@@ -1,0 +1,567 @@
+import { Response, NextFunction } from 'express';
+import Gallery from './galleryModel';
+import { GalleryDocument } from './galleryTypes';
+// import cloudinary from '../config/cloudinary';
+import { v2 as cloudinary, UploadApiOptions } from "cloudinary";
+import createHttpError from 'http-errors';
+import { AuthRequest } from '../../middlewares/authenticate';
+import mongoose from 'mongoose';
+import path from 'path';
+import fs from 'fs';
+import UserSettings from "../user/userSettingModel";
+import User from "../user/userModel";
+import { decrypt } from '../../utils/encryption';
+import { EncryptedKeyService } from '../../services/encryptedKeyService';
+
+interface CloudinaryApiResponse {
+  resources: CloudinaryResource[];
+  next_cursor: string | null;
+}
+
+interface CloudinaryResource {
+  asset_id: string;
+  public_id: string;
+  folder: string;
+  filename: string;
+  format: string;
+  resource_type: string;
+  type: string;
+  created_at: string;
+  url: string;
+  secure_url: string;
+  width: string;
+  height: string;
+  bytes: string;
+}
+
+interface CustomRequest extends Request {
+  params: {
+    publicId: string;
+  };
+  query: {
+    userId: string;
+    resourcesType: string;
+  }
+}
+
+
+
+export const getSingleMedia = async (req: CustomRequest, res: Response, next: NextFunction) => {
+  try {
+    const { publicId } = req.params;
+    const { userId, resourcesType } = req.query; // Assume userId is passed in query
+
+    console.log('🔍 getSingleMedia called with:', {
+      publicId,
+      userId,
+      resourcesType,
+      params: req.params,
+      query: req.query
+    });
+
+    if (!publicId) {
+      return next(createHttpError(400, 'publicId parameter is required'));
+    }
+
+    if (!userId) {
+      return next(createHttpError(400, 'userId parameter is required'));
+    }
+
+    if (!resourcesType) {
+      return next(createHttpError(400, 'resourcesType parameter is required'));
+    }
+    // Determine which folder the publicId belongs to (images, pdfs, or videos)
+    let folderPrefix;
+    let mediaType: 'images' | 'PDF' | 'videos';
+    let fetchPublicId;
+    if (resourcesType === 'tour-pdf') {
+      folderPrefix = 'main/tour-pdf/';
+      mediaType = 'PDF';
+      fetchPublicId = `${folderPrefix}${publicId}.pdf`;
+    } else if (resourcesType === 'tour-cover') {
+      folderPrefix = 'main/tour-cover/';
+      mediaType = 'images';
+      fetchPublicId = `${folderPrefix}${publicId}`;
+    } else if (resourcesType === 'tour-video') {
+      folderPrefix = 'main/tour-video/';
+      mediaType = 'videos';
+      fetchPublicId = `${folderPrefix}${publicId}`;
+    } else {
+      return next(createHttpError(400, 'Invalid mediaType'));
+    }
+
+    // Fetch image from MongoDB using asset_id
+    const imageDetails = await Gallery.findOne(
+      { [`${mediaType}.public_id`]: fetchPublicId },
+      { [`${mediaType}.$`]: 1, user: 1 } // Get the image and the user who uploaded it
+    ).exec();
+
+    if (!imageDetails || !imageDetails[mediaType] || imageDetails[mediaType].length === 0) {
+      return next(createHttpError(404, 'Image not found in gallery'));
+    }
+    const image = imageDetails[mediaType][0];
+    const ownerId = imageDetails.user;
+    // Fetch user roles from the database
+    const user = await User.findById(userId);
+    if (!user) {
+      return next(createHttpError(404, 'User not found'));
+    }
+    const { roles } = user;
+    // If the user is neither admin nor the owner, deny access
+    if (!roles.includes('admin') && ownerId.toString() !== userId) {
+      return res.status(403).json({
+        error: 'Access Denied',
+        message: 'This image does not belong to you. You can only view images that you have uploaded.',
+        details: 'Each user can only access their own uploaded media due to separate Cloudinary account credentials.',
+        code: 'UNAUTHORIZED_MEDIA_ACCESS'
+      });
+    }
+    // Fetch the uploader's (seller's) Cloudinary credentials
+    const cloudinaryResource = await fetchResourceByPublicId(mediaType, fetchPublicId, ownerId.toString(), res);
+
+    if (!cloudinaryResource) {
+      // If null is returned, it means credentials were invalid and response was already sent
+      if (res.headersSent) {
+        return; // Response already sent, don't continue
+      }
+      return next(createHttpError(404, 'Image not found on Cloudinary'));
+    }
+    // Respond with image details
+    res.json({
+      url: cloudinaryResource.secure_url,
+      id: image._id,
+      description: image.description,
+      title: image.title,
+      tags: image.tags,
+      uploadedAt: image.uploadedAt,
+      asset_id: image.asset_id,
+      width: cloudinaryResource.width,
+      height: cloudinaryResource.height,
+      format: cloudinaryResource.format,
+      bytes: cloudinaryResource.bytes,
+      resource_type: cloudinaryResource.resource_type,
+      created_at: cloudinaryResource.created_at,
+      public_id: cloudinaryResource.public_id,
+      secure_url: cloudinaryResource.secure_url,
+    });
+  } catch (error: any) {
+    console.error('🚨 getSingleMedia Error:', error);
+    console.error('🔍 Error details:', {
+      message: error?.message || 'Unknown error',
+      stack: error?.stack || 'No stack trace',
+
+    });
+    next(error);
+  }
+};
+
+// Fetches Cloudinary resource using the uploader's Cloudinary credentials
+const fetchResourceByPublicId = async (mediaType: string, publicId: string, ownerId: string, res: Response): Promise<CloudinaryResource | null> => {
+  console.log('🔍 fetchResourceByPublicId called with:', { mediaType, publicId, ownerId });
+
+  // Get Cloudinary credentials using unified service
+  const credentials = await EncryptedKeyService.getCloudinaryCredentials(ownerId);
+
+  if (!credentials) {
+    console.log('❌ Missing or invalid Cloudinary credentials for user:', ownerId);
+    res.status(410).json({
+      error: 'Media Access Unavailable',
+      message: 'Unable to load this image. The owner\'s media storage credentials are missing or invalid.',
+      details: 'This image was uploaded by another user whose Cloudinary credentials are not properly configured.',
+      code: 'INVALID_OWNER_CREDENTIALS'
+    });
+    return null;
+  }
+
+  // Configure Cloudinary with decrypted credentials
+  cloudinary.config(credentials);
+
+  // Test credentials with a simple API call first
+  return new Promise((resolve, reject) => {
+    // First, test credentials with a simple ping to validate they work
+    cloudinary.api.ping((pingErr: unknown) => {
+      if (pingErr) {
+        console.error('❌ Cloudinary credentials validation failed:', pingErr);
+        console.error('🔍 Credential validation details:', {
+          cloudName: credentials.cloud_name,
+          apiKeyLength: credentials.api_key?.length,
+          hasApiSecret: !!credentials.api_secret,
+          errorType: typeof pingErr,
+          errorMessage: (pingErr as any)?.message || 'Unknown ping error'
+        });
+
+        // Return a 410 status (Gone) to indicate invalid credentials rather than 500
+        if (!res.headersSent) {
+          res.status(410).json({
+            error: 'Media Access Unavailable',
+            message: 'Unable to load this image. The owner\'s media storage credentials have expired or are invalid.',
+            details: 'This image was uploaded by another user whose Cloudinary account credentials need to be updated.',
+            code: 'EXPIRED_OWNER_CREDENTIALS',
+            cloudName: credentials.cloud_name
+          });
+        }
+        return resolve(null);
+      }
+
+      console.log('✅ Cloudinary credentials validated successfully');
+
+      // Now proceed with the actual resource fetch
+      const resourceOptions = mediaType === 'PDF' ? { resource_type: 'raw' } : mediaType === 'videos' ? { resource_type: 'video' } : undefined;
+      console.log('🔍 Cloudinary API call with:', { publicId, resourceOptions });
+
+      cloudinary.api.resource(
+        publicId,
+        resourceOptions,
+        (err: unknown, result: CloudinaryResource) => {
+          if (err) {
+            console.error('❌ Cloudinary API error:', err);
+            return reject(err);
+          }
+          console.log('✅ Cloudinary API success:', { publicId: result.public_id, resourceType: result.resource_type });
+          resolve(result);
+        }
+      );
+    });
+  });
+};
+
+export const getMedia = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { userId, roles } = req; // Assuming roles and userId are attached to the request object
+    const { pageSize = '10', page = '1', mediaType } = req.query;
+    if (!['images', 'pdfs', 'videos'].includes(mediaType as string)) {
+      return next(createHttpError(400, 'Invalid mediaType parameter'));
+    }
+
+    // Handle pageSize and page with proper type checks
+    const parsedPageSize = Number(pageSize);
+    const parsedPage = Number(page);
+
+    if (isNaN(parsedPageSize) || parsedPageSize < 1 || isNaN(parsedPage) || parsedPage < 1) {
+      return next(createHttpError(400, 'Invalid pageSize or page parameter'));
+    }
+
+    // Set up the query to fetch the user's gallery
+    const query = roles === 'admin'
+      ? {} // Admin can access all galleries
+      : { user: new mongoose.Types.ObjectId(userId) }; // Seller can only access their own gallery
+
+    // Fetch galleries without skip and limit
+    const galleries = await Gallery.find(query).sort({ createdAt: -1 }).exec();
+
+
+    // Separate media into different arrays
+    const images = mediaType === 'images' ? galleries.flatMap(gallery => gallery.images) : [];
+    const pdfs = mediaType === 'pdfs' ? galleries.flatMap(gallery => gallery.PDF) : [];
+    const videos = mediaType === 'videos' ? galleries.flatMap(gallery => gallery.videos) : [];
+
+    // Sort media
+    const sortedImages = images.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+    const sortedPdfs = pdfs.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+    const sortedVideos = videos.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+
+    // Slice the media array for pagination
+    const responseMedia = mediaType === 'images'
+      ? sortedImages.slice((parsedPage - 1) * parsedPageSize, parsedPage * parsedPageSize)
+      : mediaType === 'pdfs'
+        ? sortedPdfs.slice((parsedPage - 1) * parsedPageSize, parsedPage * parsedPageSize)
+        : sortedVideos.slice((parsedPage - 1) * parsedPageSize, parsedPage * parsedPageSize);
+
+    // Calculate if there's a next page based on the total number of media items
+    const totalMediaCount = mediaType === 'images'
+      ? sortedImages.length
+      : mediaType === 'pdfs'
+        ? sortedPdfs.length
+        : sortedVideos.length;
+
+    const hasNextPage = parsedPage * parsedPageSize < totalMediaCount;
+
+
+    res.json({
+      //[mediaType as string]: responseMedia,
+      [mediaType as string]: responseMedia,
+      page: parsedPage,
+      pageSize: parsedPageSize,
+      hasNextPage,
+      nextCursor: hasNextPage ? parsedPage + 1 : null,
+      totalImages: mediaType === 'images' ? images.length : 0,
+      totalPDFs: mediaType === 'pdfs' ? pdfs.length : 0,
+      totalVideos: mediaType === 'videos' ? videos.length : 0
+    });
+
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+
+const uploadFileToCloudinary = async (file: Express.Multer.File, folder: string, resourceType: string, title?: string, description?: string) => {
+  try {
+    const filePath = file.path;
+    console.log('🔧 Cloudinary Upload: Starting upload for file:', {
+      originalName: file.originalname,
+      filePath: filePath,
+      folder: folder,
+      resourceType: resourceType,
+      fileExists: require('fs').existsSync(filePath)
+    });
+
+    const result = await cloudinary.uploader.upload(filePath, {
+      folder: folder,
+      resource_type: resourceType as 'image' | 'video' | 'raw' | 'auto',
+      context: {
+        title: title || '',
+        description: description || '',
+      },
+    });
+
+    console.log('✅ Cloudinary Upload: Upload successful for:', file.originalname, {
+      public_id: result.public_id,
+      secure_url: result.secure_url
+    });
+
+    const fileData = {
+      url: result.secure_url,
+      public_id: result.public_id,
+      width: result.width,
+      height: result.height,
+      format: result.format,
+      resource_type: result.resource_type,
+      created_at: new Date(result.created_at),
+      pages: result.pages,
+      bytes: result.bytes,
+      type: result.type,
+      etag: result.etag,
+      placeholder: result.placeholder,
+      asset_folder: result.asset_folder,
+      api_key: result.api_key,
+      // Add missing properties required by Image interface
+      asset_id: result.asset_id,
+      uploadedAt: new Date(),
+    } as any; // Cast to any to bypass strict typing for MongoDB document creation
+
+    console.log('🔧 Cloudinary Upload: Cleaning up local file:', filePath);
+    await fs.promises.unlink(filePath); // Remove the file after upload
+    return fileData;
+  } catch (error) {
+    console.error('❌ Cloudinary Upload: Error uploading file:', file.originalname, error);
+    throw error;
+  }
+};
+
+const handleUploads = async (files: any, title: string | undefined, description: string | undefined, gallery: GalleryDocument) => {
+  const uploadPromises: Promise<any>[] = [];
+  if (files.imageList) {
+    files.imageList.forEach((file: Express.Multer.File) => {
+      uploadPromises.push(uploadFileToCloudinary(file, 'main/tour-cover/', 'image', title, description).then(data => {
+
+        gallery.images.push(data);
+      }));
+    });
+  }
+
+  if (files.pdf) {
+    files.pdf.forEach((file: Express.Multer.File) => {
+      uploadPromises.push(uploadFileToCloudinary(file, 'main/tour-pdf/', 'raw', title, description).then(data => {
+        gallery.PDF.push(data);
+      }));
+    });
+  }
+
+  if (files.video) {
+    files.video.forEach((file: Express.Multer.File) => {
+      uploadPromises.push(uploadFileToCloudinary(file, 'main/tour-video/', 'video', title, description).then(data => {
+        gallery.videos.push(data);
+      }));
+    });
+  }
+
+  return Promise.all(uploadPromises);
+};
+
+export const addMedia = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  const { userId } = req.params;
+  const { description, title } = req.body;
+  const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+
+  console.log('🔧 AddMedia: Starting upload process for user:', userId);
+  console.log('🔧 AddMedia: Files received:', Object.keys(files || {}));
+  console.log('🔧 AddMedia: File details:', files ? Object.entries(files).map(([key, fileArray]) => ({
+    fieldName: key,
+    fileCount: fileArray.length,
+    fileNames: fileArray.map(f => f.originalname)
+  })) : 'No files');
+
+  try {
+    let gallery = await Gallery.findOne({ user: userId });
+    if (!gallery) {
+      console.log('🔧 AddMedia: Creating new gallery for user:', userId);
+      gallery = new Gallery({ user: userId, images: [], videos: [], PDF: [] });
+    }
+
+    // Get Cloudinary credentials using unified service
+    console.log('🔧 AddMedia: Getting Cloudinary credentials...');
+    const credentials = await EncryptedKeyService.getCloudinaryCredentials(userId);
+
+    if (!credentials) {
+      console.log('❌ AddMedia: No valid credentials found');
+      return res.status(400).json({
+        error: 'Missing Cloudinary credentials',
+        message: 'Please configure your Cloudinary API credentials in settings before uploading media.',
+        details: 'Go to Settings > API Configuration to add your Cloudinary credentials.'
+      });
+    }
+
+    console.log('✅ AddMedia: Credentials obtained, configuring Cloudinary...');
+    // Configure Cloudinary with decrypted credentials
+    cloudinary.config(credentials);
+
+    console.log('🔧 AddMedia: Starting file uploads to Cloudinary...');
+    await handleUploads(files, title, description, gallery);
+
+    console.log('🔧 AddMedia: Saving gallery to database...');
+    await gallery.save();
+
+    console.log('✅ AddMedia: Upload process completed successfully');
+    res.status(200).json({ message: 'Media uploaded successfully', gallery });
+  } catch (error) {
+    console.error('❌ AddMedia: Error during upload process:', error);
+    console.error('❌ AddMedia: Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+    return next(createHttpError(500, `Internal server error: ${error instanceof Error ? error.message : 'Unknown error'}`));
+  }
+};
+
+export const updateMedia = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { userId, imageId } = req.params;
+    const { description, title, tags } = req.body;
+    const { mediaType } = req.query;
+    const gallery: GalleryDocument | null = await Gallery.findOne({ user: userId });
+
+    if (!gallery) {
+      return res.status(404).json({ message: 'Gallery not found' });
+    }
+
+    let mediaItem;
+    if (mediaType === 'image') {
+      mediaItem = gallery.images.find((img) => img._id.toString() === imageId);
+    } else if (mediaType === 'video') {
+      mediaItem = gallery.videos.find((vid) => vid._id.toString() === imageId);
+    } else if (mediaType === 'raw') {
+      mediaItem = gallery.PDF.find((pdf) => pdf._id.toString() === imageId);
+    } else {
+      return res.status(400).json({ message: 'Invalid media type' });
+    }
+    // If the media item isn't found
+    if (!mediaItem) {
+      return res.status(404).json({ message: 'Media not found' });
+    }
+
+    if (description) {
+      mediaItem.description = description;
+    }
+    if (title) {
+      mediaItem.title = title;
+    }
+    if (tags) {
+      mediaItem.tags = tags;
+    }
+
+    await gallery.save();
+
+    res.json(gallery.images);
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+export const deleteMedia = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { userId, roles } = req;
+    const paramUserId = req.params.userId;
+    const { imageIds, mediaType } = req.body; // Expect an array of image IDs
+
+    // Check if the user is admin or the owner of the images
+    if (roles !== 'admin' && userId !== paramUserId) {
+      return next(createHttpError(403, 'Access forbidden: Admins and Sellers only'));
+    }
+
+    // Get the actual owner of the images if the user is admin
+    let AdminAsSeller = userId;
+    if (roles === 'admin') {
+      const userResult = await findUserByPublicId(imageIds[0], mediaType);
+      if (typeof userResult === 'string') {
+        AdminAsSeller = userResult;
+      } else {
+        return res.status(404).json({ error: 'Media owner not found', details: userResult.message });
+      }
+    }
+
+    // Get Cloudinary credentials using unified service
+    const credentials = await EncryptedKeyService.getCloudinaryCredentials(AdminAsSeller);
+
+    if (!credentials) {
+      return res.status(410).json({
+        error: 'Invalid Cloudinary credentials',
+        details: 'Missing or invalid Cloudinary API credentials for media deletion.'
+      });
+    }
+
+    // Configure Cloudinary with decrypted credentials
+    cloudinary.config(credentials);
+
+    // Find the gallery by userId
+    const gallery = await Gallery.findOne({ user: AdminAsSeller });
+    if (!gallery) {
+      return res.status(404).json({ message: 'Gallery not found' });
+    }
+
+    // Media type validation
+    type MediaType = 'images' | 'videos' | 'PDF'; // Define valid media types
+    if (!['images', 'videos', 'PDF'].includes(mediaType)) {
+      return res.status(400).json({ message: 'Invalid media type' });
+    }
+
+    // Find the media (images, videos, or PDFs) to delete based on the `mediaType`
+    const mediaToDelete = (gallery[mediaType as MediaType] as any[]).filter((media) =>
+      imageIds.includes(media.public_id)
+    );
+    if (mediaToDelete.length === 0) {
+      return res.status(404).json({ message: 'No media found to delete' });
+    }
+
+    // Delete media from Cloudinary
+    for (const media of mediaToDelete) {
+      const publicId = media.public_id;
+      if (!publicId) {
+        return next(createHttpError(400, 'Invalid media URL'));
+      }
+      await cloudinary.uploader.destroy(publicId);
+    }
+
+    // Remove media from gallery based on the media type
+    gallery[mediaType as MediaType] = gallery[mediaType as MediaType].filter(
+      (media) => !imageIds.includes(media.public_id)
+    );
+    await gallery.save();
+
+    res.json({ message: `${mediaType.charAt(0).toUpperCase() + mediaType.slice(1)} deleted successfully`, media: gallery[mediaType as MediaType] });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Helper function to find user by public_id
+const findUserByPublicId = async (publicId: string, mediaType: string) => {
+  try {
+    const gallery = await Gallery.findOne({ [`${mediaType}.public_id`]: publicId }).populate('user');
+    if (!gallery) {
+      return { message: 'No gallery found with this public_id' };
+    }
+    return gallery.user._id.toString();
+  } catch (error) {
+    throw new Error(`Error finding user by public_id: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+};

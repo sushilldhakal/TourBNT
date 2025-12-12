@@ -1,0 +1,217 @@
+# TourBNT - Git Ignore Configuration
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# ============================================
+# Dependencies
+# ============================================
+node_modules/
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# ============================================
+# Environment Variables (NEVER COMMIT)
+# ============================================
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.env
+*.env.*
+
+# ============================================
+# Exclude Dashboard (Not part of this repo)
+# ============================================
+dashboard/
+
+# ============================================
+# Build Output
+# ============================================
+# Next.js
+/.next/
+/out/
+/frontend/.next/
+/frontend/out/
+
+# Server build
+/server/dist/
+/server/build/
+
+# Production builds
+/build
+/dist
+
+# ============================================
+# Testing
+# ============================================
+/coverage
+*.coverage
+.nyc_output
+
+# ============================================
+# Logs
+# ============================================
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+lerna-debug.log*
+
+# ============================================
+# OS Files
+# ============================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# ============================================
+# IDE / Editor
+# ============================================
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+*.sublime-project
+*.sublime-workspace
+.kiro/
+
+# ============================================
+# TypeScript
+# ============================================
+*.tsbuildinfo
+next-env.d.ts
+
+# ============================================
+# Certificates & Keys (SECURITY)
+# ============================================
+*.pem
+*.key
+*.cert
+*.crt
+*.p12
+*.pfx
+
+# ============================================
+# Docker (Exclude images, keep configs)
+# ============================================
+# Exclude production docker compose
+docker-compose.prod.yml
+docker-compose.override.yml
+
+# Keep development docker compose
+!docker-compose.yml
+!docker-compose.dev.yml
+
+# ============================================
+# Deployment Scripts (SECURITY)
+# ============================================
+# Exclude all shell scripts by default
+*.sh
+
+# But keep safe scripts
+!install.sh
+!setup.sh
+
+# Exclude deployment scripts
+deploy*.sh
+build-and-push.sh
+copy-files-to-server.sh
+setup-server*.sh
+diagnose-server.sh
+fix-*.sh
+check-*.sh
+cleanup-*.sh
+
+# ============================================
+# Server Files (SECURITY)
+# ============================================
+# SSH keys and server access
+root@*
+*.pem
+id_rsa*
+known_hosts
+
+# ============================================
+# Deployment Documentation (SECURITY)
+# ============================================
+# These may contain sensitive server info
+AUTOMATED_DEPLOYMENT.md
+FRESH_DEPLOYMENT_CHECKLIST.md
+DEPLOY_CHECKLIST.md
+DEPLOYMENT_GUIDE.md
+NGINX_HTTPS_FIX.md
+FIX_FRONTEND_API_URL.md
+DOUBLE_API_FIX.md
+QUICK_FIX_SUMMARY.md
+ROUTE_ORDER_FIX.md
+SECURITY_CLEANUP_STEPS.md
+GIT_SECURITY.md
+
+# ============================================
+# Archives
+# ============================================
+*.tar.gz
+*.zip
+*.tar
+*.rar
+*.7z
+
+# ============================================
+# Temporary Files
+# ============================================
+tmp/
+temp/
+*.tmp
+*.bak
+*.backup
+
+# ============================================
+# Uploads (if storing locally)
+# ============================================
+uploads/
+public/uploads/
+
+# ============================================
+# Database
+# ============================================
+*.sqlite
+*.sqlite3
+*.db
+
+# ============================================
+# Cloud Platform
+# ============================================
+.vercel
+.netlify
+
+# ============================================
+# Keep These Files (Safe to commit)
+# ============================================
+!README.md
+!QUICK_START.md
+!CONTRIBUTING.md
+!CHANGELOG.md
+!LICENSE
+!ROLE_MANAGEMENT.md
+!.env.example
+!.env.production.example
+!.dockerignore
+!.gitignore

@@ -1,0 +1,393 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "./editor.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ======================================================
+   THEME CONFIG — SEMANTIC TOKENS (Primary = Sky Blue)
+   ====================================================== */
+html {
+  @apply overflow-x-hidden;
+}
+
+body {
+  @apply !min-w-full;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  /* ShadCN semantic colors */
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* Sidebar */
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Charts */
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  /* Radiuses */
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/* ======================================================
+   LIGHT MODE — SKY BLUE PRIMARY
+   ====================================================== */
+:root {
+  --radius: 0.625rem;
+
+  /* Core */
+  --background: oklch(0.99 0.01 227);
+  --foreground: oklch(0.18 0.02 227);
+
+  --card: oklch(0.99 0.01 227);
+  --card-foreground: oklch(0.18 0.02 227);
+
+  --popover: oklch(0.99 0.01 227);
+  --popover-foreground: oklch(0.18 0.02 227);
+
+  /* Primary = Sky Blue */
+  --primary: oklch(0.75 0.11 227);
+  --primary-foreground: oklch(0.98 0 0);
+
+  --secondary: oklch(0.95 0.02 227);
+  --secondary-foreground: oklch(0.25 0.03 227);
+
+  --muted: oklch(0.95 0.02 227);
+  --muted-foreground: oklch(0.50 0.08 227);
+
+  --accent: oklch(0.92 0.04 227);
+  --accent-foreground: oklch(0.25 0.03 227);
+
+  --destructive: oklch(0.60 0.25 27);
+
+  --border: oklch(0.88 0.03 227);
+  --input: oklch(0.88 0.03 227);
+  --ring: oklch(0.58 0.12 227);
+
+  /* Charts */
+  --chart-1: oklch(0.65 0.22 41);
+  --chart-2: oklch(0.60 0.12 185);
+  --chart-3: oklch(0.40 0.07 227);
+  --chart-4: oklch(0.83 0.19 84);
+  --chart-5: oklch(0.76 0.18 70);
+
+  /* Sidebar */
+  --sidebar: oklch(0.97 0.02 227);
+  --sidebar-foreground: oklch(0.25 0.03 227);
+  --sidebar-primary: oklch(0.75 0.11 227);
+  --sidebar-primary-foreground: oklch(0.98 0 0);
+  --sidebar-accent: oklch(0.92 0.04 227);
+  --sidebar-accent-foreground: oklch(0.25 0.03 227);
+  --sidebar-border: oklch(0.88 0.03 227);
+  --sidebar-ring: oklch(0.58 0.12 227);
+
+  --novel-highlight-default: #ffffff;
+  --novel-highlight-purple: #dbeafe;
+  --novel-highlight-red: #fee2e2;
+  --novel-highlight-yellow: #fef9c3;
+  --novel-highlight-blue: #dbeafe;
+  --novel-highlight-green: #dcfce7;
+  --novel-highlight-orange: #ffedd5;
+  --novel-highlight-pink: #fce7f3;
+  --novel-highlight-gray: #e5e7eb;
+
+  /* Novel Editor Variables */
+  --novel-stone-50: oklch(0.98 0.01 227);
+  --novel-stone-100: oklch(0.95 0.02 227);
+  --novel-stone-200: oklch(0.88 0.03 227);
+  --novel-stone-300: oklch(0.78 0.04 227);
+  --novel-stone-400: oklch(0.65 0.05 227);
+  --novel-stone-500: oklch(0.50 0.06 227);
+  --novel-stone-600: oklch(0.40 0.05 227);
+  --novel-stone-700: oklch(0.30 0.04 227);
+  --novel-stone-800: oklch(0.22 0.03 227);
+  --novel-stone-900: oklch(0.18 0.02 227);
+}
+
+/* ======================================================
+   DARK MODE — SKY BLUE PRIMARY
+   ====================================================== */
+.dark {
+  --background: oklch(0.20 0.03 227);
+  --foreground: oklch(0.98 0.01 227);
+
+  --card: oklch(0.25 0.03 227);
+  --card-foreground: oklch(0.98 0.01 227);
+
+  --popover: oklch(0.25 0.03 227);
+  --popover-foreground: oklch(0.98 0.01 227);
+
+  --primary: oklch(0.75 0.11 227);
+  --primary-foreground: oklch(0.20 0.03 227);
+
+  /* Secondary */
+  --secondary: oklch(0.30 0.05 230);
+  --secondary-foreground: oklch(0.98 0.01 227);
+
+  /* Accent */
+  --accent: oklch(0.80 0.06 95);
+  --accent-foreground: oklch(0.98 0.01 227);
+
+  /* Success */
+  --success: oklch(0.50 0.18 130);
+  --success-foreground: oklch(0.98 0.01 227);
+
+  /* Warning */
+  --warning: oklch(0.80 0.18 85);
+  --warning-foreground: oklch(0.98 0.01 227);
+
+  /* Danger / Destructive */
+  --danger: oklch(0.70 0.19 27);
+  --danger-foreground: oklch(0.98 0.01 227);
+
+  /* Info */
+  --info: oklch(0.50 0.12 210);
+  --info-foreground: oklch(0.98 0.01 227);
+
+  /* Muted / Disabled */
+  --muted: oklch(0.30 0.03 227);
+  --muted-foreground: oklch(0.70 0.08 227);
+
+  /* Cards / Popovers */
+  --card: oklch(0.25 0.03 227);
+  --card-foreground: oklch(0.98 0.01 227);
+  --popover: oklch(0.25 0.03 227);
+  --popover-foreground: oklch(0.98 0.01 227);
+
+  /* Borders / Input / Ring */
+  --border: oklch(0.35 0.05 227);
+  --input: oklch(0.35 0.05 227);
+  --ring: oklch(0.75 0.11 227);
+
+  /* Sidebar */
+  --sidebar: oklch(0.25 0.03 227);
+  --sidebar-foreground: oklch(0.98 0.01 227);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-border: oklch(0.35 0.05 227);
+  --sidebar-ring: oklch(0.75 0.11 227);
+
+
+  --novel-highlight-default: #000000;
+  --novel-highlight-purple: #1e1b4b;
+  --novel-highlight-red: #7f1d1d;
+  --novel-highlight-yellow: #713f12;
+  --novel-highlight-blue: #1e3a8a;
+  --novel-highlight-green: #14532d;
+  --novel-highlight-orange: #c2410c;
+  --novel-highlight-pink: #831843;
+  --novel-highlight-gray: #374151;
+
+  /* Novel Editor Variables (Dark Mode) */
+  --novel-stone-50: oklch(0.22 0.03 227);
+  --novel-stone-100: oklch(0.25 0.03 227);
+  --novel-stone-200: oklch(0.30 0.04 227);
+  --novel-stone-300: oklch(0.35 0.05 227);
+  --novel-stone-400: oklch(0.45 0.06 227);
+  --novel-stone-500: oklch(0.55 0.07 227);
+  --novel-stone-600: oklch(0.65 0.08 227);
+  --novel-stone-700: oklch(0.75 0.09 227);
+  --novel-stone-800: oklch(0.85 0.08 227);
+  --novel-stone-900: oklch(0.92 0.06 227);
+}
+
+/* ======================================================
+   BASE ELEMENTS
+   ====================================================== */
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-fade-in {
+    animation: fade-in 0.6s ease-out;
+  }
+
+  @keyframes accordion-down {
+    from {
+      height: 0;
+    }
+
+    to {
+      height: var(--radix-accordion-content-height);
+    }
+  }
+
+  @keyframes accordion-up {
+    from {
+      height: var(--radix-accordion-content-height);
+    }
+
+    to {
+      height: 0;
+    }
+  }
+
+  .animate-accordion-down {
+    animation: accordion-down 0.2s ease-out;
+  }
+
+  .animate-accordion-up {
+    animation: accordion-up 0.2s ease-out;
+  }
+
+  @keyframes shimmer {
+    0% {
+      transform: translateX(-100%);
+    }
+
+    100% {
+      transform: translateX(100%);
+    }
+  }
+
+  .animate-shimmer {
+    animation: shimmer 2s infinite;
+  }
+
+  /* Global cursor pointer for interactive elements */
+  button,
+  a,
+  [role="button"],
+  input[type="submit"],
+  input[type="button"],
+  select {
+    @apply cursor-pointer;
+  }
+
+  button:disabled,
+  a:disabled,
+  [role="button"]:disabled {
+    @apply cursor-not-allowed;
+  }
+
+  /* Novel Editor specific base styles */
+  .novel-editor-container {
+    @apply bg-background text-foreground;
+  }
+
+  .novel-editor-container * {
+    @apply border-border;
+  }
+
+  /* Ensure proper theme color inheritance */
+  .ProseMirror {
+    @apply text-foreground;
+  }
+
+  .ProseMirror ::selection {
+    @apply bg-primary/20;
+  }
+
+  /* Editor focus state */
+  .novel-editor-focused {
+    @apply ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+}
+
+/* ======
+================================================
+   ACCESSIBILITY - FOCUS INDICATORS
+   ====================================================== */
+
+/* Enhanced focus indicators for keyboard navigation */
+*:focus-visible {
+  @apply outline-none ring-2 ring-primary ring-offset-2 ring-offset-background;
+}
+
+/* Focus indicators for interactive elements in gallery */
+.gallery-page button:focus-visible,
+.gallery-page [role="button"]:focus-visible,
+.gallery-page [role="tab"]:focus-visible {
+  @apply outline-none ring-2 ring-primary ring-offset-2 ring-offset-background;
+}
+
+/* Focus indicators for media cards */
+.gallery-page [role="button"][aria-pressed]:focus-visible {
+  @apply ring-2 ring-primary ring-offset-2;
+}
+
+/* Screen reader only class */
+.sr-only {
+  @apply absolute w-px h-px p-0 -m-px overflow-hidden whitespace-nowrap border-0;
+  clip: rect(0, 0, 0, 0);
+}
+
+/* Focus trap for modals */
+[role="dialog"]:focus-visible,
+[role="alertdialog"]:focus-visible {
+  @apply outline-none;
+}
+
+/* =====
+=================================================
+   LOADING ANIMATIONS
+   ====================================================== */
+
+/* Shimmer animation for skeleton loading states */
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 2s infinite;
+}

@@ -1,0 +1,74 @@
+@media only screen and (min-width: 1024px) {
+    .cd-main-search.visibilty-visible {
+        animation: cd-slide-in 0.3s;
+    }
+
+    .cd-main-search.visibilty-visible .cd-search-suggestions {
+        transform-origin: center top;
+        animation: cd-book-open 0.8s 0.2s;
+        animation-fill-mode: backwards;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    }
+}
+
+@keyframes cd-slide-in {
+    0% {
+        transform: translateY(-100%);
+    }
+
+    100% {
+        transform: translateY(0);
+    }
+}
+
+@keyframes cd-book-open {
+    0% {
+        transform: perspective(1200px) rotateX(-90deg);
+        opacity: 0;
+    }
+
+    50% {
+        opacity: 0.5;
+    }
+
+    100% {
+        transform: perspective(1200px) rotateX(0deg);
+        opacity: 1;
+    }
+}
+
+/* Additional styling for the search suggestions */
+.cd-search-suggestions {
+    transform-origin: center top;
+    backface-visibility: hidden;
+    will-change: transform, opacity;
+    transition: transform 0.4s, opacity 0.4s;
+}
+
+.cd-search-suggestions h3 {
+    position: relative;
+    padding-bottom: 0.5rem;
+}
+
+.cd-search-suggestions h3::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 50px;
+    height: 2px;
+    background-color: currentColor;
+}
+
+.cd-search-suggestions li {
+    transition: transform 0.3s, opacity 0.3s;
+}
+
+.cd-search-suggestions li:hover {
+    transform: translateX(5px);
+}
+
+.visibilty-hidden .cd-search-suggestions {
+    transform: perspective(1200px) rotateX(90deg);
+    opacity: 0;
+}

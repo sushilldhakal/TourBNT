@@ -1,0 +1,109 @@
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes cardSlide {
+    0% {
+        transform: translateX(20px);
+        opacity: 0;
+    }
+
+    100% {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes cardShadowPulse {
+    0% {
+        box-shadow: 0 0 15px 0 rgba(0, 0, 0, 0.2);
+    }
+
+    50% {
+        box-shadow: 0 0 20px 0 rgba(0, 0, 0, 0.4);
+    }
+
+    100% {
+        box-shadow: 0 0 15px 0 rgba(0, 0, 0, 0.2);
+    }
+}
+
+@keyframes successCheckmark {
+    0% {
+        transform: scale(0);
+        opacity: 0;
+    }
+
+    50% {
+        transform: scale(1.2);
+        opacity: 1;
+    }
+
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+body.login-page {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    font-family: "Roboto", sans-serif;
+    margin: 0px;
+    height: 100vh;
+    overflow: hidden;
+    background: #EA5C54;
+    background: -webkit-gradient(linear, left top, right bottom, color-stop(0%, #EA5C54), color-stop(100%, #bb6dec));
+    background: -webkit-linear-gradient(-45deg, #EA5C54 0%, #bb6dec 100%);
+    background: -webkit-linear-gradient(315deg, #EA5C54 0%, #bb6dec 100%);
+    background: linear-gradient(135deg, #EA5C54 0%, #bb6dec 100%);
+    filter: progid:DXImageTransform.Microsoft.gradient(startColorstr='#EA5C54 ', endColorstr='#bb6dec', GradientType=1);
+}
+
+.login-page .table {
+    display: table;
+    width: 100%;
+    height: 100%;
+    opacity: 1;
+    transition-duration: .5s;
+    transform-origin: 161px 100%;
+    transform: rotateX(0deg);
+    border-top: 2px solid #D8312A;
+    background: linear-gradient(45deg, #35394a 0%, #1f222e 100%);
+}
+
+.login-page .table-cell {
+    display: table-cell;
+    vertical-align: middle;
+    transition: all 0.5s;
+}
+
+.login-page .container {
+    position: relative;
+    width: 750px;
+    margin: 30px auto 0;
+    height: 320px;
+    background: linear-gradient(45deg, #35394a 0%, #1f222e 100%);
+    padding: 0;
+    margin-top: -160px;
+    transition: all 0.5s;
+}
+
+.login-page .container .box {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}

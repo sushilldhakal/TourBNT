@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  # Backend Server
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    image: tourbnt-server:latest
+    container_name: tourbnt-server
+    restart: unless-stopped
+    ports:
+      - "8000:8000"  # Your backend port
+    environment:
+      - NODE_ENV=production
+      - PORT=8000
+      - MONGODB_URI=mongodb+srv://tripbookntour:tripbookntour@tripbnt.dzs3edk.mongodb.net/tripbnt?retryWrites=true&w=majority&appName=tripbnt
+      - JWT_SECRET=teskimaki
+      - EMAIL_USER=tripbookntour@gmail.com
+      - EMAIL_PASS=30354380@Atmc
+      - FRONTEND_URL=https://tourbnt.com
+      - CLOUDINARY_CLOUD=dmokg80lf
+      - CLOUDINARY_API_KEY=723177822495622
+      - CLOUDINARY_API_SECRET=cHPJtqvmsjRPZwsGyceh-m-gfwA
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Frontend Next.js
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_BACKEND_URL: https://tourbnt.com
+    image: tourbnt-frontend:latest
+    container_name: tourbnt-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_BACKEND_URL=https://tourbnt.com
+    depends_on:
+      - server
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  app-network:
+    driver: bridge
