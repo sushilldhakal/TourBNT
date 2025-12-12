@@ -110,15 +110,12 @@ next-env.d.ts
 *.pfx
 
 # ============================================
-# Docker (Exclude images, keep configs)
+# Docker (EXCLUDE ALL - Not part of this repo)
 # ============================================
-# Exclude production docker compose
-docker-compose.prod.yml
-docker-compose.override.yml
-
-# Keep development docker compose
-!docker-compose.yml
-!docker-compose.dev.yml
+docker-compose*.yml
+Dockerfile
+.dockerignore
+*.dockerfile
 
 # ============================================
 # Deployment Scripts (SECURITY)
