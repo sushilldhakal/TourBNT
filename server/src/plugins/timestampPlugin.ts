@@ -30,7 +30,7 @@ export const timestampPlugin = (schema: Schema) => {
     });
 
     // Update updatedAt on update
-    schema.pre('update', function (next) {
+    schema.pre('updateOne' as any, function (next: any) {
         this.set({ updatedAt: new Date() });
         next();
     });
@@ -46,8 +46,7 @@ export const softDeletePlugin = (schema: Schema) => {
     });
 
     // Override find methods to exclude soft-deleted documents
-    schema.pre(/^find/, function (next) {
-        // @ts-ignore
+    schema.pre(/^find/ as any, function (this: any, next: any) {
         if (!this.getOptions().includeDeleted) {
             this.where({ isDeleted: { $ne: true } });
         }
@@ -55,14 +54,14 @@ export const softDeletePlugin = (schema: Schema) => {
     });
 
     // Add soft delete method
-    schema.methods.softDelete = function () {
+    schema.methods.softDelete = function (this: any) {
         this.isDeleted = true;
         this.deletedAt = new Date();
         return this.save();
     };
 
     // Add restore method
-    schema.methods.restore = function () {
+    schema.methods.restore = function (this: any) {
         this.isDeleted = false;
         this.deletedAt = undefined;
         return this.save();

@@ -3,7 +3,7 @@ import tourModel from "../api/tours/tourModel";
 import userModel from "../api/user/userModel";
 import mongoose from "mongoose";
 
-interface Breadcrumb {
+export interface Breadcrumb {
   label: string;
   url: string;
 }

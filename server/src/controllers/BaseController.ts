@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { Document } from 'mongoose';
 import { BaseService } from '../services/BaseService';
 import { sendSuccess } from '../utils/responseHandler';
 
@@ -6,7 +7,7 @@ import { sendSuccess } from '../utils/responseHandler';
  * Base Controller Class
  * Provides common CRUD controller methods
  */
-export class BaseController<T> {
+export class BaseController<T extends Document = any> {
     constructor(
         protected service: BaseService<T>,
         protected resourceName: string
