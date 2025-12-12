@@ -104,7 +104,7 @@ function LoginPageContent() {
                     });
 
                     // Check if user can access dashboard using centralized utility
-                    if (canAccessDashboard(decoded.roles)) {
+                    if (canAccessDashboard(decoded.roles ?? null)) {
                         // Use window.location for cross-app navigation to dashboard
                         window.location.href = '/dashboard';
                     } else {

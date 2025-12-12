@@ -52,7 +52,7 @@ export const RoleGroups = {
  */
 export const canAccessDashboard = (role: string | null): boolean => {
     if (!role) return false;
-    return RoleGroups.DASHBOARD_ACCESS.includes(role as UserRole);
+    return (RoleGroups.DASHBOARD_ACCESS as readonly string[]).includes(role);
 };
 
 /**
@@ -80,7 +80,7 @@ export const isSeller = (role: string | null): boolean => {
  */
 export const isAdminOrSeller = (role: string | null): boolean => {
     if (!role) return false;
-    return RoleGroups.ADMIN_AND_SELLER.includes(role as UserRole);
+    return (RoleGroups.ADMIN_AND_SELLER as readonly string[]).includes(role);
 };
 
 /**
@@ -91,7 +91,7 @@ export const isAdminOrSeller = (role: string | null): boolean => {
  */
 export const hasRole = (userRole: string | null, allowedRoles: UserRole[]): boolean => {
     if (!userRole) return false;
-    return allowedRoles.includes(userRole as UserRole);
+    return (allowedRoles as readonly string[]).includes(userRole);
 };
 
 /**
@@ -101,7 +101,7 @@ export const hasRole = (userRole: string | null, allowedRoles: UserRole[]): bool
  */
 export const isRegularUser = (role: string | null): boolean => {
     if (!role) return false;
-    return RoleGroups.REGULAR_USERS.includes(role as UserRole);
+    return (RoleGroups.REGULAR_USERS as readonly string[]).includes(role);
 };
 
 /**
