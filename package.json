@@ -1,0 +1,40 @@
+{
+    "name": "tourbnt",
+    "version": "1.0.0",
+    "description": "TourBNT - Tour booking and management platform",
+    "private": true,
+    "workspaces": [
+        "frontend",
+        "server"
+    ],
+    "scripts": {
+        "install:all": "npm install && npm install --prefix frontend && npm install --prefix server",
+        "build:server": "npm run build --prefix server",
+        "build:frontend": "npm run build --prefix frontend",
+        "build": "npm run build:server && npm run build:frontend",
+        "start:server": "npm start --prefix server",
+        "start:frontend": "npm start --prefix frontend",
+        "start": "npm run start:server",
+        "dev:server": "npm run dev --prefix server",
+        "dev:frontend": "npm run dev --prefix frontend",
+        "dev": "concurrently \"npm run dev:server\" \"npm run dev:frontend\"",
+        "postinstall": "npm run install:all"
+    },
+    "engines": {
+        "node": ">=18.0.0",
+        "npm": ">=9.0.0"
+    },
+    "keywords": [
+        "tour",
+        "booking",
+        "travel",
+        "nextjs",
+        "express",
+        "mongodb"
+    ],
+    "author": "TourBNT Team",
+    "license": "MIT",
+    "devDependencies": {
+        "concurrently": "^8.2.2"
+    }
+}

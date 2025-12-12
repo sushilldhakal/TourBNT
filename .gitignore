@@ -110,12 +110,13 @@ next-env.d.ts
 *.pfx
 
 # ============================================
-# Docker (EXCLUDE ALL - Not part of this repo)
+# Docker (Exclude local docker-compose files)
 # ============================================
 docker-compose*.yml
-Dockerfile
-.dockerignore
-*.dockerfile
+!Dockerfile
+!.dockerignore
+
+# Keep Dockerfile and .dockerignore for Cloud Run
 
 # ============================================
 # Deployment Scripts (SECURITY)

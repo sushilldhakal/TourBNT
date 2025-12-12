@@ -1,0 +1,52 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+server/node_modules/
+dashboard/
+
+# Build outputs
+frontend/.next/
+frontend/out/
+server/dist/
+*.log
+
+# Environment files
+.env
+.env.*
+!.env.example
+*.env
+*.env.*
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+coverage/
+*.test.ts
+*.test.js
+__tests__/
+
+# Documentation
+*.md
+!README.md
+
+# Deployment scripts
+*.sh
+deploy*/
+build-*/
+
+# Other
+.cache/
+tmp/
+temp/
