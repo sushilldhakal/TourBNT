@@ -29,7 +29,8 @@ pnpm-lock.yaml
 # ============================================
 # Exclude Dashboard (Not part of this repo)
 # ============================================
-dashboard/
+# Only exclude root dashboard folder, not frontend/components/dashboard
+/dashboard/
 
 # ============================================
 # Build Output
