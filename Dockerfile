@@ -59,17 +59,52 @@ COPY --from=backend-builder /app/server/node_modules ./server/node_modules
 # Copy root package.json
 COPY package.json ./
 
+# Install nginx for reverse proxy
+RUN apk add --no-cache nginx
+
+# Create nginx configuration
+RUN mkdir -p /run/nginx && \
+    echo 'events { worker_connections 1024; }' > /etc/nginx/nginx.conf && \
+    echo 'http {' >> /etc/nginx/nginx.conf && \
+    echo '  include /etc/nginx/mime.types;' >> /etc/nginx/nginx.conf && \
+    echo '  default_type application/octet-stream;' >> /etc/nginx/nginx.conf && \
+    echo '  server {' >> /etc/nginx/nginx.conf && \
+    echo '    listen 8080;' >> /etc/nginx/nginx.conf && \
+    echo '    location /api/ {' >> /etc/nginx/nginx.conf && \
+    echo '      proxy_pass http://localhost:4000;' >> /etc/nginx/nginx.conf && \
+    echo '      proxy_http_version 1.1;' >> /etc/nginx/nginx.conf && \
+    echo '      proxy_set_header Upgrade $http_upgrade;' >> /etc/nginx/nginx.conf && \
+    echo '      proxy_set_header Connection "upgrade";' >> /etc/nginx/nginx.conf && \
+    echo '      proxy_set_header Host $host;' >> /etc/nginx/nginx.conf && \
+    echo '      proxy_cache_bypass $http_upgrade;' >> /etc/nginx/nginx.conf && \
+    echo '    }' >> /etc/nginx/nginx.conf && \
+    echo '    location / {' >> /etc/nginx/nginx.conf && \
+    echo '      proxy_pass http://localhost:3000;' >> /etc/nginx/nginx.conf && \
+    echo '      proxy_http_version 1.1;' >> /etc/nginx/nginx.conf && \
+    echo '      proxy_set_header Upgrade $http_upgrade;' >> /etc/nginx/nginx.conf && \
+    echo '      proxy_set_header Connection "upgrade";' >> /etc/nginx/nginx.conf && \
+    echo '      proxy_set_header Host $host;' >> /etc/nginx/nginx.conf && \
+    echo '      proxy_cache_bypass $http_upgrade;' >> /etc/nginx/nginx.conf && \
+    echo '    }' >> /etc/nginx/nginx.conf && \
+    echo '  }' >> /etc/nginx/nginx.conf && \
+    echo '}' >> /etc/nginx/nginx.conf
+
 # Create startup script
 RUN echo '#!/bin/sh' > /app/start.sh && \
     echo 'cd /app/server && node dist/server.js &' >> /app/start.sh && \
-    echo 'cd /app/frontend && npm start' >> /app/start.sh && \
+    echo 'cd /app/frontend && PORT=3000 npm start &' >> /app/start.sh && \
+    echo 'nginx -g "daemon off;"' >> /app/start.sh && \
     chmod +x /app/start.sh
 
-# Expose ports
-EXPOSE 8080 3000
+# Set environment variables
+ENV NODE_ENV=production
+ENV PORT=8080
+
+# Expose Cloud Run port
+EXPOSE 8080
 
 # Use tini for proper signal handling
 ENTRYPOINT ["/sbin/tini", "--"]
 
-# Start both services
+# Start all services
 CMD ["/app/start.sh"]
