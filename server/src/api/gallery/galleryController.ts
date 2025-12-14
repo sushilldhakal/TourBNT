@@ -36,7 +36,7 @@ interface CloudinaryResource {
 
 interface CustomRequest extends Request {
   params: {
-    publicId: string;
+    mediaId: string;
   };
   query: {
     userId: string;
@@ -48,19 +48,19 @@ interface CustomRequest extends Request {
 
 export const getSingleMedia = async (req: CustomRequest, res: Response, next: NextFunction) => {
   try {
-    const { publicId } = req.params;
+    const { mediaId } = req.params; // Changed from publicId to mediaId
     const { userId, resourcesType } = req.query; // Assume userId is passed in query
 
     console.log('🔍 getSingleMedia called with:', {
-      publicId,
+      mediaId,
       userId,
       resourcesType,
       params: req.params,
       query: req.query
     });
 
-    if (!publicId) {
-      return next(createHttpError(400, 'publicId parameter is required'));
+    if (!mediaId) {
+      return next(createHttpError(400, 'mediaId parameter is required'));
     }
 
     if (!userId) {
@@ -70,6 +70,9 @@ export const getSingleMedia = async (req: CustomRequest, res: Response, next: Ne
     if (!resourcesType) {
       return next(createHttpError(400, 'resourcesType parameter is required'));
     }
+
+    // Use mediaId as publicId for backward compatibility
+    const publicId = mediaId;
     // Determine which folder the publicId belongs to (images, pdfs, or videos)
     let folderPrefix;
     let mediaType: 'images' | 'PDF' | 'videos';
@@ -228,17 +231,11 @@ const fetchResourceByPublicId = async (mediaType: string, publicId: string, owne
 export const getMedia = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { userId, roles } = req; // Assuming roles and userId are attached to the request object
-    const { pageSize = '10', page = '1', mediaType } = req.query;
+    const { mediaType } = req.query;
+    const { page, limit, skip } = req.pagination!; // Get pagination from middleware
+
     if (!['images', 'pdfs', 'videos'].includes(mediaType as string)) {
       return next(createHttpError(400, 'Invalid mediaType parameter'));
-    }
-
-    // Handle pageSize and page with proper type checks
-    const parsedPageSize = Number(pageSize);
-    const parsedPage = Number(page);
-
-    if (isNaN(parsedPageSize) || parsedPageSize < 1 || isNaN(parsedPage) || parsedPage < 1) {
-      return next(createHttpError(400, 'Invalid pageSize or page parameter'));
     }
 
     // Set up the query to fetch the user's gallery
@@ -248,7 +245,6 @@ export const getMedia = async (req: AuthRequest, res: Response, next: NextFuncti
 
     // Fetch galleries without skip and limit
     const galleries = await Gallery.find(query).sort({ createdAt: -1 }).exec();
-
 
     // Separate media into different arrays
     const images = mediaType === 'images' ? galleries.flatMap(gallery => gallery.images) : [];
@@ -262,28 +258,26 @@ export const getMedia = async (req: AuthRequest, res: Response, next: NextFuncti
 
     // Slice the media array for pagination
     const responseMedia = mediaType === 'images'
-      ? sortedImages.slice((parsedPage - 1) * parsedPageSize, parsedPage * parsedPageSize)
+      ? sortedImages.slice(skip, skip + limit)
       : mediaType === 'pdfs'
-        ? sortedPdfs.slice((parsedPage - 1) * parsedPageSize, parsedPage * parsedPageSize)
-        : sortedVideos.slice((parsedPage - 1) * parsedPageSize, parsedPage * parsedPageSize);
+        ? sortedPdfs.slice(skip, skip + limit)
+        : sortedVideos.slice(skip, skip + limit);
 
-    // Calculate if there's a next page based on the total number of media items
+    // Calculate total count and pages
     const totalMediaCount = mediaType === 'images'
       ? sortedImages.length
       : mediaType === 'pdfs'
         ? sortedPdfs.length
         : sortedVideos.length;
 
-    const hasNextPage = parsedPage * parsedPageSize < totalMediaCount;
-
+    const totalPages = Math.ceil(totalMediaCount / limit);
 
     res.json({
-      //[mediaType as string]: responseMedia,
       [mediaType as string]: responseMedia,
-      page: parsedPage,
-      pageSize: parsedPageSize,
-      hasNextPage,
-      nextCursor: hasNextPage ? parsedPage + 1 : null,
+      total: totalMediaCount,
+      page,
+      limit,
+      totalPages,
       totalImages: mediaType === 'images' ? images.length : 0,
       totalPDFs: mediaType === 'pdfs' ? pdfs.length : 0,
       totalVideos: mediaType === 'videos' ? videos.length : 0
@@ -381,7 +375,7 @@ const handleUploads = async (files: any, title: string | undefined, description:
 };
 
 export const addMedia = async (req: AuthRequest, res: Response, next: NextFunction) => {
-  const { userId } = req.params;
+  const userId = req.userId; // Get userId from authenticated request
   const { description, title } = req.body;
   const files = req.files as { [fieldname: string]: Express.Multer.File[] };
 
@@ -402,7 +396,7 @@ export const addMedia = async (req: AuthRequest, res: Response, next: NextFuncti
 
     // Get Cloudinary credentials using unified service
     console.log('🔧 AddMedia: Getting Cloudinary credentials...');
-    const credentials = await EncryptedKeyService.getCloudinaryCredentials(userId);
+    const credentials = await EncryptedKeyService.getCloudinaryCredentials(userId!);
 
     if (!credentials) {
       console.log('❌ AddMedia: No valid credentials found');
@@ -424,7 +418,7 @@ export const addMedia = async (req: AuthRequest, res: Response, next: NextFuncti
     await gallery.save();
 
     console.log('✅ AddMedia: Upload process completed successfully');
-    res.status(200).json({ message: 'Media uploaded successfully', gallery });
+    res.status(201).json({ message: 'Media uploaded successfully', gallery });
   } catch (error) {
     console.error('❌ AddMedia: Error during upload process:', error);
     console.error('❌ AddMedia: Error stack:', error instanceof Error ? error.stack : 'No stack trace');
@@ -434,28 +428,50 @@ export const addMedia = async (req: AuthRequest, res: Response, next: NextFuncti
 
 export const updateMedia = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const { userId, imageId } = req.params;
+    const userId = req.userId; // Get userId from authenticated request
+    const { mediaId } = req.params; // Changed from imageId to mediaId
     const { description, title, tags } = req.body;
     const { mediaType } = req.query;
     const gallery: GalleryDocument | null = await Gallery.findOne({ user: userId });
 
     if (!gallery) {
-      return res.status(404).json({ message: 'Gallery not found' });
+      return res.status(404).json({
+        error: {
+          code: 'GALLERY_NOT_FOUND',
+          message: 'Gallery not found',
+          timestamp: new Date().toISOString(),
+          path: req.path
+        }
+      });
     }
 
     let mediaItem;
     if (mediaType === 'image') {
-      mediaItem = gallery.images.find((img) => img._id.toString() === imageId);
+      mediaItem = gallery.images.find((img) => img._id.toString() === mediaId);
     } else if (mediaType === 'video') {
-      mediaItem = gallery.videos.find((vid) => vid._id.toString() === imageId);
+      mediaItem = gallery.videos.find((vid) => vid._id.toString() === mediaId);
     } else if (mediaType === 'raw') {
-      mediaItem = gallery.PDF.find((pdf) => pdf._id.toString() === imageId);
+      mediaItem = gallery.PDF.find((pdf) => pdf._id.toString() === mediaId);
     } else {
-      return res.status(400).json({ message: 'Invalid media type' });
+      return res.status(400).json({
+        error: {
+          code: 'INVALID_MEDIA_TYPE',
+          message: 'Invalid media type',
+          timestamp: new Date().toISOString(),
+          path: req.path
+        }
+      });
     }
     // If the media item isn't found
     if (!mediaItem) {
-      return res.status(404).json({ message: 'Media not found' });
+      return res.status(404).json({
+        error: {
+          code: 'MEDIA_NOT_FOUND',
+          message: 'Media not found',
+          timestamp: new Date().toISOString(),
+          path: req.path
+        }
+      });
     }
 
     if (description) {
@@ -470,7 +486,7 @@ export const updateMedia = async (req: AuthRequest, res: Response, next: NextFun
 
     await gallery.save();
 
-    res.json(gallery.images);
+    res.json(mediaItem);
   } catch (error) {
     next(error);
   }
@@ -480,32 +496,50 @@ export const updateMedia = async (req: AuthRequest, res: Response, next: NextFun
 export const deleteMedia = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { userId, roles } = req;
-    const paramUserId = req.params.userId;
     const { imageIds, mediaType } = req.body; // Expect an array of image IDs
 
-    // Check if the user is admin or the owner of the images
-    if (roles !== 'admin' && userId !== paramUserId) {
-      return next(createHttpError(403, 'Access forbidden: Admins and Sellers only'));
+    if (!imageIds || !Array.isArray(imageIds) || imageIds.length === 0) {
+      return res.status(400).json({
+        error: {
+          code: 'INVALID_REQUEST',
+          message: 'imageIds array is required',
+          timestamp: new Date().toISOString(),
+          path: req.path
+        }
+      });
     }
 
     // Get the actual owner of the images if the user is admin
-    let AdminAsSeller = userId;
+    let targetUserId: string = userId!;
     if (roles === 'admin') {
       const userResult = await findUserByPublicId(imageIds[0], mediaType);
       if (typeof userResult === 'string') {
-        AdminAsSeller = userResult;
+        targetUserId = userResult;
       } else {
-        return res.status(404).json({ error: 'Media owner not found', details: userResult.message });
+        return res.status(404).json({
+          error: {
+            code: 'MEDIA_OWNER_NOT_FOUND',
+            message: 'Media owner not found',
+            details: userResult.message,
+            timestamp: new Date().toISOString(),
+            path: req.path
+          }
+        });
       }
     }
 
     // Get Cloudinary credentials using unified service
-    const credentials = await EncryptedKeyService.getCloudinaryCredentials(AdminAsSeller);
+    const credentials = await EncryptedKeyService.getCloudinaryCredentials(targetUserId);
 
     if (!credentials) {
       return res.status(410).json({
-        error: 'Invalid Cloudinary credentials',
-        details: 'Missing or invalid Cloudinary API credentials for media deletion.'
+        error: {
+          code: 'INVALID_CREDENTIALS',
+          message: 'Invalid Cloudinary credentials',
+          details: 'Missing or invalid Cloudinary API credentials for media deletion.',
+          timestamp: new Date().toISOString(),
+          path: req.path
+        }
       });
     }
 
@@ -513,41 +547,82 @@ export const deleteMedia = async (req: AuthRequest, res: Response, next: NextFun
     cloudinary.config(credentials);
 
     // Find the gallery by userId
-    const gallery = await Gallery.findOne({ user: AdminAsSeller });
+    const gallery = await Gallery.findOne({ user: targetUserId });
     if (!gallery) {
-      return res.status(404).json({ message: 'Gallery not found' });
+      return res.status(404).json({
+        error: {
+          code: 'GALLERY_NOT_FOUND',
+          message: 'Gallery not found',
+          timestamp: new Date().toISOString(),
+          path: req.path
+        }
+      });
     }
 
     // Media type validation
     type MediaType = 'images' | 'videos' | 'PDF'; // Define valid media types
     if (!['images', 'videos', 'PDF'].includes(mediaType)) {
-      return res.status(400).json({ message: 'Invalid media type' });
+      return res.status(400).json({
+        error: {
+          code: 'INVALID_MEDIA_TYPE',
+          message: 'Invalid media type',
+          timestamp: new Date().toISOString(),
+          path: req.path
+        }
+      });
     }
 
     // Find the media (images, videos, or PDFs) to delete based on the `mediaType`
     const mediaToDelete = (gallery[mediaType as MediaType] as any[]).filter((media) =>
       imageIds.includes(media.public_id)
     );
+
     if (mediaToDelete.length === 0) {
-      return res.status(404).json({ message: 'No media found to delete' });
+      return res.status(404).json({
+        error: {
+          code: 'MEDIA_NOT_FOUND',
+          message: 'No media found to delete',
+          timestamp: new Date().toISOString(),
+          path: req.path
+        }
+      });
     }
+
+    // Track success and failures for bulk operation
+    const results = {
+      success: [] as string[],
+      failed: [] as { id: string; error: string }[]
+    };
 
     // Delete media from Cloudinary
     for (const media of mediaToDelete) {
       const publicId = media.public_id;
       if (!publicId) {
-        return next(createHttpError(400, 'Invalid media URL'));
+        results.failed.push({ id: media._id.toString(), error: 'Invalid media URL' });
+        continue;
       }
-      await cloudinary.uploader.destroy(publicId);
+
+      try {
+        await cloudinary.uploader.destroy(publicId);
+        results.success.push(publicId);
+      } catch (error) {
+        results.failed.push({
+          id: publicId,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
     }
 
-    // Remove media from gallery based on the media type
+    // Remove successfully deleted media from gallery
     gallery[mediaType as MediaType] = gallery[mediaType as MediaType].filter(
-      (media) => !imageIds.includes(media.public_id)
+      (media) => !media.public_id || !results.success.includes(media.public_id)
     );
     await gallery.save();
 
-    res.json({ message: `${mediaType.charAt(0).toUpperCase() + mediaType.slice(1)} deleted successfully`, media: gallery[mediaType as MediaType] });
+    res.status(200).json({
+      message: `${mediaType.charAt(0).toUpperCase() + mediaType.slice(1)} deletion completed`,
+      results
+    });
   } catch (error) {
     next(error);
   }
@@ -557,10 +632,10 @@ export const deleteMedia = async (req: AuthRequest, res: Response, next: NextFun
 const findUserByPublicId = async (publicId: string, mediaType: string) => {
   try {
     const gallery = await Gallery.findOne({ [`${mediaType}.public_id`]: publicId }).populate('user');
-    if (!gallery) {
+    if (!gallery || !gallery.user) {
       return { message: 'No gallery found with this public_id' };
     }
-    return gallery.user._id.toString();
+    return (gallery.user as any)._id.toString();
   } catch (error) {
     throw new Error(`Error finding user by public_id: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }

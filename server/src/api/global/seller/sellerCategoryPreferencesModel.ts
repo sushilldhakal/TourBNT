@@ -87,7 +87,7 @@ const sellerCategoryPreferencesSchema = new Schema<ISellerCategoryPreferences>(
       default: Date.now,
     }
   },
-  { 
+  {
     timestamps: true,
     toJSON: { virtuals: true },
     toObject: { virtuals: true }
@@ -95,28 +95,26 @@ const sellerCategoryPreferencesSchema = new Schema<ISellerCategoryPreferences>(
 );
 
 // Indexes for performance
-sellerCategoryPreferencesSchema.index({ seller: 1 });
 sellerCategoryPreferencesSchema.index({ 'categoryPreferences.category': 1 });
-sellerCategoryPreferencesSchema.index({ seller: 1, 'categoryPreferences.category': 1 });
 
 // Compound index to prevent duplicate category preferences per seller
 sellerCategoryPreferencesSchema.index(
-  { seller: 1, 'categoryPreferences.category': 1 }, 
+  { seller: 1, 'categoryPreferences.category': 1 },
   { unique: true, sparse: true }
 );
 
 // Virtual for visible categories count
-sellerCategoryPreferencesSchema.virtual('visibleCategoriesCount').get(function() {
+sellerCategoryPreferencesSchema.virtual('visibleCategoriesCount').get(function () {
   return this.categoryPreferences.filter(pref => pref.isVisible).length;
 });
 
 // Virtual for enabled categories count
-sellerCategoryPreferencesSchema.virtual('enabledCategoriesCount').get(function() {
+sellerCategoryPreferencesSchema.virtual('enabledCategoriesCount').get(function () {
   return this.categoryPreferences.filter(pref => pref.isEnabled).length;
 });
 
 // Static method to get seller's visible categories
-sellerCategoryPreferencesSchema.statics.getVisibleCategories = function(sellerId: mongoose.Schema.Types.ObjectId) {
+sellerCategoryPreferencesSchema.statics.getVisibleCategories = function (sellerId: mongoose.Schema.Types.ObjectId) {
   return this.findOne({ seller: sellerId })
     .populate({
       path: 'categoryPreferences.category',
@@ -131,7 +129,7 @@ sellerCategoryPreferencesSchema.statics.getVisibleCategories = function(sellerId
 };
 
 // Static method to get seller's enabled categories
-sellerCategoryPreferencesSchema.statics.getEnabledCategories = function(sellerId: mongoose.Schema.Types.ObjectId) {
+sellerCategoryPreferencesSchema.statics.getEnabledCategories = function (sellerId: mongoose.Schema.Types.ObjectId) {
   return this.findOne({ seller: sellerId })
     .populate({
       path: 'categoryPreferences.category',
@@ -146,14 +144,14 @@ sellerCategoryPreferencesSchema.statics.getEnabledCategories = function(sellerId
 };
 
 // Method to update category visibility
-sellerCategoryPreferencesSchema.methods.updateCategoryVisibility = function(
+sellerCategoryPreferencesSchema.methods.updateCategoryVisibility = function (
   categoryId: mongoose.Schema.Types.ObjectId,
   isVisible: boolean
 ) {
   const preference = this.categoryPreferences.find(
     (pref: any) => pref.category.toString() === categoryId.toString()
   );
-  
+
   if (preference) {
     preference.isVisible = isVisible;
   } else {
@@ -163,20 +161,20 @@ sellerCategoryPreferencesSchema.methods.updateCategoryVisibility = function(
       isEnabled: isVisible
     });
   }
-  
+
   this.lastUpdated = new Date();
   return this.save();
 };
 
 // Method to update category enabled status
-sellerCategoryPreferencesSchema.methods.updateCategoryEnabled = function(
+sellerCategoryPreferencesSchema.methods.updateCategoryEnabled = function (
   categoryId: mongoose.Schema.Types.ObjectId,
   isEnabled: boolean
 ) {
   const preference = this.categoryPreferences.find(
     (pref: any) => pref.category.toString() === categoryId.toString()
   );
-  
+
   if (preference) {
     preference.isEnabled = isEnabled;
   } else {
@@ -186,13 +184,13 @@ sellerCategoryPreferencesSchema.methods.updateCategoryEnabled = function(
       isEnabled
     });
   }
-  
+
   this.lastUpdated = new Date();
   return this.save();
 };
 
 // Method to bulk update category preferences
-sellerCategoryPreferencesSchema.methods.bulkUpdatePreferences = function(updates: Array<{
+sellerCategoryPreferencesSchema.methods.bulkUpdatePreferences = function (updates: Array<{
   categoryId: mongoose.Schema.Types.ObjectId;
   isVisible?: boolean;
   isEnabled?: boolean;
@@ -203,7 +201,7 @@ sellerCategoryPreferencesSchema.methods.bulkUpdatePreferences = function(updates
     const preference = this.categoryPreferences.find(
       (pref: any) => pref.category.toString() === update.categoryId.toString()
     );
-    
+
     if (preference) {
       if (update.isVisible !== undefined) preference.isVisible = update.isVisible;
       if (update.isEnabled !== undefined) preference.isEnabled = update.isEnabled;
@@ -219,30 +217,30 @@ sellerCategoryPreferencesSchema.methods.bulkUpdatePreferences = function(updates
       });
     }
   });
-  
+
   this.lastUpdated = new Date();
   return this.save();
 };
 
 // Method to mark category as used
-sellerCategoryPreferencesSchema.methods.markCategoryUsed = function(
+sellerCategoryPreferencesSchema.methods.markCategoryUsed = function (
   categoryId: mongoose.Schema.Types.ObjectId
 ) {
   const preference = this.categoryPreferences.find(
     (pref: any) => pref.category.toString() === categoryId.toString()
   );
-  
+
   if (preference) {
     preference.lastUsed = new Date();
     this.lastUpdated = new Date();
     return this.save();
   }
-  
+
   return Promise.resolve(this);
 };
 
 // Pre-save middleware to update lastUpdated
-sellerCategoryPreferencesSchema.pre('save', function(next) {
+sellerCategoryPreferencesSchema.pre('save', function (next) {
   this.lastUpdated = new Date();
   next();
 });

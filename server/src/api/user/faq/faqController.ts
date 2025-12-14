@@ -47,11 +47,27 @@ export const getUserFaqs = async (req: AuthRequest, res: Response, next: NextFun
 
 export const getAllFaqs = async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-        let faqs;
-        faqs = await Faqs.find();  // Admin can view all faqs
-        res.status(200).json({ faqs });
+        const { page, limit, skip } = (req as any).pagination;
+
+        const [faqs, total] = await Promise.all([
+            Faqs.find().skip(skip).limit(limit),
+            Faqs.countDocuments()
+        ]);
+
+        const totalPages = Math.ceil(total / limit);
+
+        res.status(200).json({
+            faqs,
+            pagination: {
+                total,
+                page,
+                limit,
+                totalPages
+            }
+        });
     } catch (error) {
-        res.status(500).json({ message: 'Failed to fetch faqs' });
+        console.error('Error fetching FAQs:', error);
+        res.status(500).json({ message: 'Failed to fetch FAQs' });
     }
 };
 
@@ -142,70 +158,89 @@ export const updateFaqs = async (req: AuthRequest, res: Response, next: NextFunc
 
 export const deleteFaqs = async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-        const userId = req.userId;  // Assuming user ID is available in the request
-        const { faqsId } = req.params;
-        const faqs = await Faqs.findById(faqsId);
+        const userId = req.userId;
+        const { faqId } = req.params;
+        const faqs = await Faqs.findById(faqId);
+
         if (!faqs) {
-            return res.status(404).json({ message: 'Faqs not found' });
+            return res.status(404).json({ message: 'FAQ not found' });
         }
 
         if (faqs.user.toString() !== userId && req.roles !== 'admin') {
-            return res.status(403).json({ message: 'Not authorized to delete this faqs' });
+            return res.status(403).json({ message: 'Not authorized to delete this FAQ' });
         }
 
-        await Faqs.findByIdAndDelete(faqsId);
+        await Faqs.findByIdAndDelete(faqId);
         res.status(204).send();
     } catch (error) {
-        res.status(500).json({ message: 'Failed to delete faqs' });
+        console.error('Error deleting FAQ:', error);
+        res.status(500).json({ message: 'Failed to delete FAQ' });
     }
 };
 
-export const deleteMultipleFaqs = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const bulkDeleteFaqs = async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
         const userId = req.userId;
         const userRole = req.roles;
-        const { faqIds } = req.body; // Expecting an array of FAQ IDs
+        const { ids } = req.body; // Expecting an array of FAQ IDs
 
-        if (!Array.isArray(faqIds) || faqIds.length === 0) {
-            return res.status(400).json({ message: 'Invalid or empty faqIds array' });
-        }
-
-        console.log(`🗑️  Bulk delete request for ${faqIds.length} FAQs`);
-
-        // Find all FAQs to verify ownership
-        const faqsToDelete = await Faqs.find({ _id: { $in: faqIds } });
-
-        if (faqsToDelete.length === 0) {
-            return res.status(404).json({ message: 'No FAQs found with provided IDs' });
-        }
-
-        // Check authorization for each FAQ
-        const unauthorizedFaqs = faqsToDelete.filter(
-            faq => faq.user.toString() !== userId && userRole !== 'admin'
-        );
-
-        if (unauthorizedFaqs.length > 0) {
-            return res.status(403).json({
-                message: 'Not authorized to delete some FAQs',
-                unauthorizedCount: unauthorizedFaqs.length
+        if (!Array.isArray(ids) || ids.length === 0) {
+            return res.status(400).json({
+                error: {
+                    code: 'INVALID_REQUEST',
+                    message: 'Invalid or empty ids array',
+                    timestamp: new Date().toISOString(),
+                    path: req.path
+                }
             });
         }
 
-        // Delete all authorized FAQs
-        const deleteResult = await Faqs.deleteMany({ _id: { $in: faqIds } });
+        console.log(`🗑️  Bulk delete request for ${ids.length} FAQs`);
 
-        console.log(`✅ Successfully deleted ${deleteResult.deletedCount} FAQs`);
-        console.log(`   - Requested: ${faqIds.length}`);
-        console.log(`   - Found: ${faqsToDelete.length}`);
-        console.log(`   - Deleted: ${deleteResult.deletedCount}`);
+        // Find all FAQs to verify ownership
+        const faqsToDelete = await Faqs.find({ _id: { $in: ids } });
+
+        const success: string[] = [];
+        const failed: Array<{ id: string; error: string }> = [];
+
+        // Process each FAQ
+        for (const id of ids) {
+            const faq = faqsToDelete.find(f => f._id.toString() === id);
+
+            if (!faq) {
+                failed.push({ id, error: 'FAQ not found' });
+                continue;
+            }
+
+            // Check authorization
+            if (faq.user.toString() !== userId && userRole !== 'admin') {
+                failed.push({ id, error: 'Not authorized to delete this FAQ' });
+                continue;
+            }
+
+            try {
+                await Faqs.findByIdAndDelete(id);
+                success.push(id);
+            } catch (err) {
+                failed.push({ id, error: 'Failed to delete FAQ' });
+            }
+        }
+
+        console.log(`✅ Bulk delete completed: ${success.length} succeeded, ${failed.length} failed`);
 
         res.status(200).json({
-            message: 'FAQs deleted successfully',
-            deletedCount: deleteResult.deletedCount,
-            requestedCount: faqIds.length
+            success,
+            failed
         });
     } catch (error) {
-        console.error('Error deleting multiple FAQs:', error);
-        res.status(500).json({ message: 'Failed to delete FAQs' });
+        console.error('Error in bulk delete FAQs:', error);
+        res.status(500).json({
+            error: {
+                code: 'INTERNAL_SERVER_ERROR',
+                message: 'Failed to delete FAQs',
+                timestamp: new Date().toISOString(),
+                path: req.path
+            }
+        });
     }
 };

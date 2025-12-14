@@ -7,8 +7,9 @@ import { sign } from "jsonwebtoken";
 import { validationResult } from "express-validator";
 import { AuthRequest } from "../../middlewares/authenticate";
 import { config } from "../../config/config";
-import { sendResetPasswordEmail, sendVerificationEmail } from "../../controller/mailer";
+import { sendResetPasswordEmail as sendResetPasswordEmailMaileroo, sendVerificationEmail as sendVerificationEmailMaileroo } from "../../controller/maileroo";
 import { uploadSellerDocuments } from "../../services/sellerDocumentService";
+import { HTTP_STATUS } from "../../utils/httpStatusCodes";
 
 // create user
 export const createUser = async (req: Request, res: Response, next: NextFunction) => {
@@ -49,7 +50,7 @@ export const createUser = async (req: Request, res: Response, next: NextFunction
 
     // Skip email sending in development mode
     if (isDevMode) {
-      res.status(201).json({
+      res.status(HTTP_STATUS.CREATED).json({
         message: 'User created successfully (auto-verified in development mode)',
         user: { id: newUser._id, name: newUser.name, email: newUser.email }
       });
@@ -62,12 +63,12 @@ export const createUser = async (req: Request, res: Response, next: NextFunction
         expiresIn: '1h', // 1 hour
         algorithm: 'HS256',
       });
-      await sendVerificationEmail(email, verificationToken);
-      res.status(201).json({ message: 'Verification email sent. Please check your inbox.' });
+      await sendVerificationEmailMaileroo(email, name, verificationToken);
+      res.status(HTTP_STATUS.CREATED).json({ message: 'Verification email sent. Please check your inbox.' });
     } catch (emailError) {
       console.error("Email sending failed:", emailError);
       // Still create the user but notify about email failure
-      res.status(201).json({
+      res.status(HTTP_STATUS.CREATED).json({
         message: 'User created successfully but verification email could not be sent. Please contact support.',
         user: { id: newUser._id, name: newUser.name, email: newUser.email }
       });
@@ -115,8 +116,58 @@ export const loginUser = async (req: Request, res: Response, next: NextFunction)
 // Get all users
 export const getAllUsers = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const users = await userModel.find();
-    res.json(users);
+    // Use pagination params from middleware
+    const { page, limit, skip } = req.pagination || { page: 1, limit: 10, skip: 0 };
+
+    // Build query based on filters from middleware (AND logic - all filters must match)
+    const query: any = {};
+    if (req.filters) {
+      if (req.filters.roles) query.roles = req.filters.roles;
+      if (req.filters.verified !== undefined) query.verified = req.filters.verified === 'true';
+      if (req.filters.sellerStatus) {
+        // Filter by seller application status
+        if (req.filters.sellerStatus === 'pending') {
+          query['sellerInfo'] = { $exists: true };
+          query['sellerInfo.isApproved'] = false;
+          query['sellerInfo.rejectionReason'] = { $exists: false };
+        } else if (req.filters.sellerStatus === 'approved') {
+          query['sellerInfo.isApproved'] = true;
+        } else if (req.filters.sellerStatus === 'rejected') {
+          query['sellerInfo.rejectionReason'] = { $exists: true };
+        }
+      }
+    }
+
+    // Build sort object from middleware
+    const sort: any = {};
+    if (req.sort) {
+      sort[req.sort.field] = req.sort.order === 'desc' ? -1 : 1;
+    } else {
+      sort.createdAt = -1; // Default sort by newest first
+    }
+
+    // Get total count for pagination metadata
+    const total = await userModel.countDocuments(query);
+
+    // Get paginated users with filters and sorting
+    const users = await userModel.find(query)
+      .select('-password') // Exclude password field
+      .skip(skip)
+      .limit(limit)
+      .sort(sort);
+
+    // Calculate total pages
+    const totalPages = Math.ceil(total / limit);
+
+    res.json({
+      users,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages
+      }
+    });
   } catch (err) {
     return next(createHttpError(500, "Error while getting users"));
   }
@@ -148,7 +199,7 @@ export const getUserById = async (req: Request, res: Response, next: NextFunctio
 export const updateUser = async (req: Request, res: Response, next: NextFunction) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
+    return res.status(HTTP_STATUS.BAD_REQUEST).json({ errors: errors.array() });
   }
 
   const userId = req.params.userId;
@@ -465,9 +516,10 @@ export const deleteUser = async (req: Request, res: Response, next: NextFunction
     const user = await userModel.findById(req.params.id);
     if (user) {
       await user.deleteOne();
-      res.json({ message: 'User deleted' });
+      // Return 204 No Content for successful deletion
+      res.status(HTTP_STATUS.NO_CONTENT).send();
     } else {
-      res.status(404).json({ message: 'User not found' });
+      res.status(HTTP_STATUS.NOT_FOUND).json({ message: 'User not found' });
     }
   } catch (err) {
     return next(createHttpError(500, "Error while deleting user"));
@@ -482,13 +534,13 @@ export const changeUserRole = async (req: Request, res: Response, next: NextFunc
     const adminUser = await userModel.findById(adminUserId);
 
     if (!adminUser || !adminUser.roles.includes('admin')) {
-      return res.status(403).json({ message: 'Only an admin can change user roles' });
+      return res.status(HTTP_STATUS.FORBIDDEN).json({ message: 'Only an admin can change user roles' });
     }
 
     const targetUser = await userModel.findById(targetUserId);
 
     if (!targetUser) {
-      return res.status(404).json({ message: 'Target user not found' });
+      return res.status(HTTP_STATUS.NOT_FOUND).json({ message: 'Target user not found' });
     }
 
     targetUser.roles = newRoles;
@@ -518,7 +570,7 @@ export const verifyUser = async (req: Request, res: Response, next: NextFunction
     user.verified = true;
     await user.save();
 
-    res.status(200).json({ message: 'Email verified successfully' });
+    res.status(HTTP_STATUS.OK).json({ message: 'Email verified successfully' });
   } catch (err) {
     return next(createHttpError(400, "Invalid or expired token"));
   }
@@ -559,7 +611,7 @@ export const forgotPassword = async (req: Request, res: Response, next: NextFunc
       console.log('🔧 Development mode: Reset token:', resetToken);
       console.log('🔧 Reset URL:', `${config.frontendDomain}/auth/login?forgottoken=${resetToken}`);
 
-      return res.status(200).json({
+      return res.status(HTTP_STATUS.OK).json({
         message: 'Development mode: Password reset token generated (check server logs)',
         resetToken, // Only in development!
         resetUrl: `${config.frontendDomain}/auth/login?forgottoken=${resetToken}`
@@ -568,12 +620,12 @@ export const forgotPassword = async (req: Request, res: Response, next: NextFunc
 
     // Send email in production
     try {
-      await sendResetPasswordEmail(email, resetToken);
-      res.status(200).json({ message: 'Password reset email sent. Please check your inbox.' });
+      await sendResetPasswordEmailMaileroo(email, user.name, resetToken);
+      res.status(HTTP_STATUS.OK).json({ message: 'Password reset email sent. Please check your inbox.' });
     } catch (emailError) {
       console.error('Email sending failed:', emailError);
       // Still allow password reset but notify about email failure
-      res.status(200).json({
+      res.status(HTTP_STATUS.OK).json({
         message: 'Password reset initiated but email could not be sent. Please contact support.',
         resetToken: isDevMode ? resetToken : undefined // Only expose in dev
       });
@@ -602,7 +654,7 @@ export const resetPassword = async (req: Request, res: Response, next: NextFunct
     user.password = hashedPassword; // Assuming you are hashing passwords before saving
     await user.save();
 
-    res.status(200).json({ message: 'Password reset successful' });
+    res.status(HTTP_STATUS.OK).json({ message: 'Password reset successful' });
   } catch (err) {
     return next(createHttpError(400, 'Invalid or expired token'));
   }
@@ -637,7 +689,7 @@ export const deleteSellerApplication = async (req: Request, res: Response, next:
       $set: { roles: 'user' }
     });
 
-    res.status(200).json({
+    res.status(HTTP_STATUS.OK).json({
       message: "Seller application deleted successfully. User converted to normal user."
     });
   } catch (error) {

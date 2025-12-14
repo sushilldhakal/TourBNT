@@ -24,8 +24,8 @@ export const getPendingReviews = async () => {
 export const getTourReviews = async (tourId: string, status?: string) => {
     try {
         const url = status
-            ? `/api/reviews/tour/${tourId}?status=${status}`
-            : `/api/reviews/tour/${tourId}`;
+            ? `/api/tours/${tourId}/reviews?status=${status}`
+            : `/api/tours/${tourId}/reviews`;
         const response = await api.get(url);
         return extractResponseData(response);
     } catch (error) {
@@ -43,7 +43,7 @@ export const updateReviewStatus = async (
 ) => {
     try {
         const response = await api.patch(
-            `/api/reviews/tour/${tourId}/review/${reviewId}/status`,
+            `/api/reviews/${reviewId}/status`,
             { status }
         );
         return extractResponseData(response);
@@ -58,7 +58,7 @@ export const updateReviewStatus = async (
 export const addReviewReply = async (tourId: string, reviewId: string, comment: string) => {
     try {
         const response = await api.post(
-            `/api/reviews/tour/${tourId}/review/${reviewId}/reply`,
+            `/api/reviews/${reviewId}/replies`,
             { comment }
         );
         return extractResponseData(response);
@@ -72,7 +72,7 @@ export const addReviewReply = async (tourId: string, reviewId: string, comment: 
  */
 export const likeReview = async (tourId: string, reviewId: string) => {
     try {
-        const response = await api.post(`/api/reviews/tour/${tourId}/review/${reviewId}/like`);
+        const response = await api.post(`/api/reviews/${reviewId}/likes`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'liking review');
@@ -84,7 +84,7 @@ export const likeReview = async (tourId: string, reviewId: string) => {
  */
 export const addReview = async (tourId: string, rating: number, comment: string) => {
     try {
-        const response = await api.post(`/api/reviews/tour/${tourId}`, {
+        const response = await api.post(`/api/tours/${tourId}/reviews`, {
             rating,
             comment,
             tour: tourId,
@@ -127,7 +127,7 @@ export const getApprovedReviews = async (limit?: number) => {
  */
 export const getTourRating = async (tourId: string) => {
     try {
-        const response = await api.get(`/api/reviews/tour/${tourId}/rating`);
+        const response = await api.get(`/api/tours/${tourId}/rating`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching tour rating');
@@ -136,14 +136,13 @@ export const getTourRating = async (tourId: string) => {
 
 /**
  * Increment review view count
+ * @deprecated View tracking is now automatic on GET requests
  */
 export const incrementReviewView = async (tourId: string, reviewId: string) => {
-    try {
-        const response = await api.post(`/api/reviews/tour/${tourId}/review/${reviewId}/view`);
-        return extractResponseData(response);
-    } catch (error) {
-        throw handleApiError(error, 'incrementing review view');
-    }
+    // View tracking is now automatic - this function is kept for backward compatibility
+    // but does nothing as views are tracked automatically on GET requests
+    console.warn('incrementReviewView is deprecated - view tracking is now automatic');
+    return Promise.resolve({ success: true, message: 'View tracking is automatic' });
 };
 
 /**
@@ -152,7 +151,7 @@ export const incrementReviewView = async (tourId: string, reviewId: string) => {
 export const likeReplyReview = async (tourId: string, reviewId: string, replyId: string) => {
     try {
         const response = await api.post(
-            `/api/reviews/tour/${tourId}/review/${reviewId}/reply/${replyId}/like`
+            `/api/comments/${replyId}/likes`
         );
         return extractResponseData(response);
     } catch (error) {

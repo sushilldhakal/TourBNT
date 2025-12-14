@@ -53,7 +53,7 @@ export const processPayment = async (paymentData: {
  */
 export const getUserBookings = async () => {
     try {
-        const response = await api.get('/api/bookings/user', {
+        const response = await api.get('/api/bookings/my-bookings', {
             timeout: 15000,
         });
         return response.data;

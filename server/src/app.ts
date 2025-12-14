@@ -1,25 +1,30 @@
 import express from "express";
 import globalErrorHandler from "./middlewares/globalErrorHandler";
+import authRouter from "./api/auth/authRouter";
 import userRouter from "./api/user/userRouter";
 import tourRouter from "./api/tours/tourRouter";
 import tourSearchRouter from "./api/tours/tourSearchRouter";
 import cors from "cors";
 import { config } from "./config/config";
 import breadcrumbsMiddleware from "./middlewares/breadcrumbsMiddleware";
+import { metricsMiddleware } from "./middlewares/metricsMiddleware";
 import galleryRoutes from "./api/gallery/galleryRoutes";
 import generateRouter from "./api/generate/generateRoute";
 import subscriberRouter from "./api/subscriber/subscriberRouter";
 import factsRouter from "./api/user/facts/factsRoutes";
 import faqsRouter from "./api/user/faq/faqRouter";
 import postRouter from "./api/post/postRoute";
+import commentRouter from "./api/comment/commentRouter";
 import reviewRoutes from "./api/review/reviewRoutes";
 import globalRoutes from "./api/global";
 import bookingRouter from "./api/bookings/bookingRoutes";
+import notificationRouter from "./api/notifications/notificationRoutes";
+import monitoringRouter from "./api/monitoring/monitoringRoutes";
+import swaggerUi from 'swagger-ui-express';
+import { getSwaggerSpec } from './config/swagger';
+import { logger } from './utils/logger';
 // import fixedDepartureRouter from "./api/fixedDepartureRouter";
 // import schemaRoutes from "./api/tours/schemaRoutes";
-
-// Add multer for handling multipart/form-data
-import multer from 'multer';
 
 const app = express();
 
@@ -48,15 +53,43 @@ app.use(
 
 app.use(express.json());
 
+// Apply metrics middleware to track all requests
+app.use(metricsMiddleware);
 
 // Apply breadcrumbsMiddleware before specific routes
 app.use(breadcrumbsMiddleware);
+
+// Swagger Documentation
+const swaggerSpec = getSwaggerSpec();
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+  customCss: '.swagger-ui .topbar { display: none }',
+  customSiteTitle: 'TourBNT API Documentation',
+  swaggerOptions: {
+    persistAuthorization: true,
+    displayRequestDuration: true,
+    filter: true,
+    tryItOutEnabled: true,
+  },
+}));
+
+// Serve OpenAPI spec as JSON
+app.get('/api-docs.json', (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.send(swaggerSpec);
+});
 
 // Routes
 app.get("/", (req, res) => {
   res.json({ message: "Hello, this is TourBNT APIs" });
 });
 
+// Monitoring routes (health check and metrics dashboard)
+app.use("/api/monitoring", monitoringRouter);
+
+// Authentication routes (NEW - RESTful)
+app.use("/api/auth", authRouter);
+
+// Existing routes
 app.use("/api/users", userRouter);
 app.use("/api/tours", tourRouter);
 app.use("/api/tour-search", tourSearchRouter);
@@ -64,11 +97,13 @@ app.use('/api/subscribers', subscriberRouter);
 app.use("/api/gallery", galleryRoutes);
 app.use("/api/generate", generateRouter);
 app.use("/api/posts", postRouter);
+app.use("/api/comments", commentRouter);
 app.use("/api/facts", factsRouter);
 app.use("/api/faqs", faqsRouter);
 app.use("/api/reviews", reviewRoutes);
 app.use("/api/global", globalRoutes);
 app.use("/api/bookings", bookingRouter);
+app.use("/api/notifications", notificationRouter);
 // app.use("/api/fixed-departures", fixedDepartureRouter);
 // app.use("/api/schema", schemaRoutes);
 

@@ -212,7 +212,7 @@ export const rejectDestination = async (destinationId: string, reason: string) =
  */
 export const getUserToursTitle = async (userId: string) => {
     try {
-        const response = await api.get(`/api/tours/user/${userId}/titles`);
+        const response = await api.get(`/api/users/${userId}/tours/titles`);
         return response.data;
     } catch (error) {
         handleApiError(error, 'fetching tour titles');

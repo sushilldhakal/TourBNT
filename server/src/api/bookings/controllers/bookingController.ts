@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { BookingService } from '../services/bookingService';
 import { AuthRequest } from '../../../middlewares/authenticate';
 import { sendSuccess, sendPaginatedResponse } from '../../../utils/responseHandler';
+import { HTTP_STATUS } from '../../../utils/httpStatusCodes';
 import createHttpError from 'http-errors';
 
 /**
@@ -48,7 +49,7 @@ export const createBooking = async (req: AuthRequest, res: Response, next: NextF
 
         const booking = await BookingService.createBooking(bookingData);
 
-        sendSuccess(res, booking, 'Booking created successfully', 201);
+        sendSuccess(res, booking, 'Booking created successfully', HTTP_STATUS.CREATED);
     } catch (error) {
         next(error);
     }
@@ -59,18 +60,21 @@ export const createBooking = async (req: AuthRequest, res: Response, next: NextF
  */
 export const getAllBookings = async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-        const { page = 1, limit = 10, status, paymentStatus, tourId } = req.query;
+        // Get pagination params from middleware
+        const { page, limit } = req.pagination || { page: 1, limit: 10 };
 
-        const filters: any = {};
-        if (status) filters.status = status;
-        if (paymentStatus) filters.paymentStatus = paymentStatus;
-        if (tourId) filters.tour = tourId;
+        // Get filters from middleware
+        const filters: any = req.filters || {};
+
+        // Get sort params from middleware
+        const sortBy = req.sort?.field || 'createdAt';
+        const sortOrder = req.sort?.order || 'desc';
 
         const result = await BookingService.getAllBookings(filters, {
-            page: Number(page),
-            limit: Number(limit),
-            sortBy: 'createdAt',
-            sortOrder: 'desc'
+            page,
+            limit,
+            sortBy,
+            sortOrder
         });
 
         sendPaginatedResponse(res, result.items, {

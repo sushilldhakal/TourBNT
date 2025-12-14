@@ -1,20 +1,26 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import Notification from './notificationModel';
 import { AuthRequest } from '../../middlewares/authenticate';
+import { HTTP_STATUS } from '../../utils/httpStatusCodes';
 
 // Get notifications for authenticated user
 export const getUserNotifications = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?._id;
     if (!userId) {
-      return res.status(401).json({
-        success: false,
-        message: 'Authentication required'
+      return res.status(HTTP_STATUS.UNAUTHORIZED).json({
+        error: {
+          code: 'AUTHENTICATION_REQUIRED',
+          message: 'Authentication required',
+          timestamp: new Date().toISOString(),
+          path: req.path
+        }
       });
     }
 
-    const { page = 1, limit = 20, unreadOnly = false } = req.query;
-    const skip = (Number(page) - 1) * Number(limit);
+    // Get pagination from middleware
+    const { page, limit, skip } = req.pagination || { page: 1, limit: 10, skip: 0 };
+    const { unreadOnly } = req.query;
 
     let query: any = { recipient: userId };
     if (unreadOnly === 'true') {
@@ -25,30 +31,33 @@ export const getUserNotifications = async (req: AuthRequest, res: Response) => {
       .populate('sender', 'name email')
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(Number(limit));
+      .limit(limit);
 
     const total = await Notification.countDocuments(query);
-    const unreadCount = await Notification.countDocuments({ 
-      recipient: userId, 
-      isRead: false 
+    const unreadCount = await Notification.countDocuments({
+      recipient: userId,
+      isRead: false
     });
 
-    res.json({
-      success: true,
+    res.status(HTTP_STATUS.OK).json({
       data: notifications,
       pagination: {
-        current: Number(page),
-        total: Math.ceil(total / Number(limit)),
-        count: notifications.length,
-        totalItems: total
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit)
       },
       unreadCount
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching notifications',
-      error: error instanceof Error ? error.message : 'Unknown error'
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      error: {
+        code: 'FETCH_NOTIFICATIONS_ERROR',
+        message: 'Error fetching notifications',
+        details: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+        path: req.path
+      }
     });
   }
 };
@@ -57,24 +66,32 @@ export const getUserNotifications = async (req: AuthRequest, res: Response) => {
 export const markNotificationAsRead = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?._id;
-    const { notificationId } = req.params;
+    const { id } = req.params;
 
     if (!userId) {
-      return res.status(401).json({
-        success: false,
-        message: 'Authentication required'
+      return res.status(HTTP_STATUS.UNAUTHORIZED).json({
+        error: {
+          code: 'AUTHENTICATION_REQUIRED',
+          message: 'Authentication required',
+          timestamp: new Date().toISOString(),
+          path: req.path
+        }
       });
     }
 
     const notification = await Notification.findOne({
-      _id: notificationId,
+      _id: id,
       recipient: userId
     });
 
     if (!notification) {
-      return res.status(404).json({
-        success: false,
-        message: 'Notification not found'
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
+        error: {
+          code: 'NOTIFICATION_NOT_FOUND',
+          message: 'Notification not found',
+          timestamp: new Date().toISOString(),
+          path: req.path
+        }
       });
     }
 
@@ -82,46 +99,18 @@ export const markNotificationAsRead = async (req: AuthRequest, res: Response) =>
     notification.readAt = new Date();
     await notification.save();
 
-    res.json({
-      success: true,
-      message: 'Notification marked as read',
+    res.status(HTTP_STATUS.OK).json({
       data: notification
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error marking notification as read',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-};
-
-// Mark all notifications as read
-export const markAllNotificationsAsRead = async (req: AuthRequest, res: Response) => {
-  try {
-    const userId = req.user?._id;
-
-    if (!userId) {
-      return res.status(401).json({
-        success: false,
-        message: 'Authentication required'
-      });
-    }
-
-    await Notification.updateMany(
-      { recipient: userId, isRead: false },
-      { isRead: true, readAt: new Date() }
-    );
-
-    res.json({
-      success: true,
-      message: 'All notifications marked as read'
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error marking all notifications as read',
-      error: error instanceof Error ? error.message : 'Unknown error'
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      error: {
+        code: 'MARK_READ_ERROR',
+        message: 'Error marking notification as read',
+        details: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+        path: req.path
+      }
     });
   }
 };
@@ -130,36 +119,46 @@ export const markAllNotificationsAsRead = async (req: AuthRequest, res: Response
 export const deleteNotification = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?._id;
-    const { notificationId } = req.params;
+    const { id } = req.params;
 
     if (!userId) {
-      return res.status(401).json({
-        success: false,
-        message: 'Authentication required'
+      return res.status(HTTP_STATUS.UNAUTHORIZED).json({
+        error: {
+          code: 'AUTHENTICATION_REQUIRED',
+          message: 'Authentication required',
+          timestamp: new Date().toISOString(),
+          path: req.path
+        }
       });
     }
 
     const notification = await Notification.findOneAndDelete({
-      _id: notificationId,
+      _id: id,
       recipient: userId
     });
 
     if (!notification) {
-      return res.status(404).json({
-        success: false,
-        message: 'Notification not found'
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
+        error: {
+          code: 'NOTIFICATION_NOT_FOUND',
+          message: 'Notification not found',
+          timestamp: new Date().toISOString(),
+          path: req.path
+        }
       });
     }
 
-    res.json({
-      success: true,
-      message: 'Notification deleted successfully'
-    });
+    // Return 204 No Content for successful deletion
+    res.status(HTTP_STATUS.NO_CONTENT).send();
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error deleting notification',
-      error: error instanceof Error ? error.message : 'Unknown error'
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      error: {
+        code: 'DELETE_NOTIFICATION_ERROR',
+        message: 'Error deleting notification',
+        details: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+        path: req.path
+      }
     });
   }
 };

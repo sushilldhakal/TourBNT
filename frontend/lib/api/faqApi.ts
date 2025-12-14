@@ -2,7 +2,7 @@ import { api } from "./apiClient";
 
 export const getUserFaq = async (userId: string) => {
     try {
-        const response = await api.get(`/api/faqs/user/${userId}`);
+        const response = await api.get(`/api/users/${userId}/faqs`);
         return response.data;
     } catch (error) {
         console.error('Error fetching user FAQs:', error);
@@ -46,7 +46,7 @@ export const deleteFaq = async (faqId: string) => {
 
 export const deleteMultipleFaqs = async (faqIds: string[]) => {
     try {
-        return api.post('/api/faqs/bulk-delete', { faqIds });
+        return api.delete('/api/faqs', { data: { ids: faqIds } });
     } catch (error) {
         throw error;
     }

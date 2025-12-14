@@ -1,47 +1,41 @@
 import { NextFunction, Request, Response } from 'express';
-import mongoose from 'mongoose';
-import Post, { IPost } from './postModel';  // Assuming Post model is in models folder
+import Post from './postModel';  // Assuming Post model is in models folder
 import createHttpError from 'http-errors';
 import { AuthRequest } from '../../middlewares/authenticate';
-import Comment from './commentModel';  // Adjust the path
-import { paginate, PaginationParams } from '../../utils/pagination';
+import { HTTP_STATUS } from '../../utils/httpStatusCodes';
 
 // Add a new post
 export const addPost = async (req: Request,
-    res: Response,
-    next: NextFunction): Promise<void> => {
+  res: Response,
+  next: NextFunction): Promise<void> => {
   try {
     const _req = req as AuthRequest;
     const { title, content, tags, image, status, enableComments } = req.body;
-      // Check if the user has the required role
-      const userRole = _req.roles; // Assuming role is stored on the user object
-      // if (userRole !== 'seller' && userRole !== 'admin') {
-      //   res.status(403).json({ message: 'Access denied: Unauthorized role' });
-      //   return;
-      // }
 
-     // Parse the tags string into an array
-     const parsedTags = JSON.parse(tags); 
-    
-    // Ensure that content is a string (stringified JSON)
+    // Parse the tags if it's a string, otherwise use as-is
+    const parsedTags = typeof tags === 'string' ? JSON.parse(tags) : tags || [];
+
+    // Ensure that content is a string (stringified JSON if object)
     const parsedContent = typeof content === 'object' ? JSON.stringify(content) : content;
 
     const newPost = new Post({
       title,
       content: parsedContent,
-      author: _req.userId,  // Convert author to ObjectId
+      author: _req.userId,
       tags: parsedTags,
-      enableComments: enableComments,
+      enableComments: enableComments !== undefined ? enableComments : true,
       image,
-      status,
+      status: status || 'Draft',
     });
+
     const savedPost = await newPost.save();
-    res.status(201).json({
+
+    res.status(HTTP_STATUS.CREATED).json({
       message: 'Post created successfully',
       post: savedPost,
     });
   } catch (err) {
-    console.error(err);  // Log error for debugging
+    console.error(err);
     next(createHttpError(500, 'Failed to add post'));
   }
 };
@@ -49,34 +43,50 @@ export const addPost = async (req: Request,
 export const getAllPosts = async (req: Request,
   res: Response,
   next: NextFunction): Promise<void> => {
-    try {
-      const paginationParams: PaginationParams = {
-        page: req.query.page ? parseInt(req.query.page as string, 10) : undefined,
-        limit: req.query.limit ? parseInt(req.query.limit as string, 10) : undefined,
-        sortBy: req.query.sortBy as string,
-        sortOrder: req.query.sortOrder as 'asc' | 'desc',
-        search: req.query.search as string
-      };
-  
-      const { page, limit, totalPages, totalItems, items } = await paginate<IPost>(Post, {}, paginationParams);
-      
-      // Fetch posts with populated author details
-      const posts = await Post.find({}).populate('author', 'name');
+  try {
+    // Use pagination params from middleware
+    const { page, limit, skip } = req.pagination || { page: 1, limit: 10, skip: 0 };
 
-          res.status(200).json({
-            page,
-            limit,
-            totalPages,
-            totalItems,
-            posts: posts.map(post => ({
-                ...post.toObject(),
-                author: post.author // Include author's name
-            })),
-        });
-    }catch (err) {
-      console.error('Error fetching posts:', err);
-      next(createHttpError(500, 'Failed to get posts'));
+    // Build query based on filters from middleware (AND logic - all filters must match)
+    const query: any = {};
+    if (req.filters) {
+      if (req.filters.status) query.status = req.filters.status;
+      if (req.filters.author) query.author = req.filters.author;
     }
+
+    // Build sort object from middleware
+    const sort: any = {};
+    if (req.sort) {
+      sort[req.sort.field] = req.sort.order === 'desc' ? -1 : 1;
+    } else {
+      sort.createdAt = -1; // Default sort by createdAt descending
+    }
+
+    // Fetch posts with pagination, filtering, and sorting
+    const posts = await Post.find(query)
+      .sort(sort)
+      .skip(skip)
+      .limit(limit)
+      .populate('author', 'name');
+
+    // Get total count for pagination metadata
+    const totalItems = await Post.countDocuments(query);
+    const totalPages = Math.ceil(totalItems / limit);
+
+    res.status(HTTP_STATUS.OK).json({
+      page,
+      limit,
+      totalPages,
+      totalItems,
+      posts: posts.map(post => ({
+        ...post.toObject(),
+        author: post.author
+      })),
+    });
+  } catch (err) {
+    console.error('Error fetching posts:', err);
+    next(createHttpError(500, 'Failed to get posts'));
+  }
 };
 
 
@@ -116,7 +126,7 @@ export const getAllUserPosts = async (req: Request, res: Response, next: NextFun
     // Getting total count for pagination
     const totalPosts = await Post.countDocuments(query);
 
-    res.status(200).json({
+    res.status(HTTP_STATUS.OK).json({
       page: pageNumber,
       limit: pageSize,
       totalPages: Math.ceil(totalPosts / pageSize),
@@ -137,7 +147,7 @@ export const getAllUserPosts = async (req: Request, res: Response, next: NextFun
 export const getPost = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { postId } = req.params;
-    
+
     const post = await Post.findById(postId)
       .populate("author", "name avatar")
       .populate({
@@ -156,7 +166,7 @@ export const getPost = async (req: Request, res: Response, next: NextFunction): 
       });
 
     if (!post) {
-      res.status(404).json({ message: 'Post not found' });
+      res.status(HTTP_STATUS.NOT_FOUND).json({ message: 'Post not found' });
       return;
     }
 
@@ -167,7 +177,7 @@ export const getPost = async (req: Request, res: Response, next: NextFunction): 
       }
     ];
 
-    res.status(200).json({ post, breadcrumbs });
+    res.status(HTTP_STATUS.OK).json({ post, breadcrumbs });
   } catch (err) {
     console.error('Error in getPost:', err);
     next(createHttpError(500, 'Failed to get post'));
@@ -192,7 +202,7 @@ export const getUserPost = async (req: Request, res: Response, next: NextFunctio
 
     // If no post is found, return 404
     if (!post) {
-      res.status(404).json({ message: 'Post not found' });
+      res.status(HTTP_STATUS.NOT_FOUND).json({ message: 'Post not found' });
       return;
     }
 
@@ -205,11 +215,11 @@ export const getUserPost = async (req: Request, res: Response, next: NextFunctio
     ];
 
     if (!breadcrumbs.length) {
-      return next(createHttpError(404, 'Failed to get breadcrumbs'));
+      return next(createHttpError(HTTP_STATUS.NOT_FOUND, 'Failed to get breadcrumbs'));
     }
 
     // Send the post and breadcrumbs in the response
-    res.status(200).json({ post, breadcrumbs });
+    res.status(HTTP_STATUS.OK).json({ post, breadcrumbs });
   } catch (err) {
     // Log and return a 500 error
     console.error("Error getting post:", err);
@@ -231,24 +241,35 @@ export const deletePost = async (req: Request, res: Response, next: NextFunction
 
     // If the post doesn't exist, return a 404 error
     if (!post) {
-       res.status(404).json({ message: 'Post not found' });
-       return;
+      res.status(HTTP_STATUS.NOT_FOUND).json({
+        error: {
+          code: 'POST_NOT_FOUND',
+          message: 'Post not found',
+          timestamp: new Date().toISOString(),
+          path: req.path
+        }
+      });
+      return;
     }
 
     // Check if the current user is the owner of the post or an admin
     if (post.author.toString() !== _req.userId && _req.roles !== 'admin') {
-       res.status(403).json({ message: 'You are not authorized to delete this post' });
-       return;
+      res.status(HTTP_STATUS.FORBIDDEN).json({
+        error: {
+          code: 'FORBIDDEN',
+          message: 'You are not authorized to delete this post',
+          timestamp: new Date().toISOString(),
+          path: req.path
+        }
+      });
+      return;
     }
 
     // Delete the post
     await post.deleteOne();
 
-    // Successfully deleted
-    res.status(200).json({
-      message: 'Post deleted successfully',
-      post,
-    });
+    // Successfully deleted - return 204 No Content
+    res.status(HTTP_STATUS.NO_CONTENT).send();
   } catch (err) {
     // Log the error for debugging
     console.error("Error deleting post:", err);
@@ -269,14 +290,14 @@ export const editPost = async (req: Request, res: Response, next: NextFunction):
 
     // If the post doesn't exist, return a 404 error
     if (!post) {
-       res.status(404).json({ message: 'Post not found' });
-       return;
+      res.status(HTTP_STATUS.NOT_FOUND).json({ message: 'Post not found' });
+      return;
     }
 
     // Check if the current user is the owner of the post or an admin
     if (post.author.toString() !== _req.userId && _req.roles !== 'admin') {
-       res.status(403).json({ message: 'You are not authorized to edit this post' });
-       return;
+      res.status(HTTP_STATUS.FORBIDDEN).json({ message: 'You are not authorized to edit this post' });
+      return;
     }
 
     // Update the post if authorized
@@ -285,7 +306,7 @@ export const editPost = async (req: Request, res: Response, next: NextFunction):
       runValidators: true,  // Ensure validators are run
     });
 
-    res.status(200).json({
+    res.status(HTTP_STATUS.OK).json({
       message: 'Post updated successfully',
       post: updatedPost,
     });

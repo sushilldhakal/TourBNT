@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import { HTTP_STATUS } from '../../../utils/httpStatusCodes';
 
 /**
  * Standardized response helpers for consistent API responses
@@ -19,12 +20,13 @@ export interface ApiResponse<T = any> {
 
 /**
  * Send successful response with data
+ * Default status code is 200 (OK) for GET/PATCH operations
  */
 export const sendSuccess = <T>(
-  res: Response, 
-  data: T, 
-  message?: string, 
-  statusCode: number = 200,
+  res: Response,
+  data: T,
+  message?: string,
+  statusCode: number = HTTP_STATUS.OK,
   pagination?: ApiResponse['pagination']
 ): Response => {
   const response: ApiResponse<T> = {
@@ -33,17 +35,18 @@ export const sendSuccess = <T>(
     ...(message && { message }),
     ...(pagination && { pagination })
   };
-  
+
   return res.status(statusCode).json(response);
 };
 
 /**
  * Send error response
+ * Default status code is 500 (Internal Server Error)
  */
 export const sendError = (
-  res: Response, 
-  message: string, 
-  statusCode: number = 500,
+  res: Response,
+  message: string,
+  statusCode: number = HTTP_STATUS.INTERNAL_SERVER_ERROR,
   error?: string
 ): Response => {
   const response: ApiResponse = {
@@ -51,12 +54,13 @@ export const sendError = (
     message,
     ...(error && { error })
   };
-  
+
   return res.status(statusCode).json(response);
 };
 
 /**
  * Send paginated response
+ * Always returns 200 (OK) for successful list operations
  */
 export const sendPaginatedResponse = <T>(
   res: Response,
@@ -69,7 +73,7 @@ export const sendPaginatedResponse = <T>(
   },
   message?: string
 ): Response => {
-  return sendSuccess(res, data, message, 200, pagination);
+  return sendSuccess(res, data, message, HTTP_STATUS.OK, pagination);
 };
 
 /**
@@ -93,7 +97,7 @@ export const RESPONSE_MESSAGES = {
   TOURS_RETRIEVED: 'Tours retrieved successfully',
   VIEW_INCREMENTED: 'Tour view count incremented',
   BOOKING_INCREMENTED: 'Tour booking count incremented',
-  
+
   // Error messages
   TOUR_NOT_FOUND: 'Tour not found',
   INVALID_TOUR_ID: 'Invalid tour ID',

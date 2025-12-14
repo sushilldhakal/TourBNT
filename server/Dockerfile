@@ -6,20 +6,20 @@ FROM base AS deps
 WORKDIR /app
 
 # Copy package files
-COPY package*.json ./
+COPY package.json ./
 
 # Install dependencies
-RUN npm ci --only=production
+RUN npm install --omit=dev --legacy-peer-deps
 
 # Build stage
 FROM base AS builder
 WORKDIR /app
 
 # Copy package files
-COPY package*.json ./
+COPY package.json ./
 
 # Install all dependencies (including dev dependencies)
-RUN npm ci
+RUN npm install --legacy-peer-deps
 
 # Copy source code
 COPY . .
@@ -45,6 +45,11 @@ RUN adduser --system --uid 1001 expressjs
 COPY --from=builder --chown=expressjs:nodejs /app/dist ./dist
 COPY --from=deps --chown=expressjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=expressjs:nodejs /app/package*.json ./
+
+# Copy source files for Swagger JSDoc comments (needed for API documentation)
+COPY --from=builder --chown=expressjs:nodejs /app/src ./src
+# Copy source files for Swagger JSDoc comments (needed for API documentation)
+COPY --from=builder --chown=expressjs:nodejs /app/src ./src
 
 # Copy PM2 ecosystem file
 COPY --chown=expressjs:nodejs ecosystem.config.js ./

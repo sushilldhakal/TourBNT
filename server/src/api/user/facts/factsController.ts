@@ -49,10 +49,30 @@ export const getUserFacts = async (req: AuthRequest, res: Response, next: NextFu
 
 export const getAllFacts = async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-        let facts;
-        facts = await Facts.find();  // Admin can view all facts
-        res.status(200).json({ facts });
+        const { page, limit, skip } = req.pagination || { page: 1, limit: 10, skip: 0 };
+
+        // Get total count for pagination metadata
+        const total = await Facts.countDocuments();
+
+        // Get paginated facts
+        const facts = await Facts.find()
+            .skip(skip)
+            .limit(limit);
+
+        // Calculate total pages
+        const totalPages = Math.ceil(total / limit);
+
+        res.status(200).json({
+            facts,
+            pagination: {
+                total,
+                page,
+                limit,
+                totalPages
+            }
+        });
     } catch (error) {
+        console.error('Error fetching facts:', error);
         res.status(500).json({ message: 'Failed to fetch facts' });
     }
 };
@@ -175,48 +195,80 @@ export const deleteMultipleFacts = async (req: AuthRequest, res: Response, next:
     try {
         const userId = req.userId;
         const userRole = req.roles;
-        const { factIds } = req.body; // Expecting an array of fact IDs
+        const { ids } = req.body; // Changed from factIds to ids for RESTful consistency
 
-        if (!Array.isArray(factIds) || factIds.length === 0) {
-            return res.status(400).json({ message: 'Invalid or empty factIds array' });
-        }
-
-        console.log(`🗑️  Bulk delete request for ${factIds.length} facts`);
-
-        // Find all facts to verify ownership
-        const factsToDelete = await Facts.find({ _id: { $in: factIds } });
-
-        if (factsToDelete.length === 0) {
-            return res.status(404).json({ message: 'No facts found with provided IDs' });
-        }
-
-        // Check authorization for each fact
-        const unauthorizedFacts = factsToDelete.filter(
-            fact => fact.user.toString() !== userId && userRole !== 'admin'
-        );
-
-        if (unauthorizedFacts.length > 0) {
-            return res.status(403).json({
-                message: 'Not authorized to delete some facts',
-                unauthorizedCount: unauthorizedFacts.length
+        if (!Array.isArray(ids) || ids.length === 0) {
+            return res.status(400).json({
+                error: {
+                    code: 'INVALID_REQUEST',
+                    message: 'Invalid or empty ids array',
+                    timestamp: new Date().toISOString(),
+                    path: req.path
+                }
             });
         }
 
-        // Delete all authorized facts
-        const deleteResult = await Facts.deleteMany({ _id: { $in: factIds } });
+        console.log(`🗑️  Bulk delete request for ${ids.length} facts`);
 
-        console.log(`✅ Successfully deleted ${deleteResult.deletedCount} facts`);
-        console.log(`   - Requested: ${factIds.length}`);
-        console.log(`   - Found: ${factsToDelete.length}`);
-        console.log(`   - Deleted: ${deleteResult.deletedCount}`);
+        // Find all facts to verify ownership
+        const factsToDelete = await Facts.find({ _id: { $in: ids } });
+
+        if (factsToDelete.length === 0) {
+            return res.status(404).json({
+                error: {
+                    code: 'NOT_FOUND',
+                    message: 'No facts found with provided IDs',
+                    timestamp: new Date().toISOString(),
+                    path: req.path
+                }
+            });
+        }
+
+        // Process each fact and track results
+        const success: string[] = [];
+        const failed: Array<{ id: string; error: string }> = [];
+
+        for (const factId of ids) {
+            const fact = factsToDelete.find(f => f._id.toString() === factId);
+
+            if (!fact) {
+                failed.push({ id: factId, error: 'Not found' });
+                continue;
+            }
+
+            // Check authorization
+            if (fact.user.toString() !== userId && userRole !== 'admin') {
+                failed.push({ id: factId, error: 'Not authorized' });
+                continue;
+            }
+
+            // Delete the fact
+            try {
+                await Facts.findByIdAndDelete(factId);
+                success.push(factId);
+            } catch (error) {
+                failed.push({ id: factId, error: 'Delete failed' });
+            }
+        }
+
+        console.log(`✅ Bulk delete completed`);
+        console.log(`   - Requested: ${ids.length}`);
+        console.log(`   - Success: ${success.length}`);
+        console.log(`   - Failed: ${failed.length}`);
 
         res.status(200).json({
-            message: 'Facts deleted successfully',
-            deletedCount: deleteResult.deletedCount,
-            requestedCount: factIds.length
+            success,
+            failed
         });
     } catch (error) {
         console.error('Error deleting multiple facts:', error);
-        res.status(500).json({ message: 'Failed to delete facts' });
+        res.status(500).json({
+            error: {
+                code: 'INTERNAL_ERROR',
+                message: 'Failed to delete facts',
+                timestamp: new Date().toISOString(),
+                path: req.path
+            }
+        });
     }
 };

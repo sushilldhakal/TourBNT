@@ -86,7 +86,7 @@ export const getTours = async ({ page = 1, limit = 12 }: { page?: number; limit?
 
 /**
  * Fetch a single tour by ID
- * Uses the public /api/tours/single/{id} endpoint
+ * Uses the public /api/tours/{id} endpoint
  * Server-side uses serverApi (no auth), client-side uses api (with auth if available)
  * 
  * @param tourId - Tour ID
@@ -98,7 +98,7 @@ export const getTourById = async (tourId: string) => {
         // Use serverApi on server-side (no auth interceptor), api on client-side
         const apiClient = typeof window === 'undefined' ? serverApi : api;
 
-        const response = await apiClient.get(`/api/tours/single/${tourId}?_t=${timestamp}`, {
+        const response = await apiClient.get(`/api/tours/${tourId}?_t=${timestamp}`, {
             headers: {
                 'Cache-Control': 'no-cache',
                 'Pragma': 'no-cache'

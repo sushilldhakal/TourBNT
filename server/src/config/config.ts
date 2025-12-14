@@ -78,6 +78,17 @@ const _config = {
     apiKey: process.env.SENDGRID_API_KEY
   },
   sendGridKey: process.env.SENDGRID_API_KEY,
+
+  // Maileroo SMTP configuration
+  maileroo: {
+    smtp: {
+      host: process.env.MAILEROO_SMTP_HOST || 'smtp.maileroo.com',
+      port: parseInt(process.env.MAILEROO_SMTP_PORT || '587'),
+      user: process.env.MAILEROO_SMTP_USER,
+      pass: process.env.MAILEROO_SMTP_PASS
+    },
+    fromEmail: process.env.MAILEROO_FROM_EMAIL || 'info@tourbnt.com'
+  },
 } as const;
 
 export const config = Object.freeze(_config);

@@ -58,7 +58,7 @@ export const getSinglePost = async (postId: string) => {
  */
 export const addPost = async (postData: FormData) => {
     try {
-        const response = await api.post('/api/posts/add', postData, {
+        const response = await api.post('/api/posts', postData, {
             headers: {
                 'Content-Type': 'multipart/form-data',
             },

@@ -3,6 +3,7 @@ import createHttpError from "http-errors";
 import { JwtPayload, verify } from "jsonwebtoken";
 import { config } from "../config/config";
 import { canAccessDashboard, isAdmin as checkIsAdmin, isSeller as checkIsSeller } from "../utils/roles";
+import { HTTP_STATUS } from "../utils/httpStatusCodes";
 
 // Define a user interface that matches the structure of your user data
 interface User {
@@ -22,7 +23,7 @@ export interface AuthRequest extends Request {
 const authenticate = (req: Request, res: Response, next: NextFunction) => {
   const token = req.header("Authorization");
   if (!token) {
-    return next(createHttpError(401, "Authorization token is required."));
+    return next(createHttpError(HTTP_STATUS.UNAUTHORIZED, "Authorization token is required."));
   }
 
   try {
@@ -40,7 +41,7 @@ const authenticate = (req: Request, res: Response, next: NextFunction) => {
 
     next();
   } catch (err) {
-    return next(createHttpError(401, "Token expired."));
+    return next(createHttpError(HTTP_STATUS.UNAUTHORIZED, "Token expired."));
   }
 };
 
@@ -49,7 +50,7 @@ const isAdminOrSeller = (req: AuthRequest, res: Response, next: NextFunction) =>
   if (canAccessDashboard(req.roles)) {
     next();
   } else {
-    next(createHttpError(403, 'Access forbidden: Dashboard access required'));
+    next(createHttpError(HTTP_STATUS.FORBIDDEN, 'Access forbidden: Dashboard access required'));
   }
 };
 
@@ -58,7 +59,7 @@ const isAdmin = (req: AuthRequest, res: Response, next: NextFunction) => {
   if (checkIsAdmin(req.roles)) {
     next();
   } else {
-    next(createHttpError(403, 'Access forbidden: Admin only'));
+    next(createHttpError(HTTP_STATUS.FORBIDDEN, 'Access forbidden: Admin only'));
   }
 };
 
@@ -67,7 +68,7 @@ const isSeller = (req: AuthRequest, res: Response, next: NextFunction) => {
   if (checkIsSeller(req.roles)) {
     next();
   } else {
-    next(createHttpError(403, 'Access forbidden: Sellers only'));
+    next(createHttpError(HTTP_STATUS.FORBIDDEN, 'Access forbidden: Sellers only'));
   }
 };
 

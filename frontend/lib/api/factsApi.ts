@@ -2,7 +2,7 @@ import { api } from "./apiClient";
 
 export const getUserFacts = async (userId: string) => {
     try {
-        const response = await api.get(`/api/facts/user/${userId}`);
+        const response = await api.get(`/api/users/${userId}/facts`);
         return response.data;
     } catch (error) {
         console.error('Error fetching user facts:', error);
@@ -46,7 +46,7 @@ export const deleteFacts = async (factId: string) => {
 
 export const deleteMultipleFacts = async (factIds: string[]) => {
     try {
-        return api.post('/api/facts/bulk-delete', { factIds });
+        return api.delete('/api/facts', { data: { ids: factIds } });
     } catch (error) {
         throw error;
     }

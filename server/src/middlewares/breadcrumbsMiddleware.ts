@@ -1,3 +1,4 @@
+/// <reference path="../types/express.d.ts" />
 import { Request, Response, NextFunction } from "express";
 import tourModel from "../api/tours/tourModel";
 import userModel from "../api/user/userModel";

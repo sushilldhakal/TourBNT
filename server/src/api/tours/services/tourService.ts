@@ -60,7 +60,7 @@ export class TourService extends BaseService<Tour> {
   /**
    * Get all tours with filtering and pagination
    */
-  static async getAllTours(filters: any = {}, paginationParams: PaginationParams) {
+  static async getAllTours(filters: any = {}, paginationParams: PaginationParams, sortOptions?: any) {
     const now = new Date();
     const baseQuery = {
       tourStatus: 'Published',
@@ -73,8 +73,16 @@ export class TourService extends BaseService<Tour> {
       ...filters
     };
 
+    // Merge sort options into pagination params
+    const paginationWithSort = { ...paginationParams };
+    if (sortOptions && Object.keys(sortOptions).length > 0) {
+      const sortField = Object.keys(sortOptions)[0];
+      paginationWithSort.sortBy = sortField;
+      paginationWithSort.sortOrder = sortOptions[sortField] === -1 ? 'desc' : 'asc';
+    }
+
     // Use the paginate utility directly with the model and query
-    const result = await paginate(TourModel, baseQuery, paginationParams);
+    const result = await paginate(TourModel, baseQuery, paginationWithSort);
 
     // Populate the results manually
     if (result.items && result.items.length > 0) {

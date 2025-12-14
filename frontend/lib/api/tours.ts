@@ -127,7 +127,7 @@ export const getTours = async ({
  */
 export const getUsersTours = async (userId: string) => {
     try {
-        const response = await api.get(`/api/tours/user/${userId}`);
+        const response = await api.get(`/api/users/${userId}/tours`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching user tours');
@@ -139,7 +139,7 @@ export const getUsersTours = async (userId: string) => {
  */
 export const getUserToursTitle = async (userId: string) => {
     try {
-        const response = await api.get(`/api/tours/user/${userId}/titles`);
+        const response = await api.get(`/api/users/${userId}/tours/titles`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching user tour titles');
@@ -163,7 +163,7 @@ export const getLatestTours = async () => {
  */
 export const getSingleTour = async (tourId: string) => {
     try {
-        const response = await api.get(`/api/tours/single/${tourId}`);
+        const response = await api.get(`/api/tours/${tourId}`);
         const tourData = response.data.tour || response.data;
         const breadcrumbs = response.data.breadcrumbs || [];
 
@@ -199,7 +199,7 @@ export const createTour = async (data: FormData) => {
  */
 export const updateTour = async (tourId: string, data: FormData) => {
     try {
-        const response = await api.patch(`/api/tours/single/${tourId}`, data, {
+        const response = await api.patch(`/api/tours/${tourId}`, data, {
             headers: {
                 'Content-Type': 'multipart/form-data',
             },
@@ -215,7 +215,7 @@ export const updateTour = async (tourId: string, data: FormData) => {
  */
 export const deleteTour = async (tourId: string) => {
     try {
-        const response = await api.delete(`/api/tours/single/${tourId}`);
+        const response = await api.delete(`/api/tours/${tourId}`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'deleting tour');
@@ -251,7 +251,7 @@ export const getToursServer = async (params?: {
 
 export const getSingleTourServer = async (tourId: string) => {
     try {
-        const response = await serverApi.get(`/api/tours/single/${tourId}`);
+        const response = await serverApi.get(`/api/tours/${tourId}`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching tour (server)');

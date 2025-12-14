@@ -4,7 +4,7 @@
   "description": "node server Rest API",
   "main": "server.ts",
   "scripts": {
-    "prebuild": "rm -rf node_modules package-lock.json && npm install",
+    "prebuild": "rm -rf dist",
     "dev": "nodemon server.ts",
     "build": "tsc --project tsconfig.build.json",
     "lint": "eslint .",
@@ -12,8 +12,7 @@
     "create-admin": "ts-node src/scripts/createAdmin.ts",
     "create-admin:prod": "NODE_ENV=production ts-node src/scripts/createAdmin.ts",
     "add-settings": "ts-node src/scripts/addUserSettings.ts",
-    "add-settings:prod": "NODE_ENV=production ts-node src/scripts/addUserSettings.ts",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "add-settings:prod": "NODE_ENV=production ts-node src/scripts/addUserSettings.ts"
   },
   "keywords": [
     "rest",
@@ -29,11 +28,14 @@
     "@types/express": "^4.17.21",
     "@types/jsonwebtoken": "^9.0.6",
     "@types/mongoose": "^5.11.97",
-    "@types/multer": "^1.4.11",
+    "@types/multer": "^1.4.13",
     "@types/node": "^20.14.9",
+    "@types/swagger-jsdoc": "^6.0.4",
+    "@types/swagger-ui-express": "^4.1.8",
     "@typescript-eslint/eslint-plugin": "^8.1.0",
     "@typescript-eslint/parser": "^8.1.0",
     "eslint": "^8.57.0",
+    "fast-check": "^4.4.0",
     "globals": "^15.7.0",
     "nodemon": "^3.1.4",
     "ts-node": "^10.9.2",
@@ -56,9 +58,11 @@
     "http-errors": "^2.0.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.4.4",
-    "multer": "^1.4.5-lts.2",
+    "multer": "^2.0.2",
     "nodemailer": "^7.0.11",
-    "openai": "^4.55.0"
+    "openai": "^4.55.0",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1"
   },
   "overrides": {
     "@types/express-serve-static-core": "^4.17.31"

@@ -4,6 +4,7 @@ import { TourService } from '../services/tourService';
 import { extractTourFields } from '../utils/dataProcessors';
 import { sendSuccess, sendError, sendPaginatedResponse, asyncHandler, RESPONSE_MESSAGES } from '../utils/responseHelpers';
 import { generateUniqueCode } from '../utils/codeGenerator';
+import { HTTP_STATUS } from '../../../utils/httpStatusCodes';
 
 /**
  * Refactored Tour Controller
@@ -12,18 +13,29 @@ import { generateUniqueCode } from '../utils/codeGenerator';
 
 /**
  * Get all tours with filtering and pagination
+ * Uses pagination and filter/sort middleware
  */
 export const getAllTours = asyncHandler(async (req: Request, res: Response) => {
-  const page = parseInt(req.query.page as string) || 1;
-  const limit = parseInt(req.query.limit as string) || 10;
-  const paginationParams = { page, limit };
+  // Use pagination params from middleware
+  const paginationParams = req.pagination || { page: 1, limit: 10 };
 
-  // Extract filters from query
+  // Use filters from middleware (AND logic - all filters must match)
   const filters: any = {};
-  if (req.query.destination) filters.destination = req.query.destination;
-  if (req.query.category) filters['category.categoryName'] = { $regex: req.query.category, $options: 'i' };
+  if (req.filters) {
+    if (req.filters.destination) filters.destination = req.filters.destination;
+    if (req.filters.category) filters['category.categoryName'] = { $regex: req.filters.category, $options: 'i' };
+    if (req.filters.status) filters.status = req.filters.status;
+  }
 
-  const result = await TourService.getAllTours(filters, paginationParams);
+  // Use sort params from middleware
+  const sortOptions: any = {};
+  if (req.sort) {
+    sortOptions[req.sort.field] = req.sort.order === 'desc' ? -1 : 1;
+  } else {
+    sortOptions.createdAt = -1; // Default sort
+  }
+
+  const result = await TourService.getAllTours(filters, paginationParams, sortOptions);
   return sendPaginatedResponse(res, result.items, {
     currentPage: result.page,
     totalPages: result.totalPages,
@@ -71,7 +83,7 @@ export const createTour = asyncHandler(async (req: Request, res: Response) => {
   const userId = authReq.user?._id;
 
   if (!userId) {
-    return sendError(res, RESPONSE_MESSAGES.UNAUTHORIZED, 401);
+    return sendError(res, RESPONSE_MESSAGES.UNAUTHORIZED, HTTP_STATUS.UNAUTHORIZED);
   }
 
   // Extract and process tour data
@@ -86,7 +98,7 @@ export const createTour = asyncHandler(async (req: Request, res: Response) => {
   tourData.author = userId;
 
   const newTour = await TourService.createTour(tourData, userId);
-  sendSuccess(res, newTour, RESPONSE_MESSAGES.TOUR_CREATED, 201);
+  sendSuccess(res, newTour, RESPONSE_MESSAGES.TOUR_CREATED, HTTP_STATUS.CREATED);
 });
 
 /**
@@ -99,7 +111,7 @@ export const updateTour = asyncHandler(async (req: Request, res: Response) => {
   const { tourId } = req.params;
 
   if (!userId) {
-    return sendError(res, RESPONSE_MESSAGES.UNAUTHORIZED, 401);
+    return sendError(res, RESPONSE_MESSAGES.UNAUTHORIZED, HTTP_STATUS.UNAUTHORIZED);
   }
 
   // Extract and process update data
@@ -116,7 +128,7 @@ export const updateTour = asyncHandler(async (req: Request, res: Response) => {
 
   const updatedTour = await TourService.updateTour(tourId, updateData, authorId);
 
-  sendSuccess(res, updatedTour, RESPONSE_MESSAGES.TOUR_UPDATED);
+  sendSuccess(res, updatedTour, RESPONSE_MESSAGES.TOUR_UPDATED, HTTP_STATUS.OK);
 });
 
 /**
@@ -129,14 +141,15 @@ export const deleteTour = asyncHandler(async (req: Request, res: Response) => {
   const { tourId } = req.params;
 
   if (!userId) {
-    return sendError(res, RESPONSE_MESSAGES.UNAUTHORIZED, 401);
+    return sendError(res, RESPONSE_MESSAGES.UNAUTHORIZED, HTTP_STATUS.UNAUTHORIZED);
   }
 
   // Only admins can delete any tour, others can only delete their own
   const authorId = userRoles === 'admin' ? undefined : userId;
 
   await TourService.deleteTour(tourId, authorId);
-  sendSuccess(res, null, RESPONSE_MESSAGES.TOUR_DELETED);
+  // Return 204 No Content for successful deletion
+  res.status(HTTP_STATUS.NO_CONTENT).send();
 });
 
 /**
@@ -217,7 +230,7 @@ export const getUserTours = asyncHandler(async (req: Request, res: Response) => 
   const isAdmin = authReq.roles === 'admin';
   // Security check: users can only access their own tours unless they're admin
   if (!isAdmin && authReq.userId !== userId) {
-    return sendError(res, 'Access denied: Cannot access other user\'s tours', 403);
+    return sendError(res, 'Access denied: Cannot access other user\'s tours', HTTP_STATUS.FORBIDDEN);
   }
 
   const page = parseInt(req.query.page as string) || 1;
@@ -242,7 +255,7 @@ export const getUserToursTitle = asyncHandler(async (req: Request, res: Response
   // Security check: users can only access their own tours unless they're admin
   const isAdmin = authReq.roles === 'admin';
   if (!isAdmin && authReq.userId !== userId) {
-    return sendError(res, 'Access denied: Cannot access other user\'s tours', 403);
+    return sendError(res, 'Access denied: Cannot access other user\'s tours', HTTP_STATUS.FORBIDDEN);
   }
 
   const tours = await TourService.getUserTourTitles(userId);
@@ -277,12 +290,12 @@ export const checkTourAvailability = asyncHandler(async (req: Request, res: Resp
   const { date } = req.query;
 
   if (!date) {
-    return sendError(res, 'Date parameter is required', 400);
+    return sendError(res, 'Date parameter is required', HTTP_STATUS.BAD_REQUEST);
   }
 
   const departureDate = new Date(date as string);
   if (isNaN(departureDate.getTime())) {
-    return sendError(res, 'Invalid date format', 400);
+    return sendError(res, 'Invalid date format', HTTP_STATUS.BAD_REQUEST);
   }
 
   // Import BookingService dynamically to avoid circular dependencies

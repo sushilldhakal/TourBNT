@@ -99,7 +99,7 @@ const sellerDestinationPreferencesSchema = new Schema<ISellerDestinationPreferen
       default: Date.now,
     }
   },
-  { 
+  {
     timestamps: true,
     toJSON: { virtuals: true },
     toObject: { virtuals: true }
@@ -107,33 +107,31 @@ const sellerDestinationPreferencesSchema = new Schema<ISellerDestinationPreferen
 );
 
 // Indexes for performance
-sellerDestinationPreferencesSchema.index({ seller: 1 });
 sellerDestinationPreferencesSchema.index({ 'destinationPreferences.destination': 1 });
-sellerDestinationPreferencesSchema.index({ seller: 1, 'destinationPreferences.destination': 1 });
 
 // Compound index to prevent duplicate destination preferences per seller
 sellerDestinationPreferencesSchema.index(
-  { seller: 1, 'destinationPreferences.destination': 1 }, 
+  { seller: 1, 'destinationPreferences.destination': 1 },
   { unique: true, sparse: true }
 );
 
 // Virtual for visible destinations count
-sellerDestinationPreferencesSchema.virtual('visibleDestinationsCount').get(function() {
+sellerDestinationPreferencesSchema.virtual('visibleDestinationsCount').get(function () {
   return this.destinationPreferences.filter(pref => pref.isVisible).length;
 });
 
 // Virtual for enabled destinations count
-sellerDestinationPreferencesSchema.virtual('enabledDestinationsCount').get(function() {
+sellerDestinationPreferencesSchema.virtual('enabledDestinationsCount').get(function () {
   return this.destinationPreferences.filter(pref => pref.isEnabled).length;
 });
 
 // Virtual for favorite destinations count
-sellerDestinationPreferencesSchema.virtual('favoriteDestinationsCount').get(function() {
+sellerDestinationPreferencesSchema.virtual('favoriteDestinationsCount').get(function () {
   return this.destinationPreferences.filter(pref => pref.isFavorite).length;
 });
 
 // Static method to get seller's visible destinations
-sellerDestinationPreferencesSchema.statics.getVisibleDestinations = function(sellerId: mongoose.Schema.Types.ObjectId) {
+sellerDestinationPreferencesSchema.statics.getVisibleDestinations = function (sellerId: mongoose.Schema.Types.ObjectId) {
   return this.findOne({ seller: sellerId })
     .populate({
       path: 'destinationPreferences.destination',
@@ -153,7 +151,7 @@ sellerDestinationPreferencesSchema.statics.getVisibleDestinations = function(sel
 };
 
 // Static method to get seller's enabled destinations
-sellerDestinationPreferencesSchema.statics.getEnabledDestinations = function(sellerId: mongoose.Schema.Types.ObjectId) {
+sellerDestinationPreferencesSchema.statics.getEnabledDestinations = function (sellerId: mongoose.Schema.Types.ObjectId) {
   return this.findOne({ seller: sellerId })
     .populate({
       path: 'destinationPreferences.destination',
@@ -168,7 +166,7 @@ sellerDestinationPreferencesSchema.statics.getEnabledDestinations = function(sel
 };
 
 // Static method to get seller's favorite destinations
-sellerDestinationPreferencesSchema.statics.getFavoriteDestinations = function(sellerId: mongoose.Schema.Types.ObjectId) {
+sellerDestinationPreferencesSchema.statics.getFavoriteDestinations = function (sellerId: mongoose.Schema.Types.ObjectId) {
   return this.findOne({ seller: sellerId })
     .populate({
       path: 'destinationPreferences.destination',
@@ -183,14 +181,14 @@ sellerDestinationPreferencesSchema.statics.getFavoriteDestinations = function(se
 };
 
 // Method to update destination visibility
-sellerDestinationPreferencesSchema.methods.updateDestinationVisibility = function(
+sellerDestinationPreferencesSchema.methods.updateDestinationVisibility = function (
   destinationId: mongoose.Schema.Types.ObjectId,
   isVisible: boolean
 ) {
   const preference = this.destinationPreferences.find(
     (pref: any) => pref.destination.toString() === destinationId.toString()
   );
-  
+
   if (preference) {
     preference.isVisible = isVisible;
   } else {
@@ -200,20 +198,20 @@ sellerDestinationPreferencesSchema.methods.updateDestinationVisibility = functio
       isEnabled: isVisible
     });
   }
-  
+
   this.lastUpdated = new Date();
   return this.save();
 };
 
 // Method to update destination enabled status
-sellerDestinationPreferencesSchema.methods.updateDestinationEnabled = function(
+sellerDestinationPreferencesSchema.methods.updateDestinationEnabled = function (
   destinationId: mongoose.Schema.Types.ObjectId,
   isEnabled: boolean
 ) {
   const preference = this.destinationPreferences.find(
     (pref: any) => pref.destination.toString() === destinationId.toString()
   );
-  
+
   if (preference) {
     preference.isEnabled = isEnabled;
   } else {
@@ -223,19 +221,19 @@ sellerDestinationPreferencesSchema.methods.updateDestinationEnabled = function(
       isEnabled
     });
   }
-  
+
   this.lastUpdated = new Date();
   return this.save();
 };
 
 // Method to toggle favorite status
-sellerDestinationPreferencesSchema.methods.toggleFavorite = function(
+sellerDestinationPreferencesSchema.methods.toggleFavorite = function (
   destinationId: mongoose.Schema.Types.ObjectId
 ) {
   const preference = this.destinationPreferences.find(
     (pref: any) => pref.destination.toString() === destinationId.toString()
   );
-  
+
   if (preference) {
     preference.isFavorite = !preference.isFavorite;
   } else {
@@ -246,13 +244,13 @@ sellerDestinationPreferencesSchema.methods.toggleFavorite = function(
       isFavorite: true
     });
   }
-  
+
   this.lastUpdated = new Date();
   return this.save();
 };
 
 // Method to bulk update destination preferences
-sellerDestinationPreferencesSchema.methods.bulkUpdatePreferences = function(updates: Array<{
+sellerDestinationPreferencesSchema.methods.bulkUpdatePreferences = function (updates: Array<{
   destinationId: mongoose.Schema.Types.ObjectId;
   isVisible?: boolean;
   isEnabled?: boolean;
@@ -264,7 +262,7 @@ sellerDestinationPreferencesSchema.methods.bulkUpdatePreferences = function(upda
     const preference = this.destinationPreferences.find(
       (pref: any) => pref.destination.toString() === update.destinationId.toString()
     );
-    
+
     if (preference) {
       if (update.isVisible !== undefined) preference.isVisible = update.isVisible;
       if (update.isEnabled !== undefined) preference.isEnabled = update.isEnabled;
@@ -282,30 +280,30 @@ sellerDestinationPreferencesSchema.methods.bulkUpdatePreferences = function(upda
       });
     }
   });
-  
+
   this.lastUpdated = new Date();
   return this.save();
 };
 
 // Method to mark destination as used
-sellerDestinationPreferencesSchema.methods.markDestinationUsed = function(
+sellerDestinationPreferencesSchema.methods.markDestinationUsed = function (
   destinationId: mongoose.Schema.Types.ObjectId
 ) {
   const preference = this.destinationPreferences.find(
     (pref: any) => pref.destination.toString() === destinationId.toString()
   );
-  
+
   if (preference) {
     preference.lastUsed = new Date();
     this.lastUpdated = new Date();
     return this.save();
   }
-  
+
   return Promise.resolve(this);
 };
 
 // Pre-save middleware to update lastUpdated
-sellerDestinationPreferencesSchema.pre('save', function(next) {
+sellerDestinationPreferencesSchema.pre('save', function (next) {
   this.lastUpdated = new Date();
   next();
 });

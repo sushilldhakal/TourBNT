@@ -170,7 +170,6 @@ const bookingSchema = new Schema<Booking>(
         bookingReference: {
             type: String,
             required: true,
-            unique: true,
         },
         notes: String,
     },
@@ -182,7 +181,7 @@ const bookingSchema = new Schema<Booking>(
 // Indexes
 bookingSchema.index({ tour: 1, departureDate: 1 });
 bookingSchema.index({ user: 1 });
-bookingSchema.index({ bookingReference: 1 });
+bookingSchema.index({ bookingReference: 1 }, { unique: true });
 bookingSchema.index({ status: 1 });
 bookingSchema.index({ 'guestInfo.email': 1 });
 

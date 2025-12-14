@@ -55,6 +55,8 @@ COPY --from=frontend-builder /app/frontend/next.config.ts ./frontend/
 COPY --from=backend-builder /app/server/dist ./server/dist
 COPY --from=backend-builder /app/server/package*.json ./server/
 COPY --from=backend-builder /app/server/node_modules ./server/node_modules
+# Copy source files for Swagger JSDoc comments (needed for API documentation)
+COPY --from=backend-builder /app/server/src ./server/src
 
 # Copy root package.json
 COPY package.json ./
@@ -71,6 +73,14 @@ RUN mkdir -p /run/nginx && \
     echo '  server {' >> /etc/nginx/nginx.conf && \
     echo '    listen 8080;' >> /etc/nginx/nginx.conf && \
     echo '    location /api/ {' >> /etc/nginx/nginx.conf && \
+    echo '      proxy_pass http://localhost:4000;' >> /etc/nginx/nginx.conf && \
+    echo '      proxy_http_version 1.1;' >> /etc/nginx/nginx.conf && \
+    echo '      proxy_set_header Upgrade $http_upgrade;' >> /etc/nginx/nginx.conf && \
+    echo '      proxy_set_header Connection "upgrade";' >> /etc/nginx/nginx.conf && \
+    echo '      proxy_set_header Host $host;' >> /etc/nginx/nginx.conf && \
+    echo '      proxy_cache_bypass $http_upgrade;' >> /etc/nginx/nginx.conf && \
+    echo '    }' >> /etc/nginx/nginx.conf && \
+    echo '    location /api-docs {' >> /etc/nginx/nginx.conf && \
     echo '      proxy_pass http://localhost:4000;' >> /etc/nginx/nginx.conf && \
     echo '      proxy_http_version 1.1;' >> /etc/nginx/nginx.conf && \
     echo '      proxy_set_header Upgrade $http_upgrade;' >> /etc/nginx/nginx.conf && \

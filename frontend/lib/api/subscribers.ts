@@ -23,7 +23,7 @@ export const subscribe = async (data: { email: string[] }) => {
  */
 export const unsubscribe = async (data: { email: string }) => {
     try {
-        const response = await api.post('/api/subscribers/unsubscribe', data);
+        const response = await api.delete(`/api/subscribers/${encodeURIComponent(data.email)}`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'unsubscribing');

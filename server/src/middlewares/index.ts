@@ -1,0 +1,35 @@
+/**
+ * Centralized middleware exports
+ * Import middleware from this file for consistency
+ */
+
+// Rate limiting
+export { authLimiter, generalLimiter } from './rateLimiter';
+
+// Pagination
+export { paginationMiddleware } from './pagination';
+export type { PaginationParams } from './pagination';
+
+// Filtering and sorting
+export { filterSortMiddleware } from './filterSort';
+export type { FilterParams, SortParams } from './filterSort';
+
+// View tracking
+export {
+    viewTrackingMiddleware,
+    simpleViewTracking
+} from './viewTracking';
+export type {
+    ViewTrackableResource,
+    ViewTrackingService
+} from './viewTracking';
+
+// Authentication (existing)
+export { authenticate, isAdmin, isAdminOrSeller } from './authenticate';
+export type { AuthRequest } from './authenticate';
+
+// Error handling (existing)
+export { default as globalErrorHandler } from './globalErrorHandler';
+
+// Multer (existing)
+export * from './multer';

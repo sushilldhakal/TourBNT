@@ -40,16 +40,23 @@ export const getTourRating = async (req: Request, res: Response) => {
 
 // Get all approved reviews (public endpoint for guest users)
 export const getAllApprovedReviews = async (req: Request, res: Response) => {
-
     console.log("getAllApprovedReviews")
     try {
-        const limit = req.query.limit ? parseInt(req.query.limit as string) : 10;
-        
+        // Get pagination params from middleware
+        const { page, limit, skip } = req.pagination || { page: 1, limit: 10, skip: 0 };
+
+        // Get filter and sort params from middleware
+        const filters = req.filters || {};
+        const sort = req.sort;
+
         // Import the Tour model here to avoid circular dependencies
         const Tour = require('../tours/tourModel').default;
-        
-        // Find tours with approved reviews
-        const tours = await Tour.find({ 'reviews.status': 'approved' })
+
+        // Build query for filtering
+        const statusFilter = filters.status || 'approved';
+
+        // Find tours with reviews matching the status filter
+        const tours = await Tour.find({ [`reviews.status`]: statusFilter })
             .select('title slug images reviews')
             .populate({
                 path: 'reviews.user',
@@ -61,13 +68,13 @@ export const getAllApprovedReviews = async (req: Request, res: Response) => {
             })
             .setOptions({ strictPopulate: false }) // Added to fix StrictPopulateError
             .lean();
-        
-        // Extract all approved reviews from all tours
-        let allApprovedReviews: Array<any> = [];
-        
+
+        // Extract all reviews matching the status filter from all tours
+        let allReviews: Array<any> = [];
+
         for (const tour of tours) {
-            const approvedReviews = tour.reviews
-                .filter((review: any) => review.status === 'approved')
+            const filteredReviews = tour.reviews
+                .filter((review: any) => review.status === statusFilter)
                 .map((review: any) => ({
                     ...review,
                     tourId: tour._id,
@@ -75,37 +82,62 @@ export const getAllApprovedReviews = async (req: Request, res: Response) => {
                     tourSlug: tour.slug,
                     tourImage: tour.images && tour.images.length > 0 ? tour.images[0] : null
                 }));
-                
-            allApprovedReviews = [...allApprovedReviews, ...approvedReviews];
+
+            allReviews = [...allReviews, ...filteredReviews];
         }
-        
-        // Sort by rating (highest first) and then by date (newest first)
-        allApprovedReviews.sort((a: any, b: any) => {
-            // First sort by rating (highest first)
-            if (b.rating !== a.rating) {
-                return b.rating - a.rating;
-            }
-            // Then by date (newest first)
-            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-        });
-        
-        // Limit the number of reviews
-        const limitedReviews = allApprovedReviews.slice(0, limit);
-        
-        if (limitedReviews.length === 0) {
-            console.log("No approved reviews found");
-            return res.status(404).json({ message: 'No approved reviews found', reviews: [], total: 0 });
+
+        // Apply sorting
+        if (sort) {
+            allReviews.sort((a: any, b: any) => {
+                const aValue = a[sort.field];
+                const bValue = b[sort.field];
+
+                if (sort.field === 'createdAt') {
+                    const aTime = new Date(aValue).getTime();
+                    const bTime = new Date(bValue).getTime();
+                    return sort.order === 'asc' ? aTime - bTime : bTime - aTime;
+                } else if (sort.field === 'rating') {
+                    return sort.order === 'asc' ? aValue - bValue : bValue - aValue;
+                }
+                return 0;
+            });
+        } else {
+            // Default sort: by rating (highest first) and then by date (newest first)
+            allReviews.sort((a: any, b: any) => {
+                if (b.rating !== a.rating) {
+                    return b.rating - a.rating;
+                }
+                return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+            });
         }
-        
-        console.log(`Found ${limitedReviews.length} approved reviews`);
-        
+
+        // Calculate total and pagination
+        const total = allReviews.length;
+        const totalPages = Math.ceil(total / limit);
+
+        // Apply pagination
+        const paginatedReviews = allReviews.slice(skip, skip + limit);
+
+        console.log(`Found ${total} reviews, returning page ${page} with ${paginatedReviews.length} reviews`);
+
         res.json({
-            reviews: limitedReviews,
-            total: limitedReviews.length
+            reviews: paginatedReviews,
+            total,
+            page,
+            limit,
+            totalPages
         });
     } catch (error) {
-        console.error("Error fetching approved reviews:", error);
-        res.status(500).json({ message: 'Error fetching approved reviews', error: error instanceof Error ? error.message : String(error) });
+        console.error("Error fetching reviews:", error);
+        res.status(500).json({
+            error: {
+                code: 'INTERNAL_SERVER_ERROR',
+                message: 'Error fetching reviews',
+                details: error instanceof Error ? error.message : String(error),
+                timestamp: new Date().toISOString(),
+                path: req.path
+            }
+        });
     }
 };
 
@@ -206,7 +238,7 @@ export const getTourReviews = async (req: Request, res: Response) => {
                 path: 'reviews.user',
                 select: 'name email profileImage roles'
             })
-            // Removed the problematic populate for replies.user since it's not in the schema;
+        // Removed the problematic populate for replies.user since it's not in the schema;
 
         if (!tour) {
             return res.status(404).json({ message: 'Tour not found' });
@@ -219,7 +251,7 @@ export const getTourReviews = async (req: Request, res: Response) => {
         }
 
         // Sort reviews by date (newest first) and apply pagination
-        const sortedReviews = filteredReviews.sort((a: any, b: any) => 
+        const sortedReviews = filteredReviews.sort((a: any, b: any) =>
             new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
         );
 
@@ -258,38 +290,45 @@ export const getTourReviews = async (req: Request, res: Response) => {
 export const getPendingReviews = async (req: Request, res: Response) => {
     try {
         const userId = (req as AuthRequest).userId;
-        
+
         // Ensure user is authenticated
         if (!userId) {
-            return res.status(401).json({ message: 'You must be logged in to view pending reviews' });
+            return res.status(401).json({
+                error: {
+                    code: 'AUTHENTICATION_REQUIRED',
+                    message: 'You must be logged in to view pending reviews',
+                    timestamp: new Date().toISOString(),
+                    path: req.path
+                }
+            });
         }
-        
+
         const page = parseInt(req.query.page as string) || 1;
         const limit = parseInt(req.query.limit as string) || 10;
         const skip = (page - 1) * limit;
 
-        // Find all tours by this seller that have pending reviews
-        const tours = await Tour.find({ 
-            author: userId,
-            'reviews.status': 'pending'
-        }).populate({
+        // Check if user is admin
+        const userModel = require('../user/userModel').default;
+        const user = await userModel.findById(userId);
+        const isAdmin = user?.roles === 'admin';
+
+        // Find all tours with pending reviews (admin sees all, sellers see only their own)
+        const query = isAdmin
+            ? { 'reviews.status': 'pending' }
+            : { author: userId, 'reviews.status': 'pending' };
+
+        const tours = await Tour.find(query).populate({
             path: 'reviews.user',
             select: 'name email profileImage roles'
         });
 
         if (!tours || tours.length === 0) {
             return res.status(200).json({
-                success: true,
-                message: 'No pending reviews found',
-                data: {
-                    reviews: [],
-                    pagination: {
-                        currentPage: page,
-                        totalPages: 0,
-                        totalItems: 0,
-                        itemsPerPage: limit
-                    }
-                }
+                reviews: [],
+                total: 0,
+                page,
+                limit,
+                totalPages: 0
             });
         }
 
@@ -304,27 +343,32 @@ export const getPendingReviews = async (req: Request, res: Response) => {
         });
 
         // Sort reviews by date (newest first) and apply pagination
-        const sortedReviews = pendingReviews.sort((a: any, b: any) => 
+        const sortedReviews = pendingReviews.sort((a: any, b: any) =>
             new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
         );
 
+        const total = sortedReviews.length;
+        const totalPages = Math.ceil(total / limit);
         const paginatedReviews = sortedReviews.slice(skip, skip + limit);
 
         res.status(200).json({
-            success: true,
-            data: {
-                reviews: paginatedReviews,
-                pagination: {
-                    currentPage: page,
-                    totalPages: Math.ceil(pendingReviews.length / limit),
-                    totalItems: pendingReviews.length,
-                    itemsPerPage: limit
-                }
-            }
+            reviews: paginatedReviews,
+            total,
+            page,
+            limit,
+            totalPages
         });
     } catch (error) {
         console.error('Error in getPendingReviews:', error);
-        res.status(500).json({ message: 'Failed to get pending reviews', error });
+        res.status(500).json({
+            error: {
+                code: 'INTERNAL_SERVER_ERROR',
+                message: 'Failed to get pending reviews',
+                details: error instanceof Error ? error.message : String(error),
+                timestamp: new Date().toISOString(),
+                path: req.path
+            }
+        });
     }
 };
 
@@ -332,12 +376,12 @@ export const getPendingReviews = async (req: Request, res: Response) => {
 export const getAllReviews = async (req: Request, res: Response) => {
     try {
         const userId = (req as AuthRequest).userId;
-        
+
         // Ensure user is authenticated
         if (!userId) {
             return res.status(401).json({ message: 'You must be logged in to view reviews' });
         }
-        
+
         const page = parseInt(req.query.page as string) || 1;
         const limit = parseInt(req.query.limit as string) || 50; // Increased limit to show more reviews
         const skip = (page - 1) * limit;
@@ -346,7 +390,7 @@ export const getAllReviews = async (req: Request, res: Response) => {
         const userModel = require('../user/userModel').default;
         const user = await userModel.findById(userId);
         const isAdmin = user?.roles === 'admin';
-        
+
         let tours;
         if (isAdmin) {
             // Admins can see all tours with reviews
@@ -359,7 +403,7 @@ export const getAllReviews = async (req: Request, res: Response) => {
             });
         } else {
             // Regular sellers can only see their own tours with reviews
-            tours = await Tour.find({ 
+            tours = await Tour.find({
                 author: userId
             }).populate({
                 path: 'reviews.user',
@@ -388,7 +432,7 @@ export const getAllReviews = async (req: Request, res: Response) => {
 
         // Extract all reviews from all tours
         const allReviews: Array<any> = [];
-        
+
         // Loop through each tour and extract its reviews
         for (const tour of tours) {
             if (tour.reviews && tour.reviews.length > 0) {
@@ -401,14 +445,14 @@ export const getAllReviews = async (req: Request, res: Response) => {
                         tourTitle: tour.title
                     };
                 });
-                
+
                 // Add these reviews to our collection
                 allReviews.push(...tourReviews);
             }
         }
-        
+
         // Sort reviews by date (newest first) and apply pagination
-        const sortedReviews = allReviews.sort((a: any, b: any) => 
+        const sortedReviews = allReviews.sort((a: any, b: any) =>
             new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
         );
 
@@ -433,30 +477,65 @@ export const getAllReviews = async (req: Request, res: Response) => {
     }
 };
 
-// Approve or reject a review (using embedded reviews in tour model)
+// Approve or reject a review (using embedded reviews in tour model) - UPDATED for RESTful pattern
 export const updateReviewStatus = async (req: Request, res: Response) => {
     try {
-        const { tourId, reviewId } = req.params;
-        const { status } = req.body; // 'approved' or 'rejected'
-        const sellerId = (req as AuthRequest).userId;
+        const { reviewId } = req.params;
+        const { status } = req.body; // 'approved', 'rejected', or 'pending'
+        const userId = (req as AuthRequest).userId;
 
         // Validate inputs
-        if (!mongoose.Types.ObjectId.isValid(tourId) || !mongoose.Types.ObjectId.isValid(reviewId)) {
-            return res.status(400).json({ message: 'Invalid tour or review ID' });
+        if (!mongoose.Types.ObjectId.isValid(reviewId)) {
+            return res.status(400).json({
+                error: {
+                    code: 'INVALID_REVIEW_ID',
+                    message: 'Invalid review ID',
+                    timestamp: new Date().toISOString(),
+                    path: req.path
+                }
+            });
         }
 
-        if (!status || !['approved', 'rejected'].includes(status)) {
-            return res.status(400).json({ message: 'Status must be either "approved" or "rejected"' });
+        if (!status || !['approved', 'rejected', 'pending'].includes(status)) {
+            return res.status(400).json({
+                error: {
+                    code: 'INVALID_STATUS',
+                    message: 'Status must be either "approved", "rejected", or "pending"',
+                    timestamp: new Date().toISOString(),
+                    path: req.path
+                }
+            });
         }
 
-        // Find the tour and ensure it belongs to the current user
-        const tour = await Tour.findOne({ 
-            _id: tourId,
-            author: sellerId
-        });
+        // Check if user is admin
+        const userModel = require('../user/userModel').default;
+        const user = await userModel.findById(userId);
+        const isAdmin = user?.roles === 'admin';
+
+        // Find the tour containing this review
+        const tour = await Tour.findOne({ 'reviews._id': reviewId });
 
         if (!tour) {
-            return res.status(404).json({ message: 'Tour not found or you are not authorized to manage this tour' });
+            return res.status(404).json({
+                error: {
+                    code: 'REVIEW_NOT_FOUND',
+                    message: 'Review not found',
+                    timestamp: new Date().toISOString(),
+                    path: req.path
+                }
+            });
+        }
+
+        // Check authorization: admin can update any review, sellers can only update reviews on their tours
+        if (!isAdmin && tour.author.toString() !== userId) {
+            return res.status(403).json({
+                error: {
+                    code: 'FORBIDDEN',
+                    message: 'You are not authorized to manage this review',
+                    timestamp: new Date().toISOString(),
+                    path: req.path
+                }
+            });
         }
 
         // Find the review
@@ -465,7 +544,14 @@ export const updateReviewStatus = async (req: Request, res: Response) => {
         );
 
         if (reviewIndex === -1) {
-            return res.status(404).json({ message: 'Review not found' });
+            return res.status(404).json({
+                error: {
+                    code: 'REVIEW_NOT_FOUND',
+                    message: 'Review not found',
+                    timestamp: new Date().toISOString(),
+                    path: req.path
+                }
+            });
         }
 
         // Update the review status
@@ -475,44 +561,77 @@ export const updateReviewStatus = async (req: Request, res: Response) => {
         await tour.save();
 
         res.status(200).json({
-            success: true,
-            message: `Review ${status === 'approved' ? 'approved' : 'rejected'} successfully`,
-            data: {
-                review: tour.reviews[reviewIndex],
-                averageRating: tour.averageRating,
-                reviewCount: tour.reviewCount,
-                approvedReviewCount: tour.approvedReviewCount || 0
-            }
+            review: tour.reviews[reviewIndex],
+            averageRating: tour.averageRating,
+            reviewCount: tour.reviewCount,
+            approvedReviewCount: tour.approvedReviewCount || 0
         });
     } catch (error) {
         console.error('Error in updateReviewStatus:', error);
-        res.status(500).json({ message: `Failed to ${req.body.status} review`, error });
+        res.status(500).json({
+            error: {
+                code: 'INTERNAL_SERVER_ERROR',
+                message: `Failed to update review status`,
+                details: error instanceof Error ? error.message : String(error),
+                timestamp: new Date().toISOString(),
+                path: req.path
+            }
+        });
     }
 };
 
-// Add a reply to a review (using embedded reviews in tour model)
+// Add a reply to a review (using embedded reviews in tour model) - UPDATED for RESTful pattern
 export const addReviewReply = async (req: Request, res: Response) => {
     try {
-        const { tourId, reviewId } = req.params;
+        const { reviewId } = req.params;
         const { comment } = req.body;
         const userId = (req as AuthRequest).userId;
-        
+
         // Ensure user is authenticated
         if (!userId) {
-            return res.status(401).json({ message: 'You must be logged in to reply to a review' });
+            return res.status(401).json({
+                error: {
+                    code: 'AUTHENTICATION_REQUIRED',
+                    message: 'You must be logged in to reply to a review',
+                    timestamp: new Date().toISOString(),
+                    path: req.path
+                }
+            });
         }
 
-        if (!mongoose.Types.ObjectId.isValid(tourId) || !mongoose.Types.ObjectId.isValid(reviewId)) {
-            return res.status(400).json({ message: 'Invalid tour or review ID' });
+        if (!mongoose.Types.ObjectId.isValid(reviewId)) {
+            return res.status(400).json({
+                error: {
+                    code: 'INVALID_REVIEW_ID',
+                    message: 'Invalid review ID',
+                    timestamp: new Date().toISOString(),
+                    path: req.path
+                }
+            });
         }
 
         if (!comment || comment.trim() === '') {
-            return res.status(400).json({ message: 'Reply comment is required' });
+            return res.status(400).json({
+                error: {
+                    code: 'VALIDATION_ERROR',
+                    message: 'Reply comment is required',
+                    timestamp: new Date().toISOString(),
+                    path: req.path
+                }
+            });
         }
 
-        const tour = await Tour.findById(tourId);
+        // Find the tour containing this review
+        const tour = await Tour.findOne({ 'reviews._id': reviewId });
         if (!tour) {
-            return res.status(404).json({ message: 'Tour not found' });
+            return res.status(404).json({
+                error: {
+                    code: 'REVIEW_NOT_FOUND',
+                    message: 'Review not found',
+                    timestamp: new Date().toISOString(),
+                    path: req.path
+                }
+            });
         }
 
         // Find the review
@@ -521,7 +640,14 @@ export const addReviewReply = async (req: Request, res: Response) => {
         );
 
         if (reviewIndex === -1) {
-            return res.status(404).json({ message: 'Review not found' });
+            return res.status(404).json({
+                error: {
+                    code: 'REVIEW_NOT_FOUND',
+                    message: 'Review not found',
+                    timestamp: new Date().toISOString(),
+                    path: req.path
+                }
+            });
         }
 
         // Add the reply
@@ -539,7 +665,7 @@ export const addReviewReply = async (req: Request, res: Response) => {
         await tour.save();
 
         // Populate the user data for the new reply
-        const populatedTour = await Tour.findById(tourId)
+        const populatedTour = await Tour.findOne({ 'reviews._id': reviewId })
             .populate({
                 path: 'reviews.replies.user',
                 select: 'name email profileImage roles'
@@ -548,51 +674,83 @@ export const addReviewReply = async (req: Request, res: Response) => {
         const updatedReview = populatedTour?.reviews[reviewIndex];
         const newReplyWithUser = updatedReview?.replies[updatedReview.replies.length - 1];
 
-        res.status(200).json({
-            success: true,
-            message: 'Reply added successfully',
-            data: {
-                reply: newReplyWithUser
-            }
+        res.status(201).json({
+            reply: newReplyWithUser
         });
     } catch (error) {
         console.error('Error in addReviewReply:', error);
-        res.status(500).json({ message: 'Failed to add reply', error });
+        res.status(500).json({
+            error: {
+                code: 'INTERNAL_SERVER_ERROR',
+                message: 'Failed to add reply',
+                details: error instanceof Error ? error.message : String(error),
+                timestamp: new Date().toISOString(),
+                path: req.path
+            }
+        });
     }
 };
 
-// Like a review (using embedded reviews in tour model)
+// Like a review (using embedded reviews in tour model) - UPDATED for RESTful pattern
 export const likeReview = async (req: Request, res: Response) => {
     try {
-        const { tourId, reviewId } = req.params;
+        const { reviewId } = req.params;
         const userId = (req as AuthRequest).userId;
-        
+
         // Ensure user is authenticated
         if (!userId) {
-            return res.status(401).json({ message: 'You must be logged in to like a review' });
+            return res.status(401).json({
+                error: {
+                    code: 'AUTHENTICATION_REQUIRED',
+                    message: 'You must be logged in to like a review',
+                    timestamp: new Date().toISOString(),
+                    path: req.path
+                }
+            });
         }
 
-        if (!mongoose.Types.ObjectId.isValid(tourId) || !mongoose.Types.ObjectId.isValid(reviewId)) {
-            return res.status(400).json({ message: 'Invalid tour or review ID' });
+        if (!mongoose.Types.ObjectId.isValid(reviewId)) {
+            return res.status(400).json({
+                error: {
+                    code: 'INVALID_REVIEW_ID',
+                    message: 'Invalid review ID',
+                    timestamp: new Date().toISOString(),
+                    path: req.path
+                }
+            });
         }
 
         // Update the review's likes count
         const result = await Tour.updateOne(
-            { _id: tourId, "reviews._id": reviewId },
+            { "reviews._id": reviewId },
             { $inc: { "reviews.$.likes": 1 } }
         );
 
         if (result.matchedCount === 0) {
-            return res.status(404).json({ message: 'Tour or review not found' });
+            return res.status(404).json({
+                error: {
+                    code: 'REVIEW_NOT_FOUND',
+                    message: 'Review not found',
+                    timestamp: new Date().toISOString(),
+                    path: req.path
+                }
+            });
         }
 
         res.status(200).json({
-            success: true,
             message: 'Review liked successfully'
         });
     } catch (error) {
         console.error('Error in likeReview:', error);
-        res.status(500).json({ message: 'Failed to like review', error });
+        res.status(500).json({
+            error: {
+                code: 'INTERNAL_SERVER_ERROR',
+                message: 'Failed to like review',
+                details: error instanceof Error ? error.message : String(error),
+                timestamp: new Date().toISOString(),
+                path: req.path
+            }
+        });
     }
 };
 
@@ -601,13 +759,13 @@ export const likeReviewReply = async (req: Request, res: Response) => {
     try {
         const { tourId, reviewId, replyId } = req.params;
         const userId = (req as AuthRequest).userId;
-        
+
         // Ensure user is authenticated
         if (!userId) {
             return res.status(401).json({ message: 'You must be logged in to like a reply' });
         }
 
-        if (!mongoose.Types.ObjectId.isValid(tourId) || 
+        if (!mongoose.Types.ObjectId.isValid(tourId) ||
             !mongoose.Types.ObjectId.isValid(reviewId) ||
             !mongoose.Types.ObjectId.isValid(replyId)) {
             return res.status(400).json({ message: 'Invalid IDs provided' });
@@ -687,7 +845,7 @@ export const incrementReplyView = async (req: Request, res: Response) => {
     try {
         const { tourId, reviewId, replyId } = req.params;
 
-        if (!mongoose.Types.ObjectId.isValid(tourId) || 
+        if (!mongoose.Types.ObjectId.isValid(tourId) ||
             !mongoose.Types.ObjectId.isValid(reviewId) ||
             !mongoose.Types.ObjectId.isValid(replyId)) {
             return res.status(400).json({ message: 'Invalid IDs provided' });
@@ -730,5 +888,85 @@ export const incrementReplyView = async (req: Request, res: Response) => {
     } catch (error) {
         console.error('Error in incrementReplyView:', error);
         res.status(500).json({ message: 'Failed to increment view count', error });
+    }
+};
+
+
+// Get review by ID (public endpoint) - NEW RESTful endpoint
+export const getReviewById = async (req: Request, res: Response) => {
+    try {
+        const { reviewId } = req.params;
+
+        if (!mongoose.Types.ObjectId.isValid(reviewId)) {
+            return res.status(400).json({
+                error: {
+                    code: 'INVALID_REVIEW_ID',
+                    message: 'Invalid review ID',
+                    timestamp: new Date().toISOString(),
+                    path: req.path
+                }
+            });
+        }
+
+        // Find the tour containing this review
+        const tour = await Tour.findOne({ 'reviews._id': reviewId })
+            .select('title slug images reviews')
+            .populate({
+                path: 'reviews.user',
+                select: 'name email profileImage'
+            })
+            .populate({
+                path: 'reviews.replies.user',
+                select: 'name email profileImage'
+            })
+            .setOptions({ strictPopulate: false });
+
+        if (!tour) {
+            return res.status(404).json({
+                error: {
+                    code: 'REVIEW_NOT_FOUND',
+                    message: 'Review not found',
+                    timestamp: new Date().toISOString(),
+                    path: req.path
+                }
+            });
+        }
+
+        // Find the specific review
+        const review = tour.reviews.find((r: any) => r._id.toString() === reviewId);
+
+        if (!review) {
+            return res.status(404).json({
+                error: {
+                    code: 'REVIEW_NOT_FOUND',
+                    message: 'Review not found',
+                    timestamp: new Date().toISOString(),
+                    path: req.path
+                }
+            });
+        }
+
+        // Add tour information to the review
+        const reviewObj = (review as any).toObject ? (review as any).toObject() : review;
+        const reviewWithTour = {
+            ...reviewObj,
+            tourId: tour._id,
+            tourTitle: (tour as any).title,
+            tourSlug: (tour as any).slug,
+            tourImage: (tour as any).images && (tour as any).images.length > 0 ? (tour as any).images[0] : null
+        };
+
+        res.json(reviewWithTour);
+    } catch (error) {
+        console.error('Error in getReviewById:', error);
+        res.status(500).json({
+            error: {
+                code: 'INTERNAL_SERVER_ERROR',
+                message: 'Failed to get review',
+                details: error instanceof Error ? error.message : String(error),
+                timestamp: new Date().toISOString(),
+                path: req.path
+            }
+        });
     }
 };
