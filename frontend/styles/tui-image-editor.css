@@ -1,0 +1,34 @@
+/* TUI Image Editor CSS Import */
+@import 'tui-image-editor/dist/tui-image-editor.css';
+
+/* Custom overrides for TUI Image Editor */
+.tui-image-editor-container {
+    font-family: inherit !important;
+}
+
+.tui-image-editor-header {
+    background-color: transparent !important;
+    border: none !important;
+}
+
+.tui-image-editor-main {
+    background-color: #f8fafc !important;
+}
+
+.tui-image-editor-menu {
+    background-color: white !important;
+    border-top: 1px solid #e2e8f0 !important;
+}
+
+.tui-image-editor-button {
+    border-radius: 6px !important;
+}
+
+.tui-image-editor-button:hover {
+    background-color: #f1f5f9 !important;
+}
+
+.tui-image-editor-button.active {
+    background-color: #3b82f6 !important;
+    color: white !important;
+}
