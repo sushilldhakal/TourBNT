@@ -14,9 +14,8 @@ import { useDestination, useAllDestinations, useUserDestinations } from "./useDe
 import { addDestination, addExistingDestinationToSeller, getUserToursTitle } from "@/lib/api/destinationApi";
 import { Destination } from "@/lib/types";
 import { GalleryPage } from "@/components/dashboard/gallery/GalleryPage";
-import useTokenStore from '@/lib/store/tokenStore';
 import { JSONContent } from "novel";
-import { getUserId } from "@/lib/auth/authUtils";
+import { getUserId } from "@/lib/utils/auth";
 import NovelEditor from "../../editor/NovelEditor";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { MultiSelect, SelectValue } from "@/components/ui/MultiSelect";
@@ -61,13 +60,8 @@ interface AddDestinationProps {
 }
 
 const AddDestination = ({ onDestinationAdded }: AddDestinationProps) => {
-    const token = useTokenStore((state) => state.token);
     const [selectedDestinations, setSelectedDestinations] = useState<string[]>([]);
     const [addingDestinationId, setAddingDestinationId] = useState<string | null>(null);
-
-    // Debug token
-    console.log('AddDestination - Token exists:', !!token);
-    console.log('AddDestination - Token preview:', token ? `${token.substring(0, 20)}...` : 'No token');
 
     // All destinations hook for MultiSelect
     const { data: allDestinations, isLoading: isLoadingAll } = useAllDestinations();

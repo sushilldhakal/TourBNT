@@ -20,7 +20,7 @@ import {
 import { UploadSheetProps } from './types';
 import { UploadDropzone } from './UploadDropzone';
 import { useMediaUpload } from '@/lib/hooks/useMediaUpload';
-import { getUserId } from '@/lib/auth/authUtils';
+import { getUserId } from '@/lib/utils/auth';
 import { cn } from '@/lib/utils';
 import Icon from '@/components/Icon';
 

@@ -1,6 +1,6 @@
 import express from 'express';
 import multer from 'multer';
-import { authenticate, isAdminOrSeller } from '../../middlewares/authenticate';
+import { authenticate, authorizeRoles } from '../../middlewares/authenticate';
 import { paginationMiddleware } from '../../middlewares/pagination';
 import { filterSortMiddleware } from '../../middlewares/filterSort';
 import { simpleViewTracking } from '../../middlewares/viewTracking';
@@ -17,6 +17,7 @@ import {
   getSpecialOfferTours,
   getUserTours,
   getUserToursTitle,
+  getMyTours,
   incrementTourBookings,
   checkTourAvailability
 } from './controllers/tourController';
@@ -242,6 +243,42 @@ router.get('/discounted', getDiscountedTours);
  *                 $ref: '#/components/schemas/Tour'
  */
 router.get('/special-offers', getSpecialOfferTours);
+
+/**
+ * @swagger
+ * /api/tours/me:
+ *   get:
+ *     summary: Get current user's tours
+ *     description: Retrieve all tours created by the authenticated user (uses httpOnly cookie)
+ *     tags: [Tours]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: number
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: number
+ *           default: 10
+ *     responses:
+ *       200:
+ *         description: Current user's tours retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/PaginatedResponse'
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.get('/me', authenticate, validatePagination, getMyTours);
 
 // User tour management routes (must come before /:tourId to avoid conflicts)
 // Note: These routes will be deprecated in favor of /api/users/:userId/tours
@@ -573,7 +610,7 @@ router.get('/:tourId/rating', validateObjectId(), getTourRating);
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.get('/:tourId/bookings', authenticate, isAdminOrSeller as any, validateObjectId(), paginationMiddleware, getTourBookings);
+router.get('/:tourId/bookings', authenticate, authorizeRoles('admin', 'seller'), validateObjectId(), paginationMiddleware, getTourBookings);
 
 // RESTful update and delete routes (requires authentication and admin/seller role)
 /**
@@ -683,7 +720,7 @@ router.get('/:tourId/bookings', authenticate, isAdminOrSeller as any, validateOb
 router.patch(
   '/:tourId',
   authenticate,
-  isAdminOrSeller as any,
+  authorizeRoles('admin', 'seller'),
   validateObjectId(),
   upload.fields([
     { name: 'coverImage', maxCount: 1 },
@@ -692,7 +729,7 @@ router.patch(
   updateTour
 );
 
-router.delete('/:tourId', authenticate, isAdminOrSeller as any, validateObjectId(), deleteTour);
+router.delete('/:tourId', authenticate, authorizeRoles('admin', 'seller') as any, validateObjectId(), deleteTour);
 
 /**
  * @swagger
@@ -796,7 +833,7 @@ router.use(authenticate);
  */
 router.post('/',
   authenticate,
-  isAdminOrSeller as any,
+  authorizeRoles('admin', 'seller'),
   upload.fields([
     { name: 'coverImage', maxCount: 1 },
     { name: 'file', maxCount: 10 }

@@ -1,7 +1,6 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
-import { getUsers } from '@/lib/api/users';
+import { useAuth } from '@/lib/hooks/useAuth';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -10,52 +9,35 @@ import { Input } from '@/components/ui/input';
 import { Users, Mail, Calendar, Search, UserCog, UserPlus } from 'lucide-react';
 import Link from 'next/link';
 import { AdminGuard } from '@/components/dashboard/RoleGuard';
-import { PageHeader } from '@/components/dashboard/shared/PageHeader';
 import { LoadingState } from '@/components/dashboard/shared/LoadingState';
 import { EmptyState } from '@/components/dashboard/shared/EmptyState';
 import { ErrorState } from '@/components/dashboard/shared/ErrorState';
 import { format } from 'date-fns';
-import { useState, useEffect } from 'react';
-
-interface User {
-    _id: string;
-    name: string;
-    email: string;
-    role: string;
-    phone?: string;
-    createdAt: string;
-    avatar?: string;
-}
+import { useState } from 'react';
+import { User as StoreUser } from '@/lib/store/useUserStore';
 
 export default function UsersPage() {
     const [searchTerm, setSearchTerm] = useState('');
-    const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
+    const { user, isAuthenticated, isHydrated } = useAuth();
 
-    const { data, isLoading, isError } = useQuery({
-        queryKey: ['users'],
-        queryFn: getUsers,
-    });
+    // For now, show current user as the only "user" since we're using /api/users/me
+    // This page should be updated to show all users only for admin users
+    const users: StoreUser[] = isAuthenticated && user.id ? [user] : [];
+    const filteredUsers = searchTerm
+        ? users.filter((u: StoreUser) =>
+            u.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            u.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            u.roles?.toLowerCase().includes(searchTerm.toLowerCase())
+        )
+        : users;
 
-    const users = (data as any)?.data || [];
-
-    // Search functionality
-    useEffect(() => {
-        if (searchTerm) {
-            const filtered = users.filter(
-                (user: User) =>
-                    user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                    user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                    user.role.toLowerCase().includes(searchTerm.toLowerCase())
-            );
-            setFilteredUsers(filtered);
-        } else {
-            setFilteredUsers(users);
-        }
-    }, [searchTerm, users]);
+    const isLoading = !isHydrated;
+    const isError = false;
 
     // Helper function to get badge color based on role
-    const getRoleBadgeVariant = (role: string) => {
-        switch (role.toLowerCase()) {
+    const getRoleBadgeVariant = (roles: string) => {
+        const role = roles?.toLowerCase() || '';
+        switch (role) {
             case 'admin':
                 return 'destructive';
             case 'seller':
@@ -117,9 +99,9 @@ export default function UsersPage() {
 
         return (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredUsers.map((user: User) => (
+                {filteredUsers.map((user: StoreUser) => (
                     <Card
-                        key={user._id}
+                        key={user.id}
                         className="overflow-hidden hover:shadow-md transition-shadow border-muted"
                     >
                         <CardHeader className="p-6">
@@ -127,22 +109,21 @@ export default function UsersPage() {
                                 <div className="flex items-center gap-4">
                                     <Avatar className="h-12 w-12 border">
                                         <AvatarImage src={user.avatar} alt={user.name} />
-                                        <AvatarFallback>{getInitials(user.name)}</AvatarFallback>
+                                        <AvatarFallback>{getInitials(user.name || 'U')}</AvatarFallback>
                                     </Avatar>
                                     <div>
-                                        <CardTitle className="text-lg">{user.name}</CardTitle>
+                                        <CardTitle className="text-lg">{user.name || 'Unknown'}</CardTitle>
                                         <CardDescription className="text-sm flex items-center gap-1">
                                             <Mail className="h-3 w-3" /> {user.email}
                                         </CardDescription>
                                     </div>
                                 </div>
-                                <Badge variant={getRoleBadgeVariant(user.role)}>{user.role}</Badge>
+                                <Badge variant={getRoleBadgeVariant(user.roles)}>{user.roles}</Badge>
                             </div>
                         </CardHeader>
                         <CardContent className="p-6 pt-0">
                             <div className="text-sm text-muted-foreground flex items-center gap-1">
-                                <Calendar className="h-3 w-3" /> Joined:{' '}
-                                {format(new Date(user.createdAt), 'MMM dd, yyyy')}
+                                <Calendar className="h-3 w-3" /> Member since login
                             </div>
                             {user.phone && (
                                 <p className="text-sm mt-1 text-muted-foreground">Phone: {user.phone}</p>
@@ -150,7 +131,7 @@ export default function UsersPage() {
                         </CardContent>
                         <CardFooter className="p-6 pt-0 flex justify-end">
                             <Button variant="outline" size="sm" asChild className="flex items-center gap-2">
-                                <Link href={`/dashboard/users/edit/${user._id}`}>
+                                <Link href={`/dashboard/users/edit/${user.id}`}>
                                     <UserCog className="h-4 w-4" />
                                     Manage
                                 </Link>

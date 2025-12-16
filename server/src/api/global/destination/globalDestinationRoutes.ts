@@ -20,7 +20,7 @@ import {
   getUserDestinations,
   fixDeletedApprovedDestinations
 } from './globalDestinationController';
-import { authenticate, isAdmin } from '../../../middlewares/authenticate';
+import { authenticate, authorizeRoles } from '../../../middlewares/authenticate';
 import { uploadNone } from '../../../middlewares/multer';
 import { paginationMiddleware } from '../../../middlewares/pagination';
 
@@ -134,7 +134,7 @@ router.get('/', paginationMiddleware, getApprovedDestinations);
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/', authenticate, isAdmin as any, uploadNone, submitDestination as any);
+router.post('/', authenticate, authorizeRoles('admin'), uploadNone, submitDestination as any);
 
 /**
  * @swagger
@@ -191,7 +191,7 @@ router.post('/', authenticate, isAdmin as any, uploadNone, submitDestination as 
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.patch('/:id', authenticate, isAdmin as any, uploadNone, updateDestinationById as any);
+router.patch('/:id', authenticate, authorizeRoles('admin'), uploadNone, updateDestinationById as any);
 
 /**
  * @swagger
@@ -240,7 +240,7 @@ router.patch('/:id', authenticate, isAdmin as any, uploadNone, updateDestination
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.delete('/:id', authenticate, isAdmin as any, deleteDestinationById as any);
+router.delete('/:id', authenticate, authorizeRoles('admin'), deleteDestinationById as any);
 
 // Legacy route for backward compatibility
 /**

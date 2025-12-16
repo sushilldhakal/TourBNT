@@ -7,6 +7,7 @@ import { DashboardHeader } from './DashboardHeader';
 import { Breadcrumbs } from './Breadcrumbs';
 import { BreadcrumbsProvider } from '@/providers/BreadcrumbsProvider';
 import useDashboardStore from '@/store/dashboardStore';
+import { useAuth } from '@/lib/hooks/useAuth';
 import { cn } from '@/lib/utils';
 
 /**
@@ -21,10 +22,11 @@ interface DashboardLayoutClientProps {
 
 export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) {
     const router = useRouter();
-    const { sidebarCollapsed, setSidebarCollapsed, clearAuth } = useDashboardStore();
+    const { sidebarCollapsed, setSidebarCollapsed } = useDashboardStore();
+    const { logout } = useAuth();
 
     const handleLogout = () => {
-        clearAuth();
+        logout();
         router.push('/');
     };
 

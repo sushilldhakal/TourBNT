@@ -16,12 +16,13 @@ function getClientIp(req: any): string {
 
 /**
  * Rate limiter for authentication endpoints
- * Limits: 5 requests per 15 minutes per IP address
+ * Development: 100 requests per 15 minutes per IP address
+ * Production: 5 requests per 15 minutes per IP address
  * Applied to: /api/auth/* endpoints
  */
 export const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 5, // 5 requests per window
+    max: process.env.NODE_ENV === 'development' ? 100 : 5, // More lenient in development
     message: 'Too many authentication attempts, please try again later',
     standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
     legacyHeaders: false, // Disable `X-RateLimit-*` headers

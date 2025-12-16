@@ -2,21 +2,15 @@ import { Response, NextFunction } from 'express';
 import Gallery from './galleryModel';
 import { GalleryDocument } from './galleryTypes';
 // import cloudinary from '../config/cloudinary';
-import { v2 as cloudinary, UploadApiOptions } from "cloudinary";
+import { v2 as cloudinary } from "cloudinary";
 import createHttpError from 'http-errors';
 import { AuthRequest } from '../../middlewares/authenticate';
 import mongoose from 'mongoose';
-import path from 'path';
 import fs from 'fs';
-import UserSettings from "../user/userSettingModel";
 import User from "../user/userModel";
-import { decrypt } from '../../utils/encryption';
 import { EncryptedKeyService } from '../../services/encryptedKeyService';
 
-interface CloudinaryApiResponse {
-  resources: CloudinaryResource[];
-  next_cursor: string | null;
-}
+// Removed unused CloudinaryApiResponse interface
 
 interface CloudinaryResource {
   asset_id: string;
@@ -34,27 +28,15 @@ interface CloudinaryResource {
   bytes: string;
 }
 
-interface CustomRequest extends Request {
-  params: {
-    mediaId: string;
-  };
-  query: {
-    userId: string;
-    resourcesType: string;
-  }
-}
-
-
-
-export const getSingleMedia = async (req: CustomRequest, res: Response, next: NextFunction) => {
+export const getSingleMedia = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { mediaId } = req.params; // Changed from publicId to mediaId
-    const { userId, resourcesType } = req.query; // Assume userId is passed in query
+    const { mediaType: queryMediaType } = req.query as { mediaType: string };
+    console.log("req.query", req.query)
 
     console.log('🔍 getSingleMedia called with:', {
       mediaId,
-      userId,
-      resourcesType,
+      mediaType: queryMediaType,
       params: req.params,
       query: req.query
     });
@@ -62,13 +44,13 @@ export const getSingleMedia = async (req: CustomRequest, res: Response, next: Ne
     if (!mediaId) {
       return next(createHttpError(400, 'mediaId parameter is required'));
     }
-
-    if (!userId) {
-      return next(createHttpError(400, 'userId parameter is required'));
+    const authUser = req.user;
+    if (!authUser) {
+      return next(createHttpError(400, 'authentication is required'));
     }
 
-    if (!resourcesType) {
-      return next(createHttpError(400, 'resourcesType parameter is required'));
+    if (!queryMediaType) {
+      return next(createHttpError(400, 'mediaType parameter is required'));
     }
 
     // Use mediaId as publicId for backward compatibility
@@ -77,15 +59,15 @@ export const getSingleMedia = async (req: CustomRequest, res: Response, next: Ne
     let folderPrefix;
     let mediaType: 'images' | 'PDF' | 'videos';
     let fetchPublicId;
-    if (resourcesType === 'tour-pdf') {
+    if (queryMediaType === 'tour-pdf') {
       folderPrefix = 'main/tour-pdf/';
       mediaType = 'PDF';
       fetchPublicId = `${folderPrefix}${publicId}.pdf`;
-    } else if (resourcesType === 'tour-cover') {
+    } else if (queryMediaType === 'tour-cover') {
       folderPrefix = 'main/tour-cover/';
       mediaType = 'images';
       fetchPublicId = `${folderPrefix}${publicId}`;
-    } else if (resourcesType === 'tour-video') {
+    } else if (queryMediaType === 'tour-video') {
       folderPrefix = 'main/tour-video/';
       mediaType = 'videos';
       fetchPublicId = `${folderPrefix}${publicId}`;
@@ -104,18 +86,19 @@ export const getSingleMedia = async (req: CustomRequest, res: Response, next: Ne
     }
     const image = imageDetails[mediaType][0];
     const ownerId = imageDetails.user;
+
+    const authUserId = authUser.id;
+    const authUserRoles = authUser.roles;
     // Fetch user roles from the database
-    const user = await User.findById(userId);
+    const user = await User.findById(authUserId);
     if (!user) {
       return next(createHttpError(404, 'User not found'));
     }
-    const { roles } = user;
     // If the user is neither admin nor the owner, deny access
-    if (!roles.includes('admin') && ownerId.toString() !== userId) {
+    if (!authUserRoles.includes('admin') && ownerId.toString() !== authUserId) {
       return res.status(403).json({
         error: 'Access Denied',
-        message: 'This image does not belong to you. You can only view images that you have uploaded.',
-        details: 'Each user can only access their own uploaded media due to separate Cloudinary account credentials.',
+        message: 'This image does not belong to you.',
         code: 'UNAUTHORIZED_MEDIA_ACCESS'
       });
     }
@@ -230,7 +213,6 @@ const fetchResourceByPublicId = async (mediaType: string, publicId: string, owne
 
 export const getMedia = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const { userId, roles } = req; // Assuming roles and userId are attached to the request object
     const { mediaType } = req.query;
     const { page, limit, skip } = req.pagination!; // Get pagination from middleware
 
@@ -238,10 +220,12 @@ export const getMedia = async (req: AuthRequest, res: Response, next: NextFuncti
       return next(createHttpError(400, 'Invalid mediaType parameter'));
     }
 
-    // Set up the query to fetch the user's gallery
-    const query = roles === 'admin'
+    if (!req.user) return next(createHttpError(401, 'User not authenticated'));
+
+    const isAdmin = req.user.roles.includes('admin');
+    const query = isAdmin
       ? {} // Admin can access all galleries
-      : { user: new mongoose.Types.ObjectId(userId) }; // Seller can only access their own gallery
+      : { user: new mongoose.Types.ObjectId(req.user.id) }; // Non-admin can access only their own gallery
 
     // Fetch galleries without skip and limit
     const galleries = await Gallery.find(query).sort({ createdAt: -1 }).exec();
@@ -375,11 +359,10 @@ const handleUploads = async (files: any, title: string | undefined, description:
 };
 
 export const addMedia = async (req: AuthRequest, res: Response, next: NextFunction) => {
-  const userId = req.userId; // Get userId from authenticated request
   const { description, title } = req.body;
   const files = req.files as { [fieldname: string]: Express.Multer.File[] };
 
-  console.log('🔧 AddMedia: Starting upload process for user:', userId);
+  console.log('🔧 AddMedia: Starting upload process for user:', req.user!.id);
   console.log('🔧 AddMedia: Files received:', Object.keys(files || {}));
   console.log('🔧 AddMedia: File details:', files ? Object.entries(files).map(([key, fileArray]) => ({
     fieldName: key,
@@ -388,15 +371,16 @@ export const addMedia = async (req: AuthRequest, res: Response, next: NextFuncti
   })) : 'No files');
 
   try {
-    let gallery = await Gallery.findOne({ user: userId });
+    let gallery = await Gallery.findOne({ user: req.user!.id });
     if (!gallery) {
-      console.log('🔧 AddMedia: Creating new gallery for user:', userId);
-      gallery = new Gallery({ user: userId, images: [], videos: [], PDF: [] });
+      console.log('🔧 AddMedia: Creating new gallery for user:', req.user!.id);
+      gallery = new Gallery({ user: req.user!.id, images: [], videos: [], PDF: [] });
     }
+    if (!req.user) return next(createHttpError(401, 'User not authenticated'));
 
     // Get Cloudinary credentials using unified service
     console.log('🔧 AddMedia: Getting Cloudinary credentials...');
-    const credentials = await EncryptedKeyService.getCloudinaryCredentials(userId!);
+    const credentials = await EncryptedKeyService.getCloudinaryCredentials(req.user.id!);
 
     if (!credentials) {
       console.log('❌ AddMedia: No valid credentials found');
@@ -428,7 +412,7 @@ export const addMedia = async (req: AuthRequest, res: Response, next: NextFuncti
 
 export const updateMedia = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const userId = req.userId; // Get userId from authenticated request
+    const userId = req.user!.id; // Get userId from authenticated request
     const { mediaId } = req.params; // Changed from imageId to mediaId
     const { description, title, tags } = req.body;
     const { mediaType } = req.query;
@@ -495,7 +479,7 @@ export const updateMedia = async (req: AuthRequest, res: Response, next: NextFun
 
 export const deleteMedia = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const { userId, roles } = req;
+    const { user } = req;
     const { imageIds, mediaType } = req.body; // Expect an array of image IDs
 
     if (!imageIds || !Array.isArray(imageIds) || imageIds.length === 0) {
@@ -508,10 +492,10 @@ export const deleteMedia = async (req: AuthRequest, res: Response, next: NextFun
         }
       });
     }
-
+    if (!user) return next(createHttpError(401, 'User not authenticated'));
     // Get the actual owner of the images if the user is admin
-    let targetUserId: string = userId!;
-    if (roles === 'admin') {
+    let targetUserId = user.id;
+    if (user.roles.includes('admin')) {
       const userResult = await findUserByPublicId(imageIds[0], mediaType);
       if (typeof userResult === 'string') {
         targetUserId = userResult;

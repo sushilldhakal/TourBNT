@@ -17,7 +17,7 @@ import { useTourContext } from '@/providers/TourProvider';
 import { getUserFacts } from '@/lib/api/factsApi';
 import { FactData } from '@/lib/types';
 import Icon from '@/components/Icon';
-import { getUserId } from '@/lib/auth/authUtils';
+import { getUserId } from '@/lib/utils/auth';
 
 /**
  * TourFacts Component

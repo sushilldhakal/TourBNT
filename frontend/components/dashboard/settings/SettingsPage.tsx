@@ -13,7 +13,7 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getUserSetting, userSetting, getDecryptedApiKey } from '@/lib/api/users';
-import { getUserId } from '@/lib/auth/authUtils';
+import { getUserId } from '@/lib/utils/auth';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';

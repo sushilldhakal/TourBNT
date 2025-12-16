@@ -146,7 +146,7 @@ export const addReview = async (req: Request, res: Response) => {
     try {
         const { tourId } = req.params;
         const { rating, comment } = req.body;
-        const userId = (req as AuthRequest).userId;
+        const userId = (req as AuthRequest).user?.id;
 
         // Ensure user is authenticated
         if (!userId) {
@@ -289,7 +289,8 @@ export const getTourReviews = async (req: Request, res: Response) => {
 // Get pending reviews for a seller's tours (using embedded reviews in tour model)
 export const getPendingReviews = async (req: Request, res: Response) => {
     try {
-        const userId = (req as AuthRequest).userId;
+        const authReq = req as AuthRequest;
+        const userId = authReq.user?.id;
 
         // Ensure user is authenticated
         if (!userId) {
@@ -308,9 +309,7 @@ export const getPendingReviews = async (req: Request, res: Response) => {
         const skip = (page - 1) * limit;
 
         // Check if user is admin
-        const userModel = require('../user/userModel').default;
-        const user = await userModel.findById(userId);
-        const isAdmin = user?.roles === 'admin';
+        const isAdmin = authReq.user?.roles.includes('admin') || false;
 
         // Find all tours with pending reviews (admin sees all, sellers see only their own)
         const query = isAdmin
@@ -375,7 +374,8 @@ export const getPendingReviews = async (req: Request, res: Response) => {
 // Get all reviews for a seller (regardless of status) (using embedded reviews in tour model)
 export const getAllReviews = async (req: Request, res: Response) => {
     try {
-        const userId = (req as AuthRequest).userId;
+        const authReq = req as AuthRequest;
+        const userId = authReq.user?.id;
 
         // Ensure user is authenticated
         if (!userId) {
@@ -386,10 +386,8 @@ export const getAllReviews = async (req: Request, res: Response) => {
         const limit = parseInt(req.query.limit as string) || 50; // Increased limit to show more reviews
         const skip = (page - 1) * limit;
 
-        // First, check if the user is an admin
-        const userModel = require('../user/userModel').default;
-        const user = await userModel.findById(userId);
-        const isAdmin = user?.roles === 'admin';
+        // Check if the user is an admin
+        const isAdmin = authReq.user?.roles.includes('admin') || false;
 
         let tours;
         if (isAdmin) {
@@ -482,7 +480,8 @@ export const updateReviewStatus = async (req: Request, res: Response) => {
     try {
         const { reviewId } = req.params;
         const { status } = req.body; // 'approved', 'rejected', or 'pending'
-        const userId = (req as AuthRequest).userId;
+        const authReq = req as AuthRequest;
+        const userId = authReq.user?.id;
 
         // Validate inputs
         if (!mongoose.Types.ObjectId.isValid(reviewId)) {
@@ -508,9 +507,7 @@ export const updateReviewStatus = async (req: Request, res: Response) => {
         }
 
         // Check if user is admin
-        const userModel = require('../user/userModel').default;
-        const user = await userModel.findById(userId);
-        const isAdmin = user?.roles === 'admin';
+        const isAdmin = authReq.user?.roles.includes('admin') || false;
 
         // Find the tour containing this review
         const tour = await Tour.findOne({ 'reviews._id': reviewId });
@@ -585,7 +582,7 @@ export const addReviewReply = async (req: Request, res: Response) => {
     try {
         const { reviewId } = req.params;
         const { comment } = req.body;
-        const userId = (req as AuthRequest).userId;
+        const userId = (req as AuthRequest).user?.id;
 
         // Ensure user is authenticated
         if (!userId) {
@@ -695,7 +692,7 @@ export const addReviewReply = async (req: Request, res: Response) => {
 export const likeReview = async (req: Request, res: Response) => {
     try {
         const { reviewId } = req.params;
-        const userId = (req as AuthRequest).userId;
+        const userId = (req as AuthRequest).user?.id;
 
         // Ensure user is authenticated
         if (!userId) {
@@ -758,7 +755,7 @@ export const likeReview = async (req: Request, res: Response) => {
 export const likeReviewReply = async (req: Request, res: Response) => {
     try {
         const { tourId, reviewId, replyId } = req.params;
-        const userId = (req as AuthRequest).userId;
+        const userId = (req as AuthRequest).user?.id;
 
         // Ensure user is authenticated
         if (!userId) {

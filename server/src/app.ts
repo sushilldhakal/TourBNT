@@ -25,8 +25,14 @@ import { getSwaggerSpec } from './config/swagger';
 import { logger } from './utils/logger';
 // import fixedDepartureRouter from "./api/fixedDepartureRouter";
 // import schemaRoutes from "./api/tours/schemaRoutes";
+import cookieParser from 'cookie-parser';
 
 const app = express();
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+app.use(cookieParser());
 
 // CORS configuration
 app.use(

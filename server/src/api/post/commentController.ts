@@ -249,13 +249,13 @@ export const getAllComments = async (req: Request, res: Response, next: NextFunc
     let query;
     let totalComments: number;
 
-    if (_req.roles === 'admin') {
+    if (_req.user?.roles.includes('admin')) {
       // Admin can see all comments
       query = Comment.find();
       totalComments = await Comment.countDocuments();
     } else {
       // For sellers, first get all their posts
-      const sellerPosts = await Post.find({ author: _req.userId });
+      const sellerPosts = await Post.find({ author: _req.user?.id });
       const postIds = sellerPosts.map(post => post._id);
       // Then get comments for those posts
       query = Comment.find({ post: { $in: postIds } });
@@ -301,12 +301,12 @@ export const getUnapprovedCommentsCount = async (req: Request, res: Response, ne
   try {
     let unapprovedCount;
 
-    if (_req.roles === 'admin') {
+    if (_req.user?.roles.includes('admin')) {
       // Admin counts all unapproved comments
       unapprovedCount = await Comment.countDocuments({ approve: false });
     } else {
       // Sellers count unapproved comments on their posts
-      const sellerPosts = await Post.find({ author: _req.userId });
+      const sellerPosts = await Post.find({ author: _req.user?.id });
       const postIds = sellerPosts.map(post => post._id);
 
       unapprovedCount = await Comment.countDocuments({ approve: false, post: { $in: postIds } });

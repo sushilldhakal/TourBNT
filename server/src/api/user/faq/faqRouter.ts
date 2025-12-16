@@ -1,8 +1,8 @@
 import express, { RequestHandler } from "express";
-import { authenticate, isAdminOrSeller, AuthRequest } from "../../../middlewares/authenticate";
+import { authenticate, authorizeRoles } from "../../../middlewares/authenticate";
 import { addFaqs, getUserFaqs, updateFaqs, deleteFaqs, getAllFaqs, getSingleFaqs, bulkDeleteFaqs } from "./faqController";
 import { uploadNone } from "../../../middlewares/multer";
-import { asyncHandler } from "../../../utils/routeWrapper";
+import { asyncAuthHandler } from "../../../utils/routeWrapper";
 import { paginationMiddleware } from "../../../middlewares/pagination";
 
 const faqsRouter = express.Router();
@@ -128,23 +128,23 @@ const faqsRouter = express.Router();
  *               $ref: '#/components/schemas/ErrorResponse'
  */
 // GET /api/faqs - List all FAQs with pagination (PUBLIC)
-faqsRouter.get('/', paginationMiddleware, asyncHandler(getAllFaqs));
+faqsRouter.get('/', paginationMiddleware, asyncAuthHandler(getAllFaqs));
 
 // POST /api/faqs - Create FAQ (Protected, Admin or Seller)
 faqsRouter.post(
     '/',
     authenticate,
     uploadNone,
-    isAdminOrSeller as RequestHandler,
-    asyncHandler<AuthRequest>(addFaqs)
+    authorizeRoles('admin', 'seller') as RequestHandler,
+    asyncAuthHandler(addFaqs)
 );
 
 // DELETE /api/faqs - Bulk delete FAQs (Protected, Admin or Seller)
 faqsRouter.delete(
     '/',
     authenticate,
-    isAdminOrSeller as RequestHandler,
-    asyncHandler<AuthRequest>(bulkDeleteFaqs)
+    authorizeRoles('admin', 'seller') as RequestHandler,
+    asyncAuthHandler(bulkDeleteFaqs)
 );
 
 // Get FAQs for a Specific User (Protected, Admin or Seller)
@@ -183,8 +183,8 @@ faqsRouter.delete(
 faqsRouter.get(
     '/user/:userId',
     authenticate,
-    isAdminOrSeller as RequestHandler,
-    asyncHandler<AuthRequest>(getUserFaqs)
+    authorizeRoles('admin', 'seller') as RequestHandler,
+    asyncAuthHandler(getUserFaqs)
 );
 
 /**
@@ -275,23 +275,23 @@ faqsRouter.get(
  *               $ref: '#/components/schemas/ErrorResponse'
  */
 // GET /api/faqs/:faqId - Get single FAQ (PUBLIC)
-faqsRouter.get('/:faqId', asyncHandler(getSingleFaqs));
+faqsRouter.get('/:faqId', asyncAuthHandler(getSingleFaqs));
 
 // PATCH /api/faqs/:faqId - Update FAQ (Protected, Admin or Seller)
 faqsRouter.patch(
     '/:faqId',
     authenticate,
     uploadNone,
-    isAdminOrSeller as RequestHandler,
-    asyncHandler<AuthRequest>(updateFaqs)
+    authorizeRoles('admin', 'seller') as RequestHandler,
+    asyncAuthHandler(updateFaqs)
 );
 
 // DELETE /api/faqs/:faqId - Delete single FAQ (Protected, Admin or Seller)
 faqsRouter.delete(
     '/:faqId',
     authenticate,
-    isAdminOrSeller as RequestHandler,
-    asyncHandler<AuthRequest>(deleteFaqs)
+    authorizeRoles('admin', 'seller') as RequestHandler,
+    asyncAuthHandler(deleteFaqs)
 );
 
 export default faqsRouter;

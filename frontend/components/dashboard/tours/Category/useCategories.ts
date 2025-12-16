@@ -1,7 +1,7 @@
 // src/hooks/useCategories.ts
 import { api } from '@/lib/api';
 import { getSellerCategories, getUserCategories } from '@/lib/api/categoryApi';
-import { getUserRoles } from '@/lib/auth/authUtils';
+import { useAuth } from '@/lib/hooks/useAuth';
 import { CategoryData } from '@/lib/types';
 import { useQuery } from '@tanstack/react-query';
 
@@ -106,8 +106,8 @@ export const usePendingCategories = () => {
 
 // Combined hook that automatically chooses the right data source based on user role
 export const useCategoriesRoleBased = () => {
-  const userRoles = getUserRoles();
-  const isAdmin = userRoles.includes('admin');
+  const { user } = useAuth();
+  const isAdmin = user.roles === 'admin';
 
   // Use admin categories for admin users, user-specific categories for others
   const adminCategories = useCategories();

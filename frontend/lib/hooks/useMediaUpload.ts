@@ -91,7 +91,7 @@ const DEFAULT_MAX_SIZE = 10 * 1024 * 1024;
  * });
  * 
  * const handleUpload = (files: File[]) => {
- *   uploadMutation.mutate({ files, userId: 'user123' });
+ *   uploadMutation.mutate({ files });
  * };
  * ```
  */
@@ -112,9 +112,10 @@ export function useMediaUpload(options: UseMediaUploadOptions = {}) {
     return useMutation<
         UploadResponse,
         Error,
-        { files: File[]; userId: string }
+        { files: File[]; userId?: string }
     >({
         mutationFn: async ({ files, userId }) => {
+            // Note: userId is optional and ignored - server gets it from httpOnly cookie
             // Validate files before upload
             const { validFiles, errors } = validateFiles(
                 files,
@@ -148,7 +149,7 @@ export function useMediaUpload(options: UseMediaUploadOptions = {}) {
             });
 
             // Upload files
-            const params: UploadMediaParams = { formData, userId };
+            const params: UploadMediaParams = { formData };
             return uploadMedia(params);
         },
         onMutate: ({ files }) => {

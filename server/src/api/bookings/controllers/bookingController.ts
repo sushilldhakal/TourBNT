@@ -18,7 +18,7 @@ export const createBooking = async (req: AuthRequest, res: Response, next: NextF
         }
 
         // Determine if this is a guest booking
-        const isGuestBooking = !req.userId;
+        const isGuestBooking = !req.user;
 
         const bookingData: any = {
             tour: tourId,
@@ -35,8 +35,8 @@ export const createBooking = async (req: AuthRequest, res: Response, next: NextF
         };
 
         // Add user reference if authenticated
-        if (req.userId) {
-            bookingData.user = req.userId;
+        if (req.user) {
+            bookingData.user = req.user.id;
         } else {
             // Add guest information
             bookingData.guestInfo = {
@@ -119,21 +119,24 @@ export const getBookingByReference = async (req: Request, res: Response, next: N
 /**
  * Get user bookings
  */
-export const getUserBookings = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const getUserBookings = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const requestedUserId = req.params.userId;  // User ID from URL params
-        const authenticatedUserId = req.userId;  // Authenticated user ID
-        const userRole = req.roles;  // User role
-        const { page = 1, limit = 10, status } = req.query;
+        const requestedUserId = req.params.userId;
 
-        if (!authenticatedUserId) {
+        // Make sure authenticate middleware ran
+        if (!req.user) {
             throw createHttpError(401, 'User not authenticated');
         }
+
+        const authenticatedUserId = req.user.id;
+        const userRoles = req.user.roles;
+
+        const { page = 1, limit = 10, status } = req.query;
 
         // Determine which user's bookings to fetch
         let userId: string;
 
-        if (userRole === 'admin') {
+        if (userRoles.includes('admin')) {
             // Admin can view any user's bookings
             userId = requestedUserId || authenticatedUserId;
         } else {
@@ -144,19 +147,28 @@ export const getUserBookings = async (req: AuthRequest, res: Response, next: Nex
             userId = authenticatedUserId;
         }
 
-        const result = await BookingService.getUserBookings(userId, {
-            page: Number(page),
-            limit: Number(limit),
-            sortBy: 'createdAt',
-            sortOrder: 'desc'
-        }, status as string);
+        const result = await BookingService.getUserBookings(
+            userId,
+            {
+                page: Number(page),
+                limit: Number(limit),
+                sortBy: 'createdAt',
+                sortOrder: 'desc',
+            },
+            status as string
+        );
 
-        sendPaginatedResponse(res, result.items, {
-            currentPage: result.page,
-            totalPages: result.totalPages,
-            totalItems: result.totalItems,
-            itemsPerPage: result.limit
-        }, 'User bookings retrieved successfully');
+        sendPaginatedResponse(
+            res,
+            result.items,
+            {
+                currentPage: result.page,
+                totalPages: result.totalPages,
+                totalItems: result.totalItems,
+                itemsPerPage: result.limit,
+            },
+            'User bookings retrieved successfully'
+        );
     } catch (error) {
         next(error);
     }
@@ -273,7 +285,7 @@ export const downloadVoucher = async (req: AuthRequest, res: Response, next: Nex
         const booking = await BookingService.getBookingById(bookingId);
 
         // Verify user has access to this booking
-        if (req.userId && booking.user && booking.user.toString() !== req.userId) {
+        if (req.user && booking.user && booking.user.toString() !== req.user.id) {
             throw createHttpError(403, 'You do not have access to this booking');
         }
 

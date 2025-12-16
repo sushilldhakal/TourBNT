@@ -1,14 +1,16 @@
 import { Request, Response, NextFunction, RequestHandler } from 'express';
+import { AuthRequest } from '../middlewares/authenticate';
 
 /**
  * Async handler wrapper to catch errors in async route handlers
  * Supports custom request types (like AuthRequest)
  */
-export const asyncHandler = <T = Request>(
-    fn: (req: T, res: Response, next: NextFunction) => Promise<any> | any
-) => {
-    return (req: Request, res: Response, next: NextFunction) => {
-        Promise.resolve(fn(req as T, res, next)).catch(next);
+
+export const asyncAuthHandler = (
+    fn: (req: AuthRequest, res: Response, next: NextFunction) => any
+): RequestHandler => {
+    return (req, res, next) => {
+        Promise.resolve(fn(req as AuthRequest, res, next)).catch(next);
     };
 };
 
@@ -16,5 +18,5 @@ export const asyncHandler = <T = Request>(
  * Wrapper for protected routes with multiple middleware
  */
 export const protectedRoute = (...handlers: RequestHandler[]) => {
-    return handlers.map(handler => asyncHandler(handler));
+    return handlers.map(handler => asyncAuthHandler(handler));
 };

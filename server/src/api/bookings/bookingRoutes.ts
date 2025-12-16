@@ -1,8 +1,8 @@
 import express, { RequestHandler } from 'express';
-import { authenticate, isAdminOrSeller, AuthRequest } from '../../middlewares/authenticate';
+import { authenticate, authorizeRoles } from '../../middlewares/authenticate';
 import { paginationMiddleware } from '../../middlewares/pagination';
 import { filterSortMiddleware } from '../../middlewares/filterSort';
-import { asyncHandler } from '../../utils/routeWrapper';
+import { asyncAuthHandler } from '../../utils/routeWrapper';
 import {
     createBooking,
     getAllBookings,
@@ -83,7 +83,7 @@ const bookingRouter = express.Router();
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-bookingRouter.post('/', asyncHandler<AuthRequest>(createBooking));
+bookingRouter.post('/', asyncAuthHandler(createBooking));
 
 /**
  * @swagger
@@ -113,7 +113,7 @@ bookingRouter.post('/', asyncHandler<AuthRequest>(createBooking));
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-bookingRouter.get('/reference/:reference', asyncHandler(getBookingByReference));
+bookingRouter.get('/reference/:reference', asyncAuthHandler(getBookingByReference));
 
 // ============================================================================
 // AUTHENTICATED ROUTES (Require authentication)
@@ -158,7 +158,7 @@ bookingRouter.get('/reference/:reference', asyncHandler(getBookingByReference));
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-bookingRouter.get('/my-bookings', authenticate, asyncHandler<AuthRequest>(getUserBookings));
+bookingRouter.get('/my-bookings', authenticate, asyncAuthHandler(getUserBookings));
 
 /**
  * @swagger
@@ -197,8 +197,8 @@ bookingRouter.get('/my-bookings', authenticate, asyncHandler<AuthRequest>(getUse
 bookingRouter.get(
     '/stats',
     authenticate,
-    isAdminOrSeller as RequestHandler,
-    asyncHandler<AuthRequest>(getBookingStats)
+    authorizeRoles('admin', 'seller') as RequestHandler,
+    asyncAuthHandler(getBookingStats)
 );
 
 // ============================================================================
@@ -269,10 +269,10 @@ bookingRouter.get(
 bookingRouter.get(
     '/',
     authenticate,
-    isAdminOrSeller as RequestHandler,
+    authorizeRoles('admin', 'seller') as RequestHandler,
     paginationMiddleware,
     filterSortMiddleware(['status', 'paymentStatus', 'tourId'], ['createdAt', 'departureDate', 'totalAmount']),
-    asyncHandler<AuthRequest>(getAllBookings)
+    asyncAuthHandler(getAllBookings)
 );
 
 /**
@@ -311,7 +311,7 @@ bookingRouter.get(
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-bookingRouter.get('/:bookingId', authenticate, asyncHandler<AuthRequest>(getBookingById));
+bookingRouter.get('/:bookingId', authenticate, asyncAuthHandler(getBookingById));
 
 /**
  * @swagger
@@ -366,8 +366,8 @@ bookingRouter.get('/:bookingId', authenticate, asyncHandler<AuthRequest>(getBook
 bookingRouter.patch(
     '/:bookingId/status',
     authenticate,
-    isAdminOrSeller as RequestHandler,
-    asyncHandler<AuthRequest>(updateBookingStatus)
+    authorizeRoles('admin', 'seller') as RequestHandler,
+    asyncAuthHandler(updateBookingStatus)
 );
 
 /**
@@ -425,8 +425,8 @@ bookingRouter.patch(
 bookingRouter.patch(
     '/:bookingId/payment',
     authenticate,
-    isAdminOrSeller as RequestHandler,
-    asyncHandler<AuthRequest>(updatePaymentStatus)
+    authorizeRoles('admin', 'seller') as RequestHandler,
+    asyncAuthHandler(updatePaymentStatus)
 );
 
 /**
@@ -477,7 +477,7 @@ bookingRouter.patch(
 bookingRouter.delete(
     '/:bookingId',
     authenticate,
-    asyncHandler<AuthRequest>(cancelBooking)
+    asyncAuthHandler(cancelBooking)
 );
 
 /**
@@ -520,7 +520,7 @@ bookingRouter.delete(
 bookingRouter.get(
     '/:bookingId/voucher',
     authenticate,
-    asyncHandler<AuthRequest>(downloadVoucher)
+    asyncAuthHandler(downloadVoucher)
 );
 
 // ============================================================================

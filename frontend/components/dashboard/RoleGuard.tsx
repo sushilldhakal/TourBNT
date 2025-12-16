@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { getUserRole, hasAnyRole, isAuthenticated } from '@/lib/auth/authUtils';
+import { useAuth } from '@/lib/hooks/useAuth';
 
 /**
  * RoleGuard Component
@@ -24,11 +24,17 @@ export function RoleGuard({
     redirectTo,
 }: RoleGuardProps) {
     const router = useRouter();
+    const { user, isAuthenticated, isHydrated } = useAuth();
     const [hasAccess, setHasAccess] = useState<boolean | null>(null);
 
     useEffect(() => {
+        // Wait for auth to hydrate
+        if (!isHydrated) {
+            return;
+        }
+
         // Check authentication
-        if (!isAuthenticated()) {
+        if (!isAuthenticated) {
             if (redirectTo) {
                 router.push(redirectTo);
             }
@@ -36,18 +42,19 @@ export function RoleGuard({
             return;
         }
 
-        // Check role
-        const userHasRole = hasAnyRole(allowedRoles);
+        // Check role - user.roles is a string, allowedRoles is string[]
+        const userRole = user.roles;
+        const userHasRole = allowedRoles.includes(userRole);
         setHasAccess(userHasRole);
 
         // Redirect if no access and redirectTo is specified
         if (!userHasRole && redirectTo) {
             router.push(redirectTo);
         }
-    }, [allowedRoles, redirectTo, router]);
+    }, [allowedRoles, redirectTo, router, isAuthenticated, isHydrated, user.roles]);
 
-    // Loading state
-    if (hasAccess === null) {
+    // Loading state - wait for auth hydration
+    if (!isHydrated || hasAccess === null) {
         return (
             <div className="flex items-center justify-center min-h-[200px]">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100"></div>
@@ -195,25 +202,24 @@ export function DashboardGuard({
  * Hook to check if user has role (for conditional rendering)
  */
 export function useHasRole(role: string): boolean {
-    const [hasRole, setHasRole] = useState(false);
+    const { user, isHydrated } = useAuth();
 
-    useEffect(() => {
-        const userRole = getUserRole();
-        setHasRole(userRole === role);
-    }, [role]);
+    if (!isHydrated) {
+        return false;
+    }
 
-    return hasRole;
+    return user.roles === role;
 }
 
 /**
  * Hook to check if user has any of the specified roles
  */
 export function useHasAnyRole(roles: string[]): boolean {
-    const [hasRole, setHasRole] = useState(false);
+    const { user, isHydrated } = useAuth();
 
-    useEffect(() => {
-        setHasRole(hasAnyRole(roles));
-    }, [roles]);
+    if (!isHydrated) {
+        return false;
+    }
 
-    return hasRole;
+    return roles.includes(user.roles);
 }

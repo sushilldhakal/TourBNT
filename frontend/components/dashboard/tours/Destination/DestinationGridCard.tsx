@@ -13,10 +13,10 @@ import {
     getSellerDestinations,
     getUserDestinations
 } from "@/lib/api/destinationApi";
-import { getUserRole } from "@/lib/auth/authUtils";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EditDestinationDialog } from "./EditDestinationDialog";
 import RichTextRenderer from "@/components/RichTextRenderer";
+import { useAuth } from "@/lib/hooks/useAuth";
 
 interface DestinationGridCardProps {
     destinationId: string;
@@ -31,8 +31,10 @@ const DestinationGridCard = ({ destinationId, onUpdate, onDelete, onEdit }: Dest
     const [editDialogOpen, setEditDialogOpen] = useState(false);
 
     // Check user role
-    const userRole = getUserRole();
+
+    const { userRole } = useAuth();
     const isAdmin = userRole === 'admin';
+
 
     // Fetch destinations based on user role
     const { data: globalDestinations } = useQuery({

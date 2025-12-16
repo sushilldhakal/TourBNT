@@ -21,7 +21,7 @@ export { BulkActionsPanel } from './BulkActionsPanel';
 export { GallerySidePanel, MobileGallerySidePanel } from './GallerySidePanel';
 
 // Example components
-export { GalleryUploadExample } from './GalleryUploadExample';
+// export { GalleryUploadExample } from './GalleryUploadExample'; // Temporarily disabled
 
 // Types
 export type {

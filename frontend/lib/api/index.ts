@@ -11,7 +11,7 @@ export * from './apiClient';
 export * as tourApi from './tours';
 export * as postApi from './posts';
 export * as userApi from './users';
-export * as galleryApi from './gallery';
+// Removed duplicate gallery API - use mediaApi instead
 export * as mediaApi from './mediaApi';
 export * as categoryApi from './categories';
 export * as destinationApi from './destinations';
@@ -39,17 +39,12 @@ export {
 } from './posts';
 
 export {
-    getUsers,
     getUserById,
     updateUser,
     uploadAvatar,
 } from './users';
 
-export {
-    getAllMedia,
-    addMedia,
-    deleteMedia,
-} from './gallery';
+// Gallery API functions moved to mediaApi.ts
 
 export {
     getAllMedia as getMediaItems,

@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils';
 import { useTourContext } from '@/providers/TourProvider';
 import { getUserFaq } from '@/lib/api/faqApi';
 import { FaqData } from '@/lib/types';
-import { getUserId } from '@/lib/auth/authUtils';
+import { getUserId } from '@/lib/utils/auth';
 
 /**
  * TourFAQs Component

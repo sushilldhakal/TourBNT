@@ -9,9 +9,9 @@ import {
     removeExistingCategoryFromSeller,
     deleteCategory
 } from "@/lib/api/categoryApi";
-import { getUserRole } from "@/lib/auth/authUtils";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CategoryData } from "@/lib/types";
+import { useAuth } from "@/lib/hooks/useAuth";
 
 interface CategoryTableRowProps {
     category: CategoryData;
@@ -24,7 +24,7 @@ const CategoryTableRow = ({ category, onUpdate, onDelete }: CategoryTableRowProp
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
     // Check user role
-    const userRole = getUserRole();
+    const { userRole } = useAuth();
     const isAdmin = userRole === 'admin';
 
     // Toggle active status mutation

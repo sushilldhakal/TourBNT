@@ -1,6 +1,6 @@
 import express from "express";
 import { body } from "express-validator";
-import { authenticate, isAdmin } from "../../middlewares/authenticate";
+import { authenticate, authorizeRoles } from "../../middlewares/authenticate";
 import { paginationMiddleware } from "../../middlewares/pagination";
 import { createSubscriber, deleteSubscriber, getAllSubscribers } from "./subscriberController";
 
@@ -61,7 +61,7 @@ const subscriberRouter = express.Router();
  *       403:
  *         $ref: '#/components/responses/Forbidden'
  */
-subscriberRouter.get('/', authenticate as any, isAdmin as any, paginationMiddleware, getAllSubscribers);
+subscriberRouter.get('/', authenticate as any, authorizeRoles('admin'), paginationMiddleware, getAllSubscribers);
 
 /**
  * @swagger

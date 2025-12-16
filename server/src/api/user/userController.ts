@@ -5,11 +5,12 @@ import userModel from "./userModel";
 import jwt from "jsonwebtoken";
 import { sign } from "jsonwebtoken";
 import { validationResult } from "express-validator";
-import { AuthRequest } from "../../middlewares/authenticate";
 import { config } from "../../config/config";
 import { sendResetPasswordEmail as sendResetPasswordEmailMaileroo, sendVerificationEmail as sendVerificationEmailMaileroo } from "../../controller/maileroo";
 import { uploadSellerDocuments } from "../../services/sellerDocumentService";
 import { HTTP_STATUS } from "../../utils/httpStatusCodes";
+import { AuthRequest } from "../../middlewares/authenticate";
+import { getAuthCookieOptions, getClearCookieOptions, COOKIE_NAMES, COOKIE_DURATIONS } from "../../utils/cookieUtils";
 
 // create user
 export const createUser = async (req: Request, res: Response, next: NextFunction) => {
@@ -93,25 +94,86 @@ export const loginUser = async (req: Request, res: Response, next: NextFunction)
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
-
     if (!isMatch) {
       return next(createHttpError(400, "Username or password incorrect!"));
     }
 
-    // Token generation JWT
+    // Token generation
     const expiresIn = keepMeSignedIn ? '30d' : '2h';
-    const token = sign({ sub: user._id, roles: user.roles as string }, config.jwtSecret as string, {
-      expiresIn,
-      algorithm: "HS256",
+    const token = sign(
+      { sub: user._id, roles: user.roles },
+      config.jwtSecret as string,
+      { expiresIn, algorithm: "HS256" }
+    );
+
+    // Set token as HTTP-only cookie with proper configuration for dev/prod
+    const maxAge = keepMeSignedIn ? COOKIE_DURATIONS.LONG_SESSION : COOKIE_DURATIONS.SHORT_SESSION;
+    const cookieOptions = getAuthCookieOptions(maxAge);
+
+    res.cookie(COOKIE_NAMES.AUTH_TOKEN, token, cookieOptions);
+
+    // Return only user info, not token
+    res.json({
+      user: {
+        id: user._id,
+        roles: user.roles,
+        email: user.email
+      }
     });
 
-    res.json({ accessToken: token, roles: user.roles, userId: user._id, userEmail: user.email });
   } catch (err) {
     console.error('Error while logging in user:', err);
     next(createHttpError(500, "Error while logging in user"));
   }
 };
 
+export const logoutUser = (req: Request, res: Response) => {
+  const cookieOptions = getClearCookieOptions();
+
+  res.clearCookie(COOKIE_NAMES.AUTH_TOKEN, cookieOptions);
+  res.clearCookie(COOKIE_NAMES.REFRESH_TOKEN, cookieOptions);
+  res.json({ message: 'Logged out successfully' });
+};
+
+// Get current authenticated user
+export const getCurrentUser = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.user) {
+      return next(createHttpError(HTTP_STATUS.UNAUTHORIZED, "Not authenticated"));
+    }
+
+    const user = await userModel.findById(req.user.id).select('-password');
+
+    if (!user) {
+      return next(createHttpError(HTTP_STATUS.NOT_FOUND, "User not found"));
+    }
+
+    // Compute seller status from sellerInfo
+    let sellerStatus = 'none';
+    if (user.sellerInfo) {
+      if (user.sellerInfo.isApproved) {
+        sellerStatus = 'approved';
+      } else if (user.sellerInfo.rejectionReason) {
+        sellerStatus = 'rejected';
+      } else {
+        sellerStatus = 'pending';
+      }
+    }
+
+    res.status(HTTP_STATUS.OK).json({
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      roles: user.roles,
+      phone: user.phone,
+      verified: user.verified,
+      avatar: user.avatar,
+      sellerStatus,
+    });
+  } catch (error) {
+    return next(createHttpError(HTTP_STATUS.INTERNAL_SERVER_ERROR, "Error fetching user data"));
+  }
+};
 
 // Get all users
 export const getAllUsers = async (req: Request, res: Response, next: NextFunction) => {
@@ -215,9 +277,10 @@ export const updateUser = async (req: Request, res: Response, next: NextFunction
       return next(createHttpError(404, "User not found"));
     }
 
-    const _req = req as AuthRequest;
+    const _req = req;
     // Check if the current user is authorized to update the user
-    if (!(userId === _req.userId || _req.roles === "admin")) {
+    const isAdmin = _req.user?.roles.includes('admin') || false;
+    if (!(userId === _req.user?.id || isAdmin)) {
       return next(createHttpError(403, "You cannot update other users."));
     }
 
@@ -339,12 +402,13 @@ export const updateUser = async (req: Request, res: Response, next: NextFunction
 export const getSellerApplications = async (req: Request, res: Response, next: NextFunction) => {
   try {
     console.log('🔍 getSellerApplications called');
-    const _req = req as AuthRequest;
-    console.log('👤 User roles:', _req.roles);
-    console.log('👤 User ID:', _req.userId);
+    const _req = req;
+    console.log('👤 User roles:', _req.user?.roles);
+    console.log('👤 User ID:', _req.user?.id);
 
     // Only admin can view seller applications
-    if (_req.roles !== "admin") {
+    const isAdmin = _req.user?.roles.includes('admin') || false;
+    if (!isAdmin) {
       console.log('❌ Access denied - user is not admin');
       return next(createHttpError(403, "Only admin can view seller applications"));
     }
@@ -429,9 +493,10 @@ export const approveSellerApplication = async (req: Request, res: Response, next
       return next(createHttpError(404, "User not found"));
     }
 
-    const _req = req as AuthRequest;
+    const _req = req;
     // Only admin can approve seller applications
-    if (_req.roles !== "admin") {
+    const isAdmin = _req.user?.roles.includes('admin') || false;
+    if (!isAdmin) {
       return next(createHttpError(403, "Only admin can approve seller applications"));
     }
 
@@ -478,9 +543,10 @@ export const rejectSellerApplication = async (req: Request, res: Response, next:
       return next(createHttpError(404, "User not found"));
     }
 
-    const _req = req as AuthRequest;
+    const _req = req;
     // Only admin can reject seller applications
-    if (_req.roles !== "admin") {
+    const isAdmin = _req.user?.roles.includes('admin') || false;
+    if (!isAdmin) {
       return next(createHttpError(403, "Only admin can reject seller applications"));
     }
 
@@ -668,9 +734,10 @@ export const deleteSellerApplication = async (req: Request, res: Response, next:
       return next(createHttpError(400, "User ID is required"));
     }
 
-    const _req = req as AuthRequest;
+    const _req = req;
     // Only admin can delete seller applications
-    if (_req.roles !== "admin") {
+    const isAdmin = _req.user?.roles.includes('admin') || false;
+    if (!isAdmin) {
       return next(createHttpError(403, "Only admin can delete seller applications"));
     }
 

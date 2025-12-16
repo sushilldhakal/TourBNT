@@ -8,13 +8,13 @@ import TourModel from '../../tours/tourModel';
 export const getUserFaqs = async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
         const requestedUserId = req.params.userId;  // User ID from URL params
-        const authenticatedUserId = req.userId;  // Authenticated user ID
-        const userRole = req.roles;  // User role
+        const authenticatedUserId = req.user?.id;  // Authenticated user ID
+        const userRole = req.user?.roles;  // User role
 
         let faqs;
 
         // Admin can view any user's FAQs
-        if (userRole === 'admin') {
+        if (userRole?.includes('admin')) {
             if (requestedUserId) {
                 faqs = await Faqs.find({ user: requestedUserId });
             } else {
@@ -85,7 +85,10 @@ export const getSingleFaqs = async (req: AuthRequest, res: Response, next: NextF
 
 export const addFaqs = async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-        const userId = req.userId;  // Assuming user ID is available in the request
+        if (!req.user) {
+            return res.status(401).json({ message: 'Not authenticated' });
+        }
+        const userId = req.user.id;  // Assuming user ID is available in the request
         const { question,
             answer } = req.body;
 
@@ -105,7 +108,10 @@ export const addFaqs = async (req: AuthRequest, res: Response, next: NextFunctio
 
 export const updateFaqs = async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-        const userId = req.userId;  // Assuming user ID is available in the request
+        if (!req.user) {
+            return res.status(401).json({ message: 'Not authenticated' });
+        }
+        const userId = req.user.id;  // Assuming user ID is available in the request
         const { faqId } = req.params;
         const { question, answer } = req.body;
         const faqs = await Faqs.findById(faqId);
@@ -113,7 +119,7 @@ export const updateFaqs = async (req: AuthRequest, res: Response, next: NextFunc
             return res.status(404).json({ message: 'FAQ not found' });
         }
 
-        if (faqs.user.toString() !== userId && req.roles !== 'admin') {
+        if (faqs.user.toString() !== userId && !req.user?.roles.includes('admin')) {
             return res.status(403).json({ message: 'Not authorized to update this FAQ' });
         }
 
@@ -158,7 +164,10 @@ export const updateFaqs = async (req: AuthRequest, res: Response, next: NextFunc
 
 export const deleteFaqs = async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-        const userId = req.userId;
+        if (!req.user) {
+            return res.status(401).json({ message: 'Not authenticated' });
+        }
+        const userId = req.user.id;
         const { faqId } = req.params;
         const faqs = await Faqs.findById(faqId);
 
@@ -166,7 +175,7 @@ export const deleteFaqs = async (req: AuthRequest, res: Response, next: NextFunc
             return res.status(404).json({ message: 'FAQ not found' });
         }
 
-        if (faqs.user.toString() !== userId && req.roles !== 'admin') {
+        if (faqs.user.toString() !== userId && !req.user?.roles.includes('admin')) {
             return res.status(403).json({ message: 'Not authorized to delete this FAQ' });
         }
 
@@ -180,8 +189,8 @@ export const deleteFaqs = async (req: AuthRequest, res: Response, next: NextFunc
 
 export const bulkDeleteFaqs = async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-        const userId = req.userId;
-        const userRole = req.roles;
+        const userId = req.user?.id;
+        const userRole = req.user?.roles;
         const { ids } = req.body; // Expecting an array of FAQ IDs
 
         if (!Array.isArray(ids) || ids.length === 0) {
@@ -213,7 +222,7 @@ export const bulkDeleteFaqs = async (req: AuthRequest, res: Response, next: Next
             }
 
             // Check authorization
-            if (faq.user.toString() !== userId && userRole !== 'admin') {
+            if (faq.user.toString() !== userId && !userRole?.includes('admin')) {
                 failed.push({ id, error: 'Not authorized to delete this FAQ' });
                 continue;
             }

@@ -12,7 +12,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "@/components/ui/use-toast";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { getUserRole } from "@/lib/auth/authUtils";
 import { approveDestination, rejectDestination } from "@/lib/api/destinations";
 import AddDestination from "./AddDestination";
 import SingleDestination from "./SingleDestination";
@@ -21,6 +20,7 @@ import DestinationGridCard from "./DestinationGridCard";
 import { Destination as Dest, DestinationTypes } from "@/lib/types";
 import { ViewToggle, ViewMode } from "../ViewToggle";
 import { getViewPreference, setViewPreference } from "@/lib/utils/viewPreferences";
+import { useAuth } from "@/lib/hooks/useAuth";
 
 const Destination = () => {
     const queryClient = useQueryClient();
@@ -44,12 +44,11 @@ const Destination = () => {
     };
 
     // Check user role for admin access
-    const userRole = getUserRole();
+    const { userRole } = useAuth();
     const isAdmin = userRole === 'admin';
     const isAdminView = useMemo(() => {
-        const roles = getUserRole();
-        return roles ? roles.includes('admin') : false;
-    }, []);
+        return userRole === 'admin';
+    }, [userRole]);
 
     // Use different data sources based on user role
     // Admin: Use global destinations (useDestination)

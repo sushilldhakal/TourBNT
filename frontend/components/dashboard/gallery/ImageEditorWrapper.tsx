@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import dynamic from 'next/dynamic';
 
 interface ImageEditorWrapperProps {
     source: string;
@@ -8,124 +9,72 @@ interface ImageEditorWrapperProps {
     onClose: () => void;
 }
 
-export default function ImageEditorWrapper({ source, onSave, onClose }: ImageEditorWrapperProps) {
-    const [Editor, setEditor] = useState<any>(null);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-
-    useEffect(() => {
-        let mounted = true;
-
-        const loadEditor = async () => {
-            try {
-                setIsLoading(true);
-                setError(null);
-
-                // Dynamic import with proper error handling
-                const module = await import('react-filerobot-image-editor');
-
-                if (mounted) {
-                    setEditor(() => module.default);
-                    setIsLoading(false);
-                }
-            } catch (err) {
-                console.error('Failed to load image editor:', err);
-                if (mounted) {
-                    setError('Failed to load image editor. Please try again.');
-                    setIsLoading(false);
-                }
-            }
-        };
-
-        loadEditor();
-
-        return () => {
-            mounted = false;
-        };
-    }, []);
-
-    if (isLoading) {
-        return (
+// TUI Image Editor following proper Next.js pattern
+const TuiImageEditorProper = dynamic(
+    () => import('./TuiImageEditorProper'),
+    {
+        ssr: false, // This is crucial for TUI Image Editor
+        loading: () => (
             <div className="flex items-center justify-center h-[600px] w-full">
                 <div className="text-center">
                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-                    <p>Loading image editor...</p>
+                    <p className="text-lg font-medium">Loading TUI Image Editor</p>
+                    <p className="text-sm text-muted-foreground mt-2">Please wait...</p>
                 </div>
             </div>
-        );
+        ),
     }
+);
 
-    if (error) {
-        return (
+const SimpleImageEditor = dynamic(
+    () => import('./SimpleImageEditor'),
+    {
+        ssr: false,
+        loading: () => (
             <div className="flex items-center justify-center h-[600px] w-full">
-                <div className="text-center text-red-500">
-                    <p>{error}</p>
-                    <button
-                        onClick={onClose}
-                        className="mt-4 px-4 py-2 bg-primary text-white rounded hover:bg-primary/90"
-                    >
-                        Close
-                    </button>
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+                    <p>Loading simple editor...</p>
                 </div>
             </div>
-        );
+        ),
     }
+);
 
-    if (!Editor) {
-        return null;
+export default function ImageEditorWrapper({ source, onSave, onClose }: ImageEditorWrapperProps) {
+    const [useFallback, setUseFallback] = useState(false);
+
+    // If TUI fails, automatically switch to simple editor
+    if (useFallback) {
+        return (
+            <div className="relative">
+                <div className="absolute top-4 left-4 z-10">
+                    <div className="px-2 py-1 text-xs bg-blue-100 text-blue-800 border border-blue-200 rounded shadow-sm">
+                        Simple Editor (TUI Fallback)
+                    </div>
+                </div>
+                <SimpleImageEditor source={source} onSave={onSave} onClose={onClose} />
+            </div>
+        );
     }
 
     return (
-        <Editor
-            source={source}
-            onSave={onSave}
-            onClose={onClose}
-            annotationsCommon={{
-                fill: '#ff0000',
-            }}
-            Text={{ text: 'Filerobot...' }}
-            Rotate={{ angle: 90, componentType: 'slider' }}
-            Crop={{
-                presetsItems: [
-                    {
-                        titleKey: 'classicTv',
-                        descriptionKey: '4:3',
-                        ratio: 4 / 3,
-                    },
-                    {
-                        titleKey: 'cinemascope',
-                        descriptionKey: '21:9',
-                        ratio: 21 / 9,
-                    },
-                ],
-                presetsFolders: [
-                    {
-                        titleKey: 'socialMedia',
-                        groups: [
-                            {
-                                titleKey: 'facebook',
-                                items: [
-                                    {
-                                        titleKey: 'profile',
-                                        width: 180,
-                                        height: 180,
-                                        descriptionKey: 'fbProfileSize',
-                                    },
-                                    {
-                                        titleKey: 'coverPhoto',
-                                        width: 820,
-                                        height: 312,
-                                        descriptionKey: 'fbCoverPhotoSize',
-                                    },
-                                ],
-                            },
-                        ],
-                    },
-                ],
-            }}
-            tabsIds={['Adjust', 'Annotate', 'Filters', 'Finetune', 'Resize', 'Watermark']}
-            defaultTabId="Adjust"
-            defaultToolId="Crop"
-        />
+        <div className="relative">
+            {/* Add manual fallback button */}
+            <div className="absolute top-4 right-4 z-10">
+                <button
+                    onClick={() => setUseFallback(true)}
+                    className="px-3 py-1 text-xs bg-white/90 hover:bg-white border rounded shadow-sm"
+                >
+                    Use Simple Editor
+                </button>
+            </div>
+
+            <TuiImageEditorProper
+                source={source}
+                onSave={onSave}
+                onClose={onClose}
+            />
+        </div>
     );
 }

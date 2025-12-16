@@ -1,8 +1,8 @@
 import express, { RequestHandler } from "express";
-import { authenticate, isAdminOrSeller, AuthRequest } from "../../../middlewares/authenticate";
+import { authenticate, authorizeRoles, AuthRequest } from "../../../middlewares/authenticate";
 import { addFacts, getAllFacts, getUserFacts, updateFacts, getSingleFacts, deleteMultipleFacts } from "./factsController";
 import { uploadNone } from "../../../middlewares/multer";
-import { asyncHandler } from "../../../utils/routeWrapper";
+import { asyncAuthHandler } from "../../../utils/routeWrapper";
 import { paginationMiddleware } from "../../../middlewares/pagination";
 
 const factsRouter = express.Router();
@@ -132,23 +132,23 @@ const factsRouter = express.Router();
  */
 
 // GET /api/facts - List all facts with pagination (PUBLIC)
-factsRouter.get('/', paginationMiddleware, asyncHandler(getAllFacts));
+factsRouter.get('/', paginationMiddleware, asyncAuthHandler(getAllFacts));
 
 // POST /api/facts - Create fact (Protected, Admin or Seller)
 factsRouter.post(
     '/',
     authenticate,
     uploadNone,
-    isAdminOrSeller as RequestHandler,
-    asyncHandler<AuthRequest>(addFacts)
+    authorizeRoles('admin', 'seller') as RequestHandler,
+    asyncAuthHandler(addFacts)
 );
 
 // DELETE /api/facts - Bulk delete facts (Protected, Admin or Seller)
 factsRouter.delete(
     '/',
     authenticate,
-    isAdminOrSeller as RequestHandler,
-    asyncHandler<AuthRequest>(deleteMultipleFacts)
+    authorizeRoles('admin', 'seller') as RequestHandler,
+    asyncAuthHandler(deleteMultipleFacts)
 );
 
 // Get Facts for a Specific User (Protected, Admin or Seller)
@@ -187,8 +187,8 @@ factsRouter.delete(
 factsRouter.get(
     '/user/:userId',
     authenticate,
-    isAdminOrSeller as RequestHandler,
-    asyncHandler<AuthRequest>(getUserFacts)
+    authorizeRoles('admin', 'seller') as RequestHandler,
+    asyncAuthHandler(getUserFacts)
 );
 
 /**
@@ -258,15 +258,15 @@ factsRouter.get(
  */
 
 // GET /api/facts/:factId - Get single fact (PUBLIC)
-factsRouter.get('/:factId', asyncHandler(getSingleFacts));
+factsRouter.get('/:factId', asyncAuthHandler(getSingleFacts));
 
 // PATCH /api/facts/:factId - Update fact (Protected, Admin or Seller)
 factsRouter.patch(
     '/:factId',
     authenticate,
     uploadNone,
-    isAdminOrSeller as RequestHandler,
-    asyncHandler<AuthRequest>(updateFacts)
+    authorizeRoles('admin', 'seller') as RequestHandler,
+    asyncAuthHandler(updateFacts)
 );
 
 export default factsRouter;

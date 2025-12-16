@@ -22,7 +22,7 @@ import { Edit, FileText, Save, Tag, TagsIcon, Trash2, Type, X } from "lucide-rea
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { getUserId } from "@/lib/auth/authUtils";
+import { useAuth } from "@/lib/hooks/useAuth";
 
 interface FactDataWithId {
     name: string;
@@ -55,7 +55,7 @@ const SingleFact = memo(({
     const [isOpen, setIsOpen] = useState(false);
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
-    const userId = getUserId();
+    const { userId } = useAuth();
     const queryClient = useQueryClient();
 
     const form = useForm({

@@ -20,7 +20,7 @@ import { GallerySidePanel, MobileGallerySidePanel } from './GallerySidePanel';
 import { ErrorState } from './ErrorState';
 import { useMediaQuery } from '@/lib/hooks/useMediaQuery';
 import { useMediaDelete } from '@/lib/hooks/useMediaDelete';
-import { getUserId } from '@/lib/auth/authUtils';
+import { useAuth } from '@/lib/hooks/useAuth';
 import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
 
@@ -85,6 +85,7 @@ export function GalleryPage({
     const [uploadingFiles, setUploadingFiles] = useState<File[]>([]);
 
     const { toast } = useToast();
+    const { user } = useAuth();
 
     /**
      * Sync URL with active tab
@@ -244,8 +245,7 @@ export function GalleryPage({
      */
     const handleDelete = useCallback(
         (id: string) => {
-            const userId = getUserId();
-            if (!userId) {
+            if (!user?.id) {
                 toast({
                     variant: 'destructive',
                     title: 'Authentication Required',
@@ -266,7 +266,6 @@ export function GalleryPage({
             }
 
             deleteMutation.mutate({
-                userId,
                 mediaIds: mediaItem.publicId,
                 mediaType: state.activeTab,
             });
@@ -279,8 +278,7 @@ export function GalleryPage({
      * Requirements: 6.3
      */
     const handleBulkDelete = useCallback(() => {
-        const userId = getUserId();
-        if (!userId) {
+        if (!user?.id) {
             toast({
                 variant: 'destructive',
                 title: 'Authentication Required',
@@ -310,7 +308,6 @@ export function GalleryPage({
         }
 
         deleteMutation.mutate({
-            userId,
             mediaIds: publicIds,
             mediaType: state.activeTab,
         });

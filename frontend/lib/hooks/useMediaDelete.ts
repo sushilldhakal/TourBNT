@@ -56,7 +56,6 @@ interface UseMediaDeleteOptions {
  * 
  * const handleDelete = () => {
  *   deleteMutation.mutate({
- *     userId: 'user123',
  *     mediaIds: ['id1', 'id2'],
  *     mediaType: 'images',
  *   });

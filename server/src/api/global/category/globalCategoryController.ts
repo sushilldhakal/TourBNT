@@ -82,13 +82,13 @@ export const getCategoryById = async (req: Request, res: Response): Promise<void
 // Get all approved categories (public)
 export const getApprovedCategories = async (req: Request, res: Response): Promise<void> => {
   try {
-    const categories = await GlobalCategory.find({ 
+    const categories = await GlobalCategory.find({
       isApproved: true,
       approvalStatus: 'approved'
     })
-    .populate('createdBy', 'name email')
-    .populate('metadata.parentCategory', 'name slug')
-    .sort({ createdAt: -1 });
+      .populate('createdBy', 'name email')
+      .populate('metadata.parentCategory', 'name slug')
+      .sort({ createdAt: -1 });
 
     res.json({
       success: true,
@@ -108,7 +108,7 @@ export const getCategoriesByType = async (req: Request, res: Response): Promise<
   try {
     const { type } = req.params;
     const { search } = req.query;
-    
+
     let query: any = {
       isApproved: true,
       approvalStatus: 'approved'
@@ -125,7 +125,7 @@ export const getCategoriesByType = async (req: Request, res: Response): Promise<
     const categories = await GlobalCategory.find(query)
       .sort({ popularity: -1, name: 1 })
       .select('name description slug imageUrl type popularity usageCount');
-    
+
     res.json({
       success: true,
       data: categories,
@@ -144,8 +144,8 @@ export const getCategoriesByType = async (req: Request, res: Response): Promise<
 // This includes user's personal active/inactive status for each category
 export const getUserCategories = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const userId = req.user?._id;
-    
+    const userId = req.user?.id;
+
     if (!userId) {
       res.status(401).json({
         success: false,
@@ -189,7 +189,7 @@ export const getUserCategories = async (req: AuthRequest, res: Response): Promis
     await user.populate({
       path: 'sellerInfo.category.categoryId',
       model: 'GlobalCategory',
-      match: { 
+      match: {
         approvalStatus: { $in: ['pending', 'approved'] } // Include both pending and approved categories
       }
     });
@@ -222,8 +222,8 @@ export const getUserCategories = async (req: AuthRequest, res: Response): Promis
 // Get categories for seller (shows own categories + searchable approved categories)
 export const getSellerCategories = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const sellerId = req.user?._id;
-    const userRole = req.user?.role;
+    const sellerId = req.user?.id;
+    const userRole = req.user?.roles;
 
     if (!sellerId) {
       res.status(401).json({
@@ -234,7 +234,7 @@ export const getSellerCategories = async (req: AuthRequest, res: Response): Prom
     }
 
     // If user is admin, return all categories (pending + approved)
-    if (userRole === 'admin') {
+    if (userRole?.includes('admin')) {
       const allCategories = await GlobalCategory.find({})
         .sort({ submittedAt: -1 });
 
@@ -268,7 +268,7 @@ export const getSellerCategories = async (req: AuthRequest, res: Response): Prom
 // Search categories for sellers (to discover existing categories before creating new ones)
 export const searchCategories = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const sellerId = req.user?._id;
+    const sellerId = req.user?.id;
     if (!sellerId) {
       res.status(401).json({
         success: false,
@@ -321,7 +321,7 @@ export const searchCategories = async (req: AuthRequest, res: Response): Promise
 // Get enabled categories for seller (for tour creation)
 export const getEnabledCategories = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const sellerId = req.user?._id;
+    const sellerId = req.user?.id;
     if (!sellerId) {
       res.status(401).json({
         success: false,
@@ -335,12 +335,12 @@ export const getEnabledCategories = async (req: AuthRequest, res: Response): Pro
         path: 'categoryPreferences.category',
         match: { isApproved: true, approvalStatus: 'approved' }
       });
-    
-    const enabledCategories = sellerPrefs ? 
+
+    const enabledCategories = sellerPrefs ?
       sellerPrefs.categoryPreferences
         .filter((pref: any) => pref.isEnabled && pref.category)
         .sort((a: any, b: any) => (a.sortOrder || 0) - (b.sortOrder || 0)) : [];
-    
+
     res.json({
       success: true,
       data: enabledCategories,
@@ -362,9 +362,9 @@ export const submitCategory = async (req: AuthRequest, res: Response): Promise<v
     console.log('📝 submitCategory - req.body keys:', Object.keys(req.body));
     console.log('📝 submitCategory - name value:', `"${req.body.name}"`);
     console.log('📝 submitCategory - description value:', `"${req.body.description}"`);
-    
+
     const { name, description, imageUrl, parentCategory, reason } = req.body;
-    const createdBy = req.user?._id;
+    const createdBy = req.user?.id;
 
     if (!createdBy) {
       res.status(401).json({
@@ -458,9 +458,9 @@ export const submitCategory = async (req: AuthRequest, res: Response): Promise<v
 export const updateCategory = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { categoryId } = req.params;
-    const sellerId = req.user?._id;
+    const sellerId = req.user?.id;
     const updateData = req.body;
-    
+
     console.log("📝 Raw request data:");
     console.log("  - categoryId:", categoryId);
     console.log("  - sellerId:", sellerId);
@@ -484,12 +484,12 @@ export const updateCategory = async (req: AuthRequest, res: Response): Promise<v
     }
 
     // Check if user is admin
-    const isAdmin = req.user?.role === 'admin';
-    console.log('🔍 Update category - User role:', req.user?.role, 'Is admin:', isAdmin);
-    
+    const isAdmin = req.user?.roles.includes('admin');
+    console.log('🔍 Update category - User role:', req.user?.roles, 'Is admin:', isAdmin);
+
     // Find the category - admin can edit any category, others can only edit their own
     const category = await GlobalCategory.findOne(
-      isAdmin 
+      isAdmin
         ? { _id: categoryId } // Admin can edit any category
         : { _id: categoryId, createdBy: sellerId } // Regular users can only edit their own
     );
@@ -497,14 +497,14 @@ export const updateCategory = async (req: AuthRequest, res: Response): Promise<v
     if (!category) {
       res.status(404).json({
         success: false,
-        message: isAdmin 
-          ? 'Category not found' 
+        message: isAdmin
+          ? 'Category not found'
           : 'Category not found or you do not have permission to update it'
       });
       return;
     }
 
-    console.log('✅ Category found for update:', category._id, 'by user:', req.user?.role);
+    console.log('✅ Category found for update:', category._id, 'by user:', req.user?.roles);
     console.log('📝 Original category data:', {
       name: category.name,
       description: category.description,
@@ -515,7 +515,7 @@ export const updateCategory = async (req: AuthRequest, res: Response): Promise<v
 
     // Filter out fields that don't belong to global category model
     const { isActive, ...globalCategoryData } = updateData;
-    
+
     console.log('📝 Filtered global category data:', globalCategoryData);
     if (isActive !== undefined) {
       console.log('⚠️ isActive field ignored (user-specific, not global):', isActive);
@@ -569,7 +569,7 @@ export const updateCategory = async (req: AuthRequest, res: Response): Promise<v
 export const getPendingCategories = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     // Check if user is admin
-    if (req.user?.role !== 'admin') {
+    if (!req.user?.roles?.includes('admin')) {
       res.status(403).json({
         success: false,
         message: 'Admin access required'
@@ -577,8 +577,8 @@ export const getPendingCategories = async (req: AuthRequest, res: Response): Pro
       return;
     }
 
-    const pendingCategories = await GlobalCategory.find({ 
-      approvalStatus: 'pending' 
+    const pendingCategories = await GlobalCategory.find({
+      approvalStatus: 'pending'
     })
       .populate('createdBy', 'name email')
       .sort({ submittedAt: -1 });
@@ -601,7 +601,7 @@ export const getPendingCategories = async (req: AuthRequest, res: Response): Pro
 export const approveCategory = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     // Check if user is admin
-    if (req.user?.role !== 'admin') {
+    if (!req.user?.roles?.includes('admin')) {
       res.status(403).json({
         success: false,
         message: 'Admin access required'
@@ -610,7 +610,7 @@ export const approveCategory = async (req: AuthRequest, res: Response): Promise<
     }
 
     const { categoryId } = req.params;
-    const approvedBy = req.user._id;
+    const approvedBy = req.user.id;
 
     const category = await GlobalCategory.findById(categoryId);
     if (!category) {
@@ -636,7 +636,7 @@ export const approveCategory = async (req: AuthRequest, res: Response): Promise<
       const userCategory = creator.sellerInfo.category.find(
         cat => cat.categoryId.toString() === categoryId.toString()
       );
-      
+
       if (userCategory) {
         userCategory.isApproved = true;
         userCategory.approvalStatus = 'approved';
@@ -664,7 +664,7 @@ export const approveCategory = async (req: AuthRequest, res: Response): Promise<
 export const rejectCategory = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     // Check if user is admin
-    if (req.user?.role !== 'admin') {
+    if (!req.user?.roles?.includes('admin')) {
       res.status(403).json({
         success: false,
         message: 'Admin access required'
@@ -674,7 +674,7 @@ export const rejectCategory = async (req: AuthRequest, res: Response): Promise<v
 
     const { categoryId } = req.params;
     const { reason } = req.body;
-    const rejectedBy = req.user._id;
+    const rejectedBy = req.user.id;
 
     if (!reason) {
       res.status(400).json({
@@ -708,7 +708,7 @@ export const rejectCategory = async (req: AuthRequest, res: Response): Promise<v
       const userCategory = creator.sellerInfo.category.find(
         cat => cat.categoryId.toString() === categoryId.toString()
       );
-      
+
       if (userCategory) {
         userCategory.isApproved = false;
         userCategory.approvalStatus = 'rejected';
@@ -736,7 +736,7 @@ export const rejectCategory = async (req: AuthRequest, res: Response): Promise<v
 export const deleteCategory = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     // Check if user is admin
-    if (req.user?.role !== 'admin') {
+    if (!req.user?.roles?.includes('admin')) {
       res.status(403).json({
         success: false,
         message: 'Admin access required'
@@ -773,7 +773,7 @@ export const deleteCategory = async (req: AuthRequest, res: Response): Promise<v
 // Update seller category preferences
 export const updateCategoryPreferences = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const sellerId = req.user?._id;
+    const sellerId = req.user?.id;
     if (!sellerId) {
       res.status(401).json({
         success: false,
@@ -785,7 +785,7 @@ export const updateCategoryPreferences = async (req: AuthRequest, res: Response)
     const { preferences, globalSettings } = req.body;
 
     let sellerPrefs = await SellerCategoryPreferences.findOne({ seller: sellerId });
-    
+
     if (!sellerPrefs) {
       sellerPrefs = new SellerCategoryPreferences({
         seller: sellerId,
@@ -799,7 +799,7 @@ export const updateCategoryPreferences = async (req: AuthRequest, res: Response)
         const preference = sellerPrefs.categoryPreferences.find(
           (pref: any) => pref.category.toString() === update.categoryId.toString()
         );
-        
+
         if (preference) {
           if (update.isVisible !== undefined) preference.isVisible = update.isVisible;
           if (update.isEnabled !== undefined) preference.isEnabled = update.isEnabled;
@@ -815,7 +815,7 @@ export const updateCategoryPreferences = async (req: AuthRequest, res: Response)
           });
         }
       });
-      
+
       sellerPrefs.lastUpdated = new Date();
       await sellerPrefs.save();
     }
@@ -842,8 +842,8 @@ export const updateCategoryPreferences = async (req: AuthRequest, res: Response)
 // Get favorite categories
 export const getFavoriteCategories = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const sellerId = req.user?._id;
-    
+    const sellerId = req.user?.id;
+
     if (!sellerId) {
       res.status(401).json({
         success: false,
@@ -889,7 +889,7 @@ export const getFavoriteCategories = async (req: AuthRequest, res: Response): Pr
 // Toggle favorite category
 export const toggleFavoriteCategory = async (req: AuthRequest, res: Response) => {
   try {
-    const sellerId = req.user?._id;
+    const sellerId = req.user?.id;
     if (!sellerId) {
       return res.status(401).json({
         success: false,
@@ -900,7 +900,7 @@ export const toggleFavoriteCategory = async (req: AuthRequest, res: Response) =>
     const { categoryId } = req.params;
 
     let sellerPrefs = await SellerCategoryPreferences.findOne({ seller: sellerId });
-    
+
     if (!sellerPrefs) {
       sellerPrefs = new SellerCategoryPreferences({
         seller: sellerId,
@@ -912,7 +912,7 @@ export const toggleFavoriteCategory = async (req: AuthRequest, res: Response) =>
     const preference = sellerPrefs.categoryPreferences.find(
       (pref: any) => pref.category.toString() === categoryId.toString()
     );
-    
+
     if (preference) {
       preference.isFavorite = !preference.isFavorite;
     } else {
@@ -923,7 +923,7 @@ export const toggleFavoriteCategory = async (req: AuthRequest, res: Response) =>
         isFavorite: true
       });
     }
-    
+
     sellerPrefs.lastUpdated = new Date();
     await sellerPrefs.save();
 
@@ -945,8 +945,8 @@ export const toggleFavoriteCategory = async (req: AuthRequest, res: Response) =>
 export const addExistingCategoryToSeller = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { categoryId } = req.params;
-    const sellerId = req.user?._id;
-    
+    const sellerId = req.user?.id;
+
     if (!sellerId) {
       res.status(401).json({
         success: false,
@@ -962,7 +962,7 @@ export const addExistingCategoryToSeller = async (req: AuthRequest, res: Respons
       });
       return;
     }
-    
+
     // Check if category exists and is approved
     const category = await GlobalCategory.findOne({
       _id: categoryId,
@@ -980,7 +980,7 @@ export const addExistingCategoryToSeller = async (req: AuthRequest, res: Respons
 
     // Get or create seller preferences
     let sellerPrefs = await SellerCategoryPreferences.findOne({ seller: sellerId });
-    
+
     if (!sellerPrefs) {
       sellerPrefs = new SellerCategoryPreferences({
         seller: sellerId,
@@ -1020,7 +1020,7 @@ export const addExistingCategoryToSeller = async (req: AuthRequest, res: Respons
     if (user) {
       // Ensure user has sellerInfo
       user = await ensureSellerInfo(user, sellerId.toString());
-      
+
       if (user && user.sellerInfo) {
         if (!user.sellerInfo.category) {
           user.sellerInfo.category = [];
@@ -1049,7 +1049,7 @@ export const addExistingCategoryToSeller = async (req: AuthRequest, res: Respons
           existingUserCategory.isActive = true;
           existingUserCategory.isApproved = true;
           existingUserCategory.approvalStatus = 'approved';
-          
+
           await user.save();
           console.log(`✅ Updated category "${category.name}" in user ${sellerId} category list to active`);
         }
@@ -1078,7 +1078,7 @@ export const addExistingCategoryToSeller = async (req: AuthRequest, res: Respons
 export const toggleCategoryActiveStatus = async (req: AuthRequest, res: Response) => {
   try {
     const { categoryId } = req.params;
-    const sellerId = req.user?._id;
+    const sellerId = req.user?.id;
 
     console.log(`🔄 Toggle request for category ${categoryId} by seller ${sellerId}`);
 
@@ -1160,7 +1160,7 @@ export const toggleCategoryActiveStatus = async (req: AuthRequest, res: Response
         if (!user.sellerInfo.category) {
           user.sellerInfo.category = [];
         }
-        
+
         // Set status based on global category status
         const userCategoryStatus = {
           categoryId: categoryId,
@@ -1247,8 +1247,8 @@ export const toggleCategoryActiveStatus = async (req: AuthRequest, res: Response
 export const removeExistingCategoryFromSeller = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { categoryId } = req.params;
-    const sellerId = req.user?._id;
-    
+    const sellerId = req.user?.id;
+
     if (!sellerId) {
       res.status(401).json({
         success: false,

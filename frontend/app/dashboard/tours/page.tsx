@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getTours, deleteTour, getUsersTours } from '@/lib/api/tours';
+import { deleteTour, getMyTours } from '@/lib/api/tours';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
     CirclePlus,
@@ -22,8 +22,6 @@ import { format } from 'date-fns';
 import { useToast } from '@/components/ui/use-toast';
 import { DataTable } from '@/components/dashboard/DataTable';
 import { ActionDropdown } from '@/components/dashboard/shared/ActionDropdown';
-import { getUserId } from '@/lib/auth/authUtils';
-
 interface Author {
     name: string;
 }
@@ -31,18 +29,16 @@ interface Author {
 export default function ToursPage() {
     const { toast } = useToast();
     const queryClient = useQueryClient();
-    const currentUserId = getUserId();
 
-    console.log("currentUserId", currentUserId)
+    // ✅ Correct pattern: No userId needed, server gets it from httpOnly cookie
     const { data, isLoading, isError } = useQuery({
-        queryKey: ['tours'],
-        queryFn: () => getUsersTours(currentUserId || ''),
+        queryKey: ['my-tours'],
+        queryFn: getMyTours,
     });
-    console.log("currentUserId data", data)
     const deleteMutation = useMutation({
         mutationFn: deleteTour,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['tours'] });
+            queryClient.invalidateQueries({ queryKey: ['my-tours'] });
             toast({
                 title: 'Tour deleted successfully',
                 description: 'The tour has been deleted successfully.',

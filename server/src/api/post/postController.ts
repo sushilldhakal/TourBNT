@@ -21,7 +21,7 @@ export const addPost = async (req: Request,
     const newPost = new Post({
       title,
       content: parsedContent,
-      author: _req.userId,
+      author: _req.user?.id,
       tags: parsedTags,
       enableComments: enableComments !== undefined ? enableComments : true,
       image,
@@ -106,8 +106,9 @@ export const getAllUserPosts = async (req: Request, res: Response, next: NextFun
     const query: any = {};
 
     // If user is not admin, only show their own posts
-    if (_req.roles !== 'admin') {
-      query.author = _req.userId;
+    const isAdmin = _req.user?.roles.includes('admin') || false;
+    if (!isAdmin) {
+      query.author = _req.user?.id;
     }
 
     // Apply search filtering
@@ -192,12 +193,13 @@ export const getUserPost = async (req: Request, res: Response, next: NextFunctio
 
     // Fetch the post by ID
     let post;
-    if (_req.roles === 'admin') {
+    const isAdmin = _req.user?.roles.includes('admin') || false;
+    if (isAdmin) {
       // If the user is an admin, they can access any post
       post = await Post.findById(postId).populate("author", "name").populate("comments");
     } else {
       // If the user is not an admin, only fetch the post if they are the author
-      post = await Post.findOne({ _id: postId, author: _req.userId }).populate("author", "name").populate("comments");
+      post = await Post.findOne({ _id: postId, author: _req.user?.id }).populate("author", "name").populate("comments");
     }
 
     // If no post is found, return 404
@@ -253,7 +255,8 @@ export const deletePost = async (req: Request, res: Response, next: NextFunction
     }
 
     // Check if the current user is the owner of the post or an admin
-    if (post.author.toString() !== _req.userId && _req.roles !== 'admin') {
+    const isAdmin = _req.user?.roles.includes('admin') || false;
+    if (post.author.toString() !== _req.user?.id && !isAdmin) {
       res.status(HTTP_STATUS.FORBIDDEN).json({
         error: {
           code: 'FORBIDDEN',
@@ -295,7 +298,8 @@ export const editPost = async (req: Request, res: Response, next: NextFunction):
     }
 
     // Check if the current user is the owner of the post or an admin
-    if (post.author.toString() !== _req.userId && _req.roles !== 'admin') {
+    const isAdmin = _req.user?.roles.includes('admin') || false;
+    if (post.author.toString() !== _req.user?.id && !isAdmin) {
       res.status(HTTP_STATUS.FORBIDDEN).json({ message: 'You are not authorized to edit this post' });
       return;
     }

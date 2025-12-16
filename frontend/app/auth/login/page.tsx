@@ -7,23 +7,27 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { useLogin, useRegister, useVerifyEmail, useForgotPassword, useResetPassword } from "@/lib/hooks/useAuth";
-import useTokenStore from "@/lib/store/tokenStore";
+import { loginUser } from "@/lib/api/userApi";
+import { api } from "@/lib/api/apiClient";
 import { canAccessDashboard } from "@/lib/utils/roles";
-import { jwtDecode } from "jwt-decode";
-import { Mail, Lock, User, Phone, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import { Mail, Lock, User, Phone, CheckCircle2, AlertCircle, Loader2, EyeIcon, EyeOffIcon } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
-import Link from "next/link";
+import { cn } from "@/lib/utils";
 
 function LoginPageContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const { toast } = useToast();
-    const setToken = useTokenStore((state) => state.setToken);
+
+    // Separate show/hide states for different password fields
+    const [showLoginPassword, setShowLoginPassword] = useState(false);
+    const [showRegisterPassword, setShowRegisterPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
     const [showForm, setShowForm] = useState<'login' | 'signup' | 'forgot' | 'verify'>('login');
     const [keepMeSignedIn, setKeepMeSignedIn] = useState(false);
     const [errors, setErrors] = useState<{ [key: string]: string }>({});
+
 
     // Check for form parameter in URL
     useEffect(() => {
@@ -37,48 +41,48 @@ function LoginPageContent() {
     const loginPasswordRef = useRef<HTMLInputElement>(null);
     const registerEmailRef = useRef<HTMLInputElement>(null);
     const registerPasswordRef = useRef<HTMLInputElement>(null);
+    const registerConfirmPasswordRef = useRef<HTMLInputElement>(null);
     const registerNameRef = useRef<HTMLInputElement>(null);
     const registerPhoneRef = useRef<HTMLInputElement>(null);
     const forgotEmailRef = useRef<HTMLInputElement>(null);
     const resetPasswordRef = useRef<HTMLInputElement>(null);
 
-    // Mutations
-    const loginMutation = useLogin();
-    const registerMutation = useRegister();
-    const verifyMutation = useVerifyEmail();
-    const forgotPasswordMutation = useForgotPassword();
-    const resetPasswordMutation = useResetPassword();
+    // Loading states
+    const [isLoggingIn, setIsLoggingIn] = useState(false);
+    const [isRegistering, setIsRegistering] = useState(false);
+    const [isSendingReset, setIsSendingReset] = useState(false);
+    const [isResettingPassword, setIsResettingPassword] = useState(false);
 
     useEffect(() => {
         const token = searchParams.get('token');
         const forgotToken = searchParams.get('forgottoken');
 
         if (token) {
-            verifyMutation.mutate({ token }, {
-                onSuccess: () => {
+            // Verify email
+            api.post('/api/users/verify-email', { token })
+                .then(() => {
                     toast({
                         title: 'Email Verified',
                         description: 'Your email has been verified. Please login.',
                     });
                     setShowForm('login');
-                },
-                onError: (error: any) => {
+                })
+                .catch((error: any) => {
                     toast({
                         title: 'Verification Failed',
-                        description: error.message,
+                        description: error.response?.data?.message || 'Verification failed',
                         variant: 'destructive',
                     });
-                },
-            });
+                });
         }
 
         if (forgotToken) {
             setShowForm('forgot');
         }
-    }, [searchParams]);
+    }, [searchParams, toast]);
 
 
-    const handleLogin = () => {
+    const handleLogin = async () => {
         const email = loginEmailRef.current?.value.trim() || '';
         const password = loginPasswordRef.current?.value.trim() || '';
 
@@ -91,47 +95,47 @@ function LoginPageContent() {
             return;
         }
 
-        loginMutation.mutate(
-            { email, password, keepMeSignedIn },
-            {
-                onSuccess: (response) => {
-                    setToken(response.accessToken);
-                    const decoded = jwtDecode(response.accessToken) as { roles?: string };
+        setIsLoggingIn(true);
+        try {
+            // Login - server sets httpOnly cookie and returns user data
+            const user = await loginUser({ email, password, keepMeSignedIn });
 
-                    toast({
-                        title: 'Login Successful',
-                        description: 'Welcome back!',
-                    });
+            toast({
+                title: 'Login Successful',
+                description: 'Welcome back!',
+            });
 
-                    // Check if user can access dashboard using centralized utility
-                    if (canAccessDashboard(decoded.roles ?? null)) {
-                        // Use window.location for cross-app navigation to dashboard
-                        window.location.href = '/dashboard';
-                    } else {
-                        // Regular users go to home page
-                        router.push('/');
-                    }
-                },
-                onError: (error: any) => {
-                    toast({
-                        title: 'Login Failed',
-                        description: error.message || 'Invalid credentials',
-                        variant: 'destructive',
-                    });
-                },
+            // Check if user can access dashboard
+            if (canAccessDashboard(user.roles)) {
+                router.push('/dashboard');
+            } else {
+                router.push('/');
             }
-        );
+        } catch (error: any) {
+            toast({
+                title: 'Login Failed',
+                description: error.response?.data?.message || 'Invalid credentials',
+                variant: 'destructive',
+            });
+        } finally {
+            setIsLoggingIn(false);
+        }
     };
 
-    const handleRegister = () => {
+    const handleRegister = async () => {
         const email = registerEmailRef.current?.value.trim() || '';
         const password = registerPasswordRef.current?.value.trim() || '';
+        const confirmPassword = registerConfirmPasswordRef.current?.value.trim() || '';
         const name = registerNameRef.current?.value.trim() || '';
         const phone = registerPhoneRef.current?.value.trim() || '';
 
         const newErrors: { [key: string]: string } = {};
         if (!email) newErrors.registerEmail = 'Email is required';
         if (!password) newErrors.registerPassword = 'Password is required';
+        if (!confirmPassword) newErrors.registerConfirmPassword = 'Please confirm your password';
+        if (password && confirmPassword && password !== confirmPassword) {
+            newErrors.registerConfirmPassword = 'Passwords do not match';
+        }
         if (!name) newErrors.registerName = 'Name is required';
         if (!phone) newErrors.registerPhone = 'Phone is required';
 
@@ -140,29 +144,27 @@ function LoginPageContent() {
             return;
         }
 
-        registerMutation.mutate(
-            { name, email, password, phone },
-            {
-                onSuccess: () => {
-                    toast({
-                        title: 'Registration Successful',
-                        description: 'Please check your email to verify your account.',
-                    });
-                    setShowForm('verify');
-                },
-                onError: (error: any) => {
-                    toast({
-                        title: 'Registration Failed',
-                        description: error.message,
-                        variant: 'destructive',
-                    });
-                },
-            }
-        );
+        setIsRegistering(true);
+        try {
+            await api.post('/api/users/register', { name, email, password, phone });
+            toast({
+                title: 'Registration Successful',
+                description: 'Please check your email to verify your account.',
+            });
+            setShowForm('verify');
+        } catch (error: any) {
+            toast({
+                title: 'Registration Failed',
+                description: error.response?.data?.message || 'Registration failed',
+                variant: 'destructive',
+            });
+        } finally {
+            setIsRegistering(false);
+        }
     };
 
 
-    const handleForgotPassword = () => {
+    const handleForgotPassword = async () => {
         const email = forgotEmailRef.current?.value.trim() || '';
 
         if (!email) {
@@ -170,27 +172,25 @@ function LoginPageContent() {
             return;
         }
 
-        forgotPasswordMutation.mutate(
-            { email },
-            {
-                onSuccess: () => {
-                    toast({
-                        title: 'Email Sent',
-                        description: 'Please check your email for reset instructions.',
-                    });
-                },
-                onError: (error: any) => {
-                    toast({
-                        title: 'Error',
-                        description: error.message,
-                        variant: 'destructive',
-                    });
-                },
-            }
-        );
+        setIsSendingReset(true);
+        try {
+            await api.post('/api/users/forgot-password', { email });
+            toast({
+                title: 'Email Sent',
+                description: 'Please check your email for reset instructions.',
+            });
+        } catch (error: any) {
+            toast({
+                title: 'Error',
+                description: error.response?.data?.message || 'Failed to send reset email',
+                variant: 'destructive',
+            });
+        } finally {
+            setIsSendingReset(false);
+        }
     };
 
-    const handleResetPassword = () => {
+    const handleResetPassword = async () => {
         const password = resetPasswordRef.current?.value.trim() || '';
         const token = searchParams.get('forgottoken') || '';
 
@@ -199,25 +199,23 @@ function LoginPageContent() {
             return;
         }
 
-        resetPasswordMutation.mutate(
-            { token, password },
-            {
-                onSuccess: () => {
-                    toast({
-                        title: 'Password Reset',
-                        description: 'Your password has been reset successfully.',
-                    });
-                    router.push('/auth/login');
-                },
-                onError: (error: any) => {
-                    toast({
-                        title: 'Error',
-                        description: error.message,
-                        variant: 'destructive',
-                    });
-                },
-            }
-        );
+        setIsResettingPassword(true);
+        try {
+            await api.post('/api/users/reset-password', { token, password });
+            toast({
+                title: 'Password Reset',
+                description: 'Your password has been reset successfully.',
+            });
+            router.push('/auth/login');
+        } catch (error: any) {
+            toast({
+                title: 'Error',
+                description: error.response?.data?.message || 'Failed to reset password',
+                variant: 'destructive',
+            });
+        } finally {
+            setIsResettingPassword(false);
+        }
     };
 
     return (
@@ -230,12 +228,6 @@ function LoginPageContent() {
                             <CardDescription>Sign in to your account</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                            {loginMutation.isError && (
-                                <div className="flex items-center gap-2 p-3 bg-destructive/10 text-destructive rounded-md">
-                                    <AlertCircle size={16} />
-                                    <p className="text-sm">Invalid email or password</p>
-                                </div>
-                            )}
 
                             <div className="space-y-2">
                                 <Label htmlFor="email">Email</Label>
@@ -259,11 +251,25 @@ function LoginPageContent() {
                                     <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                                     <Input
                                         id="password"
-                                        type="password"
+                                        type={showLoginPassword ? 'text' : 'password'}
                                         placeholder="••••••••"
-                                        className="pl-10"
+                                        className={cn('hide-password-toggle px-10')}
                                         ref={loginPasswordRef}
                                     />
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                                        onClick={() => setShowLoginPassword((prev) => !prev)}
+                                    >
+                                        {showLoginPassword ? (
+                                            <EyeIcon className="h-4 w-4" aria-hidden="true" />
+                                        ) : (
+                                            <EyeOffIcon className="h-4 w-4" aria-hidden="true" />
+                                        )}
+                                        <span className="sr-only">{showLoginPassword ? 'Hide password' : 'Show password'}</span>
+                                    </Button>
                                 </div>
                                 {errors.loginPassword && <p className="text-sm text-destructive">{errors.loginPassword}</p>}
                             </div>
@@ -289,9 +295,9 @@ function LoginPageContent() {
                             <Button
                                 className="w-full"
                                 onClick={handleLogin}
-                                disabled={loginMutation.isPending}
+                                disabled={isLoggingIn}
                             >
-                                {loginMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                {isLoggingIn && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                                 Sign In
                             </Button>
 
@@ -368,21 +374,64 @@ function LoginPageContent() {
                                     <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                                     <Input
                                         id="register-password"
-                                        type="password"
+                                        type={showRegisterPassword ? 'text' : 'password'}
                                         placeholder="••••••••"
-                                        className="pl-10"
+                                        className="px-10"
                                         ref={registerPasswordRef}
                                     />
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                                        onClick={() => setShowRegisterPassword((prev) => !prev)}
+                                    >
+                                        {showRegisterPassword ? (
+                                            <EyeIcon className="h-4 w-4" aria-hidden="true" />
+                                        ) : (
+                                            <EyeOffIcon className="h-4 w-4" aria-hidden="true" />
+                                        )}
+                                        <span className="sr-only">{showRegisterPassword ? 'Hide password' : 'Show password'}</span>
+                                    </Button>
                                 </div>
                                 {errors.registerPassword && <p className="text-sm text-destructive">{errors.registerPassword}</p>}
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="confirm-password">Confirm Password</Label>
+                                <div className="relative">
+                                    <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                                    <Input
+                                        id="confirm-password"
+                                        type={showConfirmPassword ? 'text' : 'password'}
+                                        placeholder="••••••••"
+                                        className="px-10"
+                                        ref={registerConfirmPasswordRef}
+                                    />
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                                        onClick={() => setShowConfirmPassword((prev) => !prev)}
+                                    >
+                                        {showConfirmPassword ? (
+                                            <EyeIcon className="h-4 w-4" aria-hidden="true" />
+                                        ) : (
+                                            <EyeOffIcon className="h-4 w-4" aria-hidden="true" />
+                                        )}
+                                        <span className="sr-only">{showConfirmPassword ? 'Hide password' : 'Show password'}</span>
+                                    </Button>
+                                </div>
+                                {errors.registerConfirmPassword && <p className="text-sm text-destructive">{errors.registerConfirmPassword}</p>}
                             </div>
 
                             <Button
                                 className="w-full"
                                 onClick={handleRegister}
-                                disabled={registerMutation.isPending}
+                                disabled={isRegistering}
                             >
-                                {registerMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                {isRegistering && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                                 Create Account
                             </Button>
 
@@ -411,12 +460,6 @@ function LoginPageContent() {
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                            {forgotPasswordMutation.isSuccess && !searchParams.get('forgottoken') && (
-                                <div className="flex items-center gap-2 p-3 bg-green-500/10 text-green-600 rounded-md">
-                                    <CheckCircle2 size={16} />
-                                    <p className="text-sm">Check your email for reset instructions</p>
-                                </div>
-                            )}
 
                             {searchParams.get('forgottoken') ? (
                                 <div className="space-y-2">
@@ -453,9 +496,9 @@ function LoginPageContent() {
                             <Button
                                 className="w-full"
                                 onClick={searchParams.get('forgottoken') ? handleResetPassword : handleForgotPassword}
-                                disabled={forgotPasswordMutation.isPending || resetPasswordMutation.isPending}
+                                disabled={isSendingReset || isResettingPassword}
                             >
-                                {(forgotPasswordMutation.isPending || resetPasswordMutation.isPending) && (
+                                {(isSendingReset || isResettingPassword) && (
                                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                                 )}
                                 {searchParams.get('forgottoken') ? 'Reset Password' : 'Send Reset Link'}

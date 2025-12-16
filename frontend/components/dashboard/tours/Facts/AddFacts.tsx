@@ -14,7 +14,6 @@ import { Button } from "@/components/ui/button";
 import { addFacts } from "@/lib/api/factsApi";
 import { toast } from "@/components/ui/use-toast";
 import { useState, useCallback } from "react";
-import { getUserId } from "@/lib/auth/authUtils";
 import { InputTags } from "@/components/ui/InputTags";
 import AllIcons from "./AllIcons";
 import {
@@ -28,6 +27,7 @@ import {
 import Icon from "@/components/Icon";
 import { Badge } from "@/components/ui/badge";
 import { FolderPlus, Save, X } from "lucide-react";
+import { useAuth } from "@/lib/hooks/useAuth";
 
 interface FactFormData {
     name: string;
@@ -38,7 +38,7 @@ interface FactFormData {
 }
 
 const AddFact = ({ onFactAdded }: { onFactAdded: () => void }) => {
-    const userId = getUserId();
+    const { userId } = useAuth();
     const [valuesTag, setValuesTag] = useState<string[]>([]);
     const [selectedIcon, setSelectedIcon] = useState<string | null>(null);
     const [isOpen, setIsOpen] = useState(false);

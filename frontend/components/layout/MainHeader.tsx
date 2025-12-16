@@ -8,7 +8,7 @@ import { useLayout } from '@/providers/LayoutProvider';
 import { ModeToggle } from '@/components/ui/ModeToggle';
 import Logo from '@/public/logo';
 import { useRole } from '@/lib/hooks/useRole';
-import { clearAuth } from '@/lib/utils/auth';
+import { useAuth } from '@/lib/hooks/useAuth';
 
 const menuItems = [
     { id: 'home', title: 'Home', url: '/' },
@@ -33,6 +33,7 @@ export function MainHeader({ onSearchToggle }: MainHeaderProps) {
 
     // Use centralized role hook
     const { isAuthenticated, canAccessDashboard: userCanAccessDashboard } = useRole();
+    const { logout } = useAuth();
 
     useEffect(() => {
         const handleScroll = () => {
@@ -47,9 +48,8 @@ export function MainHeader({ onSearchToggle }: MainHeaderProps) {
         return () => window.removeEventListener('scroll', handleScroll);
     }, []);
 
-    const handleLogout = () => {
-        clearAuth();
-        window.location.href = '/';
+    const handleLogout = async () => {
+        await logout();
     };
 
     return (

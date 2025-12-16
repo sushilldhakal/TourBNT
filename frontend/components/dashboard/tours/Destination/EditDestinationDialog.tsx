@@ -8,10 +8,10 @@ import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/use-toast";
 import { Save, X, Image as ImageIcon, Trash2, FileText } from "lucide-react";
 import { updateDestination, getUserToursTitle, getSellerDestinations, getUserDestinations, toggleDestinationActiveStatus } from "@/lib/api/destinationApi";
-import { getUserId, getUserRole } from "@/lib/auth/authUtils";
 import { GalleryPage } from "@/components/dashboard/gallery/GalleryPage";
 import { MultiSelect, SelectValue } from "@/components/ui/MultiSelect";
 import { NovelEditor } from "../../editor";
+import { useAuth } from "@/lib/hooks/useAuth";
 
 interface EditDestinationDialogProps {
     destinationId: string;
@@ -44,7 +44,9 @@ interface DescriptionContent {
 }
 
 export const EditDestinationDialog = ({ destinationId, open, onOpenChange, onSuccess }: EditDestinationDialogProps) => {
-    const userId = getUserId();
+    const { userId } = useAuth();
+
+
     const queryClient = useQueryClient();
     const [dialogOpen, setDialogOpen] = useState(false);
     const [descriptionContent, setDescriptionContent] = useState<DescriptionContent | string>('');
@@ -63,8 +65,10 @@ export const EditDestinationDialog = ({ destinationId, open, onOpenChange, onSuc
     });
 
     // Check user role
-    const userRole = getUserRole();
+
+    const { userRole } = useAuth();
     const isAdmin = userRole === 'admin';
+
 
     // Fetch destinations based on user role
     const { data: globalDestinations } = useQuery({

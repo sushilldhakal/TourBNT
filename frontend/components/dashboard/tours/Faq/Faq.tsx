@@ -4,7 +4,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { deleteFaq, deleteMultipleFaqs } from "@/lib/api/faqApi";
 import { toast } from "@/components/ui/use-toast";
 import AddFaq from "./AddFaq";
-import { getUserId } from "@/lib/auth/authUtils";
 import FaqGridCard from "./FaqGridCard";
 import FaqTableRow from "./FaqTableRow";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,9 +23,10 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
+import { useAuth } from "@/lib/hooks/useAuth";
 
 const TourFaqs = () => {
-    const userId = getUserId();
+    const { userId } = useAuth();
     const queryClient = useQueryClient();
     const [searchQuery, setSearchQuery] = useState("");
     const [isAddFaqOpen, setIsAddFaqOpen] = useState(false);

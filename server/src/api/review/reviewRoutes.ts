@@ -1,5 +1,5 @@
 import express from 'express';
-import { authenticate, isAdminOrSeller } from '../../middlewares/authenticate';
+import { authenticate, authorizeRoles } from '../../middlewares/authenticate';
 import { paginationMiddleware } from '../../middlewares/pagination';
 import { filterSortMiddleware } from '../../middlewares/filterSort';
 import { simpleViewTracking } from '../../middlewares/viewTracking';
@@ -106,7 +106,7 @@ router.get('/',
  *       403:
  *         description: Forbidden
  */
-router.get('/pending', authenticate, isAdminOrSeller as any, getPendingReviews);
+router.get('/pending', authenticate, authorizeRoles('admin', 'seller'), getPendingReviews);
 
 /**
  * @swagger
@@ -185,7 +185,7 @@ router.get('/:reviewId',
  *       404:
  *         description: Review not found
  */
-router.patch('/:reviewId/status', authenticate, isAdminOrSeller as any, updateReviewStatus);
+router.patch('/:reviewId/status', authenticate, authorizeRoles('admin', 'seller'), updateReviewStatus);
 
 /**
  * @swagger

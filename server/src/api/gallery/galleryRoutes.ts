@@ -1,9 +1,9 @@
 
 import express, { RequestHandler } from "express";
 import { addMedia, deleteMedia, getMedia, getSingleMedia, updateMedia } from "./galleryController";
-import { authenticate, isAdminOrSeller, AuthRequest } from "../../middlewares/authenticate";
+import { authenticate, authorizeRoles } from "../../middlewares/authenticate";
 import { uploadMultiple, uploadNone } from "../../middlewares/multer";
-import { asyncHandler } from "../../utils/routeWrapper";
+import { asyncAuthHandler } from "../../utils/routeWrapper";
 import { paginationMiddleware } from "../../middlewares/pagination";
 
 const galleryRoutes = express.Router();
@@ -56,9 +56,9 @@ const galleryRoutes = express.Router();
 galleryRoutes.get(
     '/',
     authenticate,
-    isAdminOrSeller as RequestHandler,
+    authorizeRoles('admin', 'seller') as RequestHandler,
     paginationMiddleware,
-    asyncHandler<AuthRequest>(getMedia)
+    asyncAuthHandler(getMedia)
 );
 
 // Upload media (Protected, Admin or Seller) - ONLY route with upload middleware
@@ -106,9 +106,9 @@ galleryRoutes.get(
 galleryRoutes.post(
     '/',
     authenticate,
-    isAdminOrSeller as RequestHandler,
+    authorizeRoles('admin', 'seller') as RequestHandler,
     uploadMultiple,
-    asyncHandler<AuthRequest>(addMedia)
+    asyncAuthHandler(addMedia)
 );
 
 // Bulk delete media (Protected, Admin or Seller)
@@ -157,8 +157,8 @@ galleryRoutes.post(
 galleryRoutes.delete(
     '/',
     authenticate,
-    isAdminOrSeller as RequestHandler,
-    asyncHandler<AuthRequest>(deleteMedia)
+    authorizeRoles('admin', 'seller') as RequestHandler,
+    asyncAuthHandler(deleteMedia)
 );
 
 // Get single media by ID (Public)
@@ -190,7 +190,7 @@ galleryRoutes.delete(
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-galleryRoutes.get('/:mediaId', asyncHandler(getSingleMedia));
+galleryRoutes.get('/:mediaId', authenticate, getSingleMedia as any);
 
 // Update media (Protected, Admin or Seller)
 /**
@@ -235,9 +235,9 @@ galleryRoutes.get('/:mediaId', asyncHandler(getSingleMedia));
 galleryRoutes.patch(
     '/:mediaId',
     authenticate,
-    isAdminOrSeller as RequestHandler,
+    authorizeRoles('admin', 'seller') as RequestHandler,
     uploadNone,
-    asyncHandler<AuthRequest>(updateMedia)
+    asyncAuthHandler(updateMedia)
 );
 
 export default galleryRoutes;

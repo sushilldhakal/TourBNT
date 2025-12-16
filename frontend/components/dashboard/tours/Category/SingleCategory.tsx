@@ -30,9 +30,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { getUserRole } from "@/lib/auth/authUtils";
 import { GalleryPage } from "../../gallery/GalleryPage";
 import { CategoryData } from "@/lib/types";
+import { useAuth } from "@/lib/hooks/useAuth";
 
 interface SingleCategoryProps {
     category?: CategoryData;
@@ -53,7 +53,7 @@ const SingleCategory: React.FC<SingleCategoryProps> = ({
     const queryClient = useQueryClient();
 
     // Check user role for query invalidation
-    const userRole = getUserRole();
+    const { userRole } = useAuth();
     const isAdmin = userRole === 'admin';
 
     // Debug user role

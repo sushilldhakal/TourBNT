@@ -24,11 +24,11 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useCategoriesRoleBased, usePendingCategories } from "./useCategories";
-import { getUserRole } from "@/lib/auth/authUtils";
 import { approveCategory, deleteCategory, rejectCategory } from "@/lib/api/categoryApi";
 import { CategoryData } from "@/lib/types";
 import { ViewToggle, ViewMode } from "../ViewToggle";
 import { getViewPreference, setViewPreference } from "@/lib/utils/viewPreferences";
+import { useAuth } from "@/lib/hooks/useAuth";
 
 const TourCategory = () => {
     const queryClient = useQueryClient();
@@ -52,12 +52,15 @@ const TourCategory = () => {
     };
 
     // Check user role for query invalidation
-    const userRole = getUserRole();
+
+    const { userRole } = useAuth();
     const isAdmin = userRole === 'admin';
     const isAdminView = useMemo(() => {
-        const roles = getUserRole();
-        return roles ? roles.includes('admin') : false;
-    }, []);
+        // userRole is a string, so check directly
+        return userRole === 'admin';
+        // Or, if userRole can be multiple roles like "admin,seller":
+        // return userRole?.split(',').includes('admin') ?? false;
+    }, [userRole]);
 
     // Fetch categories based on user role (admin sees all, users see their personal categories)
     const { data: categories, isLoading, isError } = useCategoriesRoleBased();

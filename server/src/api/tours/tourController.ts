@@ -936,7 +936,7 @@
 //       description,
 //       coverImage,
 //       file,
-//       author: authReq.user?._id || authReq.userId,
+//       author: authReq.user?._id || authreq.user.id,
 //       enquiry: convertToBoolean(enquiry),
 //       outline,
 //       include,
@@ -1460,12 +1460,12 @@
 
 //     // Apply role-based filtering
 //     if (authReq.roles !== 'admin') {
-//       query = query.find({ author: authReq.userId });
+//       query = query.find({ author: authreq.user.id });
 //     }
 
 //     // Get total count for pagination
 //     const totalTours = await tourModel.countDocuments(
-//       authReq.roles === 'admin' ? {} : { author: authReq.userId }
+//       authReq.roles === 'admin' ? {} : { author: authreq.user.id }
 //     );
 
 //     // Apply pagination and populate
@@ -1502,7 +1502,7 @@
 // ) => {
 //   try {
 //     const authReq = req as AuthRequest;
-//     const userId = authReq.userId;
+//     const userId = authreq.user.id;
 //     const tours = await tourModel
 //       .find({ author: userId })
 //       .select('title')

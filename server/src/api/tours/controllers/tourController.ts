@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { AuthRequest } from '../../../middlewares/authenticate';
 import { TourService } from '../services/tourService';
 import { extractTourFields } from '../utils/dataProcessors';
-import { sendSuccess, sendError, sendPaginatedResponse, asyncHandler, RESPONSE_MESSAGES } from '../utils/responseHelpers';
+import { sendSuccess, sendError, sendPaginatedResponse, asyncAuthHandler, RESPONSE_MESSAGES } from '../utils/responseHelpers';
 import { generateUniqueCode } from '../utils/codeGenerator';
 import { HTTP_STATUS } from '../../../utils/httpStatusCodes';
 
@@ -15,7 +15,7 @@ import { HTTP_STATUS } from '../../../utils/httpStatusCodes';
  * Get all tours with filtering and pagination
  * Uses pagination and filter/sort middleware
  */
-export const getAllTours = asyncHandler(async (req: Request, res: Response) => {
+export const getAllTours = asyncAuthHandler(async (req: Request, res: Response) => {
   // Use pagination params from middleware
   const paginationParams = req.pagination || { page: 1, limit: 10 };
 
@@ -47,7 +47,7 @@ export const getAllTours = asyncHandler(async (req: Request, res: Response) => {
 /**
  * Get a single tour by ID
  */
-export const getTour = asyncHandler(async (req: Request, res: Response) => {
+export const getTour = asyncAuthHandler(async (req: Request, res: Response) => {
   const { tourId } = req.params;
   const tour = await TourService.getTourById(tourId);
 
@@ -78,9 +78,9 @@ export const getTour = asyncHandler(async (req: Request, res: Response) => {
 /**
  * Create a new tour
  */
-export const createTour = asyncHandler(async (req: Request, res: Response) => {
+export const createTour = asyncAuthHandler(async (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
-  const userId = authReq.user?._id;
+  const userId = authReq.user?.id;
 
   if (!userId) {
     return sendError(res, RESPONSE_MESSAGES.UNAUTHORIZED, HTTP_STATUS.UNAUTHORIZED);
@@ -104,10 +104,10 @@ export const createTour = asyncHandler(async (req: Request, res: Response) => {
 /**
  * Update an existing tour
  */
-export const updateTour = asyncHandler(async (req: Request, res: Response) => {
+export const updateTour = asyncAuthHandler(async (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
-  const userId = authReq.user?._id;
-  const userRoles = authReq.roles;
+  const userId = authReq.user?.id;
+  const isAdmin = authReq.user?.roles.includes('admin') || false;
   const { tourId } = req.params;
 
   if (!userId) {
@@ -124,7 +124,7 @@ export const updateTour = asyncHandler(async (req: Request, res: Response) => {
   });
 
   // Only admins can update any tour, others can only update their own
-  const authorId = userRoles === 'admin' ? undefined : userId;
+  const authorId = isAdmin ? undefined : userId;
 
   const updatedTour = await TourService.updateTour(tourId, updateData, authorId);
 
@@ -134,10 +134,10 @@ export const updateTour = asyncHandler(async (req: Request, res: Response) => {
 /**
  * Delete a tour
  */
-export const deleteTour = asyncHandler(async (req: Request, res: Response) => {
+export const deleteTour = asyncAuthHandler(async (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
-  const userId = authReq.user?._id;
-  const userRoles = authReq.roles;
+  const userId = authReq.user?.id;
+  const isAdmin = authReq.user?.roles.includes('admin') || false;
   const { tourId } = req.params;
 
   if (!userId) {
@@ -145,7 +145,7 @@ export const deleteTour = asyncHandler(async (req: Request, res: Response) => {
   }
 
   // Only admins can delete any tour, others can only delete their own
-  const authorId = userRoles === 'admin' ? undefined : userId;
+  const authorId = isAdmin ? undefined : userId;
 
   await TourService.deleteTour(tourId, authorId);
   // Return 204 No Content for successful deletion
@@ -155,7 +155,7 @@ export const deleteTour = asyncHandler(async (req: Request, res: Response) => {
 /**
  * Search tours
  */
-export const searchTours = asyncHandler(async (req: Request, res: Response) => {
+export const searchTours = asyncAuthHandler(async (req: Request, res: Response) => {
   const { keyword, destination, minPrice, maxPrice, rating, category } = req.query;
   const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 10;
@@ -181,7 +181,7 @@ export const searchTours = asyncHandler(async (req: Request, res: Response) => {
 /**
  * Get latest tours
  */
-export const getLatestTours = asyncHandler(async (req: Request, res: Response) => {
+export const getLatestTours = asyncAuthHandler(async (req: Request, res: Response) => {
   const limit = parseInt(req.query.limit as string) || 10;
   const tours = await TourService.getToursBy('latest', limit);
 
@@ -197,7 +197,7 @@ export const getLatestTours = asyncHandler(async (req: Request, res: Response) =
 /**
  * Get tours by rating
  */
-export const getToursByRating = asyncHandler(async (req: Request, res: Response) => {
+export const getToursByRating = asyncAuthHandler(async (req: Request, res: Response) => {
   const limit = parseInt(req.query.limit as string) || 10;
   const tours = await TourService.getToursBy('rating', limit);
   sendSuccess(res, { tours }, RESPONSE_MESSAGES.TOURS_RETRIEVED);
@@ -206,7 +206,7 @@ export const getToursByRating = asyncHandler(async (req: Request, res: Response)
 /**
  * Get discounted tours
  */
-export const getDiscountedTours = asyncHandler(async (req: Request, res: Response) => {
+export const getDiscountedTours = asyncAuthHandler(async (req: Request, res: Response) => {
   const limit = parseInt(req.query.limit as string) || 10;
   const tours = await TourService.getToursBy('discounted', limit);
   sendSuccess(res, { tours }, RESPONSE_MESSAGES.TOURS_RETRIEVED);
@@ -215,7 +215,7 @@ export const getDiscountedTours = asyncHandler(async (req: Request, res: Respons
 /**
  * Get special offer tours
  */
-export const getSpecialOfferTours = asyncHandler(async (req: Request, res: Response) => {
+export const getSpecialOfferTours = asyncAuthHandler(async (req: Request, res: Response) => {
   const limit = parseInt(req.query.limit as string) || 10;
   const tours = await TourService.getToursBy('special-offers', limit);
   sendSuccess(res, { tours }, RESPONSE_MESSAGES.TOURS_RETRIEVED);
@@ -224,12 +224,12 @@ export const getSpecialOfferTours = asyncHandler(async (req: Request, res: Respo
 /**
  * Get user's tours
  */
-export const getUserTours = asyncHandler(async (req: Request, res: Response) => {
+export const getUserTours = asyncAuthHandler(async (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
   const { userId } = req.params; // Use userId from route parameter
-  const isAdmin = authReq.roles === 'admin';
+  const isAdmin = authReq.user?.roles.includes('admin') || false;
   // Security check: users can only access their own tours unless they're admin
-  if (!isAdmin && authReq.userId !== userId) {
+  if (!isAdmin && authReq.user?.id !== userId) {
     return sendError(res, 'Access denied: Cannot access other user\'s tours', HTTP_STATUS.FORBIDDEN);
   }
 
@@ -248,13 +248,13 @@ export const getUserTours = asyncHandler(async (req: Request, res: Response) => 
 /**
  * Get user's tour titles
  */
-export const getUserToursTitle = asyncHandler(async (req: Request, res: Response) => {
+export const getUserToursTitle = asyncAuthHandler(async (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
   const { userId } = req.params; // Use userId from route parameter
 
   // Security check: users can only access their own tours unless they're admin
-  const isAdmin = authReq.roles === 'admin';
-  if (!isAdmin && authReq.userId !== userId) {
+  const isAdmin = authReq.user?.roles.includes('admin') || false;
+  if (!isAdmin && authReq.user?.id !== userId) {
     return sendError(res, 'Access denied: Cannot access other user\'s tours', HTTP_STATUS.FORBIDDEN);
   }
 
@@ -263,9 +263,30 @@ export const getUserToursTitle = asyncHandler(async (req: Request, res: Response
 });
 
 /**
+ * Get current user's tours (httpOnly cookie auth)
+ */
+export const getMyTours = asyncAuthHandler(async (req: Request, res: Response) => {
+  const authReq = req as AuthRequest;
+  const userId = authReq.user!.id; // Get from authenticated cookie, not params
+
+  // Get pagination params
+  const page = parseInt(req.query.page as string) || 1;
+  const limit = parseInt(req.query.limit as string) || 10;
+
+  const result = await TourService.getUserTours(userId, false, { page, limit });
+
+  return sendPaginatedResponse(res, result.items, {
+    currentPage: result.page,
+    totalPages: result.totalPages,
+    totalItems: result.totalItems,
+    itemsPerPage: result.limit
+  });
+});
+
+/**
  * Increment tour views
  */
-export const incrementTourViews = asyncHandler(async (req: Request, res: Response) => {
+export const incrementTourViews = asyncAuthHandler(async (req: Request, res: Response) => {
   const { tourId } = req.params;
   const views = await TourService.incrementTourViews(tourId);
 
@@ -275,7 +296,7 @@ export const incrementTourViews = asyncHandler(async (req: Request, res: Respons
 /**
  * Increment tour bookings
  */
-export const incrementTourBookings = asyncHandler(async (req: Request, res: Response) => {
+export const incrementTourBookings = asyncAuthHandler(async (req: Request, res: Response) => {
   const { tourId } = req.params;
   const bookingCount = await TourService.incrementTourBookings(tourId);
 
@@ -285,7 +306,7 @@ export const incrementTourBookings = asyncHandler(async (req: Request, res: Resp
 /**
  * Check tour availability for a specific date
  */
-export const checkTourAvailability = asyncHandler(async (req: Request, res: Response) => {
+export const checkTourAvailability = asyncAuthHandler(async (req: Request, res: Response) => {
   const { tourId } = req.params;
   const { date } = req.query;
 

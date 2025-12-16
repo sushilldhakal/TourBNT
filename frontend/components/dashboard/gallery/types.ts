@@ -213,7 +213,7 @@ export interface ErrorStateProps {
  * Delete media params
  */
 export interface DeleteMediaParams {
-    userId: string;
+    userId?: string; // Optional - server gets userId from httpOnly cookie
     mediaIds: string | string[];
     mediaType: string;
 }
@@ -223,14 +223,14 @@ export interface DeleteMediaParams {
  */
 export interface UploadMediaParams {
     formData: FormData;
-    userId: string;
+    userId?: string; // Optional - server gets userId from httpOnly cookie
 }
 
 /**
  * Update media params
  */
 export interface UpdateMediaParams {
-    userId: string;
+    userId?: string; // Optional - server gets userId from httpOnly cookie
     imageId: string;
     mediaType: string;
     title?: string;

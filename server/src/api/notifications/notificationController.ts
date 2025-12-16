@@ -6,7 +6,7 @@ import { HTTP_STATUS } from '../../utils/httpStatusCodes';
 // Get notifications for authenticated user
 export const getUserNotifications = async (req: AuthRequest, res: Response) => {
   try {
-    const userId = req.user?._id;
+    const userId = req.user?.id;
     if (!userId) {
       return res.status(HTTP_STATUS.UNAUTHORIZED).json({
         error: {
@@ -65,7 +65,7 @@ export const getUserNotifications = async (req: AuthRequest, res: Response) => {
 // Mark notification as read
 export const markNotificationAsRead = async (req: AuthRequest, res: Response) => {
   try {
-    const userId = req.user?._id;
+    const userId = req.user?.id;
     const { id } = req.params;
 
     if (!userId) {
@@ -118,7 +118,7 @@ export const markNotificationAsRead = async (req: AuthRequest, res: Response) =>
 // Delete notification
 export const deleteNotification = async (req: AuthRequest, res: Response) => {
   try {
-    const userId = req.user?._id;
+    const userId = req.user?.id;
     const { id } = req.params;
 
     if (!userId) {

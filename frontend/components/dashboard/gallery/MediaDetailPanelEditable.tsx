@@ -22,7 +22,6 @@ import { getFullSizeUrl } from '@/lib/utils/imageOptimization';
 import { InputTags } from '@/components/ui/input-tags';
 import { useMediaUpdate } from '@/lib/hooks/useMediaUpdate';
 import { useMediaUpload } from '@/lib/hooks/useMediaUpload';
-import { getUserId } from '@/lib/auth/authUtils';
 import {
     Dialog,
     DialogContent,
@@ -33,54 +32,25 @@ import {
     DialogTrigger,
 } from '@/components/ui/dialog';
 import dynamic from 'next/dynamic';
+import { useAuth } from '@/lib/hooks/useAuth';
 
 // Dynamically import the ImageEditorWrapper to avoid SSR issues
 const ImageEditorWrapper = dynamic(
     () => import('./ImageEditorWrapper'),
     {
         ssr: false,
-        loading: () => <div className="flex items-center justify-center h-full">Loading editor...</div>
+        loading: () => (
+            <div className="flex items-center justify-center h-[600px] w-full">
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+                    <p className="text-muted-foreground">Loading image editor...</p>
+                </div>
+            </div>
+        )
     }
 );
 
-// Import TABS and TOOLS types separately - we'll define the constants locally
-const TABS = {
-    FINETUNE: 'Finetune',
-    FILTERS: 'Filters',
-    ADJUST: 'Adjust',
-    WATERMARK: 'Watermark',
-    ANNOTATE: 'Annotate',
-    RESIZE: 'Resize',
-    AI: 'AI',
-} as const;
-
-const TOOLS = {
-    CROP: 'Crop',
-    ROTATE: 'Rotate',
-    FLIP_X: 'Flip_X',
-    FLIP_Y: 'Flip_Y',
-    BRIGHTNESS: 'Brightness',
-    CONTRAST: 'Contrast',
-    HSV: 'HueSaturationValue',
-    WARMTH: 'Warmth',
-    BLUR: 'Blur',
-    THRESHOLD: 'Threshold',
-    POSTERIZE: 'Posterize',
-    PIXELATE: 'Pixelate',
-    NOISE: 'Noise',
-    FILTERS: 'Filters',
-    RECT: 'Rect',
-    ELLIPSE: 'Ellipse',
-    POLYGON: 'Polygon',
-    TEXT: 'Text',
-    LINE: 'Line',
-    IMAGE: 'Image',
-    ARROW: 'Arrow',
-    WATERMARK: 'Watermark',
-    PEN: 'Pen',
-    RESIZE: 'Resize',
-    OBJECT_REMOVAL: 'ObjectRemoval',
-} as const;
+// Image editor constants removed - editor temporarily disabled
 
 // Dynamically import PDF components to avoid SSR issues
 const PDFDocument = dynamic(
@@ -109,6 +79,7 @@ export function MediaDetailPanelEditable({
     onCopyUrl,
 }: MediaDetailPanelProps) {
     const { toast } = useToast();
+    const { user } = useAuth();
     const [imageError, setImageError] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
@@ -148,6 +119,7 @@ export function MediaDetailPanelEditable({
     const uploadMutation = useMediaUpload({
         onSuccess: () => {
             toast({
+                variant: 'success',
                 title: 'Upload Successful',
                 description: 'Your edited image has been uploaded.',
             });
@@ -250,6 +222,9 @@ export function MediaDetailPanelEditable({
     /**
      * Handle upload changes
      */
+    /**
+     * Handle upload changes
+     */
     const handleUploadChange = async () => {
         if (!editedImageFile) {
             toast({
@@ -260,8 +235,7 @@ export function MediaDetailPanelEditable({
             return;
         }
 
-        const userId = getUserId();
-        if (!userId) {
+        if (!user?.id) {
             toast({
                 variant: 'destructive',
                 title: 'Authentication Required',
@@ -273,7 +247,6 @@ export function MediaDetailPanelEditable({
         // Upload the edited image
         uploadMutation.mutate({
             files: [editedImageFile],
-            userId,
         });
     };
 
@@ -322,8 +295,7 @@ export function MediaDetailPanelEditable({
     const handleFormSubmit = (e: React.FormEvent) => {
         e.preventDefault();
 
-        const userId = getUserId();
-        if (!userId) {
+        if (!user?.id) {
             toast({
                 variant: 'destructive',
                 title: 'Authentication Required',
@@ -338,7 +310,6 @@ export function MediaDetailPanelEditable({
         else if (media.mediaType === 'pdf') mediaType = 'PDF';
 
         updateMutation.mutate({
-            userId,
             imageId: media.id,
             mediaType,
             title: formValues.title,
@@ -391,22 +362,24 @@ export function MediaDetailPanelEditable({
                                     </div>
                                 </div>
                             </DialogTrigger>
-                            <DialogContent className="sm:max-w-[1100px] z-[100]" style={{ zIndex: 100 }}>
+                            <DialogContent className="sm:max-w-[1200px] max-h-[90vh] overflow-hidden" style={{ zIndex: 100 }}>
                                 <DialogHeader>
                                     <DialogTitle className="break-words">Edit Image</DialogTitle>
                                     <DialogDescription>
-                                        Make changes to your Image here. Click save when you're done.
+                                        Make changes to your image here. Click save when you're done.
                                     </DialogDescription>
                                 </DialogHeader>
-                                <div className="flex justify-center gap-4 py-4" style={{ position: 'relative', zIndex: 1 }}>
+                                <div className="flex justify-center gap-4 py-4 h-[600px] overflow-hidden" style={{ position: 'relative', zIndex: 1 }}>
                                     {isImgEditorShown && (
-                                        <ImageEditorWrapper
-                                            source={media.secureUrl}
-                                            onSave={(editedImageObject: any) => {
-                                                handleImageEditorSave(editedImageObject);
-                                            }}
-                                            onClose={closeImgEditor}
-                                        />
+                                        <div className="w-full h-full">
+                                            <ImageEditorWrapper
+                                                source={media.secureUrl}
+                                                onSave={(editedImageObject: any) => {
+                                                    handleImageEditorSave(editedImageObject);
+                                                }}
+                                                onClose={closeImgEditor}
+                                            />
+                                        </div>
                                     )}
                                 </div>
                                 <DialogFooter>

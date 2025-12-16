@@ -123,7 +123,7 @@ export const getTours = async ({
 };
 
 /**
- * Get tours by user ID
+ * Get tours by user ID (admin only)
  */
 export const getUsersTours = async (userId: string) => {
     try {
@@ -131,6 +131,18 @@ export const getUsersTours = async (userId: string) => {
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching user tours');
+    }
+};
+
+/**
+ * Get current user's tours (uses httpOnly cookie for auth)
+ */
+export const getMyTours = async () => {
+    try {
+        const response = await api.get('/api/tours/me');
+        return extractResponseData(response);
+    } catch (error) {
+        throw handleApiError(error, 'fetching my tours');
     }
 };
 

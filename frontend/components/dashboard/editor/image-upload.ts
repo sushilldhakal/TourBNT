@@ -5,8 +5,7 @@
  */
 
 import { createImageUpload } from 'novel';
-import { addMedia } from '@/lib/api/gallery';
-import { getUserId } from '@/lib/auth/authUtils';
+import { uploadMedia } from '@/lib/api/mediaApi';
 import { toast } from '@/components/ui/use-toast';
 
 /**
@@ -166,10 +165,10 @@ const compressImage = async (
  */
 const uploadImageFiles = async (
     files: File[],
+    userId: string,
     retryCount: number = 0,
     onProgress?: (progress: number) => void
 ): Promise<string[]> => {
-    const userId = getUserId();
     if (!userId) {
         throw new ImageUploadError(
             'User not authenticated. Please log in and try again.',
@@ -213,30 +212,20 @@ const uploadImageFiles = async (
             onProgress(40); // 40% - starting upload
         }
 
-        const response = await addMedia(formData, userId) as any;
+        const response = await uploadMedia({
+            formData
+        }) as any;
 
         if (onProgress) {
             onProgress(90); // 90% - processing response
         }
 
-        // The response structure is { message: string, gallery: GalleryDocument }
-        // We need to extract URLs from the gallery.images array
-        if (response && response.gallery && response.gallery.images) {
-            // Get the most recently uploaded images (last N items where N = files.length)
-            const recentImages = response.gallery.images.slice(-files.length);
-            const urls = recentImages.map((img: any) => img.url || img.secure_url);
-
-            if (urls.length === 0) {
-                throw new ImageUploadError(
-                    'No image URLs returned from server',
-                    UploadErrorType.SERVER
-                );
-            }
-
-            return urls;
+        // The response structure from uploadMedia is { success: boolean, urls: string[], resources: any[], message?: string }
+        if (response && response.success && response.urls && response.urls.length > 0) {
+            return response.urls;
         } else {
             throw new ImageUploadError(
-                'Invalid response format from server',
+                response?.message || 'No image URLs returned from server',
                 UploadErrorType.SERVER,
                 response
             );
@@ -279,6 +268,7 @@ const uploadImageFiles = async (
  */
 const uploadWithRetry = async (
     files: File[],
+    userId: string,
     maxRetries: number = 2,
     onProgress?: (progress: number) => void
 ): Promise<string[]> => {
@@ -286,7 +276,7 @@ const uploadWithRetry = async (
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
-            return await uploadImageFiles(files, attempt, onProgress);
+            return await uploadImageFiles(files, userId, attempt, onProgress);
         } catch (error) {
             lastError = error instanceof ImageUploadError
                 ? error
@@ -350,7 +340,7 @@ const handleUploadError = (error: ImageUploadError, retryFn?: () => void) => {
  * 
  * Requirements: 8.1, 8.2, 8.3, 19.3, 20.1
  */
-export const uploadFn = createImageUpload({
+export const createUploadFn = (userId: string) => createImageUpload({
     onUpload: async (file: File | string) => {
         // Convert base64 to File if needed
         if (typeof file === 'string') {
@@ -391,7 +381,7 @@ export const uploadFn = createImageUpload({
 
         try {
             // Upload with automatic retry and progress tracking
-            const imageUrls = await uploadWithRetry([file], 2, showProgress);
+            const imageUrls = await uploadWithRetry([file], userId, 2, showProgress);
 
             // Show success message
             toast({
@@ -409,7 +399,7 @@ export const uploadFn = createImageUpload({
             // Create retry function
             const retry = async () => {
                 try {
-                    const imageUrls = await uploadWithRetry([file as File], 2, showProgress);
+                    const imageUrls = await uploadWithRetry([file as File], userId, 2, showProgress);
                     toast({
                         title: 'Image uploaded',
                         description: 'Your image has been uploaded successfully.',
@@ -471,3 +461,9 @@ export const uploadFn = createImageUpload({
         return true;
     },
 });
+
+/**
+ * Default upload function for backward compatibility
+ * @deprecated Use createUploadFn(userId) instead
+ */
+export const uploadFn = createUploadFn('');

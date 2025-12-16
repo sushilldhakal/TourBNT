@@ -12,12 +12,12 @@ import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/use-toast";
 import { Edit, FileText, MapPin, Image as ImageIcon, Save, Trash2, X, Eye, EyeOff, Globe, Users, Star, Calendar } from "lucide-react";
 import { updateDestination, removeExistingDestinationFromSeller, deleteDestination, getUserToursTitle, getSellerDestinations, getUserDestinations, toggleDestinationActiveStatus } from "@/lib/api/destinationApi";
-import { getUserId, getUserRole } from "@/lib/auth/authUtils";
 import { GalleryPage } from "@/components/dashboard/gallery/GalleryPage";
 
 import { MultiSelect, SelectValue } from "@/components/ui/MultiSelect";
 import RichTextRenderer from "@/components/RichTextRenderer";
 import { NovelEditor } from "../../editor";
+import { useAuth } from "@/lib/hooks/useAuth";
 
 interface SingleDestinationProps {
     destinationId: string;
@@ -59,7 +59,9 @@ interface OriginalDestinationValues {
 }
 
 const SingleDestination = ({ destinationId, onUpdate, onDelete }: SingleDestinationProps) => {
-    const userId = getUserId();
+
+    const { userId } = useAuth();
+
     const queryClient = useQueryClient();
     const [isEditMode, setIsEditMode] = useState(false);
     const [dialogOpen, setDialogOpen] = useState(false);
@@ -81,7 +83,7 @@ const SingleDestination = ({ destinationId, onUpdate, onDelete }: SingleDestinat
     });
 
     // Check user role to determine which data source to use
-    const userRole = getUserRole();
+    const { userRole } = useAuth();
     const isAdmin = userRole === 'admin';
 
     // Fetch destinations based on user role
@@ -180,9 +182,8 @@ const SingleDestination = ({ destinationId, onUpdate, onDelete }: SingleDestinat
     const removeMutation = useMutation({
         mutationFn: () => {
             // Check if user is admin to determine which deletion method to use
-            const userRole = getUserRole();
             console.log('🔍 User role for deletion:', userRole);
-            if (userRole === 'admin') {
+            if (isAdmin) {
                 console.log('🔧 Using admin deleteDestination for:', userRole);
                 return deleteDestination(destinationId);
             } else {

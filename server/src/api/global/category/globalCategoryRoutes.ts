@@ -20,7 +20,7 @@ import {
   addExistingCategoryToSeller,
   removeExistingCategoryFromSeller
 } from './globalCategoryController';
-import { authenticate, isAdmin, isAdminOrSeller } from '../../../middlewares/authenticate';
+import { authenticate, authorizeRoles } from '../../../middlewares/authenticate';
 import { uploadNone } from '../../../middlewares/multer';
 import { paginationMiddleware } from '../../../middlewares/pagination';
 
@@ -132,7 +132,7 @@ router.get('/', paginationMiddleware, getApprovedCategories);
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/', authenticate, isAdmin as any, uploadNone, submitCategory as any);
+router.post('/', authenticate, authorizeRoles('admin'), uploadNone, submitCategory as any);
 
 /**
  * @swagger
@@ -187,7 +187,7 @@ router.post('/', authenticate, isAdmin as any, uploadNone, submitCategory as any
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.patch('/:id', authenticate, isAdmin as any, uploadNone, updateCategoryById as any);
+router.patch('/:id', authenticate, authorizeRoles('admin'), uploadNone, updateCategoryById as any);
 
 /**
  * @swagger
@@ -236,7 +236,7 @@ router.patch('/:id', authenticate, isAdmin as any, uploadNone, updateCategoryByI
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.delete('/:id', authenticate, isAdmin as any, deleteCategoryById as any);
+router.delete('/:id', authenticate, authorizeRoles('admin'), deleteCategoryById as any);
 
 // Legacy route for backward compatibility
 /**
@@ -367,10 +367,10 @@ router.get('/:categoryId', getCategoryById);
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/submit', uploadNone, isAdminOrSeller as any, submitCategory as any);
-router.put('/:categoryId', uploadNone, isAdminOrSeller as any, updateCategory as any);
-router.patch('/:categoryId', uploadNone, isAdminOrSeller as any, updateCategory as any);
-router.put('/preferences', isAdminOrSeller as any, updateCategoryPreferences as any);
+router.post('/submit', uploadNone, authorizeRoles('admin', 'seller'), submitCategory as any);
+router.put('/:categoryId', uploadNone, authorizeRoles('admin', 'seller'), updateCategory as any);
+router.patch('/:categoryId', uploadNone, authorizeRoles('admin', 'seller'), updateCategory as any);
+router.put('/preferences', authorizeRoles('admin', 'seller'), updateCategoryPreferences as any);
 router.put('/:categoryId/favorite', toggleFavoriteCategory as any);
 router.patch('/:categoryId/toggle-active', toggleCategoryActiveStatus as any);
 router.post('/:categoryId/add-to-list', authenticate, addExistingCategoryToSeller as any);
@@ -380,6 +380,6 @@ router.post('/:categoryId/remove-from-list', authenticate, removeExistingCategor
 router.get('/admin/pending', getPendingCategories as any);
 router.put('/admin/:categoryId/approve', approveCategory as any);
 router.put('/admin/:categoryId/reject', rejectCategory as any);
-router.delete('/admin/:categoryId', isAdmin as any, deleteCategory as any);
+router.delete('/admin/:categoryId', authorizeRoles('admin'), deleteCategory as any);
 
 export default router;

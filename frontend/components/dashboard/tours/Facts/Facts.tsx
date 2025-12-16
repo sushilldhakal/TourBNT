@@ -4,7 +4,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { deleteFacts, deleteMultipleFacts } from "@/lib/api/factsApi";
 import { toast } from "@/components/ui/use-toast";
 import AddFact from "./AddFacts";
-import { getUserId } from "@/lib/auth/authUtils";
 import SingleFact from "./SingleFacts";
 import FactTableRow from "./FactTableRow";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,9 +23,10 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
+import { useAuth } from "@/lib/hooks/useAuth";
 
 const TourFacts = () => {
-    const userId = getUserId();
+    const { userId } = useAuth();
     const queryClient = useQueryClient();
     const [searchQuery, setSearchQuery] = useState("");
     const [isAddFactOpen, setIsAddFactOpen] = useState(false);

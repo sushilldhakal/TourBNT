@@ -25,7 +25,7 @@ export type {
 } from './viewTracking';
 
 // Authentication (existing)
-export { authenticate, isAdmin, isAdminOrSeller } from './authenticate';
+export { authenticate, authorizeRoles } from './authenticate';
 export type { AuthRequest } from './authenticate';
 
 // Error handling (existing)

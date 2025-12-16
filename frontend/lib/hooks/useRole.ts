@@ -1,5 +1,4 @@
-import { useState, useEffect } from 'react';
-import { getAuthState, AuthState } from '@/lib/utils/auth';
+import useUserStore from '@/lib/store/useUserStore';
 import {
     canAccessDashboard,
     isAdmin,
@@ -10,45 +9,45 @@ import {
 } from '@/lib/utils/roles';
 
 /**
- * Hook for managing user roles and permissions
- * @returns Object with authentication state and role checking functions
+ * useRole Hook
+ * Provides role-checking functions based on user store
+ * NO token management - all data comes from store
  */
-export const useRole = () => {
-    const [authState, setAuthState] = useState<AuthState>({
-        isAuthenticated: false,
-        userRole: null,
-        userId: null,
-        isExpired: false,
-    });
 
-    useEffect(() => {
-        // Get initial auth state
-        const state = getAuthState();
-        setAuthState(state);
+interface UseRoleReturn {
+    // State
+    isAuthenticated: boolean;
+    userRole: string | null;
+    userId: string | null;
 
-        // Optional: Set up an interval to check token expiration
-        const interval = setInterval(() => {
-            const updatedState = getAuthState();
-            setAuthState(updatedState);
-        }, 60000); // Check every minute
+    // Role checks
+    canAccessDashboard: boolean;
+    isAdmin: boolean;
+    isSeller: boolean;
+    isAdminOrSeller: boolean;
+    isRegularUser: boolean;
 
-        return () => clearInterval(interval);
-    }, []);
+    // Utility
+    hasRole: (role: UserRole) => boolean;
+}
+
+export const useRole = (): UseRoleReturn => {
+    const user = useUserStore((state) => state.user);
 
     return {
-        // Auth state
-        isAuthenticated: authState.isAuthenticated,
-        userRole: authState.userRole,
-        userId: authState.userId,
+        // State from store
+        isAuthenticated: !!user.id,
+        userRole: user.roles,
+        userId: user.id,
 
-        // Role checking functions
-        canAccessDashboard: canAccessDashboard(authState.userRole),
-        isAdmin: isAdmin(authState.userRole),
-        isSeller: isSeller(authState.userRole),
-        isAdminOrSeller: isAdminOrSeller(authState.userRole),
-        isRegularUser: isRegularUser(authState.userRole),
+        // Role checks using utility functions
+        canAccessDashboard: canAccessDashboard(user.roles),
+        isAdmin: isAdmin(user.roles),
+        isSeller: isSeller(user.roles),
+        isAdminOrSeller: isAdminOrSeller(user.roles),
+        isRegularUser: isRegularUser(user.roles),
 
-        // Utility function to check specific role
-        hasRole: (role: UserRole) => authState.userRole === role,
+        // Utility function
+        hasRole: (role: UserRole) => user.roles === role,
     };
 };

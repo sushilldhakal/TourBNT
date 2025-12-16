@@ -20,8 +20,8 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog";
 import AllIcons from "./AllIcons";
-import { getUserId } from "@/lib/auth/authUtils";
 import { Checkbox } from "@/components/ui/checkbox";
+import { useAuth } from "@/lib/hooks/useAuth";
 
 interface FactTableRowProps {
     fact?: FactData;
@@ -42,7 +42,7 @@ const FactTableRow = ({
     const [isOpen, setIsOpen] = useState(false);
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
-    const userId = getUserId();
+    const { userId } = useAuth();
     const queryClient = useQueryClient();
 
     const form = useForm({

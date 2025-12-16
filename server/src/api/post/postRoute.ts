@@ -1,6 +1,6 @@
 import express from 'express';
 import { addPost, getPost, deletePost, editPost, getAllPosts, getUserPost, getAllUserPosts } from './postController';
-import { authenticate, isAdminOrSeller } from '../../middlewares/authenticate';
+import { authenticate, authorizeRoles } from '../../middlewares/authenticate';
 import { paginationMiddleware } from '../../middlewares/pagination';
 import { filterSortMiddleware } from '../../middlewares/filterSort';
 import { simpleViewTracking } from '../../middlewares/viewTracking';
@@ -124,7 +124,7 @@ postRouter.get('/',
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-postRouter.post('/', authenticate, isAdminOrSeller as any, addPost);
+postRouter.post('/', authenticate, authorizeRoles('admin', 'seller') as any, addPost);
 
 /**
  * @swagger

@@ -79,7 +79,7 @@ export async function getAllMedia(
     try {
         const { pageParam, mediaType } = params;
 
-        const response = await api.get('/api/gallery/media', {
+        const response = await api.get('/api/gallery', {
             params: {
                 mediaType,
                 page: pageParam,
@@ -137,9 +137,10 @@ export async function uploadMedia(
     params: UploadMediaParams
 ): Promise<UploadResponse> {
     try {
-        const { formData, userId } = params;
+        const { formData } = params;
+        // Note: userId is no longer used - server gets it from httpOnly cookie
 
-        const response = await api.post(`/api/gallery/${userId}`, formData, {
+        const response = await api.post('/api/gallery', formData, {
             headers: {
                 'Content-Type': 'multipart/form-data',
             },
@@ -238,7 +239,8 @@ export async function deleteMedia(
     params: DeleteMediaParams
 ): Promise<void> {
     try {
-        const { userId, mediaIds, mediaType } = params;
+        const { mediaIds, mediaType } = params;
+        // Note: userId is no longer used - server gets it from httpOnly cookie
 
         // Ensure mediaIds is always an array
         const ids = Array.isArray(mediaIds) ? mediaIds : [mediaIds];
@@ -249,7 +251,7 @@ export async function deleteMedia(
             backendMediaType = 'PDF';
         }
 
-        await api.delete(`/api/gallery/${userId}`, {
+        await api.delete('/api/gallery', {
             data: {
                 imageIds: ids,
                 mediaType: backendMediaType
@@ -461,7 +463,8 @@ export async function updateMedia(
     params: UpdateMediaParams
 ): Promise<void> {
     try {
-        const { userId, imageId, mediaType, title, description, tags } = params;
+        const { imageId, mediaType, title, description, tags } = params;
+        // Note: userId is no longer used - server gets it from httpOnly cookie
 
         // Convert mediaType to backend format
         let backendMediaType = mediaType;
@@ -475,7 +478,7 @@ export async function updateMedia(
         if (description !== undefined) body.description = description;
         if (tags !== undefined) body.tags = tags; // Send as array, not JSON string
 
-        await api.patch(`/api/gallery/${userId}/${imageId}`, body, {
+        await api.patch(`/api/gallery/${imageId}`, body, {
             params: { mediaType: backendMediaType },
             headers: {
                 'Content-Type': 'application/json',

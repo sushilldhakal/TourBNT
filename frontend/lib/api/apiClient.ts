@@ -1,69 +1,58 @@
 import axios, { AxiosError, AxiosRequestConfig } from 'axios';
 import { getApiTimeout } from '../performanceConfig';
-import Cookies from 'js-cookie';
+import useUserStore from '@/lib/store/useUserStore';
 
 /**
  * Unified API Client for Next.js Frontend
- * Consolidates dashboard and frontend API implementations
- * Follows server API specifications from API_DOCUMENTATION.md
+ * HttpOnly cookie-based authentication - NO token management
+ * Browser automatically sends httpOnly cookies with every request
  */
 
-// Base API configuration with performance optimizations
+// Base API configuration
 export const api = axios.create({
     baseURL: process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000',
     timeout: getApiTimeout('default'),
-    // Enable compression
+    withCredentials: true, // CRITICAL: Enables httpOnly cookie sending
     decompress: true,
-    // Set max redirects
     maxRedirects: 5,
-    // Enable HTTP/2
-    httpAgent: undefined,
-    httpsAgent: undefined,
-    // Enable credentials for cookies
-    withCredentials: true,
+    headers: {
+        'Content-Type': 'application/json',
+    },
 });
 
-// Server-side API client without auth interceptor (for public endpoints and SSR)
+// Server-side API client (for SSR and public endpoints)
 export const serverApi = axios.create({
     baseURL: process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000',
     timeout: getApiTimeout('default'),
+    withCredentials: true,
     decompress: true,
     maxRedirects: 5,
-    httpAgent: undefined,
-    httpsAgent: undefined,
-    withCredentials: true,
 });
 
-// Request interceptor to add authorization token from cookies (only for client-side api)
-api.interceptors.request.use(
-    (config) => {
-        // Get token from cookie if available (client-side only)
-        if (typeof window !== 'undefined') {
-            const token = Cookies.get('token');
-            if (token) {
-                config.headers.Authorization = `Bearer ${token}`;
-            }
-        }
-
-        return config;
-    },
-    (error) => {
-        return Promise.reject(error);
-    }
-);
-
-// Response interceptor for consistent error handling
+// Response interceptor for 401 handling
 api.interceptors.response.use(
     (response) => response,
     (error: AxiosError) => {
-        // Handle token expiration
+        // Handle authentication failure (httpOnly cookie expired or invalid)
         if (error.response?.status === 401) {
-            // Clear invalid token
-            if (typeof window !== 'undefined') {
-                Cookies.remove('token');
-                Cookies.remove('refreshToken');
-                // Redirect to login if on dashboard
-                if (window.location.pathname.startsWith('/dashboard')) {
+            console.error('401 Error Details:', {
+                url: error.config?.url,
+                method: error.config?.method,
+                headers: error.config?.headers,
+                data: error.response?.data,
+                status: error.response?.status
+            });
+
+            // Only redirect if it's a critical auth endpoint, not all 401s
+            const criticalEndpoints = ['/api/users/me'];
+            const url = error.config?.url || '';
+
+            if (criticalEndpoints.some(endpoint => url.includes(endpoint))) {
+                // Clear user store
+                useUserStore.getState().clearUser();
+
+                // Redirect to login if on protected route
+                if (typeof window !== 'undefined' && window.location.pathname.startsWith('/dashboard')) {
                     window.location.href = '/auth/login';
                 }
             }
@@ -72,7 +61,7 @@ api.interceptors.response.use(
     }
 );
 
-// Server API response interceptor
+// Server API response interceptor (no redirect on server)
 serverApi.interceptors.response.use(
     (response) => response,
     (error: AxiosError) => {

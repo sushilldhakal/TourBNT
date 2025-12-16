@@ -11,11 +11,13 @@ import {
   approveSellerApplication,
   rejectSellerApplication,
   deleteSellerApplication,
-  loginUser
+  loginUser,
+  logoutUser,
+  getCurrentUser
 } from "./userController";
 import { uploadAvatar, getUserAvatar } from './userAvatarController';
 import { body, param } from 'express-validator';
-import { authenticate, isAdminOrSeller, isAdmin } from "../../middlewares/authenticate";
+import { authenticate, authorizeRoles } from "../../middlewares/authenticate";
 import { paginationMiddleware } from "../../middlewares/pagination";
 import { filterSortMiddleware } from "../../middlewares/filterSort";
 import { upload, uploadNone, uploadAvatar as uploadAvatarMiddleware, uploadSellerDocs } from '../../middlewares/multer';
@@ -37,6 +39,12 @@ userRouter.post(
     body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters')
   ],
   loginUser
+);
+
+userRouter.post(
+  '/logout',
+  authLimiter,
+  logoutUser
 );
 
 /**
@@ -87,6 +95,32 @@ userRouter.get('/',
   filterSortMiddleware(['roles', 'verified', 'sellerStatus'], ['createdAt', 'name', 'email']),
   getAllUsers
 );
+
+// Get current authenticated user - MUST come before /:userId route
+/**
+ * @swagger
+ * /api/users/me:
+ *   get:
+ *     summary: Get current user
+ *     description: Retrieve the currently authenticated user's information
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: User retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/User'
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+userRouter.get('/me', authenticate, getCurrentUser);
 
 // Seller application routes (admin only) - MUST come before /:userId route
 /**
@@ -190,9 +224,9 @@ userRouter.get('/seller-applications', authenticate, getSellerApplications);
  *               $ref: '#/components/schemas/ErrorResponse'
  */
 userRouter.patch(
-  '/setting/:userId', uploadNone, authenticate as any, isAdminOrSeller as any, addOrUpdateSettings as any
+  '/setting/:userId', uploadNone, authenticate as any, authorizeRoles('admin', 'seller'), addOrUpdateSettings as any
 );
-userRouter.get('/setting/:userId', authenticate, isAdminOrSeller as any, getUserSettings);
+userRouter.get('/setting/:userId', authenticate, authorizeRoles('admin', 'seller'), getUserSettings);
 
 /**
  * @swagger
@@ -227,7 +261,7 @@ userRouter.get('/setting/:userId', authenticate, isAdminOrSeller as any, getUser
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-userRouter.get('/setting/:userId/key', authenticate as any, isAdminOrSeller as any, getDecryptedApiKey as any);
+userRouter.get('/setting/:userId/key', authenticate as any, authorizeRoles('admin', 'seller'), getDecryptedApiKey as any);
 
 // Generic user routes - MUST come after specific routes
 /**
@@ -349,13 +383,13 @@ userRouter.get('/setting/:userId/key', authenticate as any, isAdminOrSeller as a
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-userRouter.get('/:userId', [param('userId').isMongoId(), authenticate], getUserById);
+userRouter.get('/:userId', [param('userId').isMongoId(), authorizeRoles('admin')], getUserById);
 
 userRouter.patch(
   '/:userId', uploadSellerDocs, authenticate, updateUser
 );
 
-userRouter.delete('/:userId', [param('userId').isMongoId(), authenticate], deleteUser);
+userRouter.delete('/:userId', [param('userId').isMongoId(), authorizeRoles('admin')], deleteUser);
 
 /**
  * @swagger
@@ -405,7 +439,7 @@ userRouter.delete('/:userId', [param('userId').isMongoId(), authenticate], delet
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-userRouter.patch('/:userId/role', [param('userId').isMongoId(), authenticate, isAdmin as any], changeUserRole);
+userRouter.patch('/:userId/role', [param('userId').isMongoId(), authorizeRoles('admin')], changeUserRole);
 
 /**
  * @swagger
@@ -458,7 +492,7 @@ userRouter.patch('/:userId/role', [param('userId').isMongoId(), authenticate, is
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-userRouter.patch('/:userId/seller-status', [param('userId').isMongoId(), authenticate, isAdmin as any], async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+userRouter.patch('/:userId/seller-status', [param('userId').isMongoId(), authorizeRoles('admin')], async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const { status, rejectionReason } = req.body;
 
   if (status === 'approved') {
@@ -481,7 +515,7 @@ userRouter.patch('/:userId/seller-status', [param('userId').isMongoId(), authent
 /**
  * @deprecated Use PATCH /api/users/{userId}/role instead
  */
-userRouter.post('/change-role', authenticate, changeUserRole);
+userRouter.post('/change-role', authorizeRoles('admin'), changeUserRole);
 
 /**
  * @swagger
@@ -513,7 +547,7 @@ userRouter.post('/change-role', authenticate, changeUserRole);
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-userRouter.patch('/:userId/approve-seller', [param('userId').isMongoId(), authenticate], approveSellerApplication);
+userRouter.patch('/:userId/approve-seller', [param('userId').isMongoId(), authenticate], authorizeRoles('admin'), approveSellerApplication);
 
 /**
  * @swagger
@@ -554,7 +588,7 @@ userRouter.patch('/:userId/approve-seller', [param('userId').isMongoId(), authen
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-userRouter.patch('/:userId/reject-seller', [param('userId').isMongoId(), authenticate], rejectSellerApplication);
+userRouter.patch('/:userId/reject-seller', [param('userId').isMongoId(), authenticate], authorizeRoles('admin'), rejectSellerApplication);
 
 /**
  * @swagger
@@ -589,7 +623,7 @@ userRouter.patch('/:userId/reject-seller', [param('userId').isMongoId(), authent
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-userRouter.delete('/:userId/delete-seller', [param('userId').isMongoId(), authenticate], deleteSellerApplication);
+userRouter.delete('/:userId/delete-seller', [param('userId').isMongoId(), authenticate], authorizeRoles('admin'), deleteSellerApplication);
 
 // NOTE: Authentication routes have been moved to /api/auth
 // - POST /api/auth/verify-email (was /api/users/login/verify)

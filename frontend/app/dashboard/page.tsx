@@ -3,14 +3,15 @@
 import { useQuery } from '@tanstack/react-query';
 import { getTours } from '@/lib/api/tours';
 import { getPosts } from '@/lib/api/posts';
-import { getUsers } from '@/lib/api/users';
+import { useAuth } from '@/lib/hooks/useAuth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { MapPin, FileText, Users, Mail, CirclePlus, Image, Settings } from 'lucide-react';
 import Link from 'next/link';
 import { format } from 'date-fns';
+
 export default function DashboardPage() {
-    const user = null; // TODO: Get user from auth context
+    const { user, isAuthenticated } = useAuth();
 
     const { data: tours } = useQuery({
         queryKey: ['tours-count'],
@@ -22,21 +23,19 @@ export default function DashboardPage() {
         queryFn: getPosts,
     });
 
-    const { data: users } = useQuery({
-        queryKey: ['users-count'],
-        queryFn: getUsers,
-    });
-
     const toursCount = tours?.totalTours || 0;
     const postsCount = ((posts as any)?.posts || (posts as any)?.data || []).length;
-    const usersCount = ((users as any)?.data || []).length;
+    // For non-admin users, just show 1 (current user) or hide the stat
+    const usersCount = isAuthenticated ? 1 : 0;
 
     return (
         <div className="space-y-6">
             {/* Welcome Section */}
             <Card>
                 <CardHeader>
-                    <CardTitle className="text-3xl font-bold">Welcome back!</CardTitle>
+                    <CardTitle className="text-3xl font-bold">
+                        Welcome back{user.name ? `, ${user.name}` : ''}!
+                    </CardTitle>
                     <CardDescription className="text-base">
                         {format(new Date(), 'EEEE, MMMM d, yyyy')}
                     </CardDescription>
@@ -73,14 +72,14 @@ export default function DashboardPage() {
 
                 <Card className="hover:shadow-md transition-shadow">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Users</CardTitle>
+                        <CardTitle className="text-sm font-medium">Your Profile</CardTitle>
                         <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
                             <Users className="h-4 w-4 text-primary" />
                         </div>
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{usersCount}</div>
-                        <p className="text-xs text-muted-foreground mt-1">Registered users</p>
+                        <div className="text-2xl font-bold">{user.roles || 'User'}</div>
+                        <p className="text-xs text-muted-foreground mt-1">Your account role</p>
                     </CardContent>
                 </Card>
 

@@ -1,5 +1,5 @@
 import express from 'express';
-import { authenticate, isAdminOrSeller } from '../../middlewares/authenticate';
+import { authenticate, authorizeRoles } from '../../middlewares/authenticate';
 import { paginationMiddleware } from '../../middlewares/pagination';
 import {
     getAllComments,
@@ -64,7 +64,7 @@ const commentRouter = express.Router();
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-commentRouter.get('/', authenticate, isAdminOrSeller as any, paginationMiddleware, getAllComments);
+commentRouter.get('/', authenticate, authorizeRoles('admin', 'seller') as any, paginationMiddleware, getAllComments);
 
 /**
  * @swagger

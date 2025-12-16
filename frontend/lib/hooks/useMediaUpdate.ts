@@ -47,7 +47,6 @@ interface UseMediaUpdateOptions {
  * 
  * const handleUpdate = () => {
  *   updateMutation.mutate({
- *     userId: 'user123',
  *     imageId: 'img123',
  *     mediaType: 'images',
  *     title: 'New Title',

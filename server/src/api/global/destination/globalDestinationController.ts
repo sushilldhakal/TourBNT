@@ -45,7 +45,7 @@ const ensureSellerInfo = async (user: any, userId: string) => {
 export const getApprovedDestinations = async (req: Request, res: Response): Promise<void> => {
   try {
     const { country, region, search } = req.query;
-    
+
     let query: any = {
       isActive: true,
       isApproved: true,
@@ -67,7 +67,7 @@ export const getApprovedDestinations = async (req: Request, res: Response): Prom
     const destinations = await GlobalDestination.find(query)
       .sort({ popularity: -1, name: 1 })
       .select('name description coverImage country region city coordinates popularity usageCount fullLocation');
-    
+
     res.json({
       success: true,
       data: destinations,
@@ -86,14 +86,14 @@ export const getApprovedDestinations = async (req: Request, res: Response): Prom
 export const getDestinationsByCountry = async (req: Request, res: Response): Promise<void> => {
   try {
     const { country } = req.params;
-    
-    const destinations = await GlobalDestination.find({ 
+
+    const destinations = await GlobalDestination.find({
       country: { $regex: new RegExp(country, 'i') },
-      isActive: true, 
-      isApproved: true, 
-      approvalStatus: 'approved' 
+      isActive: true,
+      isApproved: true,
+      approvalStatus: 'approved'
     });
-    
+
     res.json({
       success: true,
       data: destinations,
@@ -111,8 +111,8 @@ export const getDestinationsByCountry = async (req: Request, res: Response): Pro
 // Get destinations for seller (shows own destinations + enabled destinations from preferences)
 export const getSellerDestinations = async (req: AuthRequest, res: Response) => {
   try {
-    const sellerId = req.user?._id;
-    const userRole = req.user?.role;
+    const sellerId = req.user?.id;
+    const isAdmin = req.user?.roles.includes('admin') || false;
 
     if (!sellerId) {
       return res.status(401).json({
@@ -122,16 +122,16 @@ export const getSellerDestinations = async (req: AuthRequest, res: Response) => 
     }
 
     // If user is admin, return ALL destinations (no filtering by isActive)
-    if (userRole === 'admin') {
+    if (isAdmin) {
       const allDestinations = await GlobalDestination.find({})
         .sort({ submittedAt: -1 });
 
       console.log('🔍 Admin destinations query result count:', allDestinations.length);
-      console.log('🔍 Admin destinations status breakdown:', allDestinations.map(d => ({ 
-        id: d._id, 
+      console.log('🔍 Admin destinations status breakdown:', allDestinations.map(d => ({
+        id: d._id,
         name: d.name,
-        isActive: d.isActive, 
-        status: d.approvalStatus 
+        isActive: d.isActive,
+        status: d.approvalStatus
       })));
 
       return res.json({
@@ -150,7 +150,7 @@ export const getSellerDestinations = async (req: AuthRequest, res: Response) => 
 
     // Get IDs of destinations that seller has explicitly hidden
     const hiddenDestinationIds = new Set(
-      sellerPrefs ? 
+      sellerPrefs ?
         sellerPrefs.destinationPreferences
           .filter((pref: any) => (!pref.isVisible || !pref.isEnabled) && pref.destination)
           .map((pref: any) => {
@@ -173,7 +173,7 @@ export const getSellerDestinations = async (req: AuthRequest, res: Response) => 
 
     // Filter out hidden destinations from seller-created ones
     console.log('🔍 Seller created destinations before filtering:', sellerCreatedDestinations.map((d: any) => ({ id: d._id.toString(), name: d.name })));
-    
+
     const visibleSellerCreatedDestinations = sellerCreatedDestinations.filter(
       (dest: any) => {
         const isHidden = hiddenDestinationIds.has(dest._id.toString());
@@ -181,7 +181,7 @@ export const getSellerDestinations = async (req: AuthRequest, res: Response) => 
         return !isHidden;
       }
     );
-    
+
     console.log('🔍 Visible seller created destinations after filtering:', visibleSellerCreatedDestinations.map((d: any) => ({ id: d._id.toString(), name: d.name })));
 
     // Get seller's enabled destinations from preferences
@@ -224,7 +224,7 @@ export const getSellerDestinations = async (req: AuthRequest, res: Response) => 
 // Search destinations for sellers (to discover existing destinations before creating new ones)
 export const searchDestinations = async (req: AuthRequest, res: Response) => {
   try {
-    const sellerId = req.user?._id;
+    const sellerId = req.user?.id;
     if (!sellerId) {
       return res.status(401).json({
         success: false,
@@ -282,7 +282,7 @@ export const searchDestinations = async (req: AuthRequest, res: Response) => {
 // Get enabled destinations for seller (for tour creation)
 export const getEnabledDestinations = async (req: AuthRequest, res: Response) => {
   try {
-    const sellerId = req.user?._id;
+    const sellerId = req.user?.id;
     if (!sellerId) {
       return res.status(401).json({
         success: false,
@@ -295,12 +295,12 @@ export const getEnabledDestinations = async (req: AuthRequest, res: Response) =>
         path: 'destinationPreferences.destination',
         match: { isActive: true, isApproved: true, approvalStatus: 'approved' }
       });
-    
-    const enabledDestinations = sellerPrefs ? 
+
+    const enabledDestinations = sellerPrefs ?
       sellerPrefs.destinationPreferences
         .filter((pref: any) => pref.isEnabled && pref.destination)
         .sort((a: any, b: any) => (a.sortOrder || 0) - (b.sortOrder || 0)) : [];
-    
+
     res.json({
       success: true,
       data: enabledDestinations,
@@ -318,7 +318,7 @@ export const getEnabledDestinations = async (req: AuthRequest, res: Response) =>
 // Get seller's favorite destinations
 export const getFavoriteDestinations = async (req: AuthRequest, res: Response) => {
   try {
-    const sellerId = req.user?._id;
+    const sellerId = req.user?.id;
     if (!sellerId) {
       return res.status(401).json({
         success: false,
@@ -331,12 +331,12 @@ export const getFavoriteDestinations = async (req: AuthRequest, res: Response) =
         path: 'destinationPreferences.destination',
         match: { isActive: true, isApproved: true, approvalStatus: 'approved' }
       });
-    
-    const favoriteDestinations = sellerPrefs ? 
+
+    const favoriteDestinations = sellerPrefs ?
       sellerPrefs.destinationPreferences
         .filter((pref: any) => pref.isFavorite && pref.destination)
         .sort((a: any, b: any) => (a.sortOrder || 0) - (b.sortOrder || 0)) : [];
-    
+
     res.json({
       success: true,
       data: favoriteDestinations,
@@ -368,7 +368,7 @@ export const submitDestination = async (req: AuthRequest, res: Response) => {
       featuredTours,
       metadata
     } = req.body;
-    const createdBy = req.user?._id;
+    const createdBy = req.user?.id;
 
     if (!createdBy) {
       return res.status(401).json({
@@ -399,15 +399,15 @@ export const submitDestination = async (req: AuthRequest, res: Response) => {
     console.log("🏗️ GlobalDestination Model Name:", GlobalDestination.modelName)
     console.log("🏗️ GlobalDestination Collection:", GlobalDestination.collection.name)
     console.log("🏗️ GlobalDestination Schema Fields:", Object.keys(GlobalDestination.schema.paths))
-    
+
     // Log existing destinations count
     const totalDestinations = await GlobalDestination.countDocuments();
     console.log("📊 Total destinations in database:", totalDestinations)
-    
+
     // Log some sample destinations
     const sampleDestinations = await GlobalDestination.find().limit(3).select('name country city approvalStatus isActive');
     console.log("📍 Sample destinations:", JSON.stringify(sampleDestinations, null, 2))
-    
+
     console.log('🔍 Duplicate check for:', { name, country, city });
     console.log('🔍 Found existing destination:', existingDestination ? 'YES' : 'NO');
 
@@ -478,15 +478,15 @@ export const submitDestination = async (req: AuthRequest, res: Response) => {
 export const getPendingDestinations = async (req: AuthRequest, res: Response) => {
   try {
     // Check if user is admin
-    if (req.user?.role !== 'admin') {
+    if (!req.user?.roles?.includes('admin')) {
       return res.json({
         success: false,
         message: 'Admin access required'
       });
     }
 
-    const pendingDestinations = await GlobalDestination.find({ 
-      approvalStatus: 'pending' 
+    const pendingDestinations = await GlobalDestination.find({
+      approvalStatus: 'pending'
     })
       .populate('createdBy', 'name email')
       .sort({ submittedAt: -1 });
@@ -509,7 +509,7 @@ export const getPendingDestinations = async (req: AuthRequest, res: Response) =>
 export const approveDestination = async (req: AuthRequest, res: Response) => {
   try {
     // Check if user is admin
-    if (req.user?.role !== 'admin') {
+    if (!req.user?.roles?.includes('admin')) {
       return res.status(403).json({
         success: false,
         message: 'Admin access required'
@@ -517,7 +517,7 @@ export const approveDestination = async (req: AuthRequest, res: Response) => {
     }
 
     const { destinationId } = req.params;
-    const approvedBy = req.user._id;
+    const approvedBy = req.user.id;
 
     const destination = await GlobalDestination.findById(destinationId);
     if (!destination) {
@@ -545,7 +545,7 @@ export const approveDestination = async (req: AuthRequest, res: Response) => {
       const userDestination = creator.sellerInfo.destination.find(
         dest => dest.destinationId.toString() === destinationId.toString()
       );
-      
+
       if (userDestination) {
         userDestination.isApproved = true;
         userDestination.approvalStatus = 'approved';
@@ -586,7 +586,7 @@ export const approveDestination = async (req: AuthRequest, res: Response) => {
 export const rejectDestination = async (req: AuthRequest, res: Response) => {
   try {
     // Check if user is admin
-    if (req.user?.role !== 'admin') {
+    if (!req.user?.roles?.includes('admin')) {
       return res.status(403).json({
         success: false,
         message: 'Admin access required'
@@ -595,7 +595,7 @@ export const rejectDestination = async (req: AuthRequest, res: Response) => {
 
     const { destinationId } = req.params;
     const { reason } = req.body;
-    const rejectedBy = req.user._id;
+    const rejectedBy = req.user.id;
 
     if (!reason) {
       return res.status(400).json({
@@ -628,7 +628,7 @@ export const rejectDestination = async (req: AuthRequest, res: Response) => {
       const userDestination = creator.sellerInfo.destination.find(
         dest => dest.destinationId.toString() === destinationId.toString()
       );
-      
+
       if (userDestination) {
         userDestination.isApproved = false;
         userDestination.approvalStatus = 'rejected';
@@ -669,9 +669,9 @@ export const rejectDestination = async (req: AuthRequest, res: Response) => {
 // Admin: Delete destination (HARD DELETE - completely remove from database)
 export const deleteDestination = async (req: AuthRequest, res: Response) => {
   try {
-    console.log('🚀 Admin hard deleting destination:', req.user?.role);
+    console.log('🚀 Admin hard deleting destination:', req.user?.roles);
     // Check if user is admin
-    if (req.user?.role !== 'admin') {
+    if (!req.user?.roles?.includes('admin')) {
       return res.status(403).json({
         success: false,
         message: 'Admin access required'
@@ -717,8 +717,8 @@ export const deleteDestination = async (req: AuthRequest, res: Response) => {
 export const updateDestination = async (req: AuthRequest, res: Response) => {
   try {
     const { destinationId } = req.params;
-    const userId = req.user?._id;
-    const userRole = req.user?.role;
+    const userId = req.user?.id;
+    const userRole = req.user?.roles;
 
     if (!userId) {
       return res.status(401).json({
@@ -737,7 +737,7 @@ export const updateDestination = async (req: AuthRequest, res: Response) => {
 
     // Check permissions: sellers can only update their own destinations, admins can update any
     const isOwner = destination.createdBy.toString() === userId.toString();
-    const isAdmin = userRole === 'admin';
+    const isAdmin = req.user?.roles.includes('admin') || false;
 
     if (!isOwner && !isAdmin) {
       return res.status(403).json({
@@ -788,7 +788,7 @@ export const updateDestination = async (req: AuthRequest, res: Response) => {
     }
 
     // Check if this is only an isActive toggle by comparing the boolean value change
-    const isOnlyActiveToggle = isActive !== undefined && 
+    const isOnlyActiveToggle = isActive !== undefined &&
       isActive !== destination.isActive && // Only if isActive is actually changing
       name === destination.name &&
       description === destination.description &&
@@ -855,7 +855,7 @@ export const updateDestination = async (req: AuthRequest, res: Response) => {
 };
 export const updateDestinationPreferences = async (req: AuthRequest, res: Response) => {
   try {
-    const sellerId = req.user?._id;
+    const sellerId = req.user?.id;
     if (!sellerId) {
       return res.status(401).json({
         success: false,
@@ -866,7 +866,7 @@ export const updateDestinationPreferences = async (req: AuthRequest, res: Respon
     const { preferences, globalSettings } = req.body;
 
     let sellerPrefs = await SellerDestinationPreferences.findOne({ seller: sellerId });
-    
+
     if (!sellerPrefs) {
       sellerPrefs = new SellerDestinationPreferences({
         seller: sellerId,
@@ -880,7 +880,7 @@ export const updateDestinationPreferences = async (req: AuthRequest, res: Respon
         const preference = sellerPrefs.destinationPreferences.find(
           (pref: any) => pref.destination.toString() === update.destinationId.toString()
         );
-        
+
         if (preference) {
           if (update.isVisible !== undefined) preference.isVisible = update.isVisible;
           if (update.isEnabled !== undefined) preference.isEnabled = update.isEnabled;
@@ -898,7 +898,7 @@ export const updateDestinationPreferences = async (req: AuthRequest, res: Respon
           });
         }
       });
-      
+
       sellerPrefs.lastUpdated = new Date();
       await sellerPrefs.save();
     }
@@ -925,7 +925,7 @@ export const updateDestinationPreferences = async (req: AuthRequest, res: Respon
 // Toggle favorite destination
 export const toggleFavoriteDestination = async (req: AuthRequest, res: Response) => {
   try {
-    const sellerId = req.user?._id;
+    const sellerId = req.user?.id;
     if (!sellerId) {
       return res.status(401).json({
         success: false,
@@ -936,7 +936,7 @@ export const toggleFavoriteDestination = async (req: AuthRequest, res: Response)
     const { destinationId } = req.params;
 
     let sellerPrefs = await SellerDestinationPreferences.findOne({ seller: sellerId });
-    
+
     if (!sellerPrefs) {
       sellerPrefs = new SellerDestinationPreferences({
         seller: sellerId,
@@ -948,7 +948,7 @@ export const toggleFavoriteDestination = async (req: AuthRequest, res: Response)
     const preference = sellerPrefs.destinationPreferences.find(
       (pref: any) => pref.destination.toString() === destinationId.toString()
     );
-    
+
     if (preference) {
       preference.isFavorite = !preference.isFavorite;
     } else {
@@ -959,7 +959,7 @@ export const toggleFavoriteDestination = async (req: AuthRequest, res: Response)
         isFavorite: true
       });
     }
-    
+
     sellerPrefs.lastUpdated = new Date();
     await sellerPrefs.save();
 
@@ -979,14 +979,14 @@ export const toggleFavoriteDestination = async (req: AuthRequest, res: Response)
 
 // Add existing destination to seller's list
 export const addExistingDestinationToSeller = async (req: AuthRequest, res: Response): Promise<void> => {
-  
+
   try {
     const { destinationId } = req.params;
-    const sellerId = req.user?._id;
-    
+    const sellerId = req.user?.id;
+
     if (!sellerId) {
 
-     
+
       res.status(401).json({
         success: false,
         message: 'Authentication required'
@@ -1001,9 +1001,9 @@ export const addExistingDestinationToSeller = async (req: AuthRequest, res: Resp
       });
       return;
     }
-    console.log("req.user?._id;", req.user?._id)
+    console.log("req.user?.id;", req.user?.id)
     console.log("destinationId", destinationId)
-    
+
     // Check if destination exists and is approved
     const destination = await GlobalDestination.findOne({
       _id: destinationId,
@@ -1027,7 +1027,7 @@ export const addExistingDestinationToSeller = async (req: AuthRequest, res: Resp
     // Find or create seller preferences
     let sellerPrefs = await SellerDestinationPreferences.findOne({ seller: sellerId });
     console.log("Existing seller preferences:", sellerPrefs ? "YES" : "NO");
-    
+
     if (!sellerPrefs) {
       console.log("Creating new seller preferences");
       sellerPrefs = new SellerDestinationPreferences({
@@ -1041,7 +1041,7 @@ export const addExistingDestinationToSeller = async (req: AuthRequest, res: Resp
     const existingPreference = sellerPrefs.destinationPreferences.find(
       (pref: any) => pref.destination.toString() === destinationId.toString()
     );
-    
+
     console.log("Destination already in list:", existingPreference ? "YES" : "NO");
 
     if (existingPreference) {
@@ -1059,14 +1059,14 @@ export const addExistingDestinationToSeller = async (req: AuthRequest, res: Resp
         isEnabled: true,
         isFavorite: true
       });
-      
+
       // Increment seller count on the destination
       destination.sellerCount = (destination.sellerCount || 0) + 1;
       await destination.save();
     }
-    
+
     sellerPrefs.lastUpdated = new Date();
-    
+
     try {
       console.log("Saving seller preferences...");
       const savedPrefs = await sellerPrefs.save();
@@ -1093,7 +1093,7 @@ export const addExistingDestinationToSeller = async (req: AuthRequest, res: Resp
     if (user) {
       // Ensure user has sellerInfo
       user = await ensureSellerInfo(user, sellerId.toString());
-      
+
       if (user && user.sellerInfo) {
         if (!user.sellerInfo.destination) {
           user.sellerInfo.destination = [];
@@ -1123,7 +1123,7 @@ export const addExistingDestinationToSeller = async (req: AuthRequest, res: Resp
           existingUserDestination.isActive = true;
           existingUserDestination.isApproved = true;
           existingUserDestination.approvalStatus = 'approved';
-          
+
           await user.save();
           console.log(`✅ Updated destination "${destination.name}" in user ${sellerId} destination list to active`);
         }
@@ -1153,7 +1153,7 @@ export const addExistingDestinationToSeller = async (req: AuthRequest, res: Resp
 export const toggleDestinationActiveStatus = async (req: AuthRequest, res: Response) => {
   try {
     const { destinationId } = req.params;
-    const sellerId = req.user?._id;
+    const sellerId = req.user?.id;
 
     console.log(`🔄 Toggle request for destination ${destinationId} by seller ${sellerId}`);
 
@@ -1259,7 +1259,7 @@ export const toggleDestinationActiveStatus = async (req: AuthRequest, res: Respo
       if (!user.sellerInfo.destination) {
         user.sellerInfo.destination = [];
       }
-      
+
       // Set status based on global destination status
       const userDestinationStatus = {
         destinationId: destinationId,
@@ -1344,7 +1344,7 @@ export const toggleDestinationActiveStatus = async (req: AuthRequest, res: Respo
 // Get user-specific destinations with their personal active status
 export const getUserDestinations = async (req: AuthRequest, res: Response) => {
   try {
-    const sellerId = req.user?._id;
+    const sellerId = req.user?.id;
 
     if (!sellerId) {
       return res.status(401).json({
@@ -1371,9 +1371,9 @@ export const getUserDestinations = async (req: AuthRequest, res: Response) => {
     // Get user's destination preferences with global destination data
     const userDestinations = user.sellerInfo.destination?.map(userDest => {
       const globalDest = userDest.destinationId as any; // Populated destination
-      
+
       if (!globalDest) return null; // Skip if global destination was deleted or not approved
-      
+
       return {
         _id: globalDest._id,
         name: globalDest.name,
@@ -1413,7 +1413,7 @@ export const getUserDestinations = async (req: AuthRequest, res: Response) => {
 export const fixDeletedApprovedDestinations = async (req: AuthRequest, res: Response) => {
   try {
     // Check if user is admin
-    if (req.user?.role !== 'admin') {
+    if (!req.user?.roles?.includes('admin')) {
       return res.status(403).json({
         success: false,
         message: 'Admin access required'
@@ -1466,7 +1466,7 @@ export const fixDeletedApprovedDestinations = async (req: AuthRequest, res: Resp
 export const removeExistingDestinationFromSeller = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { destinationId } = req.params;
-    const sellerId = req.user?._id;
+    const sellerId = req.user?.id;
 
     console.log("sellerId", sellerId)
     console.log("destinationId", destinationId)
@@ -1490,7 +1490,7 @@ export const removeExistingDestinationFromSeller = async (req: AuthRequest, res:
     // Find seller preferences
     const sellerPrefs = await SellerDestinationPreferences.findOne({ seller: sellerId });
     console.log("sellerPrefs", sellerPrefs)
-    
+
     if (!sellerPrefs) {
       res.status(404).json({
         success: false,
@@ -1501,7 +1501,7 @@ export const removeExistingDestinationFromSeller = async (req: AuthRequest, res:
 
     console.log("Current destination preferences:", sellerPrefs.destinationPreferences);
     console.log("Looking for destinationId:", destinationId);
-    
+
     // Log each destination in the preferences for debugging
     sellerPrefs.destinationPreferences.forEach((pref: any, index: number) => {
       console.log(`Preference ${index}:`, {
@@ -1522,12 +1522,12 @@ export const removeExistingDestinationFromSeller = async (req: AuthRequest, res:
       // Check if destination is approved - if approved, only remove from view, don't delete
       if (sellerCreatedDestination.isApproved && sellerCreatedDestination.approvalStatus === 'approved') {
         console.log("This is an approved seller-created destination, removing from dashboard view only");
-        
+
         // Add to seller preferences as disabled/hidden so it doesn't show in their dashboard
         const existingPreference = sellerPrefs.destinationPreferences.find(
           (pref: any) => pref.destination.toString() === destinationId.toString()
         );
-        
+
         if (existingPreference) {
           // Update existing preference to hide it
           existingPreference.isVisible = false;
@@ -1542,12 +1542,12 @@ export const removeExistingDestinationFromSeller = async (req: AuthRequest, res:
             sortOrder: 0
           });
         }
-        
+
         // Decrease seller count on the destination
         if (sellerCreatedDestination.sellerCount && sellerCreatedDestination.sellerCount > 0) {
           sellerCreatedDestination.sellerCount -= 1;
         }
-        
+
         await sellerCreatedDestination.save();
         sellerPrefs.lastUpdated = new Date();
         await sellerPrefs.save();
@@ -1564,7 +1564,7 @@ export const removeExistingDestinationFromSeller = async (req: AuthRequest, res:
             console.log(`✅ Set destination "${sellerCreatedDestination.name}" as inactive in user ${sellerId} destination list`);
           }
         }
-        
+
         res.json({
           success: true,
           message: 'Destination removed from your dashboard successfully'
@@ -1574,7 +1574,7 @@ export const removeExistingDestinationFromSeller = async (req: AuthRequest, res:
         // If not approved yet, seller can hard delete it completely
         console.log("This is an unapproved seller-created destination, hard deleting it");
         await GlobalDestination.findByIdAndDelete(destinationId);
-        
+
         // Also remove from seller preferences if exists
         sellerPrefs.destinationPreferences = sellerPrefs.destinationPreferences.filter(
           (pref: any) => pref.destination.toString() !== destinationId.toString()
@@ -1590,7 +1590,7 @@ export const removeExistingDestinationFromSeller = async (req: AuthRequest, res:
           await user.save();
           console.log(`✅ Removed destination from user ${sellerId} destination list (hard delete)`);
         }
-        
+
         res.json({
           success: true,
           message: 'Destination deleted successfully'
@@ -1630,7 +1630,7 @@ export const removeExistingDestinationFromSeller = async (req: AuthRequest, res:
       user.sellerInfo.destination = user.sellerInfo.destination.filter(
         dest => dest.destinationId.toString() !== destinationId.toString()
       );
-      
+
       if (user.sellerInfo.destination.length < initialUserDestLength) {
         await user.save();
         console.log(`✅ Removed destination from user ${sellerId} destination list`);

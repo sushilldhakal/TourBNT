@@ -17,4 +17,4 @@ export {
 export type { ErrorResponse } from './errorResponse';
 
 // Route wrapper (existing)
-export { asyncHandler } from './routeWrapper';
+export { asyncAuthHandler } from './routeWrapper';

@@ -6,12 +6,12 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { addFaq } from "@/lib/api/faqApi";
 import { toast } from "@/components/ui/use-toast";
-import { getUserId } from "@/lib/auth/authUtils";
 import { Textarea } from "@/components/ui/textarea";
 import { HelpCircle, MessageCircle, Plus } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useAuth } from "@/lib/hooks/useAuth";
 
 const formSchema = z.object({
     question: z.string().min(5, "Question must be at least 5 characters"),
@@ -22,7 +22,7 @@ const formSchema = z.object({
 type FaqFormData = z.infer<typeof formSchema>;
 
 const AddFaq = ({ onFaqAdded }: { onFaqAdded: () => void }) => {
-    const userId = getUserId();
+    const { userId } = useAuth();
 
     const form = useForm<FaqFormData>({
         resolver: zodResolver(formSchema),

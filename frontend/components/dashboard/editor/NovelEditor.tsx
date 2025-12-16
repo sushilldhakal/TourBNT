@@ -5,7 +5,8 @@ import { EditorRoot, EditorContent, type JSONContent, EditorInstance, EditorComm
 import { useDebouncedCallback } from "use-debounce";
 import { coreExtensions } from "./extensions";
 import { getLazyExtensions } from "./extensions-lazy";
-import { uploadFn } from "./image-upload";
+import { createUploadFn } from "./image-upload";
+import { useAuth } from '@/lib/hooks/useAuth';
 import { slashCommand, suggestionItems } from "./slash-command";
 import CustomEditorCommandItem from "./CustomEditorCommandItem";
 import GenerativeMenuSwitch from "./generative/generative-menu-switch";
@@ -97,6 +98,9 @@ function NovelEditorCore({
 
     // Gallery dialog state
     const [dialogOpen, setDialogOpen] = useState(false);
+
+    // Authentication
+    const { user } = useAuth();
 
     /**
      * Content cache to avoid repeated parsing of the same content
@@ -329,8 +333,8 @@ function NovelEditorCore({
                         handleDOMEvents: {
                             keydown: (_view, event) => handleCommandNavigation(event),
                         },
-                        handlePaste: (view, event) => handleImagePaste(view, event, uploadFn),
-                        handleDrop: (view, event, _slice, moved) => handleImageDrop(view, event, moved, uploadFn),
+                        handlePaste: (view, event) => handleImagePaste(view, event, createUploadFn(user?.id || '')),
+                        handleDrop: (view, event, _slice, moved) => handleImageDrop(view, event, moved, createUploadFn(user?.id || '')),
                         attributes: {
                             class: cn(
                                 "prose prose-lg dark:prose-invert prose-headings:font-title font-default focus:outline-none max-w-full",

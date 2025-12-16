@@ -12,7 +12,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useRouter } from 'next/navigation';
-import { getUserEmail, getUserRole } from '@/lib/auth/authUtils';
+import { getUserEmail, getUserRole } from '@/lib/utils/auth';
+import { useAuth } from '@/lib/hooks/useAuth';
 import useDashboardStore from '@/store/dashboardStore';
 
 /**
@@ -29,7 +30,7 @@ interface DashboardHeaderProps {
 
 export function DashboardHeader({ isCollapsed, onToggleSidebar, onLogout }: DashboardHeaderProps) {
     const router = useRouter();
-    const { user } = useDashboardStore();
+    const { user } = useAuth();
     const userEmail = getUserEmail();
     const userRole = getUserRole();
 

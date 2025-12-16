@@ -4,7 +4,7 @@
 
 import { Router } from 'express';
 import { getDashboard, getHealthCheck } from './monitoringController';
-import { authenticate, isAdmin } from '../../middlewares/authenticate';
+import { authenticate, authorizeRoles } from '../../middlewares/authenticate';
 
 const router = Router();
 
@@ -20,6 +20,6 @@ router.get('/health', getHealthCheck);
  * @desc    Get API metrics dashboard
  * @access  Admin only
  */
-router.get('/dashboard', authenticate, isAdmin as any, getDashboard);
+router.get('/dashboard', authenticate, authorizeRoles('admin'), getDashboard);
 
 export default router;

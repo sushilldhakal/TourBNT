@@ -2,19 +2,25 @@ import { AuthRequest } from './../../../middlewares/authenticate';
 import Facts from './factsModel';
 import { Response, Request, NextFunction } from 'express';
 import TourModel from '../../tours/tourModel';
+import createHttpError from 'http-errors';
 
 
 
 export const getUserFacts = async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
         const requestedUserId = req.params.userId;  // User ID from URL params
-        const authenticatedUserId = req.userId;  // Authenticated user ID
-        const userRole = req.roles;  // User role
+
+        if (!req.user) {
+            throw createHttpError(401, "Not authenticated");
+        }
+
+        const authenticatedUserId = req.user.id;  // Authenticated user ID
+        const userRole = req.user.roles;  // User role
 
         let facts;
 
         // Admin can view any user's facts
-        if (userRole === 'admin') {
+        if (userRole.includes('admin')) {
             if (requestedUserId) {
                 facts = await Facts.find({ user: requestedUserId });
             } else {
@@ -90,7 +96,10 @@ export const getSingleFacts = async (req: AuthRequest, res: Response, next: Next
 
 export const addFacts = async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-        const userId = req.userId;  // Assuming user ID is available in the request
+        if (!req.user) {
+            return res.status(401).json({ message: 'Not authenticated' });
+        }
+        const userId = req.user.id;  // Assuming user ID is available in the request
         const { name,
             field_type,
             value,
@@ -115,7 +124,10 @@ export const addFacts = async (req: AuthRequest, res: Response, next: NextFuncti
 
 export const updateFacts = async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-        const userId = req.userId;  // Assuming user ID is available in the request
+        if (!req.user) {
+            return res.status(401).json({ message: 'Not authenticated' });
+        }
+        const userId = req.user.id;  // Assuming user ID is available in the request
         const { factId } = req.params;
         const { name, field_type, value, icon } = req.body;
         console.log("req.body", req.body, factId)
@@ -124,7 +136,7 @@ export const updateFacts = async (req: AuthRequest, res: Response, next: NextFun
             return res.status(404).json({ message: 'Fact not found' });
         }
 
-        if (facts.user.toString() !== userId && req.roles !== 'admin') {
+        if (facts.user.toString() !== userId && !req.user.roles.includes('admin')) {
             return res.status(403).json({ message: 'Not authorized to update this Fact' });
         }
 
@@ -173,14 +185,17 @@ export const updateFacts = async (req: AuthRequest, res: Response, next: NextFun
 
 export const deleteFacts = async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-        const userId = req.userId;  // Assuming user ID is available in the request
+        if (!req.user) {
+            return res.status(401).json({ message: 'Not authenticated' });
+        }
+        const userId = req.user.id;  // Assuming user ID is available in the request
         const { factsId } = req.params;
         const facts = await Facts.findById(factsId);
         if (!facts) {
             return res.status(404).json({ message: 'Facts not found' });
         }
 
-        if (facts.user.toString() !== userId && req.roles !== 'admin') {
+        if (facts.user.toString() !== userId && !req.user.roles.includes('admin')) {
             return res.status(403).json({ message: 'Not authorized to delete this facts' });
         }
 
@@ -193,8 +208,11 @@ export const deleteFacts = async (req: AuthRequest, res: Response, next: NextFun
 
 export const deleteMultipleFacts = async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-        const userId = req.userId;
-        const userRole = req.roles;
+        if (!req.user) {
+            return res.status(401).json({ message: 'Not authenticated' });
+        }
+        const userId = req.user.id;
+        const userRole = req.user.roles;
         const { ids } = req.body; // Changed from factIds to ids for RESTful consistency
 
         if (!Array.isArray(ids) || ids.length === 0) {
@@ -237,7 +255,7 @@ export const deleteMultipleFacts = async (req: AuthRequest, res: Response, next:
             }
 
             // Check authorization
-            if (fact.user.toString() !== userId && userRole !== 'admin') {
+            if (fact.user.toString() !== userId && !userRole.includes('admin')) {
                 failed.push({ id: factId, error: 'Not authorized' });
                 continue;
             }

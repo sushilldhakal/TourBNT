@@ -46,52 +46,53 @@ export const RoleGroups = {
 } as const;
 
 /**
- * Check if a role can access dashboard features
- * @param role - User role to check
- * @returns True if role can access dashboard
+ * Check if user has any dashboard access role
+ * @param roles - User's roles array
+ * @returns True if user can access dashboard
  */
-export const canAccessDashboard = (role: string | string[]): boolean => {
-    const roleStr = Array.isArray(role) ? role[0] : role;
-    return (RoleGroups.DASHBOARD_ACCESS as readonly string[]).includes(roleStr);
+export const canAccessDashboard = (roles: string[]): boolean => {
+    return roles.some(role =>
+        (RoleGroups.DASHBOARD_ACCESS as readonly string[]).includes(role)
+    );
 };
 
 /**
  * Check if user is admin
- * @param role - User role to check
+ * @param roles - User's roles array
  * @returns True if user is admin
  */
-export const isAdmin = (role: string | string[]): boolean => {
-    const roleStr = Array.isArray(role) ? role[0] : role;
-    return roleStr === UserRole.ADMIN;
+export const isAdmin = (roles: string[]): boolean => {
+    return roles.includes(UserRole.ADMIN);
 };
 
 /**
  * Check if user is seller
- * @param role - User role to check
+ * @param roles - User's roles array
  * @returns True if user is seller
  */
-export const isSeller = (role: string | string[]): boolean => {
-    const roleStr = Array.isArray(role) ? role[0] : role;
-    return roleStr === UserRole.SELLER;
+export const isSeller = (roles: string[]): boolean => {
+    return roles.includes(UserRole.SELLER);
 };
 
 /**
  * Check if user is admin or seller
- * @param role - User role to check
+ * @param roles - User's roles array
  * @returns True if user is admin or seller
  */
-export const isAdminOrSeller = (role: string | string[]): boolean => {
-    const roleStr = Array.isArray(role) ? role[0] : role;
-    return (RoleGroups.ADMIN_AND_SELLER as readonly string[]).includes(roleStr);
+export const isAdminOrSeller = (roles: string[]): boolean => {
+    return roles.some(role =>
+        (RoleGroups.ADMIN_AND_SELLER as readonly string[]).includes(role)
+    );
 };
 
 /**
  * Check if user has any of the specified roles
- * @param userRole - User's current role
+ * @param userRoles - User's current roles
  * @param allowedRoles - Array of allowed roles
  * @returns True if user has one of the allowed roles
  */
-export const hasRole = (userRole: string | string[], allowedRoles: UserRole[]): boolean => {
-    const roleStr = Array.isArray(userRole) ? userRole[0] : userRole;
-    return (allowedRoles as readonly string[]).includes(roleStr);
+export const hasRole = (userRoles: string[], allowedRoles: UserRole[]): boolean => {
+    return userRoles.some(role =>
+        (allowedRoles as readonly string[]).includes(role)
+    );
 };

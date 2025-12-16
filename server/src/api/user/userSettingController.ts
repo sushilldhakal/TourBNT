@@ -2,6 +2,7 @@ import { AuthRequest } from './../../middlewares/authenticate';
 import { Request, Response, NextFunction } from 'express';
 import UserSettings from './userSettingModel';
 import { encrypt, decrypt } from '../../utils/encryption';
+import createHttpError from 'http-errors';
 
 export const addOrUpdateSettings = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
@@ -86,8 +87,8 @@ export const getDecryptedApiKey = async (req: AuthRequest, res: Response, next: 
     const { userId } = req.params;
     const { keyType } = req.query;
     // Ensure the requesting user has permission (either admin or the user themselves)
-    if (req.userId !== userId && req.roles !== 'admin') {
-      return res.status(403).json({ message: 'Unauthorized access to API keys' });
+    if (!req.user) {
+      throw createHttpError(401, "Not authenticated");
     }
 
     const settings = await UserSettings.findOne({ user: userId });
