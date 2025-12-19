@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import "tui-image-editor/dist/tui-image-editor.css";
 import { ThemeProvider } from "@/providers/ThemeProvider";
 import { LayoutProvider } from "@/providers/LayoutProvider";
 import { QueryProvider } from "@/providers/QueryProvider";
@@ -32,6 +33,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        suppressHydrationWarning={true}
       >
         <ThemeProvider
           attribute="class"

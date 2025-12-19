@@ -2,7 +2,6 @@ import { Request, Response, NextFunction } from 'express';
 import Comment from './commentModel';  // Adjust the path as necessary
 import Post from './postModel';        // Adjust the path as necessary
 import createHttpError from 'http-errors';
-import { AuthRequest } from '../../middlewares/authenticate';
 import CommentLike from './commentLikeModel';
 
 // Create a new comment
@@ -239,7 +238,8 @@ export const getCommentWithReplies = async (req: Request, res: Response, next: N
 };
 
 export const getAllComments = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  const _req = req as AuthRequest;
+  const _req = req as Request
+;
   try {
     // Get pagination parameters from query
     const page = parseInt(req.query.page as string) || 1;
@@ -297,7 +297,8 @@ export const getAllComments = async (req: Request, res: Response, next: NextFunc
   }
 };
 export const getUnapprovedCommentsCount = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  const _req = req as AuthRequest;
+  const _req = req as Request
+;
   try {
     let unapprovedCount;
 

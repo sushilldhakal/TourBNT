@@ -1,14 +1,18 @@
-import { AuthRequest } from './../../middlewares/authenticate';
 import { Request, Response, NextFunction } from 'express';
 import UserSettings from './userSettingModel';
 import { encrypt, decrypt } from '../../utils/encryption';
 import createHttpError from 'http-errors';
 
-export const addOrUpdateSettings = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const addOrUpdateSettings = async (req: Request
+, res: Response, next: NextFunction) => {
   try {
     console.log('Request body:', req.body);
 
-    const { userId } = req.params;
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new Error('User ID is required');
+       return next(createHttpError(401, 'Not authenticated'));
+    }
     const { CLOUDINARY_CLOUD, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET, OPENAI_API_KEY, GOOGLE_API_KEY } = req.body;
 
     let settings = await UserSettings.findOne({ user: userId });
@@ -50,7 +54,11 @@ export const addOrUpdateSettings = async (req: AuthRequest, res: Response, next:
 
 export const getUserSettings = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { userId } = req.params;
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new Error('User ID is required');
+       return next(createHttpError(401, 'Not authenticated'));
+    }
 
     let settings = await UserSettings.findOne({ user: userId });
 
@@ -82,9 +90,14 @@ export const getUserSettings = async (req: Request, res: Response, next: NextFun
 };
 
 // New method to get decrypted API keys when needed
-export const getDecryptedApiKey = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const getDecryptedApiKey = async (req: Request
+, res: Response, next: NextFunction) => {
   try {
-    const { userId } = req.params;
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new Error('User ID is required');
+       return next(createHttpError(401, 'Not authenticated'));
+    }
     const { keyType } = req.query;
     // Ensure the requesting user has permission (either admin or the user themselves)
     if (!req.user) {

@@ -4,7 +4,6 @@ import GlobalDestination from './globalDestinationModel';
 import SellerDestinationPreferences from '../seller/sellerDestinationPreferencesModel';
 import Notification from '../../notifications/notificationModel';
 import User from '../../user/userModel';
-import { AuthRequest } from '../../../middlewares/authenticate';
 
 // Utility function to ensure user has sellerInfo
 const ensureSellerInfo = async (user: any, userId: string) => {
@@ -109,7 +108,8 @@ export const getDestinationsByCountry = async (req: Request, res: Response): Pro
 };
 
 // Get destinations for seller (shows own destinations + enabled destinations from preferences)
-export const getSellerDestinations = async (req: AuthRequest, res: Response) => {
+export const getSellerDestinations = async (req: Request
+, res: Response) => {
   try {
     const sellerId = req.user?.id;
     const isAdmin = req.user?.roles.includes('admin') || false;
@@ -222,7 +222,8 @@ export const getSellerDestinations = async (req: AuthRequest, res: Response) => 
 };
 
 // Search destinations for sellers (to discover existing destinations before creating new ones)
-export const searchDestinations = async (req: AuthRequest, res: Response) => {
+export const searchDestinations = async (req: Request
+, res: Response) => {
   try {
     const sellerId = req.user?.id;
     if (!sellerId) {
@@ -280,7 +281,8 @@ export const searchDestinations = async (req: AuthRequest, res: Response) => {
 };
 
 // Get enabled destinations for seller (for tour creation)
-export const getEnabledDestinations = async (req: AuthRequest, res: Response) => {
+export const getEnabledDestinations = async (req: Request
+, res: Response) => {
   try {
     const sellerId = req.user?.id;
     if (!sellerId) {
@@ -316,7 +318,8 @@ export const getEnabledDestinations = async (req: AuthRequest, res: Response) =>
 };
 
 // Get seller's favorite destinations
-export const getFavoriteDestinations = async (req: AuthRequest, res: Response) => {
+export const getFavoriteDestinations = async (req: Request
+, res: Response) => {
   try {
     const sellerId = req.user?.id;
     if (!sellerId) {
@@ -352,7 +355,8 @@ export const getFavoriteDestinations = async (req: AuthRequest, res: Response) =
 };
 
 // Submit new destination for approval
-export const submitDestination = async (req: AuthRequest, res: Response) => {
+export const submitDestination = async (req: Request
+, res: Response) => {
   try {
     const {
       name,
@@ -475,7 +479,8 @@ export const submitDestination = async (req: AuthRequest, res: Response) => {
 };
 
 // Admin: Get pending destinations
-export const getPendingDestinations = async (req: AuthRequest, res: Response) => {
+export const getPendingDestinations = async (req: Request
+, res: Response) => {
   try {
     // Check if user is admin
     if (!req.user?.roles?.includes('admin')) {
@@ -506,7 +511,8 @@ export const getPendingDestinations = async (req: AuthRequest, res: Response) =>
 };
 
 // Admin: Approve destination
-export const approveDestination = async (req: AuthRequest, res: Response) => {
+export const approveDestination = async (req: Request
+, res: Response) => {
   try {
     // Check if user is admin
     if (!req.user?.roles?.includes('admin')) {
@@ -583,7 +589,8 @@ export const approveDestination = async (req: AuthRequest, res: Response) => {
 };
 
 // Admin: Reject destination
-export const rejectDestination = async (req: AuthRequest, res: Response) => {
+export const rejectDestination = async (req: Request
+, res: Response) => {
   try {
     // Check if user is admin
     if (!req.user?.roles?.includes('admin')) {
@@ -667,7 +674,8 @@ export const rejectDestination = async (req: AuthRequest, res: Response) => {
 };
 
 // Admin: Delete destination (HARD DELETE - completely remove from database)
-export const deleteDestination = async (req: AuthRequest, res: Response) => {
+export const deleteDestination = async (req: Request
+, res: Response) => {
   try {
     console.log('🚀 Admin hard deleting destination:', req.user?.roles);
     // Check if user is admin
@@ -714,7 +722,8 @@ export const deleteDestination = async (req: AuthRequest, res: Response) => {
 };
 
 // Update destination (sellers can update their own destinations, admins can update any)
-export const updateDestination = async (req: AuthRequest, res: Response) => {
+export const updateDestination = async (req: Request
+, res: Response) => {
   try {
     const { destinationId } = req.params;
     const userId = req.user?.id;
@@ -853,7 +862,8 @@ export const updateDestination = async (req: AuthRequest, res: Response) => {
     });
   }
 };
-export const updateDestinationPreferences = async (req: AuthRequest, res: Response) => {
+export const updateDestinationPreferences = async (req: Request
+, res: Response) => {
   try {
     const sellerId = req.user?.id;
     if (!sellerId) {
@@ -923,7 +933,8 @@ export const updateDestinationPreferences = async (req: AuthRequest, res: Respon
 };
 
 // Toggle favorite destination
-export const toggleFavoriteDestination = async (req: AuthRequest, res: Response) => {
+export const toggleFavoriteDestination = async (req: Request
+, res: Response) => {
   try {
     const sellerId = req.user?.id;
     if (!sellerId) {
@@ -978,7 +989,8 @@ export const toggleFavoriteDestination = async (req: AuthRequest, res: Response)
 };
 
 // Add existing destination to seller's list
-export const addExistingDestinationToSeller = async (req: AuthRequest, res: Response): Promise<void> => {
+export const addExistingDestinationToSeller = async (req: Request
+, res: Response): Promise<void> => {
 
   try {
     const { destinationId } = req.params;
@@ -1150,7 +1162,8 @@ export const addExistingDestinationToSeller = async (req: AuthRequest, res: Resp
 
 // Toggle destination active status (user-specific, not global)
 // This endpoint toggles the user's personal isActive status for a destination
-export const toggleDestinationActiveStatus = async (req: AuthRequest, res: Response) => {
+export const toggleDestinationActiveStatus = async (req: Request
+, res: Response) => {
   try {
     const { destinationId } = req.params;
     const sellerId = req.user?.id;
@@ -1342,7 +1355,8 @@ export const toggleDestinationActiveStatus = async (req: AuthRequest, res: Respo
 };
 
 // Get user-specific destinations with their personal active status
-export const getUserDestinations = async (req: AuthRequest, res: Response) => {
+export const getUserDestinations = async (req: Request
+, res: Response) => {
   try {
     const sellerId = req.user?.id;
 
@@ -1410,7 +1424,8 @@ export const getUserDestinations = async (req: AuthRequest, res: Response) => {
 };
 
 // Fix destinations with deletedAt but approved status (temporary fix)
-export const fixDeletedApprovedDestinations = async (req: AuthRequest, res: Response) => {
+export const fixDeletedApprovedDestinations = async (req: Request
+, res: Response) => {
   try {
     // Check if user is admin
     if (!req.user?.roles?.includes('admin')) {
@@ -1463,7 +1478,8 @@ export const fixDeletedApprovedDestinations = async (req: AuthRequest, res: Resp
   }
 };
 
-export const removeExistingDestinationFromSeller = async (req: AuthRequest, res: Response): Promise<void> => {
+export const removeExistingDestinationFromSeller = async (req: Request
+, res: Response): Promise<void> => {
   try {
     const { destinationId } = req.params;
     const sellerId = req.user?.id;

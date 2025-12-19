@@ -1,5 +1,4 @@
-import { Request, Response, NextFunction } from 'express';
-import { AuthRequest } from '../../../middlewares/authenticate';
+import { Request, Response } from 'express';
 import { TourService } from '../services/tourService';
 import { extractTourFields } from '../utils/dataProcessors';
 import { sendSuccess, sendError, sendPaginatedResponse, asyncAuthHandler, RESPONSE_MESSAGES } from '../utils/responseHelpers';
@@ -79,7 +78,8 @@ export const getTour = asyncAuthHandler(async (req: Request, res: Response) => {
  * Create a new tour
  */
 export const createTour = asyncAuthHandler(async (req: Request, res: Response) => {
-  const authReq = req as AuthRequest;
+  const authReq = req as Request
+;
   const userId = authReq.user?.id;
 
   if (!userId) {
@@ -105,7 +105,8 @@ export const createTour = asyncAuthHandler(async (req: Request, res: Response) =
  * Update an existing tour
  */
 export const updateTour = asyncAuthHandler(async (req: Request, res: Response) => {
-  const authReq = req as AuthRequest;
+  const authReq = req as Request
+;
   const userId = authReq.user?.id;
   const isAdmin = authReq.user?.roles.includes('admin') || false;
   const { tourId } = req.params;
@@ -135,7 +136,8 @@ export const updateTour = asyncAuthHandler(async (req: Request, res: Response) =
  * Delete a tour
  */
 export const deleteTour = asyncAuthHandler(async (req: Request, res: Response) => {
-  const authReq = req as AuthRequest;
+  const authReq = req as Request
+;
   const userId = authReq.user?.id;
   const isAdmin = authReq.user?.roles.includes('admin') || false;
   const { tourId } = req.params;
@@ -225,7 +227,8 @@ export const getSpecialOfferTours = asyncAuthHandler(async (req: Request, res: R
  * Get user's tours
  */
 export const getUserTours = asyncAuthHandler(async (req: Request, res: Response) => {
-  const authReq = req as AuthRequest;
+  const authReq = req as Request
+;
   const { userId } = req.params; // Use userId from route parameter
   const isAdmin = authReq.user?.roles.includes('admin') || false;
   // Security check: users can only access their own tours unless they're admin
@@ -249,7 +252,8 @@ export const getUserTours = asyncAuthHandler(async (req: Request, res: Response)
  * Get user's tour titles
  */
 export const getUserToursTitle = asyncAuthHandler(async (req: Request, res: Response) => {
-  const authReq = req as AuthRequest;
+  const authReq = req as Request
+;
   const { userId } = req.params; // Use userId from route parameter
 
   // Security check: users can only access their own tours unless they're admin
@@ -266,7 +270,8 @@ export const getUserToursTitle = asyncAuthHandler(async (req: Request, res: Resp
  * Get current user's tours (httpOnly cookie auth)
  */
 export const getMyTours = asyncAuthHandler(async (req: Request, res: Response) => {
-  const authReq = req as AuthRequest;
+  const authReq = req as Request
+;
   const userId = authReq.user!.id; // Get from authenticated cookie, not params
 
   // Get pagination params

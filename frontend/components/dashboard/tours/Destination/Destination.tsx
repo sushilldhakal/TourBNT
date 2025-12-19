@@ -50,19 +50,32 @@ const Destination = () => {
         return userRole === 'admin';
     }, [userRole]);
 
-    // Use different data sources based on user role
-    // Admin: Use global destinations (useDestination)
-    // Seller: Use user-specific destinations (useUserDestinations) 
-    const { data: globalDestinations, isLoading: globalLoading, isError: globalError, refetch: refetchGlobal } = useDestination();
-    const { data: userDestinations, isLoading: userLoading, isError: userError, refetch: refetchUser } = useUserDestinations();
+    // Fetch destinations based on user role (admin sees all, users see their personal destinations)
+    const { data: destinations, isLoading, isError } = useDestinationsRoleBased();
 
-    // Choose the appropriate data source based on user role
-    const destinations = isAdminView ? globalDestinations : userDestinations;
-    const isLoading = isAdminView ? globalLoading : userLoading;
-    const isError = isAdminView ? globalError : userError;
-    const refetch = isAdminView ? refetchGlobal : refetchUser;
-
+    // Fetch pending destinations for admin users
     const { data: pendingDestinations, isLoading: pendingLoading, isError: pendingError } = usePendingDestinations();
+
+    // Filter destinations based on search query
+    const filteredDestinations = destinations?.filter((destination: DestinationTypes) => {
+        const nameMatch = destination.name.toLowerCase().includes(searchQuery.toLowerCase());
+        const countryMatch = destination.country?.toLowerCase().includes(searchQuery.toLowerCase());
+        const cityMatch = destination.city?.toLowerCase().includes(searchQuery.toLowerCase());
+        const regionMatch = destination.region?.toLowerCase().includes(searchQuery.toLowerCase());
+        return nameMatch || countryMatch || cityMatch || regionMatch;
+    });
+
+    // This function will be called when a destination is successfully added
+    const handleDestinationAdded = () => {
+        setIsAddingDestination(false);
+        // Invalidate the appropriate query based on user role
+        if (isAdmin) {
+            queryClient.invalidateQueries({ queryKey: ['seller-destinations'] });
+        } else {
+            queryClient.invalidateQueries({ queryKey: ['user-destinations'] });
+        }
+        queryClient.invalidateQueries({ queryKey: ['pending-destinations'] });
+    };
 
     console.log("destinations response:", destinations);
     console.log("destinations data:", destinations?.data);
@@ -71,88 +84,6 @@ const Destination = () => {
     console.log("isError:", isError);
     console.log("isAdmin:", isAdmin);
     console.log("isAdminView:", isAdminView);
-
-
-
-    // This function will be called when a destination is successfully added
-    const handleDestinationAdded = () => {
-        // Close the add form
-        setIsAddingDestination(false);
-        // Refetch the destinations to update the list
-        refetch();
-        // Also invalidate the query cache to ensure fresh data
-        if (isAdminView) {
-            queryClient.invalidateQueries({ queryKey: ['seller-destinations'] });
-        } else {
-            queryClient.invalidateQueries({ queryKey: ['user-destinations'] });
-        }
-        queryClient.invalidateQueries({ queryKey: ['pending-destinations'] });
-    };
-
-    // Admin mutations
-    const approveMutation = useMutation({
-        mutationFn: (destinationId: string) => approveDestination(destinationId),
-        onSuccess: () => {
-            toast({
-                title: "Destination approved",
-                description: "The destination has been approved and is now available.",
-                variant: "default",
-            });
-            // Invalidate both query types since approval affects both admin and user views
-            queryClient.invalidateQueries({ queryKey: ['seller-destinations'] });
-            queryClient.invalidateQueries({ queryKey: ['user-destinations'] });
-            queryClient.invalidateQueries({ queryKey: ['pending-destinations'] });
-        },
-        onError: () => {
-            toast({
-                title: "Failed to approve destination",
-                description: "There was an error approving the destination.",
-                variant: "destructive",
-            });
-        },
-    });
-
-    const rejectMutation = useMutation({
-        mutationFn: ({ destinationId, reason }: { destinationId: string; reason: string }) =>
-            rejectDestination(destinationId, reason),
-        onSuccess: () => {
-            toast({
-                title: "Destination rejected",
-                description: "The destination has been rejected.",
-                variant: "default",
-            });
-            // Invalidate both query types since rejection affects both admin and user views
-            queryClient.invalidateQueries({ queryKey: ['seller-destinations'] });
-            queryClient.invalidateQueries({ queryKey: ['user-destinations'] });
-            queryClient.invalidateQueries({ queryKey: ['pending-destinations'] });
-            setRejectDialogOpen(false);
-            setRejectReason("");
-            setSelectedDestination(null);
-        },
-        onError: () => {
-            toast({
-                title: "Failed to reject destination",
-                description: "There was an error rejecting the destination.",
-                variant: "destructive",
-            });
-        },
-    });
-
-    // Filter destinations based on search query
-    const filteredDestinations = useMemo(() => {
-        if (!destinations?.data) return [];
-        if (!searchQuery.trim()) return destinations.data;
-
-        return destinations.data.filter((destination: DestinationTypes) =>
-            destination.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            destination.country?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            destination.city?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            destination.region?.toLowerCase().includes(searchQuery.toLowerCase())
-        );
-    }, [destinations?.data, searchQuery]);
-
-    console.log("filteredDestinations:", filteredDestinations);
-    console.log("filteredDestinations length:", filteredDestinations?.length);
 
     return (
         <div className="space-y-6">

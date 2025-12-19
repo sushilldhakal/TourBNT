@@ -14,7 +14,6 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useRouter } from 'next/navigation';
 import { getUserEmail, getUserRole } from '@/lib/utils/auth';
 import { useAuth } from '@/lib/hooks/useAuth';
-import useDashboardStore from '@/store/dashboardStore';
 
 /**
  * Dashboard Header Component
@@ -35,7 +34,7 @@ export function DashboardHeader({ isCollapsed, onToggleSidebar, onLogout }: Dash
     const userRole = getUserRole();
 
     const handleProfileClick = () => {
-        router.push('/dashboard/settings');
+        router.push('/dashboard/profile');
     };
 
     const handleHomeClick = () => {

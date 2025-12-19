@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { toast } from "@/components/ui/use-toast";
 import { Image as ImageIcon, Save, Trash2, X, FolderPlus } from "lucide-react";
 import { useDestination, useAllDestinations, useUserDestinations } from "./useDestination";
-import { addDestination, addExistingDestinationToSeller, getUserToursTitle } from "@/lib/api/destinationApi";
+import { addDestination, addExistingDestinationToSeller, getUserToursTitle } from "@/lib/api/destinations";
 import { Destination } from "@/lib/types";
 import { GalleryPage } from "@/components/dashboard/gallery/GalleryPage";
 import { JSONContent } from "novel";
@@ -83,7 +83,7 @@ const AddDestination = ({ onDestinationAdded }: AddDestinationProps) => {
     const { data: tourTitles } = useQuery({
         queryKey: ['tour-titles'],
         queryFn: () => getUserToursTitle(getUserId() || ''),
-        enabled: true,
+        enabled: !!getUserId(), // Only enable if userId exists
     });
 
     console.log("tourTitles", tourTitles)
@@ -358,7 +358,7 @@ const AddDestination = ({ onDestinationAdded }: AddDestinationProps) => {
                                                     <FormLabel>Featured Tours</FormLabel>
                                                     <FormControl>
                                                         <MultiSelect
-                                                            options={(tourTitles?.data || []).map((item: TourTitle) => ({
+                                                            options={(Array.isArray(tourTitles) ? tourTitles : tourTitles?.data || []).map((item: TourTitle) => ({
                                                                 value: item._id,
                                                                 label: item.code ? `${item.title} (${item.code})` : item.title,
                                                             }))}

@@ -14,12 +14,8 @@ export interface FaqData {
 export const useFaq = (userId: string | null) => {
     return useQuery<FaqData[]>({
         queryKey: ['Faq', userId],
-        queryFn: () => {
-            if (!userId) {
-                return Promise.reject('No user ID provided');
-            }
-            return getUserFaq(userId);
-        },
+        queryFn: () => getUserFaq(userId!),
         enabled: !!userId,
+        staleTime: 5 * 60 * 1000, // optional
     });
 };

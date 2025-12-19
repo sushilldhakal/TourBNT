@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import RichTextRenderer from "@/components/RichTextRenderer";
-import { getLatestTours } from "@/lib/api/tourApi";
+import { getLatestTours } from "@/lib/api/tours";
 
 // Define the tour item interface
 interface TourItem {

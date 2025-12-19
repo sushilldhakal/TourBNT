@@ -66,6 +66,13 @@ export const getDestination = async (destinationId: string) => {
 };
 
 /**
+ * Get single destination by ID (alias for getDestination)
+ */
+export const getDestinationById = async (destinationId: string) => {
+    return getDestination(destinationId);
+};
+
+/**
  * Toggle destination favorite status
  */
 export const toggleDestinationFavorite = async (destinationId: string) => {
@@ -213,5 +220,17 @@ export const searchDestinations = async (searchParams: {
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'searching destinations');
+    }
+};
+
+/**
+ * Get user's tour titles (for featured tours selection)
+ */
+export const getUserToursTitle = async (userId: string) => {
+    try {
+        const response = await api.get(`/api/users/${userId}/tours/titles`);
+        return extractResponseData(response);
+    } catch (error) {
+        throw handleApiError(error, 'fetching tour titles');
     }
 };

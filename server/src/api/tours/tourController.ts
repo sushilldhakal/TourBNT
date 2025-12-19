@@ -2,7 +2,8 @@
 // import CreateHttpError from 'http-errors';
 // import mongoose from 'mongoose';
 // import tourModel from './tourModel';
-// import { AuthRequest } from "../../middlewares/authenticate";
+// import { Request
+ } from "../../middlewares/authenticate";
 // import { Discount, PricingOption, DateRange, Tour, FactValue } from './tourTypes';
 // import { paginate, PaginationParams } from '../../utils/pagination';
 
@@ -777,8 +778,10 @@
 
 //   console.log("req.body", req.body);
 //   try {
-//     // Cast req to AuthRequest to access user properties
-//     const authReq = req as AuthRequest;
+//     // Cast req to Request
+ to access user properties
+//     const authReq = req as Request
+;
 //     // Extract all tour fields using helper function
 //     const {title,code,excerpt,description,tourStatus,basePrice,price,pricePerType,minSize,maxSize,groupSize,pricingOptionsEnabled,fixedDeparture,multipleDates,isSpecialOffer,outline,include,exclude,destination,map,coverImage,file,author,enquiry,category,itinerary,facts,faqs,gallery,location,originalPrice,discountEnabled,discountPrice,discountDateRange,pricingOptions,tourDates,fixedDate,dateRanges
 //     } = extractTourFields(req);
@@ -1011,8 +1014,10 @@
 //   console.log("Tour ID:", req.params.tourId);
 //   console.log("req.body", req.body);
 //   try {
-//     // Cast req to AuthRequest to access user properties
-//     const authReq = req as AuthRequest;
+//     // Cast req to Request
+ to access user properties
+//     const authReq = req as Request
+;
 //     const userId = authReq.user?._id;
 //     const tourId = req.params.tourId; // Changed from req.params.id to req.params.tourId
       
@@ -1447,8 +1452,10 @@
 //   next: NextFunction
 // ) => {
 //   try {
-//     // Cast to AuthRequest to access user properties
-//     const authReq = req as AuthRequest;
+//     // Cast to Request
+ to access user properties
+//     const authReq = req as Request
+;
     
 //     // Get pagination parameters from query
 //     const page = parseInt(req.query.page as string) || 1;
@@ -1501,7 +1508,8 @@
 //   next: NextFunction
 // ) => {
 //   try {
-//     const authReq = req as AuthRequest;
+//     const authReq = req as Request
+;
 //     const userId = authreq.user.id;
 //     const tours = await tourModel
 //       .find({ author: userId })

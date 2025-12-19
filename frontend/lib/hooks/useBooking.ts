@@ -6,7 +6,7 @@ import {
     getBookingByReference,
     validatePromoCode,
     cancelBooking,
-} from '../api/bookingApi';
+} from '../api/bookings';
 import { CartBooking } from '../cartUtils';
 
 /**

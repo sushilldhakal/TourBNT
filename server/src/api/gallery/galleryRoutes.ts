@@ -56,6 +56,13 @@ const galleryRoutes = express.Router();
 galleryRoutes.get(
     '/',
     authenticate,
+    (req, res, next) => {
+        // Normalize roles to lowercase for comparison
+        if (req.user) {
+            req.user.roles = req.user.roles.map((role: string) => role.toLowerCase());
+        }
+        next();
+    },
     authorizeRoles('admin', 'seller') as RequestHandler,
     paginationMiddleware,
     asyncAuthHandler(getMedia)

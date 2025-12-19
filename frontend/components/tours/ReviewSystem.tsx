@@ -17,7 +17,7 @@ import {
     likeReply,
     incrementReviewView,
     incrementReplyView,
-} from '@/lib/api/reviewApi';
+} from '@/lib/api/reviews';
 import { Review, Reply } from '@/lib/types';
 import { cn } from '@/lib/utils';
 

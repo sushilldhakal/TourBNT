@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getPosts, deletePost } from '@/lib/api/posts';
+import { deletePost, getAllUserPosts } from '@/lib/api/posts';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
     CirclePlus,
@@ -35,7 +35,7 @@ export default function PostsPage() {
 
     const { data, isLoading, isError } = useQuery({
         queryKey: ['posts'],
-        queryFn: getPosts,
+        queryFn: getAllUserPosts,
     });
 
     const deleteMutation = useMutation({
@@ -90,6 +90,17 @@ export default function PostsPage() {
 
     const posts = (data as any)?.posts || (data as any)?.data || [];
     const tableData = posts;
+
+    // Debug logs - these will show you the actual data state
+    console.log('=== POSTS DEBUG ===');
+    console.log('isLoading:', isLoading);
+    console.log('isError:', isError);
+    console.log('data:', data);
+    console.log('posts array:', posts);
+    console.log('tableData:', tableData);
+    console.log('==================');
+
+
 
     const columns: any[] = [
         {

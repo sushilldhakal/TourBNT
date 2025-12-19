@@ -2,7 +2,6 @@ import { Request, Response } from "express";
 import rateLimit from 'express-rate-limit';
 import { config } from "../../config/config";
 import OpenAI from "openai";
-import { AuthRequest } from "../../middlewares/authenticate";
 import UserSettings from "../user/userSettingModel";
 import { decrypt } from "../../utils/encryption";
 
@@ -17,7 +16,8 @@ const limiter = rateLimit({
   message: 'You have reached your request limit for the day.',
 });
 
-export const generateCompletion = async (req: AuthRequest, res: Response) => {
+export const generateCompletion = async (req: Request
+, res: Response) => {
   try {
     const { prompt, option, command } = req.body;
     const userId = req.user;

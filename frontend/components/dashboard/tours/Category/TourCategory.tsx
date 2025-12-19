@@ -24,7 +24,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useCategoriesRoleBased, usePendingCategories } from "./useCategories";
-import { approveCategory, deleteCategory, rejectCategory } from "@/lib/api/categoryApi";
+import { approveCategory, deleteCategory, rejectCategory } from "@/lib/api/categories";
 import { CategoryData } from "@/lib/types";
 import { ViewToggle, ViewMode } from "../ViewToggle";
 import { getViewPreference, setViewPreference } from "@/lib/utils/viewPreferences";
@@ -231,71 +231,108 @@ const TourCategory = () => {
             {/* Admin: Pending Categories Section */}
             {isAdmin && pendingCategories && pendingCategories.length > 0 && (
                 <>
-                    <div className="flex items-center gap-2 mb-6">
-                        <AlertTriangle className="h-5 w-5 text-orange-500" />
-                        <h2 className="text-xl font-semibold">Pending Categories for Approval</h2>
-                        <Badge variant="outline" className="ml-2 bg-orange-100 text-orange-700 border-orange-300">
-                            {pendingCategories.length} pending
-                        </Badge>
-                    </div>
+                    <Card className="shadow-sm py-0 border-2 border-destructive/20 bg-gradient-to-br from-background via-background to-destructive/5">
+                        <CardHeader className="pb-4 pt-4 rounded-t-xl bg-gradient-to-r from-destructive/10 via-destructive/5 to-transparent border-b">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 rounded-lg bg-destructive/20">
+                                        <AlertTriangle className="h-5 w-5 text-destructive" />
+                                    </div>
+                                    <div>
+                                        <CardTitle className="text-xl font-semibold">Pending Categories for Approval</CardTitle>
+                                        <CardDescription className="text-sm mt-1">
+                                            Review and approve or reject category submissions
+                                        </CardDescription>
+                                    </div>
+                                </div>
+                                <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/30 shadow-sm">
+                                    {pendingCategories.length} {pendingCategories.length === 1 ? 'item' : 'items'}
+                                </Badge>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="p-6">
+                            <div className="space-y-4">
+                                {pendingCategories.map((category) => (
+                                    <Card
+                                        key={category._id}
+                                        className="overflow-hidden pt-0 border-2 border-destructive/10 bg-gradient-to-br from-card via-card to-destructive/5 hover:border-destructive/20 hover:shadow-md transition-all duration-200"
+                                    >
+                                        <div className="flex flex-col lg:flex-row">
+                                            {/* Image Section */}
+                                            <div className="lg:w-48 h-48 lg:h-auto relative overflow-hidden bg-muted">
+                                                {category.imageUrl ? (
+                                                    <img
+                                                        src={category.imageUrl}
+                                                        alt={category.name}
+                                                        className="w-full h-full object-cover"
+                                                    />
+                                                ) : (
+                                                    <div className="w-full h-full bg-gradient-to-br from-muted to-muted/80 flex items-center justify-center">
+                                                        <Folder className="h-12 w-12 text-muted-foreground" />
+                                                    </div>
+                                                )}
+                                                <div className="absolute top-3 right-3">
+                                                    <Badge variant="outline" className="bg-destructive/90 hover:bg-destructive text-white border-destructive/50 shadow-md backdrop-blur-sm">
+                                                        <AlertTriangle className="h-3 w-3 mr-1" />
+                                                        Pending
+                                                    </Badge>
+                                                </div>
+                                            </div>
 
-                    <div className="space-y-4 mb-8">
-                        {pendingCategories.map((category) => (
-                            <Card key={category._id} className="overflow-hidden py-0 border-orange-200 bg-gradient-to-r from-orange-50 to-amber-50 hover:shadow-lg transition-all duration-200">
-                                <CardHeader className="pb-3">
-                                    <div className="flex items-start justify-between">
-                                        <div className="flex-1">
-                                            <div className="flex items-center gap-2 mb-2">
-                                                <Folder className="h-5 w-5 text-orange-600" />
-                                                <CardTitle className="text-lg">{category.name}</CardTitle>
-                                                <Badge className="bg-orange-500 hover:bg-orange-600 text-white">
-                                                    Pending
-                                                </Badge>
+                                            {/* Content Section */}
+                                            <div className="flex-1 flex flex-col">
+                                                <CardHeader className="pb-3 pt-4 rounded-t-xl">
+                                                    <div className="flex items-start justify-between gap-4">
+                                                        <div className="flex-1 space-y-2">
+                                                            <div className="flex items-center gap-2">
+                                                                <Folder className="h-4 w-4 text-primary" />
+                                                                <CardTitle className="text-lg font-semibold">{category.name}</CardTitle>
+                                                            </div>
+                                                            <CardDescription className="text-sm">
+                                                                {category.description || 'No description provided'}
+                                                            </CardDescription>
+                                                            {category.reason && (
+                                                                <div className="mt-2 p-2 rounded-md bg-muted/50 border border-muted">
+                                                                    <p className="text-xs font-medium text-muted-foreground mb-1">Reason:</p>
+                                                                    <p className="text-xs text-muted-foreground">{category.reason}</p>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </CardHeader>
+                                                <CardContent className="pt-0 pb-4">
+                                                    <div className="flex items-center gap-2">
+                                                        <Button
+                                                            size="sm"
+                                                            onClick={() => approveMutation.mutate(category._id)}
+                                                            disabled={approveMutation.isPending}
+                                                            className="gap-2"
+                                                        >
+                                                            <Check className="h-4 w-4" />
+                                                            {approveMutation.isPending ? 'Approving...' : 'Approve'}
+                                                        </Button>
+                                                        <Button
+                                                            size="sm"
+                                                            variant="destructive"
+                                                            onClick={() => {
+                                                                setSelectedCategory(category);
+                                                                setRejectDialogOpen(true);
+                                                            }}
+                                                            disabled={rejectMutation.isPending}
+                                                            className="gap-2"
+                                                        >
+                                                            <XIcon className="h-4 w-4" />
+                                                            {rejectMutation.isPending ? 'Rejecting...' : 'Reject'}
+                                                        </Button>
+                                                    </div>
+                                                </CardContent>
                                             </div>
-                                            <CardDescription className="text-sm text-muted-foreground">
-                                                {category.description || 'No description provided'}
-                                            </CardDescription>
                                         </div>
-                                        {category.imageUrl && (
-                                            <div className="w-16 h-16 rounded-lg overflow-hidden bg-muted ml-4">
-                                                <img
-                                                    src={category.imageUrl}
-                                                    alt={category.name}
-                                                    className="w-full h-full object-cover"
-                                                />
-                                            </div>
-                                        )}
-                                    </div>
-                                </CardHeader>
-                                <CardContent className="pt-0">
-                                    <div className="flex items-center gap-2">
-                                        <Button
-                                            size="sm"
-                                            onClick={() => approveMutation.mutate(category._id)}
-                                            disabled={approveMutation.isPending}
-                                            className="bg-green-600 hover:bg-green-700 text-white"
-                                        >
-                                            <Check className="h-4 w-4 mr-1" />
-                                            Approve
-                                        </Button>
-                                        <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() => {
-                                                setSelectedCategory(category);
-                                                setRejectDialogOpen(true);
-                                            }}
-                                            disabled={rejectMutation.isPending}
-                                            className="border-red-300 text-red-700 hover:bg-red-50"
-                                        >
-                                            <XIcon className="h-4 w-4 mr-1" />
-                                            Reject
-                                        </Button>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        ))}
-                    </div>
+                                    </Card>
+                                ))}
+                            </div>
+                        </CardContent>
+                    </Card>
 
                     <Separator className="my-6" />
                 </>

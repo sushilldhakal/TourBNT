@@ -1,6 +1,6 @@
 import express, { RequestHandler } from "express";
-import { authenticate, authorizeRoles, AuthRequest } from "../../../middlewares/authenticate";
-import { addFacts, getAllFacts, getUserFacts, updateFacts, getSingleFacts, deleteMultipleFacts } from "./factsController";
+import { authenticate, authorizeRoles, requireOwnerOrAdmin } from "../../../middlewares/authenticate";
+import { addFacts, getAllFacts, getUserFacts, updateFacts, getSingleFacts, deleteMultipleFacts, deleteFacts } from "./factsController";
 import { uploadNone } from "../../../middlewares/multer";
 import { asyncAuthHandler } from "../../../utils/routeWrapper";
 import { paginationMiddleware } from "../../../middlewares/pagination";
@@ -12,8 +12,10 @@ const factsRouter = express.Router();
  * /api/facts:
  *   get:
  *     summary: Get all facts
- *     description: Retrieve all tour facts (PUBLIC)
+ *     description: Retrieve all tour facts (Admin or Seller only)
  *     tags: [Facts]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: query
  *         name: page
@@ -50,6 +52,10 @@ const factsRouter = express.Router();
  *                       type: integer
  *                     totalPages:
  *                       type: integer
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
  *   post:
  *     summary: Create tour fact
  *     description: Add a new tour fact (admin/seller only)
@@ -79,10 +85,8 @@ const factsRouter = express.Router();
  *               $ref: '#/components/schemas/Fact'
  *       401:
  *         description: Unauthorized
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Forbidden
  *   delete:
  *     summary: Bulk delete facts
  *     description: Delete multiple tour facts at once (admin/seller only)
@@ -105,45 +109,47 @@ const factsRouter = express.Router();
  *     responses:
  *       200:
  *         description: Facts deleted successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: array
- *                   items:
- *                     type: string
- *                 failed:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       id:
- *                         type: string
- *                       error:
- *                         type: string
  *       401:
  *         description: Unauthorized
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Forbidden
  */
 
-// GET /api/facts - List all facts with pagination (PUBLIC)
-factsRouter.get('/', paginationMiddleware, asyncAuthHandler(getAllFacts));
+/**
+ * GET /api/facts
+ * List all facts (Admin or Seller only)
+ */
+factsRouter.get(
+    '/',
+    authenticate,
+    authorizeRoles('admin', 'seller') as RequestHandler,
+    paginationMiddleware,
+    asyncAuthHandler(getAllFacts)
+);
 
-// POST /api/facts - Create fact (Protected, Admin or Seller)
+/**
+ * POST /api/facts
+ * Create a new fact (Admin or Seller only)
+ */
 factsRouter.post(
     '/',
     authenticate,
-    uploadNone,
     authorizeRoles('admin', 'seller') as RequestHandler,
+    uploadNone,
     asyncAuthHandler(addFacts)
 );
 
-// DELETE /api/facts - Bulk delete facts (Protected, Admin or Seller)
+factsRouter.delete(
+    '/:factId',
+    authenticate,
+    authorizeRoles('admin', 'seller') as RequestHandler,
+    asyncAuthHandler(deleteFacts)
+);
+
+/**
+ * DELETE /api/facts
+ * Bulk delete facts (Admin or Seller only)
+ */
 factsRouter.delete(
     '/',
     authenticate,
@@ -151,13 +157,12 @@ factsRouter.delete(
     asyncAuthHandler(deleteMultipleFacts)
 );
 
-// Get Facts for a Specific User (Protected, Admin or Seller)
 /**
  * @swagger
  * /api/facts/user/{userId}:
  *   get:
  *     summary: Get user's facts
- *     description: Retrieve all facts created by a specific user (admin/seller only)
+ *     description: Retrieve all facts created by a specific user (owner or admin)
  *     tags: [Facts]
  *     security:
  *       - bearerAuth: []
@@ -179,15 +184,19 @@ factsRouter.delete(
  *                 $ref: '#/components/schemas/Fact'
  *       401:
  *         description: Unauthorized
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Forbidden
+ */
+
+/**
+ * GET /api/facts/user/:userId
+ * Get facts created by a specific user
+ * Owner of the facts or Admin
  */
 factsRouter.get(
     '/user/:userId',
     authenticate,
-    authorizeRoles('admin', 'seller') as RequestHandler,
+    requireOwnerOrAdmin(req => req.params.userId),
     asyncAuthHandler(getUserFacts)
 );
 
@@ -196,8 +205,10 @@ factsRouter.get(
  * /api/facts/{factId}:
  *   get:
  *     summary: Get fact by ID
- *     description: Retrieve a specific fact by its ID (PUBLIC)
+ *     description: Retrieve a specific fact by its ID (owner or admin)
  *     tags: [Facts]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: factId
@@ -212,15 +223,15 @@ factsRouter.get(
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/Fact'
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
  *       404:
  *         description: Fact not found
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
  *   patch:
  *     summary: Update fact
- *     description: Update a tour fact (admin/seller only)
+ *     description: Update a tour fact (owner or admin)
  *     tags: [Facts]
  *     security:
  *       - bearerAuth: []
@@ -251,21 +262,32 @@ factsRouter.get(
  *               $ref: '#/components/schemas/Fact'
  *       401:
  *         description: Unauthorized
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Forbidden
+ *       404:
+ *         description: Fact not found
  */
 
-// GET /api/facts/:factId - Get single fact (PUBLIC)
-factsRouter.get('/:factId', asyncAuthHandler(getSingleFacts));
+/**
+ * GET /api/facts/:factId
+ * Get single fact (Owner or Admin)
+ * Note: Ownership check is handled in the controller by looking up the fact's user field
+ */
+factsRouter.get(
+    '/:factId',
+    authenticate,
+    asyncAuthHandler(getSingleFacts)
+);
 
-// PATCH /api/facts/:factId - Update fact (Protected, Admin or Seller)
+/**
+ * PATCH /api/facts/:factId
+ * Update a fact (Owner or Admin)
+ * Note: Ownership check is handled in the controller by looking up the fact's user field
+ */
 factsRouter.patch(
     '/:factId',
     authenticate,
     uploadNone,
-    authorizeRoles('admin', 'seller') as RequestHandler,
     asyncAuthHandler(updateFacts)
 );
 

@@ -9,17 +9,17 @@ interface ImageEditorWrapperProps {
     onClose: () => void;
 }
 
-// TUI Image Editor following proper Next.js pattern
+// Use the more robust TuiImageEditor implementation
 const TuiImageEditorProper = dynamic(
-    () => import('./TuiImageEditorProper'),
+    () => import('./TuiImageEditor'),
     {
-        ssr: false, // This is crucial for TUI Image Editor
+        ssr: false,
         loading: () => (
             <div className="flex items-center justify-center h-[600px] w-full">
                 <div className="text-center">
                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
                     <p className="text-lg font-medium">Loading TUI Image Editor</p>
-                    <p className="text-sm text-muted-foreground mt-2">Please wait...</p>
+                    <p className="text-sm text-muted-foreground mt-2">Initializing canvas and tools...</p>
                 </div>
             </div>
         ),

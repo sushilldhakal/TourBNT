@@ -1,7 +1,7 @@
 'use client';
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
-import { updateCategory, getCategoryById, toggleCategoryActiveStatus, removeExistingCategoryFromSeller } from "@/lib/api/categoryApi";
+import { updateCategory, getCategoryById, toggleCategoryActiveStatus, removeExistingCategoryFromSeller } from "@/lib/api/categories";
 import { toast } from "@/components/ui/use-toast";
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";

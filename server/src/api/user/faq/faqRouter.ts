@@ -1,13 +1,19 @@
 import express, { RequestHandler } from "express";
-import { authenticate, authorizeRoles } from "../../../middlewares/authenticate";
-import { addFaqs, getUserFaqs, updateFaqs, deleteFaqs, getAllFaqs, getSingleFaqs, bulkDeleteFaqs } from "./faqController";
+import { authenticate, authorizeRoles, requireOwnerOrAdmin } from "../../../middlewares/authenticate";
+import {
+  addFaqs,
+  getAllFaqs,
+  getUserFaqs,
+  updateFaqs,
+  getSingleFaqs,
+  deleteFaqs,
+  bulkDeleteFaqs
+} from "./faqController";
 import { uploadNone } from "../../../middlewares/multer";
 import { asyncAuthHandler } from "../../../utils/routeWrapper";
 import { paginationMiddleware } from "../../../middlewares/pagination";
 
 const faqsRouter = express.Router();
-
-// RESTful FAQ Routes
 
 /**
  * @swagger
@@ -81,10 +87,8 @@ const faqsRouter = express.Router();
  *               $ref: '#/components/schemas/FAQ'
  *       401:
  *         description: Unauthorized
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Forbidden
  *   delete:
  *     summary: Bulk delete FAQs
  *     description: Delete multiple FAQs at once (admin/seller only)
@@ -107,39 +111,34 @@ const faqsRouter = express.Router();
  *     responses:
  *       200:
  *         description: FAQs deleted successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: array
- *                   items:
- *                     type: string
- *                 failed:
- *                   type: array
- *                   items:
- *                     type: object
  *       401:
  *         description: Unauthorized
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Forbidden
  */
-// GET /api/faqs - List all FAQs with pagination (PUBLIC)
+
+/**
+ * GET /api/faqs
+ * List all FAQs (PUBLIC)
+ */
 faqsRouter.get('/', paginationMiddleware, asyncAuthHandler(getAllFaqs));
 
-// POST /api/faqs - Create FAQ (Protected, Admin or Seller)
+/**
+ * POST /api/faqs
+ * Create FAQ (Admin or Seller)
+ */
 faqsRouter.post(
     '/',
     authenticate,
-    uploadNone,
     authorizeRoles('admin', 'seller') as RequestHandler,
+    uploadNone,
     asyncAuthHandler(addFaqs)
 );
 
-// DELETE /api/faqs - Bulk delete FAQs (Protected, Admin or Seller)
+/**
+ * DELETE /api/faqs
+ * Bulk delete FAQs (Admin or Seller)
+ */
 faqsRouter.delete(
     '/',
     authenticate,
@@ -147,13 +146,12 @@ faqsRouter.delete(
     asyncAuthHandler(bulkDeleteFaqs)
 );
 
-// Get FAQs for a Specific User (Protected, Admin or Seller)
 /**
  * @swagger
  * /api/faqs/user/{userId}:
  *   get:
  *     summary: Get user's FAQs
- *     description: Retrieve all FAQs created by a specific user (admin/seller only)
+ *     description: Retrieve all FAQs created by a specific user (owner or admin)
  *     tags: [FAQs]
  *     security:
  *       - bearerAuth: []
@@ -175,15 +173,18 @@ faqsRouter.delete(
  *                 $ref: '#/components/schemas/FAQ'
  *       401:
  *         description: Unauthorized
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Forbidden
+ */
+
+/**
+ * GET /api/faqs/user/:userId
+ * Get FAQs created by a specific user (Owner or Admin)
  */
 faqsRouter.get(
     '/user/:userId',
     authenticate,
-    authorizeRoles('admin', 'seller') as RequestHandler,
+    requireOwnerOrAdmin(req => req.params.userId),
     asyncAuthHandler(getUserFaqs)
 );
 
@@ -210,13 +211,9 @@ faqsRouter.get(
  *               $ref: '#/components/schemas/FAQ'
  *       404:
  *         description: FAQ not found
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
  *   patch:
  *     summary: Update FAQ
- *     description: Update a frequently asked question (admin/seller only)
+ *     description: Update a frequently asked question (owner or admin)
  *     tags: [FAQs]
  *     security:
  *       - bearerAuth: []
@@ -247,13 +244,13 @@ faqsRouter.get(
  *               $ref: '#/components/schemas/FAQ'
  *       401:
  *         description: Unauthorized
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Forbidden
+ *       404:
+ *         description: FAQ not found
  *   delete:
  *     summary: Delete FAQ
- *     description: Delete a frequently asked question (admin/seller only)
+ *     description: Delete a frequently asked question (owner or admin)
  *     tags: [FAQs]
  *     security:
  *       - bearerAuth: []
@@ -269,28 +266,38 @@ faqsRouter.get(
  *         description: FAQ deleted successfully
  *       401:
  *         description: Unauthorized
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Forbidden
+ *       404:
+ *         description: FAQ not found
  */
-// GET /api/faqs/:faqId - Get single FAQ (PUBLIC)
+
+/**
+ * GET /api/faqs/:faqId
+ * Get single FAQ (PUBLIC)
+ */
 faqsRouter.get('/:faqId', asyncAuthHandler(getSingleFaqs));
 
-// PATCH /api/faqs/:faqId - Update FAQ (Protected, Admin or Seller)
+/**
+ * PATCH /api/faqs/:faqId
+ * Update FAQ (Owner or Admin)
+ * Note: Ownership check is handled in the controller by looking up the FAQ's user field
+ */
 faqsRouter.patch(
     '/:faqId',
     authenticate,
-    uploadNone,
-    authorizeRoles('admin', 'seller') as RequestHandler,
+    // Remove uploadNone - we're sending JSON, not FormData
     asyncAuthHandler(updateFaqs)
 );
 
-// DELETE /api/faqs/:faqId - Delete single FAQ (Protected, Admin or Seller)
+/**
+ * DELETE /api/faqs/:faqId
+ * Delete FAQ (Owner or Admin)
+ * Note: Ownership check is handled in the controller by looking up the FAQ's user field
+ */
 faqsRouter.delete(
     '/:faqId',
     authenticate,
-    authorizeRoles('admin', 'seller') as RequestHandler,
     asyncAuthHandler(deleteFaqs)
 );
 

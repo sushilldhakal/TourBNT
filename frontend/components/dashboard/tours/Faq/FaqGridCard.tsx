@@ -3,13 +3,7 @@ import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { toast } from "@/components/ui/use-toast";
-import { getSingleFaq, updateFaq } from "@/lib/api/faqApi";
-import { FaqData } from "./useFaq";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
-import { Edit, HelpCircle, MessageCircle, Save, Trash2, X } from "lucide-react";
+import { HelpCircle, MessageCircle, Save, Trash2, X, Edit } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +14,8 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
+import { FaqData } from "./useFaq";
+import { useFaqItem } from "./useFaqItem";
 
 interface FaqGridCardProps {
     faq?: FaqData;
@@ -30,107 +26,20 @@ const FaqGridCard = ({
     faq,
     DeleteFaq,
 }: FaqGridCardProps) => {
-    const [isEditMode, setIsEditMode] = useState<boolean>(false);
-    const [editingFaqId, setEditingFaqId] = useState<string | null>(null);
-    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-
-    const queryClient = useQueryClient();
-    const form = useForm({
-        defaultValues: {
-            question: faq?.question || '',
-            answer: faq?.answer || '',
-            userId: '',
-        },
-    });
-
-    const { data: faqSingle, isLoading, isError } = useQuery<FaqData>({
-        queryKey: ['singleFaq', editingFaqId],
-        queryFn: () => editingFaqId ? getSingleFaq(editingFaqId) : Promise.reject('No faq ID provided'),
-        enabled: isEditMode && !!editingFaqId,
-    });
-
-    useEffect(() => {
-        if (faqSingle && isEditMode) {
-            form.setValue('question', faqSingle.question);
-            form.setValue('answer', faqSingle.answer);
-        } else if (faq && isEditMode) {
-            form.setValue('question', faq.question);
-            form.setValue('answer', faq.answer);
-        }
-    }, [faqSingle, isEditMode, form, faq]);
-
-    const updateFaqMutation = useMutation({
-        mutationFn: (faqData: FormData) => updateFaq(faqData, faq?.id || faq?._id || ''),
-        onSuccess: () => {
-            toast({
-                title: 'FAQ updated successfully',
-                description: 'Your changes have been saved.',
-                variant: 'default',
-            });
-            setEditingFaqId(null);
-            setIsEditMode(false);
-            queryClient.invalidateQueries({ queryKey: ['Faq'] });
-        },
-        onError: () => {
-            toast({
-                title: 'Failed to update FAQ',
-                description: 'An error occurred while saving changes.',
-                variant: 'destructive',
-            });
-        },
-    });
-
-    const handleUpdateFaq = async () => {
-        const formData = new FormData();
-        formData.append('question', form.getValues('question') || '');
-        formData.append('answer', form.getValues('answer') || '');
-
-        try {
-            await updateFaqMutation.mutateAsync(formData);
-        } catch (error) {
-            toast({
-                title: 'Failed to update FAQ',
-                description: 'Please try again later.',
-                variant: 'destructive',
-            });
-        }
-    };
-
-    const handleDeleteFaq = () => {
-        setDeleteDialogOpen(true);
-    };
-
-    const confirmDeleteFaq = () => {
-        if (DeleteFaq && (faq?.id || faq?._id)) {
-            DeleteFaq(faq.id || faq._id as string);
-            setDeleteDialogOpen(false);
-            toast({
-                title: 'FAQ deleted successfully',
-                description: 'The FAQ has been removed.',
-                variant: 'default',
-            });
-        } else {
-            toast({
-                title: 'Failed to delete FAQ',
-                description: 'An error occurred while deleting the FAQ.',
-                variant: 'destructive',
-            });
-            setDeleteDialogOpen(false);
-        }
-    };
-
-    const handleEditClick = () => {
-        if (faq) {
-            setEditingFaqId(faq.id || faq._id || '');
-            setIsEditMode(true);
-        }
-    };
-
-    const handleCancelClick = () => {
-        setEditingFaqId(null);
-        setIsEditMode(false);
-        form.reset();
-    };
+    const {
+        isEditMode,
+        deleteDialogOpen,
+        setDeleteDialogOpen,
+        form,
+        isLoading,
+        isError,
+        updateFaqMutation,
+        handleUpdateFaq,
+        handleDeleteFaq,
+        confirmDeleteFaq,
+        handleEditClick,
+        handleCancelClick,
+    } = useFaqItem({ faq, DeleteFaq });
 
     if (isLoading) return (
         <Card className="shadow-xs animate-pulse">
@@ -151,10 +60,12 @@ const FaqGridCard = ({
 
     return (
         <Form {...form}>
-            <form onSubmit={(e) => {
-                e.preventDefault();
-                form.handleSubmit(handleUpdateFaq)();
-            }}>
+            <form
+                onSubmit={(e) => {
+                    e.preventDefault();
+                    form.handleSubmit(handleUpdateFaq)(e);
+                }}
+            >
                 <Card className={cn(
                     "shadow-xs overflow-hidden transition-all h-full flex py-0 flex-col",
                     isEditMode ? "border-primary/30 bg-primary/5" : "hover:border-border/80"
@@ -256,7 +167,11 @@ const FaqGridCard = ({
                                     type="button"
                                     variant="ghost"
                                     size="sm"
-                                    onClick={handleEditClick}
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        handleEditClick(e);
+                                    }}
                                     className="text-muted-foreground hover:text-primary gap-1.5"
                                 >
                                     <Edit className="h-3.5 w-3.5" />
@@ -266,7 +181,11 @@ const FaqGridCard = ({
                                     type="button"
                                     variant="ghost"
                                     size="sm"
-                                    onClick={handleDeleteFaq}
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        handleDeleteFaq();
+                                    }}
                                     className="text-muted-foreground hover:text-destructive gap-1.5"
                                 >
                                     <Trash2 className="h-3.5 w-3.5" />

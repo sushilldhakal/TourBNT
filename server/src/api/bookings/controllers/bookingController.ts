@@ -1,6 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
 import { BookingService } from '../services/bookingService';
-import { AuthRequest } from '../../../middlewares/authenticate';
 import { sendSuccess, sendPaginatedResponse } from '../../../utils/responseHandler';
 import { HTTP_STATUS } from '../../../utils/httpStatusCodes';
 import createHttpError from 'http-errors';
@@ -8,7 +7,8 @@ import createHttpError from 'http-errors';
 /**
  * Create a new booking
  */
-export const createBooking = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const createBooking = async (req: Request
+, res: Response, next: NextFunction) => {
     try {
         const { tourId, tourTitle, tourCode, departureDate, participants, pricing, contactInfo, specialRequests } = req.body;
 
@@ -58,7 +58,8 @@ export const createBooking = async (req: AuthRequest, res: Response, next: NextF
 /**
  * Get all bookings (admin/seller only)
  */
-export const getAllBookings = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const getAllBookings = async (req: Request
+, res: Response, next: NextFunction) => {
     try {
         // Get pagination params from middleware
         const { page, limit } = req.pagination || { page: 1, limit: 10 };
@@ -277,7 +278,8 @@ export const getBookingStats = async (req: Request, res: Response, next: NextFun
 /**
  * Download booking voucher
  */
-export const downloadVoucher = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const downloadVoucher = async (req: Request
+, res: Response, next: NextFunction) => {
     try {
         const { bookingId } = req.params;
 

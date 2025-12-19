@@ -1,7 +1,6 @@
 import { NextFunction, Request, Response } from 'express';
 import Post from './postModel';  // Assuming Post model is in models folder
 import createHttpError from 'http-errors';
-import { AuthRequest } from '../../middlewares/authenticate';
 import { HTTP_STATUS } from '../../utils/httpStatusCodes';
 
 // Add a new post
@@ -9,7 +8,8 @@ export const addPost = async (req: Request,
   res: Response,
   next: NextFunction): Promise<void> => {
   try {
-    const _req = req as AuthRequest;
+    const _req = req as Request
+;
     const { title, content, tags, image, status, enableComments } = req.body;
 
     // Parse the tags if it's a string, otherwise use as-is
@@ -92,7 +92,8 @@ export const getAllPosts = async (req: Request,
 
 export const getAllUserPosts = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const _req = req as AuthRequest; // Assuming `userId` and `role` are available in _req
+    const _req = req as Request
+; // Assuming `userId` and `role` are available in _req
     const { page = 1, limit = 10, sortBy = 'createdAt', sortOrder = 'desc', search } = req.query;
 
     // Pagination
@@ -188,7 +189,8 @@ export const getPost = async (req: Request, res: Response, next: NextFunction): 
 
 export const getUserPost = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const _req = req as AuthRequest; // Assuming `userId` and `role` are available in _req
+    const _req = req as Request
+; // Assuming `userId` and `role` are available in _req
     const { postId } = req.params;
 
     // Fetch the post by ID
@@ -235,7 +237,8 @@ export const getUserPost = async (req: Request, res: Response, next: NextFunctio
 // Delete a post by ID
 export const deletePost = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const _req = req as AuthRequest; // Assume user information (including role) is available in _req
+    const _req = req as Request
+; // Assume user information (including role) is available in _req
     const { postId } = req.params;
 
     // Find the post by ID
@@ -284,9 +287,61 @@ export const deletePost = async (req: Request, res: Response, next: NextFunction
 // Edit a post using PATCH
 export const editPost = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const _req = req as AuthRequest; // Assume user info (including role) is available in _req
+    const _req = req as Request
+;
     const { postId } = req.params;
-    const updates = req.body;
+    
+    // Extract updates from req.body (now parsed by multer)
+    const updates: any = {};
+    
+    // Handle title
+    if (req.body.title !== undefined) {
+      updates.title = req.body.title;
+    }
+    
+    // Handle status
+    if (req.body.status !== undefined) {
+      updates.status = req.body.status;
+    }
+    
+    // Handle content
+    if (req.body.content !== undefined) {
+      // Content might be a JSON string, parse it if needed
+      const parsedContent = typeof req.body.content === 'string' ? req.body.content : JSON.stringify(req.body.content);
+      updates.content = parsedContent;
+    }
+    
+    // Handle image
+    if (req.body.image !== undefined) {
+      updates.image = req.body.image;
+    }
+    
+    // Handle tags (FormData sends tags[] as array)
+    if (req.body.tags !== undefined) {
+      // If tags is a string, try to parse it, otherwise use as-is
+      let parsedTags = req.body.tags;
+      if (typeof parsedTags === 'string') {
+        try {
+          parsedTags = JSON.parse(parsedTags);
+        } catch {
+          // If not JSON, treat as single tag
+          parsedTags = [parsedTags];
+        }
+      }
+      // If it's an array with one element that's a string, it might be from FormData tags[]
+      if (Array.isArray(parsedTags) && parsedTags.length === 1 && typeof parsedTags[0] === 'string') {
+        updates.tags = parsedTags;
+      } else if (Array.isArray(parsedTags)) {
+        updates.tags = parsedTags;
+      }
+    }
+    
+    // Handle enableComments
+    if (req.body.enableComments !== undefined) {
+      updates.enableComments = req.body.enableComments === 'true' || req.body.enableComments === true;
+    }
+
+    console.log('Updating post with:', updates); // Debug log
 
     // Fetch the post by ID to verify the owner
     const post = await Post.findById(postId);

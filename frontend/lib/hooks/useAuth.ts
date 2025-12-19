@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api/apiClient';
 import useUserStore, { User } from '@/lib/store/useUserStore';
-import { logoutUser } from '@/lib/api/userApi';
+import { logoutUser } from '@/lib/api/users';
 
 /**
  * useAuth Hook

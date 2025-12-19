@@ -11,9 +11,13 @@ export const uploadAvatar = async (req: Request, res: Response, next: NextFuncti
       return next(createHttpError(401, 'Not authenticated'));
     }
 
-    const userId = req.params.userId;
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new Error('User ID is required');
+       return next(createHttpError(401, 'Not authenticated'));
+    }
     const currentUserRoles = req.user.roles;
-    const currentUserId = req.user.id;
+    const currentUserId = userId;
 
     // Check if user exists
     const user = await userModel.findById(userId);
@@ -66,7 +70,10 @@ export const uploadAvatar = async (req: Request, res: Response, next: NextFuncti
 // Get user avatar
 export const getUserAvatar = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const userId = req.params.userId;
+    const userId = req.user?.id;
+    if (!userId) {
+      return next(createHttpError(401, 'Not authenticated'));
+    }
 
     // Find user
     const user = await userModel.findById(userId).select('avatar');

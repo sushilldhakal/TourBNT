@@ -1,6 +1,6 @@
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { getTourById, getLatestTours } from '@/lib/api/tourApi';
+import { getTourById, getLatestTours } from '@/lib/api/tours';
 import { Tour } from '@/lib/types';
 import TourBanner from '@/components/tours/TourBanner';
 import { TourHeader } from '@/components/tours/TourHeader';

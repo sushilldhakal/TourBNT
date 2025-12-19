@@ -90,6 +90,7 @@ export interface CategoryData {
     isApproved: boolean;
     approvalStatus: 'pending' | 'approved' | 'rejected';
     usageCount?: number;
+    reason?: string; // Add this field
 }
 
 // Destination types

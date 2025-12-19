@@ -1,10 +1,12 @@
 import { Response } from 'express';
 import Notification from './notificationModel';
-import { AuthRequest } from '../../middlewares/authenticate';
+import { Request
+ } from '../../middlewares/authenticate';
 import { HTTP_STATUS } from '../../utils/httpStatusCodes';
 
 // Get notifications for authenticated user
-export const getUserNotifications = async (req: AuthRequest, res: Response) => {
+export const getUserNotifications = async (req: Request
+, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
@@ -63,7 +65,8 @@ export const getUserNotifications = async (req: AuthRequest, res: Response) => {
 };
 
 // Mark notification as read
-export const markNotificationAsRead = async (req: AuthRequest, res: Response) => {
+export const markNotificationAsRead = async (req: Request
+, res: Response) => {
   try {
     const userId = req.user?.id;
     const { id } = req.params;
@@ -116,7 +119,8 @@ export const markNotificationAsRead = async (req: AuthRequest, res: Response) =>
 };
 
 // Delete notification
-export const deleteNotification = async (req: AuthRequest, res: Response) => {
+export const deleteNotification = async (req: Request
+, res: Response) => {
   try {
     const userId = req.user?.id;
     const { id } = req.params;

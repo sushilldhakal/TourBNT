@@ -4,7 +4,8 @@ import { GalleryDocument } from './galleryTypes';
 // import cloudinary from '../config/cloudinary';
 import { v2 as cloudinary } from "cloudinary";
 import createHttpError from 'http-errors';
-import { AuthRequest } from '../../middlewares/authenticate';
+import { Request
+ } from '../../middlewares/authenticate';
 import mongoose from 'mongoose';
 import fs from 'fs';
 import User from "../user/userModel";
@@ -28,7 +29,8 @@ interface CloudinaryResource {
   bytes: string;
 }
 
-export const getSingleMedia = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const getSingleMedia = async (req: Request
+, res: Response, next: NextFunction) => {
   try {
     const { mediaId } = req.params; // Changed from publicId to mediaId
     const { mediaType: queryMediaType } = req.query as { mediaType: string };
@@ -211,7 +213,8 @@ const fetchResourceByPublicId = async (mediaType: string, publicId: string, owne
   });
 };
 
-export const getMedia = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const getMedia = async (req: Request
+, res: Response, next: NextFunction) => {
   try {
     const { mediaType } = req.query;
     const { page, limit, skip } = req.pagination!; // Get pagination from middleware
@@ -219,7 +222,7 @@ export const getMedia = async (req: AuthRequest, res: Response, next: NextFuncti
     if (!['images', 'pdfs', 'videos'].includes(mediaType as string)) {
       return next(createHttpError(400, 'Invalid mediaType parameter'));
     }
-
+    console.log('🔍 getMedia called with:', { mediaType, page, limit, skip }, req.user);
     if (!req.user) return next(createHttpError(401, 'User not authenticated'));
 
     const isAdmin = req.user.roles.includes('admin');
@@ -358,7 +361,8 @@ const handleUploads = async (files: any, title: string | undefined, description:
   return Promise.all(uploadPromises);
 };
 
-export const addMedia = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const addMedia = async (req: Request
+, res: Response, next: NextFunction) => {
   const { description, title } = req.body;
   const files = req.files as { [fieldname: string]: Express.Multer.File[] };
 
@@ -410,7 +414,8 @@ export const addMedia = async (req: AuthRequest, res: Response, next: NextFuncti
   }
 };
 
-export const updateMedia = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const updateMedia = async (req: Request
+, res: Response, next: NextFunction) => {
   try {
     const userId = req.user!.id; // Get userId from authenticated request
     const { mediaId } = req.params; // Changed from imageId to mediaId
@@ -477,7 +482,8 @@ export const updateMedia = async (req: AuthRequest, res: Response, next: NextFun
 };
 
 
-export const deleteMedia = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const deleteMedia = async (req: Request
+, res: Response, next: NextFunction) => {
   try {
     const { user } = req;
     const { imageIds, mediaType } = req.body; // Expect an array of image IDs

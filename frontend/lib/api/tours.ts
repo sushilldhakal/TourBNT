@@ -189,6 +189,13 @@ export const getSingleTour = async (tourId: string) => {
 };
 
 /**
+ * Get single tour by ID (alias for getSingleTour)
+ */
+export const getTourById = async (tourId: string) => {
+    return getSingleTour(tourId);
+};
+
+/**
  * Create a new tour
  * Uses multipart/form-data for file uploads
  */

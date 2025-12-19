@@ -67,6 +67,13 @@ export const getCategory = async (categoryId: string) => {
 };
 
 /**
+ * Get single category by ID (alias for getCategory)
+ */
+export const getCategoryById = async (categoryId: string) => {
+    return getCategory(categoryId);
+};
+
+/**
  * Toggle category favorite status
  */
 export const toggleCategoryFavorite = async (categoryId: string) => {

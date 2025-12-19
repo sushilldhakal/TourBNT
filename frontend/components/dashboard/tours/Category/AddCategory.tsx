@@ -14,7 +14,7 @@ import { toast } from "@/components/ui/use-toast";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
-import { addCategory, addExistingCategoryToSeller } from "@/lib/api/categoryApi";
+import { getAllCategories, getSellerCategories, addCategory, updateCategory, deleteCategory, getCategoryById, addExistingCategoryToSeller } from '@/lib/api/categories';
 import { GalleryPage } from "@/components/dashboard/gallery/GalleryPage";
 interface CategoryFormData {
     name: string;

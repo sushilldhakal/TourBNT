@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/use-toast";
 import { Save, X, Image as ImageIcon, Trash2, FileText } from "lucide-react";
-import { updateDestination, getUserToursTitle, getSellerDestinations, getUserDestinations, toggleDestinationActiveStatus } from "@/lib/api/destinationApi";
+import { updateDestination, getUserToursTitle, getSellerDestinations, getUserDestinations, toggleDestinationActiveStatus } from "@/lib/api/destinations";
 import { GalleryPage } from "@/components/dashboard/gallery/GalleryPage";
 import { MultiSelect, SelectValue } from "@/components/ui/MultiSelect";
 import { NovelEditor } from "../../editor";

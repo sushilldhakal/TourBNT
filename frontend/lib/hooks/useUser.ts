@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import useUserStore from '../store/useUserStore';
-import { fetchCurrentUser } from '../api/userApi';
+import { fetchCurrentUser } from '../api/users';
 import { isAdmin, isAdminOrSeller, isSeller } from '../utils/roles';
 
 /**

@@ -4,12 +4,12 @@ import { authenticate, authorizeRoles } from '../../middlewares/authenticate';
 import { paginationMiddleware } from '../../middlewares/pagination';
 import { filterSortMiddleware } from '../../middlewares/filterSort';
 import { simpleViewTracking } from '../../middlewares/viewTracking';
+import { uploadNone } from '../../middlewares/multer'; // Add this import
 import Post from './postModel';
 import {
   addComment,
   deleteComment,
   editComment,
-  getAllComments,
   getCommentsByPost,
   getUnapprovedCommentsCount,
   addReply,
@@ -124,7 +124,7 @@ postRouter.get('/',
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-postRouter.post('/', authenticate, authorizeRoles('admin', 'seller') as any, addPost);
+postRouter.post('/', uploadNone, authenticate, authorizeRoles('admin', 'seller') as any, addPost);
 
 /**
  * @swagger
@@ -285,7 +285,7 @@ postRouter.get('/:postId',
   }),
   getPost
 );
-postRouter.patch('/:postId', authenticate, editPost);
+postRouter.patch('/:postId', authenticate, uploadNone, editPost); // Add uploadNone middleware
 postRouter.delete('/:postId', authenticate, deletePost);
 
 // Nested post resource routes - RESTful patterns

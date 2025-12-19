@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/use-toast";
 import { Edit, FileText, MapPin, Image as ImageIcon, Save, Trash2, X, Eye, EyeOff, Globe, Users, Star, Calendar } from "lucide-react";
-import { updateDestination, removeExistingDestinationFromSeller, deleteDestination, getUserToursTitle, getSellerDestinations, getUserDestinations, toggleDestinationActiveStatus } from "@/lib/api/destinationApi";
+import { updateDestination, removeExistingDestinationFromSeller, deleteDestination, getUserToursTitle, getSellerDestinations, getUserDestinations, toggleDestinationActiveStatus } from "@/lib/api/destinations";
 import { GalleryPage } from "@/components/dashboard/gallery/GalleryPage";
 
 import { MultiSelect, SelectValue } from "@/components/ui/MultiSelect";

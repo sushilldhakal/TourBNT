@@ -1,19 +1,17 @@
 import { api, serverApi, handleApiError, extractResponseData } from './apiClient';
 
-/**
- * Post API Methods
- * Migrated from dashboard/src/http/postApi.ts
- * Follows server API specifications from API_DOCUMENTATION.md
- */
+
 
 /**
- * Get all posts
+ * Get all posts public 
  */
 export const getPosts = async () => {
     try {
         // Add timestamp to prevent caching
         const timestamp = new Date().getTime();
         const response = await api.get(`/api/posts?_t=${timestamp}`);
+
+        console.log('post detail', response)
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching posts');
@@ -21,7 +19,14 @@ export const getPosts = async () => {
 };
 
 /**
- * Get all posts by current user
+ * Get all posts (alias for getPosts)
+ */
+export const getPost = async (id: string) => {
+    return getPosts();
+};
+
+/**
+ * Get all posts by current user dashboard
  */
 export const getAllUserPosts = async () => {
     try {
@@ -46,7 +51,9 @@ export const getSinglePost = async (postId: string) => {
                 'Pragma': 'no-cache'
             }
         });
-        return extractResponseData(response);
+        const data = extractResponseData(response);
+        // Server returns { post, breadcrumbs }, extract just the post
+        return data.post || data;
     } catch (error) {
         throw handleApiError(error, 'fetching post');
     }

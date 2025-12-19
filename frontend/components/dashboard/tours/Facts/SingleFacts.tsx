@@ -1,15 +1,11 @@
-import React, { memo, useCallback, useMemo, useEffect, useState } from "react";
+import React, { memo, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { toast } from "@/components/ui/use-toast";
-import { getSingleFacts, updateFacts } from "@/lib/api/factsApi";
 import Icon from "@/components/Icon";
 import { InputTags } from "@/components/ui/InputTags";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
 import {
     Dialog,
     DialogContent,
@@ -22,268 +18,39 @@ import { Edit, FileText, Save, Tag, TagsIcon, Trash2, Type, X } from "lucide-rea
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { useAuth } from "@/lib/hooks/useAuth";
-
-interface FactDataWithId {
-    name: string;
-    title?: string;
-    field_type?: string;
-    label: string;
-    icon?: string;
-    id?: string;
-    _id?: string;
-    value: string[] | string | { label: string; value: string }[];
-}
+import { FactData } from "./useFacts";
+import { useFactItem } from "./useFactItem";
 
 interface SingleFactProps {
-    fact?: FactDataWithId;
+    fact?: FactData;
     DeleteFact?: (id: string) => void;
-}
-
-interface FactApiResponse {
-    facts?: FactDataWithId;
-    [key: string]: unknown;
 }
 
 const SingleFact = memo(({
     fact,
     DeleteFact,
 }: SingleFactProps) => {
-    const [isEditMode, setIsEditMode] = useState<boolean>(false);
-    const [valuesTag, setValuesTag] = useState<string[]>([]);
-    const [selectedIcon, setSelectedIcon] = useState<string | null>(null);
-    const [isOpen, setIsOpen] = useState(false);
-    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-
-    const { userId } = useAuth();
-    const queryClient = useQueryClient();
-
-    const form = useForm({
-        defaultValues: {
-            name: fact?.name || '',
-            field_type: fact?.field_type || '',
-            value: Array.isArray(fact?.value) ? fact.value : [],
-            icon: fact?.icon || '',
-        },
-    });
-
-    const { watch } = form;
-    const fieldType = watch('field_type');
-
-    const setupFormFromFact = useCallback((factData: FactDataWithId) => {
-        form.setValue('name', factData.name);
-        form.setValue('field_type', factData.field_type || '');
-        form.setValue('icon', factData.icon || '');
-
-        let parsedValues: string[] = [];
-
-        if (Array.isArray(factData.value)) {
-            parsedValues = factData.value.map(item => {
-                if (typeof item === 'string') {
-                    return item;
-                } else if (typeof item === 'object' && item !== null && 'value' in item) {
-                    return item.value;
-                }
-                return '';
-            });
-        } else if (typeof factData.value === 'string') {
-            try {
-                const parsed = JSON.parse(factData.value);
-                if (Array.isArray(parsed)) {
-                    parsedValues = parsed.map(item => {
-                        if (typeof item === 'string') {
-                            return item;
-                        } else if (typeof item === 'object' && item !== null && 'value' in item) {
-                            return item.value;
-                        }
-                        return '';
-                    });
-                }
-            } catch (e) {
-                // Silent error
-            }
-        }
-
-        form.setValue('value', parsedValues);
-        setValuesTag(parsedValues);
-        setSelectedIcon(factData.icon || null);
-    }, [form]);
-
-    useEffect(() => {
-        if (fact && !isEditMode) {
-            setSelectedIcon(fact.icon || null);
-        }
-    }, [fact, isEditMode]);
-
-    const { data: factSingle, isLoading, isError, refetch } = useQuery<FactApiResponse>({
-        queryKey: ['singleFact', fact?.id || fact?._id],
-        queryFn: () => {
-            const factId = fact?.id || fact?._id;
-            if (factId) {
-                return getSingleFacts(factId);
-            }
-            return Promise.reject('No fact ID provided');
-        },
-        enabled: !!(fact?.id || fact?._id),
-        staleTime: 0,
-    });
-
-    useEffect(() => {
-        if (factSingle && isEditMode) {
-            const factData = factSingle.facts || factSingle;
-            setupFormFromFact(factData as FactDataWithId);
-        }
-    }, [factSingle, isEditMode, setupFormFromFact]);
-
-    const enterEditMode = useCallback(() => {
-        if (fact) {
-            refetch().then(() => {
-                const factData = factSingle?.facts || factSingle || fact;
-                setupFormFromFact(factData as FactDataWithId);
-                setIsEditMode(true);
-            });
-        }
-    }, [fact, setupFormFromFact, factSingle, refetch]);
-
-    const updateFactMutation = useMutation({
-        mutationFn: (factData: FormData) => updateFacts(factData, fact?.id || fact?._id || ''),
-        onSuccess: () => {
-            toast({
-                title: 'Fact updated successfully',
-                description: 'Your changes have been saved.',
-                variant: 'default',
-            });
-            setIsEditMode(false);
-            refetch();
-            queryClient.invalidateQueries({ queryKey: ['facts'] });
-            queryClient.invalidateQueries({ queryKey: ['Facts'] });
-            if (userId) {
-                queryClient.invalidateQueries({ queryKey: ['Facts', userId] });
-            }
-            queryClient.invalidateQueries({ queryKey: ['tours'] });
-        },
-        onError: (e) => {
-            toast({
-                title: 'Failed to update fact',
-                description: 'An error occurred while saving changes.',
-                variant: 'destructive',
-            });
-            console.error("Error on facts update", e);
-        },
-    });
-
-    const handleUpdateFact = useCallback(async () => {
-        const formData = new FormData();
-        formData.append('name', form.getValues('name') || '');
-        formData.append('field_type', form.getValues('field_type') || '');
-
-        if (fieldType === 'Single Select' || fieldType === 'Multi Select') {
-            const values = form.getValues('value');
-
-            if (Array.isArray(values) && values.length > 0) {
-                values.forEach((item, index) => {
-                    const itemValue = typeof item === 'object' && item !== null && 'value' in item ? (item as any).value : String(item);
-                    formData.append(`value[${index}]`, itemValue);
-                });
-            } else if (valuesTag.length > 0) {
-                valuesTag.forEach((item, index) => {
-                    const itemValue = typeof item === 'object' && item !== null && 'value' in item ? (item as any).value : String(item);
-                    formData.append(`value[${index}]`, itemValue);
-                });
-            } else {
-                formData.append('value', '[]');
-            }
-        }
-
-        if (selectedIcon) {
-            formData.append('icon', selectedIcon);
-        }
-
-        try {
-            await updateFactMutation.mutateAsync(formData);
-        } catch (error) {
-            toast({
-                title: 'Failed to update fact',
-                description: 'Please try again later.',
-                variant: 'destructive',
-            });
-        }
-    }, [fieldType, form, selectedIcon, updateFactMutation, valuesTag]);
-
-    const handleDeleteFact = useCallback(() => {
-        setDeleteDialogOpen(true);
-    }, []);
-
-    const confirmDeleteFact = useCallback(() => {
-        if (DeleteFact && (fact?.id || fact?._id)) {
-            DeleteFact(fact.id || fact._id as string);
-            setDeleteDialogOpen(false);
-            toast({
-                title: "Fact deleted",
-                description: "The fact has been deleted successfully."
-            });
-        } else {
-            toast({
-                title: "Error",
-                description: "Could not delete the fact. Please try again.",
-                variant: "destructive"
-            });
-            setDeleteDialogOpen(false);
-        }
-    }, [DeleteFact, fact]);
-
-    const handleEditClick = useCallback(() => {
-        enterEditMode();
-    }, [enterEditMode]);
-
-    const handleCancelClick = useCallback(() => {
-        setIsEditMode(false);
-        form.reset({
-            name: fact?.name || '',
-            field_type: fact?.field_type || '',
-            value: Array.isArray(fact?.value) ? fact.value : [],
-            icon: fact?.icon || '',
-        });
-
-        if (fact) {
-            let parsedValues: string[] = [];
-
-            if (Array.isArray(fact.value)) {
-                parsedValues = fact.value.map(item => {
-                    if (typeof item === 'string') {
-                        return item;
-                    } else if (typeof item === 'object' && item !== null && 'value' in item) {
-                        return item.value;
-                    }
-                    return '';
-                });
-            } else if (typeof fact.value === 'string') {
-                try {
-                    const parsed = JSON.parse(fact.value);
-                    if (Array.isArray(parsed)) {
-                        parsedValues = parsed.map(item => {
-                            if (typeof item === 'string') {
-                                return item;
-                            } else if (typeof item === 'object' && item !== null && 'value' in item) {
-                                return item.value;
-                            }
-                            return '';
-                        });
-                    }
-                } catch (e) {
-                    // Silent error
-                }
-            }
-
-            setValuesTag(parsedValues);
-            setSelectedIcon(fact.icon || null);
-        }
-    }, [fact, form]);
-
-    const handleIconSelect = useCallback((iconName: string) => {
-        setSelectedIcon(iconName);
-        setIsOpen(false);
-    }, []);
+    const {
+        isEditMode,
+        deleteDialogOpen,
+        setDeleteDialogOpen,
+        valuesTag,
+        setValuesTag,
+        selectedIcon,
+        isOpen,
+        setIsOpen,
+        form,
+        fieldType,
+        isLoading,
+        isError,
+        updateFactMutation,
+        handleUpdateFact,
+        handleDeleteFact,
+        confirmDeleteFact,
+        handleEditClick,
+        handleCancelClick,
+        handleIconSelect,
+    } = useFactItem({ fact, DeleteFact });
 
     const loadingComponent = useMemo(() => (
         <Card className="shadow-xs animate-pulse">
@@ -302,8 +69,9 @@ const SingleFact = memo(({
         </Card>
     ), []);
 
-    if (isLoading) return loadingComponent;
-    if (isError) return errorComponent;
+    // Only show loading/error when in edit mode (when query is enabled)
+    if (isEditMode && isLoading) return loadingComponent;
+    if (isEditMode && isError) return errorComponent;
 
     return (
         <Form {...form}>
@@ -350,14 +118,17 @@ const SingleFact = memo(({
                                                 <Type className="h-3.5 w-3.5 text-primary" />
                                                 Fact Type
                                             </FormLabel>
-                                            <Select onValueChange={(value) => {
-                                                if ((value === 'Single Select' || value === 'Multi Select') &&
-                                                    (field.value !== 'Single Select' && field.value !== 'Multi Select')) {
-                                                    setValuesTag([]);
-                                                    form.setValue('value', []);
-                                                }
-                                                field.onChange(value);
-                                            }} value={field.value}>
+                                            <Select
+                                                onValueChange={(value) => {
+                                                    if ((value === 'Single Select' || value === 'Multi Select') &&
+                                                        (field.value !== 'Single Select' && field.value !== 'Multi Select')) {
+                                                        setValuesTag([]);
+                                                        form.setValue('value', []);
+                                                    }
+                                                    field.onChange(value);
+                                                }}
+                                                value={field.value || ''}
+                                            >
                                                 <FormControl>
                                                     <SelectTrigger className="focus-visible:ring-primary">
                                                         <SelectValue placeholder="Select type for fact value" />
@@ -536,7 +307,11 @@ const SingleFact = memo(({
                                     type="button"
                                     variant="ghost"
                                     size="sm"
-                                    onClick={handleEditClick}
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        handleEditClick(e);
+                                    }}
                                     className="text-muted-foreground hover:text-primary gap-1.5"
                                 >
                                     <Edit className="h-3.5 w-3.5" />
@@ -546,7 +321,11 @@ const SingleFact = memo(({
                                     type="button"
                                     variant="ghost"
                                     size="sm"
-                                    onClick={() => handleDeleteFact()}
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        handleDeleteFact();
+                                    }}
                                     className="text-muted-foreground hover:text-destructive gap-1.5"
                                 >
                                     <Trash2 className="h-3.5 w-3.5" />

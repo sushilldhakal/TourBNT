@@ -6,16 +6,19 @@ import {
     Package2, Home, FileText, Users, Image, Settings, Mail, LayoutDashboard,
     ChevronDown, ChevronRight, Plus, List, MapPin, FolderTree, Lightbulb,
     HelpCircle, Calendar, Star, Wrench, MessageSquare, UserPlus, Briefcase,
-    PanelLeftClose, PanelLeft
+    PanelLeftClose, PanelLeft,
+    UserCog
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
     Tooltip,
     TooltipContent,
     TooltipProvider,
     TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { useAuth } from '@/lib/hooks/useAuth';
+import { isAdmin } from '@/lib/utils/roles';
 
 /**
  * Dashboard Sidebar Component
@@ -33,9 +36,10 @@ interface NavigationItem {
     label: string;
     icon: any;
     children?: NavigationItem[];
+    adminOnly?: boolean; // Flag to mark admin-only items
 }
 
-const navigationItems: NavigationItem[] = [
+const baseNavigationItems: NavigationItem[] = [
     {
         href: '/dashboard',
         label: 'Dashboard',
@@ -69,10 +73,16 @@ const navigationItems: NavigationItem[] = [
         label: 'Users',
         icon: Users,
         children: [
-            { href: '/dashboard/users', label: 'All Users', icon: List },
-            { href: '/dashboard/users/add', label: 'Add User', icon: UserPlus },
-            { href: '/dashboard/users/seller-applications', label: 'Seller Applications', icon: Briefcase },
+            { href: '/dashboard/users', label: 'All Users', icon: List, adminOnly: true },
+            // Remove the static edit link - users can access edit from the users list page
+            { href: '/dashboard/users/seller-applications', label: 'Seller Applications', icon: Briefcase, adminOnly: true },
         ]
+    },
+    // Add My Profile link at top level (accessible to all authenticated users)
+    {
+        href: '/dashboard/profile', // We'll create this page
+        label: 'My Profile',
+        icon: UserCog
     },
     {
         href: '/dashboard/gallery',
@@ -82,7 +92,8 @@ const navigationItems: NavigationItem[] = [
     {
         href: '/dashboard/subscribers',
         label: 'Subscribers',
-        icon: Mail
+        icon: Mail,
+        adminOnly: true
     },
     {
         href: '/dashboard/settings',
@@ -94,6 +105,58 @@ const navigationItems: NavigationItem[] = [
 export function DashboardSidebar({ isCollapsed, onToggle }: DashboardSidebarProps) {
     const pathname = usePathname();
     const [expandedItems, setExpandedItems] = useState<string[]>([]);
+    const { userRole, isHydrated, user } = useAuth();
+    const isUserAdmin = isAdmin(userRole);
+
+    // Extract userId to avoid dependency issues
+    const userId = user?.id;
+
+    // Filter navigation items based on user role
+    const navigationItems = useMemo(() => {
+        if (!isHydrated) return baseNavigationItems;
+
+        return baseNavigationItems
+            .filter((item) => {
+                // First, filter out parent items that are admin-only
+                if (item.adminOnly && !isUserAdmin) {
+                    return false;
+                }
+
+                // If item has children, filter them based on admin status
+                if (item.children) {
+                    const filteredChildren = item.children
+                        .filter((child) => {
+                            // Show item if it's not admin-only, or if user is admin
+                            return !child.adminOnly || isUserAdmin;
+                        })
+                        .map((child) => {
+                            // Replace dynamic hrefs with actual user ID
+                            if (child.href === '/dashboard/users/edit/:id' && userId) {
+                                return {
+                                    ...child,
+                                    href: `/dashboard/users/edit/${userId}`,
+                                    label: 'My Profile', // Change label for current user
+                                };
+                            }
+                            return child;
+                        });
+
+                    // If no children remain after filtering, hide the parent
+                    if (filteredChildren.length === 0) {
+                        return false;
+                    }
+
+                    // Update the item with filtered children
+                    item.children = filteredChildren;
+                }
+
+                return true;
+            })
+            .map((item) => {
+                // Return the item (children already filtered if applicable)
+                return item;
+            });
+    }, [isHydrated, isUserAdmin, userId]);
 
     // Auto-expand parent menu if child is active
     useState(() => {

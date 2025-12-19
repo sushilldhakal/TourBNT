@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { loginUser } from "@/lib/api/userApi";
+import { loginUser } from "@/lib/api/users";
 import { api } from "@/lib/api/apiClient";
 import { canAccessDashboard } from "@/lib/utils/roles";
 import { Mail, Lock, User, Phone, CheckCircle2, AlertCircle, Loader2, EyeIcon, EyeOffIcon } from "lucide-react";

@@ -10,13 +10,6 @@ export interface AuthUser {
   roles: string[];
 }
 
-/**
- * Extended Express Request with authentication information
- */
-
-export interface AuthRequest extends Request {
-  user?: AuthUser;
-}
 
 declare global {
   namespace Express {

@@ -159,3 +159,49 @@ export const getBookingStats = async () => {
         throw handleApiError(error, 'fetching booking stats');
     }
 };
+
+/**
+ * Process payment for bookings
+ * @param paymentData - Payment information
+ * @returns Payment confirmation
+ */
+export const processPayment = async (paymentData: {
+    bookings: any[];
+    paymentMethod: 'card' | 'paypal';
+    contactInfo: {
+        firstName: string;
+        lastName: string;
+        email: string;
+        phone: string;
+    };
+    cardInfo?: {
+        cardNumber: string;
+        expiry: string;
+        cvv: string;
+    };
+}) => {
+    try {
+        const response = await api.post('/api/bookings/payment', paymentData, {
+            timeout: 30000, // 30 seconds for payment processing
+        });
+        return extractResponseData(response);
+    } catch (error) {
+        throw handleApiError(error, 'processing payment');
+    }
+};
+
+/**
+ * Validate promo code
+ * @param promoCode - Promo code to validate
+ * @returns Discount information
+ */
+export const validatePromoCode = async (promoCode: string) => {
+    try {
+        const response = await api.post('/api/bookings/promo/validate', { promoCode }, {
+            timeout: 10000,
+        });
+        return extractResponseData(response);
+    } catch (error) {
+        throw handleApiError(error, 'validating promo code');
+    }
+};

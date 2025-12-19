@@ -3,15 +3,8 @@ import { Badge } from "@/components/ui/badge";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { toast } from "@/components/ui/use-toast";
-import { getSingleFacts, updateFacts } from "@/lib/api/factsApi";
-import { FactData } from "./useFacts";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
-import { Edit, Save, Trash2, X, Tag } from "lucide-react";
 import { InputTags } from "@/components/ui/InputTags";
-import Icon from "@/components/Icon";
+import { Edit, Save, Trash2, X } from "lucide-react";
 import {
     Dialog,
     DialogContent,
@@ -21,7 +14,9 @@ import {
 } from "@/components/ui/dialog";
 import AllIcons from "./AllIcons";
 import { Checkbox } from "@/components/ui/checkbox";
-import { useAuth } from "@/lib/hooks/useAuth";
+import Icon from "@/components/Icon";
+import { FactData } from "./useFacts";
+import { useFactItem } from "./useFactItem";
 
 interface FactTableRowProps {
     fact?: FactData;
@@ -36,136 +31,25 @@ const FactTableRow = ({
     isSelected = false,
     onSelectChange,
 }: FactTableRowProps) => {
-    const [isEditMode, setIsEditMode] = useState<boolean>(false);
-    const [valuesTag, setValuesTag] = useState<string[]>([]);
-    const [selectedIcon, setSelectedIcon] = useState<string | null>(null);
-    const [isOpen, setIsOpen] = useState(false);
-    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-
-    const { userId } = useAuth();
-    const queryClient = useQueryClient();
-
-    const form = useForm({
-        defaultValues: {
-            name: fact?.name || '',
-            field_type: fact?.field_type || '',
-            value: Array.isArray(fact?.value) ? fact.value : [],
-            icon: fact?.icon || '',
-        },
-    });
-
-    const { watch } = form;
-    const fieldType = watch('field_type');
-
-    const { data: factSingle, refetch } = useQuery({
-        queryKey: ['singleFact', fact?.id || fact?._id],
-        queryFn: () => {
-            const factId = fact?.id || fact?._id;
-            if (factId) {
-                return getSingleFacts(factId);
-            }
-            return Promise.reject('No fact ID provided');
-        },
-        enabled: false,
-    });
-
-    const updateFactMutation = useMutation({
-        mutationFn: (factData: FormData) => updateFacts(factData, fact?.id || fact?._id || ''),
-        onSuccess: () => {
-            toast({
-                title: 'Fact updated successfully',
-                description: 'Your changes have been saved.',
-            });
-            setIsEditMode(false);
-            queryClient.invalidateQueries({ queryKey: ['Facts'] });
-            if (userId) {
-                queryClient.invalidateQueries({ queryKey: ['Facts', userId] });
-            }
-        },
-        onError: () => {
-            toast({
-                title: 'Failed to update fact',
-                description: 'An error occurred while saving changes.',
-                variant: 'destructive',
-            });
-        },
-    });
-
-    const handleUpdateFact = async () => {
-        const formData = new FormData();
-        formData.append('name', form.getValues('name') || '');
-        formData.append('field_type', form.getValues('field_type') || '');
-
-        if (fieldType === 'Single Select' || fieldType === 'Multi Select') {
-            const values = form.getValues('value');
-            if (Array.isArray(values) && values.length > 0) {
-                values.forEach((item, index) => {
-                    const itemValue = typeof item === 'object' && item !== null && 'value' in item ? (item as any).value : String(item);
-                    formData.append(`value[${index}]`, itemValue);
-                });
-            } else if (valuesTag.length > 0) {
-                valuesTag.forEach((item, index) => {
-                    formData.append(`value[${index}]`, item);
-                });
-            }
-        }
-
-        if (selectedIcon) {
-            formData.append('icon', selectedIcon);
-        }
-
-        try {
-            await updateFactMutation.mutateAsync(formData);
-        } catch (error) {
-            toast({
-                title: 'Failed to update fact',
-                description: 'Please try again later.',
-                variant: 'destructive',
-            });
-        }
-    };
-
-    const confirmDeleteFact = () => {
-        const factId = fact?.id || fact?._id;
-        if (DeleteFact && factId) {
-            DeleteFact(factId);
-            setDeleteDialogOpen(false);
-        }
-    };
-
-    const handleEditClick = () => {
-        if (fact) {
-            refetch().then(() => {
-                const factData = factSingle?.facts || factSingle || fact;
-                form.setValue('name', factData.name);
-                form.setValue('field_type', factData.field_type || '');
-                form.setValue('icon', factData.icon || '');
-
-                let parsedValues: string[] = [];
-                if (Array.isArray(factData.value)) {
-                    parsedValues = factData.value.map((item: any) => {
-                        if (typeof item === 'string') return item;
-                        if (typeof item === 'object' && item !== null && 'value' in item) return item.value;
-                        return '';
-                    });
-                }
-                form.setValue('value', parsedValues);
-                setValuesTag(parsedValues);
-                setSelectedIcon(factData.icon || null);
-                setIsEditMode(true);
-            });
-        }
-    };
-
-    const handleCancelClick = () => {
-        setIsEditMode(false);
-        form.reset();
-    };
-
-    const handleIconSelect = (iconName: string) => {
-        setSelectedIcon(iconName);
-        setIsOpen(false);
-    };
+    const {
+        isEditMode,
+        deleteDialogOpen,
+        setDeleteDialogOpen,
+        valuesTag,
+        setValuesTag,
+        selectedIcon,
+        isOpen,
+        setIsOpen,
+        form,
+        fieldType,
+        updateFactMutation,
+        handleUpdateFact,
+        handleDeleteFact,
+        confirmDeleteFact,
+        handleEditClick,
+        handleCancelClick,
+        handleIconSelect,
+    } = useFactItem({ fact, DeleteFact });
 
     if (isEditMode) {
         return (
@@ -196,7 +80,17 @@ const FactTableRow = ({
                                     render={({ field }) => (
                                         <FormItem>
                                             <FormLabel>Fact Type</FormLabel>
-                                            <Select onValueChange={field.onChange} value={field.value}>
+                                            <Select
+                                                onValueChange={(value) => {
+                                                    if ((value === 'Single Select' || value === 'Multi Select') &&
+                                                        (field.value !== 'Single Select' && field.value !== 'Multi Select')) {
+                                                        setValuesTag([]);
+                                                        form.setValue('value', []);
+                                                    }
+                                                    field.onChange(value);
+                                                }}
+                                                value={field.value || ''}
+                                            >
                                                 <FormControl>
                                                     <SelectTrigger>
                                                         <SelectValue placeholder="Select type" />
@@ -346,14 +240,22 @@ const FactTableRow = ({
                         <Button
                             variant="ghost"
                             size="sm"
-                            onClick={handleEditClick}
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleEditClick(e);
+                            }}
                         >
                             <Edit className="h-4 w-4" />
                         </Button>
                         <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => setDeleteDialogOpen(true)}
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleDeleteFact();
+                            }}
                         >
                             <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>

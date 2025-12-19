@@ -8,7 +8,7 @@ import {
     toggleCategoryActiveStatus,
     removeExistingCategoryFromSeller,
     deleteCategory
-} from "@/lib/api/categoryApi";
+} from "@/lib/api/categories";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CategoryData } from "@/lib/types";
 import { useAuth } from "@/lib/hooks/useAuth";

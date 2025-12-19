@@ -16,9 +16,8 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
-import { TipTapEditor } from '@/components/dashboard/editor/TipTapEditor';
 import { getDefaultItineraryItem } from '@/lib/utils/defaultTourValues';
-
+import NovelEditor from '@/components/dashboard/editor/NovelEditor';
 /**
  * TourItinerary Component
  * Handles tour itinerary with outline and dynamic day-by-day items
@@ -110,16 +109,22 @@ export function TourItinerary() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <TipTapEditor
-                        content={outlineContent}
-                        onChange={handleOutlineChange}
-                        placeholder="Enter a brief overview of the tour itinerary..."
+                    <NovelEditor
+                        initialValue={outlineContent}
+                        onContentChange={handleOutlineChange}
+                        placeholder="List what's included in the tour (e.g., accommodation, meals, transportation, activities)..."
+                        minHeight="250px"
+                        enableAI={false}
+                        enableGallery={true}
                     />
-                    {(errors.itinerary as any)?.outline && (
+                    {(errors.include as any) && (
                         <p className="text-sm text-destructive mt-2">
-                            {(errors.itinerary as any)?.outline?.message as string}
+                            {(errors.include as any)?.message as string}
                         </p>
                     )}
+                    <p className="text-sm text-muted-foreground mt-2">
+                        Tip: Use bullet points to make the list easy to read. Press '/' for formatting options.
+                    </p>
                 </CardContent>
             </Card>
 

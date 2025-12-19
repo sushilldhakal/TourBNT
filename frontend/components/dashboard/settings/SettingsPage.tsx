@@ -348,8 +348,8 @@ export function SettingsPage() {
     };
 
     const renderCloudinaryContent = () => (
-        <Card>
-            <CardHeader className="bg-gradient-to-r from-primary/5 to-primary/10 border-b">
+        <Card className="pt-0">
+            <CardHeader className="bg-gradient-to-r from-primary/5 to-primary/10 border-b pt-4 rounded-t-xl">
                 <div className="flex items-center gap-2">
                     <div className="bg-primary/10 p-2 rounded-full">
                         <CloudIcon className="h-5 w-5 text-primary" />
@@ -416,8 +416,8 @@ export function SettingsPage() {
     );
 
     const renderOpenAIContent = () => (
-        <Card>
-            <CardHeader className="bg-gradient-to-r from-primary/5 to-primary/10 border-b">
+        <Card className="pt-0">
+            <CardHeader className="bg-gradient-to-r from-primary/5 to-primary/10 border-b pt-4 rounded-t-xl">
                 <div className="flex items-center gap-2">
                     <div className="bg-primary/10 p-2 rounded-full">
                         <BrainCircuit className="h-5 w-5 text-primary" />
@@ -487,8 +487,8 @@ export function SettingsPage() {
     );
 
     const renderGoogleMapsContent = () => (
-        <Card>
-            <CardHeader className="bg-gradient-to-r from-primary/5 to-primary/10 border-b">
+        <Card className="pt-0">
+            <CardHeader className="bg-gradient-to-r from-primary/5 to-primary/10 border-b pt-4 rounded-t-xl">
                 <div className="flex items-center gap-2">
                     <div className="bg-primary/10 p-2 rounded-full">
                         <MapPin className="h-5 w-5 text-primary" />
@@ -629,8 +629,8 @@ export function SettingsPage() {
                                     </CardFooter>
                                 </Card>
 
-                                <Card>
-                                    <CardHeader className="pb-3">
+                                <Card className="pt-0">
+                                    <CardHeader className="pb-3 pt-4 rounded-t-xl">
                                         <CardTitle className="text-base flex items-center gap-2">
                                             <Lock className="h-4 w-4 text-muted-foreground" />
                                             Security Information

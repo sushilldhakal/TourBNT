@@ -2,12 +2,6 @@ import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { toast } from "@/components/ui/use-toast";
-import { getSingleFaq, updateFaq } from "@/lib/api/faqApi";
-import { FaqData } from "./useFaq";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
 import { Edit, Save, Trash2, X } from "lucide-react";
 import {
     Dialog,
@@ -17,6 +11,8 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
+import { FaqData } from "./useFaq";
+import { useFaqItem } from "./useFaqItem";
 
 interface FaqTableRowProps {
     faq?: FaqData;
@@ -31,100 +27,24 @@ const FaqTableRow = ({
     isSelected = false,
     onSelectChange,
 }: FaqTableRowProps) => {
-    const [isEditMode, setIsEditMode] = useState<boolean>(false);
-    const [editingFaqId, setEditingFaqId] = useState<string | null>(null);
-    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-
-    const queryClient = useQueryClient();
-    const form = useForm({
-        defaultValues: {
-            question: faq?.question || '',
-            answer: faq?.answer || '',
-            userId: '',
-        },
-    });
-
-    const { data: faqSingle } = useQuery<FaqData>({
-        queryKey: ['singleFaq', editingFaqId],
-        queryFn: () => editingFaqId ? getSingleFaq(editingFaqId) : Promise.reject('No faq ID provided'),
-        enabled: isEditMode && !!editingFaqId,
-    });
-
-    useEffect(() => {
-        if (faqSingle && isEditMode) {
-            form.setValue('question', faqSingle.question);
-            form.setValue('answer', faqSingle.answer);
-        } else if (faq && isEditMode) {
-            form.setValue('question', faq.question);
-            form.setValue('answer', faq.answer);
-        }
-    }, [faqSingle, isEditMode, form, faq]);
-
-    const updateFaqMutation = useMutation({
-        mutationFn: (faqData: FormData) => updateFaq(faqData, faq?.id || faq?._id || ''),
-        onSuccess: () => {
-            toast({
-                title: 'FAQ updated successfully',
-                description: 'Your changes have been saved.',
-            });
-            setEditingFaqId(null);
-            setIsEditMode(false);
-            queryClient.invalidateQueries({ queryKey: ['Faq'] });
-        },
-        onError: () => {
-            toast({
-                title: 'Failed to update FAQ',
-                description: 'An error occurred while saving changes.',
-                variant: 'destructive',
-            });
-        },
-    });
-
-    const handleUpdateFaq = async () => {
-        const formData = new FormData();
-        formData.append('question', form.getValues('question') || '');
-        formData.append('answer', form.getValues('answer') || '');
-
-        try {
-            await updateFaqMutation.mutateAsync(formData);
-        } catch (error) {
-            toast({
-                title: 'Failed to update FAQ',
-                description: 'Please try again later.',
-                variant: 'destructive',
-            });
-        }
-    };
-
-    const confirmDeleteFaq = () => {
-        if (DeleteFaq && (faq?.id || faq?._id)) {
-            DeleteFaq(faq.id || faq._id as string);
-            setDeleteDialogOpen(false);
-        }
-    };
-
-    const handleEditClick = () => {
-        if (faq) {
-            setEditingFaqId(faq.id || faq._id || '');
-            setIsEditMode(true);
-        }
-    };
-
-    const handleCancelClick = () => {
-        setEditingFaqId(null);
-        setIsEditMode(false);
-        form.reset();
-    };
+    const {
+        isEditMode,
+        deleteDialogOpen,
+        setDeleteDialogOpen,
+        form,
+        updateFaqMutation,
+        handleUpdateFaq,
+        confirmDeleteFaq,
+        handleEditClick,
+        handleCancelClick,
+    } = useFaqItem({ faq, DeleteFaq });
 
     if (isEditMode) {
         return (
             <tr className="border-b bg-primary/5">
                 <td colSpan={4} className="p-4">
                     <Form {...form}>
-                        <form onSubmit={(e) => {
-                            e.preventDefault();
-                            form.handleSubmit(handleUpdateFaq)();
-                        }} className="space-y-4">
+                        <form onSubmit={form.handleSubmit(handleUpdateFaq)} className="space-y-4">
                             <FormField
                                 control={form.control}
                                 name="question"

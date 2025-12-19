@@ -27,7 +27,7 @@ export const addComment = async (commentData: FormData, postId: string) => {
  */
 export const getAllComments = async () => {
     try {
-        const response = await api.get('/api/posts/comment/post');
+        const response = await api.get('/api/comments');
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching comments');

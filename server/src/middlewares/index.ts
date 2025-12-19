@@ -26,7 +26,8 @@ export type {
 
 // Authentication (existing)
 export { authenticate, authorizeRoles } from './authenticate';
-export type { AuthRequest } from './authenticate';
+export type { Request
+ } from './authenticate';
 
 // Error handling (existing)
 export { default as globalErrorHandler } from './globalErrorHandler';

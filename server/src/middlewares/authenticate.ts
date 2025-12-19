@@ -3,7 +3,7 @@ import createHttpError from "http-errors";
 import { JwtPayload, verify } from "jsonwebtoken";
 import { config } from "../config/config";
 import { HTTP_STATUS } from "../utils/httpStatusCodes";
-import { AuthRequest, AuthUser } from "../types/express";
+import { AuthUser } from "../types/express";
 import { COOKIE_NAMES } from "../utils/cookieUtils";
 
 /**
@@ -36,8 +36,9 @@ export const authorizeRoles = (...allowedRoles: string[]) => {
   return (req: Request, res: Response, next: NextFunction) => {
     if (!req.user) return next(createHttpError(401, 'Not authenticated'));
 
-    const roles = req.user.roles;
-    const hasRole = roles.some(role => allowedRoles.includes(role));
+    const roles = req.user.roles.map(role => role.toLowerCase());
+    const normalizedAllowedRoles = allowedRoles.map(role => role.toLowerCase());
+    const hasRole = roles.some(role => normalizedAllowedRoles.includes(role));
 
     if (!hasRole) return next(createHttpError(403, 'Forbidden'));
 
@@ -46,9 +47,9 @@ export const authorizeRoles = (...allowedRoles: string[]) => {
 };
 
 export const requireOwnerOrAdmin = (
-  getOwnerId: (req: AuthRequest) => string | undefined
+  getOwnerId: (req: Request) => string | undefined
 ) => {
-  return (req: AuthRequest, res: Response, next: NextFunction) => {
+  return (req: Request, res: Response, next: NextFunction) => {
     // Check if user is authenticated
     if (!req.user) {
       return next(
@@ -74,4 +75,4 @@ export const requireOwnerOrAdmin = (
 };
 
 
-export { authenticate, AuthRequest, AuthUser };
+export { authenticate, Request, AuthUser };

@@ -1,7 +1,6 @@
 import { Request, Response } from 'express';
 import Tour from '../tours/tourModel';
 import mongoose from 'mongoose';
-import { AuthRequest } from '../../middlewares/authenticate';
 import { Review } from './reviewModel';
 
 // Get average rating for a tour
@@ -146,7 +145,8 @@ export const addReview = async (req: Request, res: Response) => {
     try {
         const { tourId } = req.params;
         const { rating, comment } = req.body;
-        const userId = (req as AuthRequest).user?.id;
+        const userId = (req as Request
+).user?.id;
 
         // Ensure user is authenticated
         if (!userId) {
@@ -289,7 +289,8 @@ export const getTourReviews = async (req: Request, res: Response) => {
 // Get pending reviews for a seller's tours (using embedded reviews in tour model)
 export const getPendingReviews = async (req: Request, res: Response) => {
     try {
-        const authReq = req as AuthRequest;
+        const authReq = req as Request
+;
         const userId = authReq.user?.id;
 
         // Ensure user is authenticated
@@ -374,7 +375,8 @@ export const getPendingReviews = async (req: Request, res: Response) => {
 // Get all reviews for a seller (regardless of status) (using embedded reviews in tour model)
 export const getAllReviews = async (req: Request, res: Response) => {
     try {
-        const authReq = req as AuthRequest;
+        const authReq = req as Request
+;
         const userId = authReq.user?.id;
 
         // Ensure user is authenticated
@@ -480,7 +482,8 @@ export const updateReviewStatus = async (req: Request, res: Response) => {
     try {
         const { reviewId } = req.params;
         const { status } = req.body; // 'approved', 'rejected', or 'pending'
-        const authReq = req as AuthRequest;
+        const authReq = req as Request
+;
         const userId = authReq.user?.id;
 
         // Validate inputs
@@ -582,7 +585,8 @@ export const addReviewReply = async (req: Request, res: Response) => {
     try {
         const { reviewId } = req.params;
         const { comment } = req.body;
-        const userId = (req as AuthRequest).user?.id;
+        const userId = (req as Request
+).user?.id;
 
         // Ensure user is authenticated
         if (!userId) {
@@ -692,7 +696,8 @@ export const addReviewReply = async (req: Request, res: Response) => {
 export const likeReview = async (req: Request, res: Response) => {
     try {
         const { reviewId } = req.params;
-        const userId = (req as AuthRequest).user?.id;
+        const userId = (req as Request
+).user?.id;
 
         // Ensure user is authenticated
         if (!userId) {
@@ -755,7 +760,8 @@ export const likeReview = async (req: Request, res: Response) => {
 export const likeReviewReply = async (req: Request, res: Response) => {
     try {
         const { tourId, reviewId, replyId } = req.params;
-        const userId = (req as AuthRequest).user?.id;
+        const userId = (req as Request
+).user?.id;
 
         // Ensure user is authenticated
         if (!userId) {

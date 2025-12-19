@@ -9,7 +9,6 @@ import { config } from "../../config/config";
 import { sendResetPasswordEmail as sendResetPasswordEmailMaileroo, sendVerificationEmail as sendVerificationEmailMaileroo } from "../../controller/maileroo";
 import { uploadSellerDocuments } from "../../services/sellerDocumentService";
 import { HTTP_STATUS } from "../../utils/httpStatusCodes";
-import { AuthRequest } from "../../middlewares/authenticate";
 import { getAuthCookieOptions, getClearCookieOptions, COOKIE_NAMES, COOKIE_DURATIONS } from "../../utils/cookieUtils";
 
 // create user
@@ -98,12 +97,16 @@ export const loginUser = async (req: Request, res: Response, next: NextFunction)
       return next(createHttpError(400, "Username or password incorrect!"));
     }
 
-    // Token generation
     const expiresIn = keepMeSignedIn ? '30d' : '2h';
+
+    // Create JWT token with user ID and roles
     const token = sign(
-      { sub: user._id, roles: user.roles },
-      config.jwtSecret as string,
-      { expiresIn, algorithm: "HS256" }
+      {
+        sub: user._id.toString(),
+        roles: user.roles || [], // Ensure roles is an array
+      },
+      config.jwtSecret,
+      { expiresIn }
     );
 
     // Set token as HTTP-only cookie with proper configuration for dev/prod
@@ -117,7 +120,11 @@ export const loginUser = async (req: Request, res: Response, next: NextFunction)
       user: {
         id: user._id,
         roles: user.roles,
-        email: user.email
+        email: user.email,
+        name: user.name,
+        phone: user.phone,
+        verified: user.verified,
+        avatar: user.avatar,
       }
     });
 
@@ -136,7 +143,8 @@ export const logoutUser = (req: Request, res: Response) => {
 };
 
 // Get current authenticated user
-export const getCurrentUser = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const getCurrentUser = async (req: Request
+, res: Response, next: NextFunction) => {
   try {
     if (!req.user) {
       return next(createHttpError(HTTP_STATUS.UNAUTHORIZED, "Not authenticated"));
@@ -185,7 +193,6 @@ export const getAllUsers = async (req: Request, res: Response, next: NextFunctio
     const query: any = {};
     if (req.filters) {
       if (req.filters.roles) query.roles = req.filters.roles;
-      if (req.filters.verified !== undefined) query.verified = req.filters.verified === 'true';
       if (req.filters.sellerStatus) {
         // Filter by seller application status
         if (req.filters.sellerStatus === 'pending') {
@@ -208,8 +215,13 @@ export const getAllUsers = async (req: Request, res: Response, next: NextFunctio
       sort.createdAt = -1; // Default sort by newest first
     }
 
+    console.log("Final query:", JSON.stringify(query, null, 2));
+    console.log("Sort:", sort);
+    console.log("Pagination:", { page, limit, skip });
+
     // Get total count for pagination metadata
     const total = await userModel.countDocuments(query);
+    console.log("Total users matching query:", total);
 
     // Get paginated users with filters and sorting
     const users = await userModel.find(query)
@@ -218,6 +230,9 @@ export const getAllUsers = async (req: Request, res: Response, next: NextFunctio
       .limit(limit)
       .sort(sort);
 
+    console.log("users returned:", users.length);
+    console.log("User roles in result:", users.map(u => ({ id: u._id, name: u.name, role: u.roles })));
+    
     // Calculate total pages
     const totalPages = Math.ceil(total / limit);
 
@@ -231,27 +246,27 @@ export const getAllUsers = async (req: Request, res: Response, next: NextFunctio
       }
     });
   } catch (err) {
+    console.error("Error in getAllUsers:", err);
     return next(createHttpError(500, "Error while getting users"));
   }
 };
 
 
-// Get a single user by ID
-export const getUserById = async (req: Request, res: Response, next: NextFunction) => {
+// Get a single user by ID (admin only)
+export const getUserById = async (req: Request
+, res: Response, next: NextFunction) => {
   const { userId } = req.params;
+  if (!userId) {
+    return next(createHttpError(400, "User ID is required"));
+  }
+  
   try {
     const user = await userModel.findById(userId);
     if (!user) {
-      throw new Error('User not found');
-      // return next(createHttpError(404, 'User not found'));
+      return next(createHttpError(404, "User not found"));
     }
-    const breadcrumbs = [
-      {
-        label: user.name,
-        url: `/api/users/${userId}`,
-      }
-    ];
-    res.json({ user, breadcrumbs });
+    
+    res.json(user);
   } catch (err) {
     return next(createHttpError(500, "Error while getting user"));
   }
@@ -264,12 +279,10 @@ export const updateUser = async (req: Request, res: Response, next: NextFunction
     return res.status(HTTP_STATUS.BAD_REQUEST).json({ errors: errors.array() });
   }
 
-  const userId = req.params.userId;
-  console.log('🔍 updateUser called for userId:', userId);
-  console.log('📋 Request body keys:', Object.keys(req.body));
-  console.log('📁 Request files:', req.files ? Object.keys(req.files) : 'No files');
-  console.log('📄 Full request body:', req.body);
-
+  const userId = req.user?.id;
+  if (!userId) {
+    return next(createHttpError(401, 'Not authenticated'));
+  }
   try {
     const user = await userModel.findOne({ _id: userId });
 
@@ -484,7 +497,10 @@ export const getSellerApplications = async (req: Request, res: Response, next: N
 };
 
 export const approveSellerApplication = async (req: Request, res: Response, next: NextFunction) => {
-  const userId = req.params.userId;
+  const userId = req.user?.id;
+  if (!userId) {
+    return next(createHttpError(401, 'Not authenticated'));
+  }
 
   try {
     const user = await userModel.findOne({ _id: userId });
@@ -533,7 +549,10 @@ export const approveSellerApplication = async (req: Request, res: Response, next
 
 // Reject seller application (admin only)
 export const rejectSellerApplication = async (req: Request, res: Response, next: NextFunction) => {
-  const userId = req.params.userId;
+  const userId = req.user?.id;
+  if (!userId) {
+    return next(createHttpError(401, 'Not authenticated'));
+  }
   const { reason } = req.body;
 
   try {
@@ -579,7 +598,11 @@ export const rejectSellerApplication = async (req: Request, res: Response, next:
 // Delete a user by ID
 export const deleteUser = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const user = await userModel.findById(req.params.id);
+    const userId = req.user?.id;
+    if (!userId) {
+      return next(createHttpError(401, 'Not authenticated'));
+    }
+    const user = await userModel.findById(userId);
     if (user) {
       await user.deleteOne();
       // Return 204 No Content for successful deletion
@@ -761,5 +784,156 @@ export const deleteSellerApplication = async (req: Request, res: Response, next:
     });
   } catch (error) {
     return next(createHttpError(500, "Error deleting seller application"));
+  }
+};
+// Add these new controller functions for /me routes
+
+// Update current user's profile
+export const updateMyProfile = async (req: Request, res: Response, next: NextFunction) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(HTTP_STATUS.BAD_REQUEST).json({ errors: errors.array() });
+  }
+
+  const userId = req.user?.id;
+  if (!userId) {
+    return next(createHttpError(401, 'Not authenticated'));
+  }
+
+  try {
+    const user = await userModel.findOne({ _id: userId });
+    if (!user) {
+      return next(createHttpError(404, "User not found"));
+    }
+
+    // Check if this is a seller application
+    const isSellerApplication = req.body.companyName && req.body.companyRegistrationNumber && req.body.sellerType;
+
+    if (isSellerApplication) {
+      // ... existing seller application logic ...
+    } else {
+      // Regular profile update
+      const { name, email, phone, bankName, accountNumber, accountHolderName, branchCode } = req.body;
+      
+      const updateData: any = {
+        name: name || user.name,
+        email: email || user.email,
+        phone: phone || user.phone
+      };
+
+      // Handle banking details if provided
+      if (bankName || accountNumber || accountHolderName || branchCode) {
+        // Use MongoDB dot notation to update nested fields directly
+        // This avoids TypeScript issues and is more efficient
+        if (bankName !== undefined) {
+          updateData['sellerInfo.bankDetails.bankName'] = bankName;
+        }
+        if (accountNumber !== undefined) {
+          updateData['sellerInfo.bankDetails.accountNumber'] = accountNumber;
+        }
+        if (accountHolderName !== undefined) {
+          updateData['sellerInfo.bankDetails.accountHolderName'] = accountHolderName;
+        }
+        if (branchCode !== undefined) {
+          updateData['sellerInfo.bankDetails.branchCode'] = branchCode;
+        }
+      }
+
+      const updatedUser = await userModel.findOneAndUpdate(
+        { _id: userId },
+        { $set: updateData },
+        { new: true }
+      );
+      res.json(updatedUser);
+    }
+  } catch (err) {
+    console.error('Error while updating profile:', err);
+    next(createHttpError(500, "Error while updating profile"));
+  }
+};
+
+// Change current user's password
+export const changeMyPassword = async (req: Request
+, res: Response, next: NextFunction) => {
+  const { currentPassword, newPassword } = req.body;
+  
+  if (!currentPassword || !newPassword) {
+    return next(createHttpError(400, "Current password and new password are required"));
+  }
+
+  const userId = req.user?.id;
+  if (!userId) {
+    return next(createHttpError(401, 'Not authenticated'));
+  }
+
+  try {
+    const user = await userModel.findById(userId);
+    if (!user) {
+      return next(createHttpError(404, "User not found"));
+    }
+
+    // Verify current password
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      return next(createHttpError(400, "Current password is incorrect"));
+    }
+
+    // Hash new password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+    // Update password
+    await userModel.findByIdAndUpdate(userId, { password: hashedPassword });
+    
+    res.json({ message: "Password changed successfully" });
+  } catch (err) {
+    console.error('Error while changing password:', err);
+    next(createHttpError(500, "Error while changing password"));
+  }
+};
+
+// Update user by ID (admin only)
+export const updateUserById = async (req: Request
+, res: Response, next: NextFunction) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(HTTP_STATUS.BAD_REQUEST).json({ errors: errors.array() });
+  }
+
+  const { userId } = req.params;
+  if (!userId) {
+    return next(createHttpError(400, "User ID is required"));
+  }
+
+  try {
+    const user = await userModel.findById(userId);
+    if (!user) {
+      return next(createHttpError(404, "User not found"));
+    }
+
+    // Regular user update (admin can update name, email, phone, roles, password)
+    const { name, email, roles, password, phone } = req.body;
+
+    const updateData: any = {
+      name: name || user.name,
+      email: email || user.email,
+      roles: roles || user.roles,
+      phone: phone || user.phone
+    };
+
+    if (password) {
+      const salt = await bcrypt.genSalt(10);
+      updateData.password = await bcrypt.hash(password, salt);
+    }
+
+    const updatedUser = await userModel.findOneAndUpdate(
+      { _id: userId },
+      updateData,
+      { new: true }
+    );
+    res.json(updatedUser);
+  } catch (err) {
+    console.error('Error while updating user:', err);
+    next(createHttpError(500, "Error while updating user"));
   }
 };

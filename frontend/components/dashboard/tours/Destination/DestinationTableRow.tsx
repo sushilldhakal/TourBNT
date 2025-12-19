@@ -11,7 +11,7 @@ import {
     deleteDestination,
     getSellerDestinations,
     getUserDestinations
-} from "@/lib/api/destinationApi";
+} from "@/lib/api/destinations";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EditDestinationDialog } from "./EditDestinationDialog";
 import RichTextRenderer from "@/components/RichTextRenderer";

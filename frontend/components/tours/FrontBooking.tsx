@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { createBooking } from '@/lib/api/bookingApi';
+import { createBooking } from '@/lib/api/bookings';
 import { CartBooking } from '@/lib/cartUtils';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';

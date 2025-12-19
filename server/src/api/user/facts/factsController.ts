@@ -1,4 +1,3 @@
-import { AuthRequest } from './../../../middlewares/authenticate';
 import Facts from './factsModel';
 import { Response, Request, NextFunction } from 'express';
 import TourModel from '../../tours/tourModel';
@@ -6,30 +5,26 @@ import createHttpError from 'http-errors';
 
 
 
-export const getUserFacts = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const getUserFacts = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const requestedUserId = req.params.userId;  // User ID from URL params
+        const requestedUserId = req.params.userId; // Get from URL params
+        const authenticatedUserId = req.user?.id;
+        const userRole = req.user?.roles || [];
 
         if (!req.user) {
-            throw createHttpError(401, "Not authenticated");
+            return next(createHttpError(401, 'Not authenticated'));
         }
-
-        const authenticatedUserId = req.user.id;  // Authenticated user ID
-        const userRole = req.user.roles;  // User role
 
         let facts;
 
         // Admin can view any user's facts
         if (userRole.includes('admin')) {
-            if (requestedUserId) {
-                facts = await Facts.find({ user: requestedUserId });
-            } else {
-                facts = await Facts.find();  // All facts if no specific user requested
-            }
+            facts = await Facts.find({ user: requestedUserId });
         } else {
             // Non-admin users can only view their own facts
-            if (requestedUserId && requestedUserId !== authenticatedUserId) {
-                return res.status(403).json({ message: 'Not authorized to view these facts' });
+            // requireOwnerOrAdmin middleware already ensures this, but double-check
+            if (requestedUserId !== authenticatedUserId) {
+                return next(createHttpError(403, 'Not authorized to view these facts'));
             }
             facts = await Facts.find({ user: authenticatedUserId });
         }
@@ -37,7 +32,7 @@ export const getUserFacts = async (req: AuthRequest, res: Response, next: NextFu
         // Transform facts for response
         const transformedFacts = facts.map(fact => ({
             id: fact._id,
-            _id: fact._id,  // Include both for compatibility
+            _id: fact._id,
             name: fact.name,
             field_type: fact.field_type,
             value: fact.value,
@@ -45,15 +40,14 @@ export const getUserFacts = async (req: AuthRequest, res: Response, next: NextFu
             user: fact.user,
         }));
 
-        console.log("transformedFacts", transformedFacts);
         res.status(200).json(transformedFacts);
     } catch (error) {
         console.error('Error fetching user facts:', error);
-        res.status(500).json({ message: 'Failed to fetch facts' });
+        return next(createHttpError(500, 'Failed to fetch facts'));
     }
 };
 
-export const getAllFacts = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const getAllFacts = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { page, limit, skip } = req.pagination || { page: 1, limit: 10, skip: 0 };
 
@@ -83,18 +77,34 @@ export const getAllFacts = async (req: AuthRequest, res: Response, next: NextFun
     }
 };
 
-export const getSingleFacts = async (req: AuthRequest, res: Response, next: NextFunction) => {
-    const { factsId } = req.params;
+export const getSingleFacts = async (req: Request, res: Response, next: NextFunction) => {
+    const { factId } = req.params; // Note: param name should match route
     try {
-        let facts;
-        facts = await Facts.findById(factsId);  // Admin can view all facts
-        res.status(200).json({ facts });
+        if (!req.user) {
+            return next(createHttpError(401, 'Not authenticated'));
+        }
+
+        const fact = await Facts.findById(factId);
+        if (!fact) {
+            return next(createHttpError(404, 'Fact not found'));
+        }
+
+        const userId = req.user.id;
+        const isAdmin = req.user.roles.includes('admin');
+
+        // Check ownership: user must be the owner or admin
+        if (fact.user.toString() !== userId && !isAdmin) {
+            return next(createHttpError(403, 'Not authorized to view this fact'));
+        }
+
+        res.status(200).json({ fact });
     } catch (error) {
-        res.status(500).json({ message: 'Failed to fetch facts' });
+        console.error('Error fetching fact:', error);
+        return next(createHttpError(500, 'Failed to fetch fact'));
     }
 };
 
-export const addFacts = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const addFacts = async (req: Request, res: Response, next: NextFunction) => {
     try {
         if (!req.user) {
             return res.status(401).json({ message: 'Not authenticated' });
@@ -122,7 +132,7 @@ export const addFacts = async (req: AuthRequest, res: Response, next: NextFuncti
 };
 
 
-export const updateFacts = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const updateFacts = async (req: Request, res: Response, next: NextFunction) => {
     try {
         if (!req.user) {
             return res.status(401).json({ message: 'Not authenticated' });
@@ -183,7 +193,7 @@ export const updateFacts = async (req: AuthRequest, res: Response, next: NextFun
 };
 
 
-export const deleteFacts = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const deleteFacts = async (req: Request, res: Response, next: NextFunction) => {
     try {
         if (!req.user) {
             return res.status(401).json({ message: 'Not authenticated' });
@@ -206,7 +216,7 @@ export const deleteFacts = async (req: AuthRequest, res: Response, next: NextFun
     }
 };
 
-export const deleteMultipleFacts = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const deleteMultipleFacts = async (req: Request, res: Response, next: NextFunction) => {
     try {
         if (!req.user) {
             return res.status(401).json({ message: 'Not authenticated' });

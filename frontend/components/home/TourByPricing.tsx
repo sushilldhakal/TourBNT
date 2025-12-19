@@ -12,7 +12,7 @@ import {
     CarouselItem,
 } from "@/components/ui/carousel";
 import { ThumbsUp } from "lucide-react";
-import { getLatestTours } from "@/lib/api/tourApi";
+import { getLatestTours } from "@/lib/api/tours";
 
 interface TourItem {
     _id: string;

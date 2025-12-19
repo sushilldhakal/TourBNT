@@ -10,7 +10,7 @@ import {
     CarouselItem,
 } from "@/components/ui/carousel";
 import { useEffect, useState } from "react";
-import { getLatestTours } from "@/lib/api/tourApi";
+import { getLatestTours } from "@/lib/api/tours";
 import { useLayout } from "@/providers/LayoutProvider";
 
 interface Tour {

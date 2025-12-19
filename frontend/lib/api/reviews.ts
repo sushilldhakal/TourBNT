@@ -135,14 +135,16 @@ export const getTourRating = async (tourId: string) => {
 };
 
 /**
- * Increment review view count
+ * Increment view count for a review
  * @deprecated View tracking is now automatic on GET requests
  */
 export const incrementReviewView = async (tourId: string, reviewId: string) => {
-    // View tracking is now automatic - this function is kept for backward compatibility
-    // but does nothing as views are tracked automatically on GET requests
-    console.warn('incrementReviewView is deprecated - view tracking is now automatic');
-    return Promise.resolve({ success: true, message: 'View tracking is automatic' });
+    try {
+        const response = await api.post(`/api/reviews/tour/${tourId}/review/${reviewId}/view`);
+        return extractResponseData(response);
+    } catch (error) {
+        throw handleApiError(error, 'incrementing review view');
+    }
 };
 
 /**
@@ -156,5 +158,24 @@ export const likeReplyReview = async (tourId: string, reviewId: string, replyId:
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'liking reply');
+    }
+};
+
+/**
+ * Like a reply (alias for likeReplyReview)
+ */
+export const likeReply = async (tourId: string, reviewId: string, replyId: string) => {
+    return likeReplyReview(tourId, reviewId, replyId);
+};
+
+/**
+ * Increment view count for a reply
+ */
+export const incrementReplyView = async (tourId: string, reviewId: string, replyId: string) => {
+    try {
+        const response = await api.post(`/api/reviews/tour/${tourId}/review/${reviewId}/reply/${replyId}/view`);
+        return extractResponseData(response);
+    } catch (error) {
+        throw handleApiError(error, 'incrementing reply view');
     }
 };

@@ -16,12 +16,8 @@ export interface FactData {
 export const useFacts = (userId: string | null) => {
     return useQuery<FactData[]>({
         queryKey: ['Facts', userId],
-        queryFn: () => {
-            if (!userId) {
-                return Promise.reject('No user ID provided');
-            }
-            return getUserFacts(userId);
-        },
+        queryFn: () => getUserFacts(userId!),
         enabled: !!userId,
+        staleTime: 5 * 60 * 1000, // optional
     });
 };

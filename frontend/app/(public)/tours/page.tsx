@@ -6,9 +6,9 @@ import TourFilters from '@/components/tours/TourFilters';
 import TourCard from '@/components/tours/TourCard';
 import TourSearch from '@/components/tours/TourSearch';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { getTours } from '@/lib/api/tourApi';
-import { getAllCategories } from '@/lib/api/categoryApi';
-import { getAllDestinations } from '@/lib/api/destinationApi';
+import { getTours } from '@/lib/api/tours';
+import { getAllCategories } from '@/lib/api/categories';
+import { getAllDestinations } from '@/lib/api/destinations';
 import { useRef, useCallback, useEffect, useState, useMemo } from 'react';
 
 export default function ToursPage() {

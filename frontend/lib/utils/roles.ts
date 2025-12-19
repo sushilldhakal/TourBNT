@@ -134,14 +134,14 @@ export const getRoleBadgeColor = (role: string | null): string => {
     if (!role) return 'bg-gray-500';
 
     const colorMap: Record<string, string> = {
-        [UserRole.ADMIN]: 'bg-red-500',
-        [UserRole.SELLER]: 'bg-blue-500',
-        [UserRole.ADVERTISER]: 'bg-purple-500',
-        [UserRole.GUIDE]: 'bg-green-500',
-        [UserRole.VENUE]: 'bg-yellow-500',
-        [UserRole.USER]: 'bg-gray-500',
-        [UserRole.SUBSCRIBER]: 'bg-indigo-500',
+        [UserRole.ADMIN]: 'destructive',
+        [UserRole.SELLER]: 'default',
+        [UserRole.ADVERTISER]: 'secondary',
+        [UserRole.GUIDE]: 'secondary',
+        [UserRole.VENUE]: 'secondary',
+        [UserRole.USER]: 'secondary',
+        [UserRole.SUBSCRIBER]: 'secondary',
     };
 
-    return colorMap[role] || 'bg-gray-500';
+    return colorMap[role] || 'secondary';
 };

@@ -1,29 +1,30 @@
-import { AuthRequest } from './../../../middlewares/authenticate';
+
 import Faqs from './faqModel';
 import { Response, Request, NextFunction } from 'express';
 import TourModel from '../../tours/tourModel';
+import createHttpError from 'http-errors';
 
 
-
-export const getUserFaqs = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const getUserFaqs = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const requestedUserId = req.params.userId;  // User ID from URL params
-        const authenticatedUserId = req.user?.id;  // Authenticated user ID
-        const userRole = req.user?.roles;  // User role
+        const requestedUserId = req.params.userId; // Get from URL params
+        const authenticatedUserId = req.user?.id;
+        const userRole = req.user?.roles || [];
+
+        if (!req.user) {
+            return next(createHttpError(401, 'Not authenticated'));
+        }
 
         let faqs;
 
         // Admin can view any user's FAQs
-        if (userRole?.includes('admin')) {
-            if (requestedUserId) {
-                faqs = await Faqs.find({ user: requestedUserId });
-            } else {
-                faqs = await Faqs.find();  // All FAQs if no specific user requested
-            }
+        if (userRole.includes('admin')) {
+            faqs = await Faqs.find({ user: requestedUserId });
         } else {
             // Non-admin users can only view their own FAQs
-            if (requestedUserId && requestedUserId !== authenticatedUserId) {
-                return res.status(403).json({ message: 'Not authorized to view these FAQs' });
+            // requireOwnerOrAdmin middleware already ensures this, but double-check
+            if (requestedUserId !== authenticatedUserId) {
+                return next(createHttpError(403, 'Not authorized to view these FAQs'));
             }
             faqs = await Faqs.find({ user: authenticatedUserId });
         }
@@ -31,21 +32,21 @@ export const getUserFaqs = async (req: AuthRequest, res: Response, next: NextFun
         // Transform FAQs for response
         const transformedFaqs = faqs.map(faq => ({
             id: faq._id,
-            _id: faq._id,  // Include both for compatibility
+            _id: faq._id,
             question: faq.question,
             answer: faq.answer,
             user: faq.user,
         }));
 
-        console.log("transformedFaqs", transformedFaqs);
         res.status(200).json(transformedFaqs);
     } catch (error) {
         console.error('Error fetching user FAQs:', error);
-        res.status(500).json({ message: 'Failed to fetch FAQs' });
+        return next(createHttpError(500, 'Failed to fetch FAQs'));
     }
 };
 
-export const getAllFaqs = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const getAllFaqs = async (req: Request
+, res: Response, next: NextFunction) => {
     try {
         const { page, limit, skip } = (req as any).pagination;
 
@@ -71,19 +72,34 @@ export const getAllFaqs = async (req: AuthRequest, res: Response, next: NextFunc
     }
 };
 
-export const getSingleFaqs = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const getSingleFaqs = async (req: Request, res: Response, next: NextFunction) => {
     const { faqId } = req.params;
 
     try {
-        let faqs;
-        faqs = await Faqs.findById(faqId);  // Admin can view all faqs
-        res.status(200).json({ faqs });
+        const faq = await Faqs.findById(faqId);
+        if (!faq) {
+            return next(createHttpError(404, 'FAQ not found'));
+        }
+
+        // If user is authenticated, check ownership (optional - currently public)
+        if (req.user) {
+            const userId = req.user.id;
+            const isAdmin = req.user.roles.includes('admin');
+            
+            // Only check ownership if user is authenticated (optional check)
+            // Since this is a public route, we don't enforce ownership
+            // But we can still return the FAQ
+        }
+
+        res.status(200).json({ faq });
     } catch (error) {
-        res.status(500).json({ message: 'Failed to fetch faqs' });
+        console.error('Error fetching FAQ:', error);
+        return next(createHttpError(500, 'Failed to fetch FAQ'));
     }
 };
 
-export const addFaqs = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const addFaqs = async (req: Request
+, res: Response, next: NextFunction) => {
     try {
         if (!req.user) {
             return res.status(401).json({ message: 'Not authenticated' });
@@ -106,14 +122,16 @@ export const addFaqs = async (req: AuthRequest, res: Response, next: NextFunctio
 };
 
 
-export const updateFaqs = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const updateFaqs = async (req: Request, res: Response, next: NextFunction) => {
     try {
         if (!req.user) {
             return res.status(401).json({ message: 'Not authenticated' });
         }
         const userId = req.user.id;  // Assuming user ID is available in the request
+        
         const { faqId } = req.params;
         const { question, answer } = req.body;
+        console.log("req.user", userId, faqId, question, answer)
         const faqs = await Faqs.findById(faqId);
         if (!faqs) {
             return res.status(404).json({ message: 'FAQ not found' });
@@ -123,9 +141,13 @@ export const updateFaqs = async (req: AuthRequest, res: Response, next: NextFunc
             return res.status(403).json({ message: 'Not authorized to update this FAQ' });
         }
 
-        // Update the master FAQ
-        faqs.question = question;
-        faqs.answer = answer;
+        
+        if (question) {
+            faqs.question = question;
+        }
+        if (answer) {
+            faqs.answer = answer;
+        }
         await faqs.save();
 
         // Cascade update to all tours that use this FAQ
@@ -162,7 +184,8 @@ export const updateFaqs = async (req: AuthRequest, res: Response, next: NextFunc
 };
 
 
-export const deleteFaqs = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const deleteFaqs = async (req: Request
+, res: Response, next: NextFunction) => {
     try {
         if (!req.user) {
             return res.status(401).json({ message: 'Not authenticated' });
@@ -187,7 +210,8 @@ export const deleteFaqs = async (req: AuthRequest, res: Response, next: NextFunc
     }
 };
 
-export const bulkDeleteFaqs = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const bulkDeleteFaqs = async (req: Request
+, res: Response, next: NextFunction) => {
     try {
         const userId = req.user?.id;
         const userRole = req.user?.roles;

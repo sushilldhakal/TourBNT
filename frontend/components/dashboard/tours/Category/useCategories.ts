@@ -1,9 +1,10 @@
 // src/hooks/useCategories.ts
 import { api } from '@/lib/api';
-import { getSellerCategories, getUserCategories } from '@/lib/api/categoryApi';
+import { getSellerCategories, getUserCategories } from '@/lib/api/categories';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { CategoryData } from '@/lib/types';
 import { useQuery } from '@tanstack/react-query';
+import { isAdmin } from '@/lib/utils/roles'; // Add this import
 
 // Extended interface for backend category data
 interface BackendCategoryData {
@@ -19,6 +20,7 @@ interface BackendCategoryData {
   createdBy: string;
   submittedAt: string;
   popularity: number;
+  reason?: string; // Add this field
 }
 
 // Hook for admin users - shows all categories
@@ -29,9 +31,11 @@ export const useCategories = () => {
       console.log('🔍 Fetching seller categories...');
       const response = await getSellerCategories();
       console.log('📦 Seller categories response:', response);
-      if (response.success) {
+      
+      // Check if response is already an array (direct API response)
+      if (Array.isArray(response)) {
         // Transform backend data to match frontend CategoryData interface
-        const transformed = response.data.map((category: BackendCategoryData): CategoryData => ({
+        const transformed = response.map((category: BackendCategoryData): CategoryData => ({
           _id: category._id,
           id: category._id, // Use _id as id for compatibility
           name: category.name,
@@ -45,6 +49,24 @@ export const useCategories = () => {
         console.log('✅ Transformed categories:', transformed);
         return transformed;
       }
+      
+      // Handle wrapped response format (if server returns { success, data })
+      if (response.success && Array.isArray(response.data)) {
+        const transformed = response.data.map((category: BackendCategoryData): CategoryData => ({
+          _id: category._id,
+          id: category._id,
+          name: category.name,
+          description: category.description,
+          imageUrl: category.imageUrl || '',
+          isActive: category.isActive,
+          isApproved: category.isApproved,
+          approvalStatus: category.approvalStatus,
+          userId: category.createdBy
+        }));
+        console.log('✅ Transformed categories:', transformed);
+        return transformed;
+      }
+      
       console.log('⚠️ No success in response, returning empty array');
       return [];
     },
@@ -58,9 +80,12 @@ export const useUserCategories = () => {
     queryKey: ['user-categories'],
     queryFn: async () => {
       const response = await getUserCategories();
-      if (response.success) {
+      console.log('📦 User categories response:', response);
+      
+      // Check if response is already an array (direct API response)
+      if (Array.isArray(response)) {
         // Transform backend data to match frontend CategoryData interface
-        return response.data.map((category: BackendCategoryData): CategoryData => ({
+        const transformed = response.map((category: BackendCategoryData): CategoryData => ({
           _id: category._id,
           id: category._id, // Use _id as id for compatibility
           name: category.name,
@@ -71,7 +96,26 @@ export const useUserCategories = () => {
           approvalStatus: category.approvalStatus, // This is user-specific status
           userId: category.createdBy
         }));
+        console.log('✅ Transformed user categories:', transformed);
+        return transformed;
       }
+      
+      // Handle wrapped response format (if server returns { success, data })
+      if (response.success && Array.isArray(response.data)) {
+        return response.data.map((category: BackendCategoryData): CategoryData => ({
+          _id: category._id,
+          id: category._id,
+          name: category.name,
+          description: category.description,
+          imageUrl: category.imageUrl || '',
+          isActive: category.isActive,
+          isApproved: category.isApproved,
+          approvalStatus: category.approvalStatus,
+          userId: category.createdBy
+        }));
+      }
+      
+      console.log('⚠️ No valid data in response, returning empty array');
       return [];
     },
     enabled: true,
@@ -84,8 +128,29 @@ export const usePendingCategories = () => {
     queryKey: ['pending-categories'],
     queryFn: async () => {
       const response = await api.get('/api/global/categories/admin/pending');
-      if (response.data.success) {
+      console.log('📦 Pending categories response:', response);
+      
+      // Check if response is already an array (direct API response)
+      if (Array.isArray(response.data)) {
         // Transform backend data to match frontend CategoryData interface
+        const transformed = response.data.map((category: BackendCategoryData): CategoryData => ({
+          _id: category._id,
+          id: category._id,
+          name: category.name,
+          description: category.description,
+          imageUrl: category.imageUrl || '',
+          isActive: category.isActive,
+          isApproved: category.isApproved,
+          approvalStatus: category.approvalStatus,
+          userId: category.createdBy,
+          reason: category.reason, // Add this field
+        }));
+        console.log('✅ Transformed pending categories:', transformed);
+        return transformed;
+      }
+      
+      // Handle wrapped response format (if server returns { success, data })
+      if (response.data.success && Array.isArray(response.data.data)) {
         return response.data.data.map((category: BackendCategoryData): CategoryData => ({
           _id: category._id,
           id: category._id,
@@ -95,9 +160,12 @@ export const usePendingCategories = () => {
           isActive: category.isActive,
           isApproved: category.isApproved,
           approvalStatus: category.approvalStatus,
-          userId: category.createdBy
+          userId: category.createdBy,
+          reason: category.reason, // Add this field
         }));
       }
+      
+      console.log('⚠️ No valid data in response, returning empty array');
       return [];
     },
     enabled: true,
@@ -107,13 +175,14 @@ export const usePendingCategories = () => {
 // Combined hook that automatically chooses the right data source based on user role
 export const useCategoriesRoleBased = () => {
   const { user } = useAuth();
-  const isAdmin = user.roles === 'admin';
+  // Use the isAdmin utility function instead of direct comparison
+  const isAdminUser = isAdmin(user.roles);
 
   // Use admin categories for admin users, user-specific categories for others
   const adminCategories = useCategories();
   const userCategories = useUserCategories();
 
-  return isAdmin ? adminCategories : userCategories;
+  return isAdminUser ? adminCategories : userCategories;
 };
 
 // Hook to get all approved categories for search functionality
