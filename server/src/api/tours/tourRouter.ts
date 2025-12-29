@@ -15,7 +15,6 @@ import {
   getToursByRating,
   getDiscountedTours,
   getSpecialOfferTours,
-  getUserTours,
   getUserToursTitle,
   getMyTours,
   incrementTourBookings,
@@ -52,7 +51,7 @@ const upload = multer({
 // Public routes (no authentication required)
 /**
  * @swagger
- * /api/tours:
+ * /api/v1/tours:
  *   get:
  *     summary: Get all tours
  *     description: Retrieve a paginated list of all published tours with filtering and sorting
@@ -102,7 +101,19 @@ const upload = multer({
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/PaginatedResponse'
+ *               allOf:
+ *                 - $ref: '#/components/schemas/StandardResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       type: object
+ *                       properties:
+ *                         items:
+ *                           type: array
+ *                           items:
+ *                             $ref: '#/components/schemas/Tour'
+ *                         pagination:
+ *                           $ref: '#/components/schemas/PaginationMetadata'
  *       400:
  *         description: Invalid pagination parameters
  *         content:
@@ -117,7 +128,7 @@ router.get('/',
 );
 /**
  * @swagger
- * /api/tours/search:
+ * /api/v1/tours/search:
  *   get:
  *     summary: Search tours
  *     description: Search tours with filters and pagination
@@ -170,7 +181,7 @@ router.get('/search', validateSearchParams, validatePagination, searchTours);
 
 /**
  * @swagger
- * /api/tours/latest:
+ * /api/v1/tours/latest:
  *   get:
  *     summary: Get latest tours
  *     description: Retrieve the most recently created tours
@@ -189,7 +200,7 @@ router.get('/latest', getLatestTours);
 
 /**
  * @swagger
- * /api/tours/by-rating:
+ * /api/v1/tours/by-rating:
  *   get:
  *     summary: Get tours by rating
  *     description: Retrieve tours sorted by average rating
@@ -208,7 +219,7 @@ router.get('/by-rating', getToursByRating);
 
 /**
  * @swagger
- * /api/tours/discounted:
+ * /api/v1/tours/discounted:
  *   get:
  *     summary: Get discounted tours
  *     description: Retrieve tours with active discounts
@@ -227,7 +238,7 @@ router.get('/discounted', getDiscountedTours);
 
 /**
  * @swagger
- * /api/tours/special-offers:
+ * /api/v1/tours/special-offers:
  *   get:
  *     summary: Get special offer tours
  *     description: Retrieve tours marked as special offers
@@ -246,7 +257,7 @@ router.get('/special-offers', getSpecialOfferTours);
 
 /**
  * @swagger
- * /api/tours/me:
+ * /api/v1/tours/me:
  *   get:
  *     summary: Get current user's tours
  *     description: Retrieve all tours created by the authenticated user (uses httpOnly cookie)
@@ -280,56 +291,13 @@ router.get('/special-offers', getSpecialOfferTours);
  */
 router.get('/me', authenticate, validatePagination, getMyTours);
 
-// User tour management routes (must come before /:tourId to avoid conflicts)
-// Note: These routes will be deprecated in favor of /api/users/:userId/tours
-/**
- * @swagger
- * /api/tours/user/{userId}:
- *   get:
- *     summary: Get user's tours
- *     description: Retrieve all tours created by a specific user (deprecated - use /api/users/:userId/tours)
- *     tags: [Tours]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: userId
- *         required: true
- *         schema:
- *           type: string
- *         description: User ID
- *       - in: query
- *         name: page
- *         schema:
- *           type: number
- *           default: 1
- *       - in: query
- *         name: limit
- *         schema:
- *           type: number
- *           default: 10
- *     responses:
- *       200:
- *         description: User tours retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/PaginatedResponse'
- *       401:
- *         description: Unauthorized
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- */
-router.get('/user/:userId', authenticate, validatePagination, getUserTours);
 
 /**
  * @swagger
- * /api/tours/user/{userId}/titles:
+ * /api/v1/tours/user/{userId}/titles:
  *   get:
  *     summary: Get user's tour titles
- *     description: Retrieve titles of all tours created by a specific user (deprecated - use /api/users/:userId/tours)
+ *     description: Retrieve titles of all tours created by a specific user (deprecated - use /api/v1/users/:userId/tours)
  *     tags: [Tours]
  *     security:
  *       - bearerAuth: []
@@ -366,7 +334,7 @@ router.get('/user/:userId/titles', authenticate, getUserToursTitle);
 // RESTful single tour route (public) with automatic view tracking
 /**
  * @swagger
- * /api/tours/{tourId}:
+ * /api/v1/tours/{tourId}:
  *   get:
  *     summary: Get tour by ID
  *     description: Retrieve detailed information about a specific tour (automatically increments view count)
@@ -384,7 +352,12 @@ router.get('/user/:userId/titles', authenticate, getUserToursTitle);
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/Tour'
+ *               allOf:
+ *                 - $ref: '#/components/schemas/StandardResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       $ref: '#/components/schemas/Tour'
  *       400:
  *         description: Invalid tour ID
  *         content:
@@ -408,7 +381,7 @@ router.get('/:tourId',
 
 /**
  * @swagger
- * /api/tours/{tourId}/availability:
+ * /api/v1/tours/{tourId}/availability:
  *   get:
  *     summary: Check tour availability
  *     description: Check if a tour is available for booking
@@ -445,7 +418,7 @@ router.get('/:tourId/availability', validateObjectId(), checkTourAvailability);
 
 /**
  * @swagger
- * /api/tours/{tourId}/reviews:
+ * /api/v1/tours/{tourId}/reviews:
  *   get:
  *     summary: Get tour reviews
  *     description: Retrieve all reviews for a specific tour with pagination
@@ -487,7 +460,7 @@ router.get('/:tourId/reviews', validateObjectId(), paginationMiddleware, getTour
 
 /**
  * @swagger
- * /api/tours/{tourId}/reviews:
+ * /api/v1/tours/{tourId}/reviews:
  *   post:
  *     summary: Add review to tour
  *     description: Submit a new review for a tour (requires authentication)
@@ -535,7 +508,7 @@ router.post('/:tourId/reviews', authenticate, validateObjectId(), addReview);
 
 /**
  * @swagger
- * /api/tours/{tourId}/rating:
+ * /api/v1/tours/{tourId}/rating:
  *   get:
  *     summary: Get tour rating
  *     description: Get average rating and review count for a tour
@@ -564,7 +537,7 @@ router.get('/:tourId/rating', validateObjectId(), getTourRating);
 
 /**
  * @swagger
- * /api/tours/{tourId}/bookings:
+ * /api/v1/tours/{tourId}/bookings:
  *   get:
  *     summary: Get tour bookings
  *     description: Retrieve all bookings for a specific tour (admin/seller only)
@@ -615,7 +588,7 @@ router.get('/:tourId/bookings', authenticate, authorizeRoles('admin', 'seller'),
 // RESTful update and delete routes (requires authentication and admin/seller role)
 /**
  * @swagger
- * /api/tours/{tourId}:
+ * /api/v1/tours/{tourId}:
  *   patch:
  *     summary: Update tour
  *     description: Update tour information including images (requires admin or seller role)
@@ -733,7 +706,7 @@ router.delete('/:tourId', authenticate, authorizeRoles('admin', 'seller') as any
 
 /**
  * @swagger
- * /api/tours/{tourId}/bookings/increment:
+ * /api/v1/tours/{tourId}/bookings/increment:
  *   patch:
  *     summary: Increment tour bookings
  *     description: Increment the booking count for a tour (internal use)
@@ -764,7 +737,7 @@ router.use(authenticate);
 // RESTful create tour route (requires authentication and admin/seller role)
 /**
  * @swagger
- * /api/tours:
+ * /api/v1/tours:
  *   post:
  *     summary: Create new tour
  *     description: Create a new tour with details and images (requires admin or seller role)

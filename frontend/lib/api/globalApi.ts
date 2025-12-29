@@ -9,7 +9,7 @@ export const getApprovedDestinations = async () => {
         // Use serverApi on server-side (no auth), api on client-side
         const apiClient = typeof window === 'undefined' ? serverApi : api;
 
-        const response = await apiClient.get('/api/global/destinations/approved', {
+        const response = await apiClient.get('/global/destinations/approved', {
             timeout: 15000,
         });
         return response.data;
@@ -27,7 +27,7 @@ export const getApprovedCategories = async () => {
         // Use serverApi on server-side (no auth), api on client-side
         const apiClient = typeof window === 'undefined' ? serverApi : api;
 
-        const response = await apiClient.get('/api/global/categories/approved', {
+        const response = await apiClient.get('/global/categories/approved', {
             timeout: 15000,
         });
         return response.data;

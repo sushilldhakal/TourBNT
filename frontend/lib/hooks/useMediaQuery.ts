@@ -109,8 +109,12 @@ export function useMediaQuery(options: UseMediaQueryOptions) {
             }
         },
         getNextPageParam: (lastPage) => {
-            // Return undefined if no more pages (stops infinite query)
-            return lastPage.nextCursor ?? undefined;
+            // Return next page number if there are more pages, otherwise undefined
+            // nextCursor is set to the next page number (or null if no more pages)
+            if (lastPage.nextCursor !== null && lastPage.nextCursor !== undefined) {
+                return lastPage.nextCursor;
+            }
+            return undefined;
         },
         initialPageParam: 1,
         enabled,

@@ -3,6 +3,7 @@ import fs from 'fs';
 import createHttpError from 'http-errors';
 import userModel from './userModel';
 import { uploadToCloudinary } from '../../config/cloudinaryConfig';
+import { sendSuccess } from '../../utils/apiResponse';
 
 // Upload user avatar
 export const uploadAvatar = async (req: Request, res: Response, next: NextFunction) => {
@@ -14,7 +15,7 @@ export const uploadAvatar = async (req: Request, res: Response, next: NextFuncti
     const userId = req.user?.id;
     if (!userId) {
       throw new Error('User ID is required');
-       return next(createHttpError(401, 'Not authenticated'));
+      return next(createHttpError(401, 'Not authenticated'));
     }
     const currentUserRoles = req.user.roles;
     const currentUserId = userId;
@@ -56,11 +57,7 @@ export const uploadAvatar = async (req: Request, res: Response, next: NextFuncti
       { new: true }
     ).select('-password');
 
-    res.status(200).json({
-      success: true,
-      message: 'Avatar uploaded successfully',
-      data: { user: updatedUser, avatar: avatarUrl },
-    });
+    sendSuccess(res, { user: updatedUser, avatar: avatarUrl }, 'Avatar uploaded successfully');
   } catch (error) {
     console.error('Error uploading avatar:', error);
     return next(createHttpError(500, 'Error uploading avatar'));
@@ -82,10 +79,10 @@ export const getUserAvatar = async (req: Request, res: Response, next: NextFunct
     }
 
     if (!user.avatar) {
-      return res.status(404).json({ success: false, message: 'User does not have an avatar' });
+      return next(createHttpError(404, 'User does not have an avatar'));
     }
 
-    res.status(200).json({ success: true, avatar: user.avatar });
+    sendSuccess(res, { avatar: user.avatar }, 'Avatar retrieved successfully');
   } catch (error) {
     console.error('Error getting avatar:', error);
     return next(createHttpError(500, 'Error getting avatar'));

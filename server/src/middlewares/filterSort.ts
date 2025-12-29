@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { HTTP_STATUS } from '../utils/httpStatusCodes';
+import { HTTP_STATUS } from '../utils/apiResponse';
 
 /**
  * Filter parameters interface

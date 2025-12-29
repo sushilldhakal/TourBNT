@@ -38,7 +38,7 @@ export interface BookingData {
  */
 export const createBooking = async (bookingData: BookingData) => {
     try {
-        const response = await api.post('/api/bookings', bookingData);
+        const response = await api.post('/bookings', bookingData);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'creating booking');
@@ -50,7 +50,7 @@ export const createBooking = async (bookingData: BookingData) => {
  */
 export const getBookingByReference = async (reference: string) => {
     try {
-        const response = await api.get(`/api/bookings/reference/${reference}`);
+        const response = await api.get(`/bookings/reference/${reference}`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching booking by reference');
@@ -62,7 +62,7 @@ export const getBookingByReference = async (reference: string) => {
  */
 export const getUserBookings = async (params?: { page?: number; limit?: number }) => {
     try {
-        const response = await api.get('/api/bookings/my-bookings', { params });
+        const response = await api.get('/bookings/my-bookings', { params });
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching user bookings');
@@ -80,7 +80,7 @@ export const getAllBookings = async (params?: {
     tourId?: string;
 }) => {
     try {
-        const response = await api.get('/api/bookings', { params });
+        const response = await api.get('/bookings', { params });
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching bookings');
@@ -92,7 +92,7 @@ export const getAllBookings = async (params?: {
  */
 export const getBookingById = async (bookingId: string) => {
     try {
-        const response = await api.get(`/api/bookings/${bookingId}`);
+        const response = await api.get(`/bookings/${bookingId}`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching booking');
@@ -108,7 +108,7 @@ export const updateBookingStatus = async (
     notes?: string
 ) => {
     try {
-        const response = await api.patch(`/api/bookings/${bookingId}/status`, { status, notes });
+        const response = await api.patch(`/bookings/${bookingId}/status`, { status, notes });
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'updating booking status');
@@ -125,7 +125,7 @@ export const updatePaymentStatus = async (
     transactionId?: string
 ) => {
     try {
-        const response = await api.patch(`/api/bookings/${bookingId}/payment`, {
+        const response = await api.patch(`/bookings/${bookingId}/payment`, {
             paymentStatus,
             paidAmount,
             transactionId,
@@ -141,7 +141,7 @@ export const updatePaymentStatus = async (
  */
 export const cancelBooking = async (bookingId: string, reason?: string) => {
     try {
-        const response = await api.post(`/api/bookings/${bookingId}/cancel`, { reason });
+        const response = await api.post(`/bookings/${bookingId}/cancel`, { reason });
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'cancelling booking');
@@ -153,7 +153,7 @@ export const cancelBooking = async (bookingId: string, reason?: string) => {
  */
 export const getBookingStats = async () => {
     try {
-        const response = await api.get('/api/bookings/stats');
+        const response = await api.get('/bookings/stats');
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching booking stats');
@@ -181,7 +181,7 @@ export const processPayment = async (paymentData: {
     };
 }) => {
     try {
-        const response = await api.post('/api/bookings/payment', paymentData, {
+        const response = await api.post('/bookings/payment', paymentData, {
             timeout: 30000, // 30 seconds for payment processing
         });
         return extractResponseData(response);
@@ -197,7 +197,7 @@ export const processPayment = async (paymentData: {
  */
 export const validatePromoCode = async (promoCode: string) => {
     try {
-        const response = await api.post('/api/bookings/promo/validate', { promoCode }, {
+        const response = await api.post('/bookings/promo/validate', { promoCode }, {
             timeout: 10000,
         });
         return extractResponseData(response);

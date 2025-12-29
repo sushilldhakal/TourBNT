@@ -31,10 +31,6 @@ const _config = {
     secret: process.env.CLOUDINARY_API_SECRET
   },
 
-  // Legacy cloudinary fields (for backward compatibility)
-  cloudinaryCloud: process.env.CLOUDINARY_CLOUD,
-  cloudinaryApiKey: process.env.CLOUDINARY_API_KEY,
-  cloudinarySecret: process.env.CLOUDINARY_API_SECRET,
 
   // Frontend configuration
   frontend: {

@@ -5,7 +5,7 @@ import { api, handleApiError } from './apiClient';
  */
 export const login = async (data: { email: string; password: string; keepMeSignedIn: boolean }) => {
     try {
-        const response = await api.post('/api/users/login', data, {
+        const response = await api.post('/users/login', data, {
             timeout: 15000,
         });
         return response.data;
@@ -19,7 +19,7 @@ export const login = async (data: { email: string; password: string; keepMeSigne
  */
 export const register = async (data: { name: string; email: string; password: string; phone: string }) => {
     try {
-        const response = await api.post('/api/users/register', data, {
+        const response = await api.post('/users/register', data, {
             timeout: 15000,
         });
         return response.data;
@@ -33,7 +33,7 @@ export const register = async (data: { name: string; email: string; password: st
  */
 export const verifyEmail = async (data: { token: string }) => {
     try {
-        const response = await api.post('/api/auth/verify-email', data, {
+        const response = await api.post('/auth/verify-email', data, {
             timeout: 15000,
         });
         return response.data;
@@ -47,7 +47,7 @@ export const verifyEmail = async (data: { token: string }) => {
  */
 export const forgotPassword = async (data: { email: string }) => {
     try {
-        const response = await api.post('/api/auth/forgot-password', data, {
+        const response = await api.post('/auth/forgot-password', data, {
             timeout: 15000,
         });
         return response.data;
@@ -61,7 +61,7 @@ export const forgotPassword = async (data: { email: string }) => {
  */
 export const resetPassword = async (data: { token: string; password: string }) => {
     try {
-        const response = await api.post('/api/auth/reset-password', data, {
+        const response = await api.post('/auth/reset-password', data, {
             timeout: 15000,
         });
         return response.data;

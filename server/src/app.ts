@@ -1,13 +1,10 @@
 import express from "express";
-import globalErrorHandler from "./middlewares/globalErrorHandler";
+import { errorHandler, notFoundHandler } from "./utils/apiResponse";
 import authRouter from "./api/auth/authRouter";
 import userRouter from "./api/user/userRouter";
 import tourRouter from "./api/tours/tourRouter";
+import tourRouterV2 from "./api/tours/tourRouterV2";
 import tourSearchRouter from "./api/tours/tourSearchRouter";
-import cors from "cors";
-import { config } from "./config/config";
-import breadcrumbsMiddleware from "./middlewares/breadcrumbsMiddleware";
-import { metricsMiddleware } from "./middlewares/metricsMiddleware";
 import galleryRoutes from "./api/gallery/galleryRoutes";
 import generateRouter from "./api/generate/generateRoute";
 import subscriberRouter from "./api/subscriber/subscriberRouter";
@@ -20,11 +17,13 @@ import globalRoutes from "./api/global";
 import bookingRouter from "./api/bookings/bookingRoutes";
 import notificationRouter from "./api/notifications/notificationRoutes";
 import monitoringRouter from "./api/monitoring/monitoringRoutes";
+import cors from "cors";
+import { config } from "./config/config";
+import breadcrumbsMiddleware from "./middlewares/breadcrumbsMiddleware";
+import { metricsMiddleware } from "./middlewares/metricsMiddleware";
 import swaggerUi from 'swagger-ui-express';
 import { getSwaggerSpec } from './config/swagger';
 import { logger } from './utils/logger';
-// import fixedDepartureRouter from "./api/fixedDepartureRouter";
-// import schemaRoutes from "./api/tours/schemaRoutes";
 import cookieParser from 'cookie-parser';
 
 const app = express();
@@ -89,29 +88,26 @@ app.get("/", (req, res) => {
   res.json({ message: "Hello, this is TourBNT APIs" });
 });
 
-// Monitoring routes (health check and metrics dashboard)
-app.use("/api/monitoring", monitoringRouter);
+// API v1 routes - individual route registrations for flexibility
+app.use('/api/v1/auth', authRouter);
+app.use('/api/v1/users', userRouter);
+app.use('/api/v1/tours', tourRouter);
+app.use('/api/v1/tour-search', tourSearchRouter);
+app.use('/api/v1/subscribers', subscriberRouter);
+app.use('/api/v1/gallery', galleryRoutes);
+app.use('/api/v1/generate', generateRouter);
+app.use('/api/v1/posts', postRouter);
+app.use('/api/v1/comments', commentRouter);
+app.use('/api/v1/facts', factsRouter);
+app.use('/api/v1/faqs', faqsRouter);
+app.use('/api/v1/reviews', reviewRoutes);
+app.use('/api/v1/global', globalRoutes);
+app.use('/api/v1/bookings', bookingRouter);
+app.use('/api/v1/notifications', notificationRouter);
+app.use('/api/v1/monitoring', monitoringRouter);
 
-// Authentication routes (NEW - RESTful)
-app.use("/api/auth", authRouter);
-
-// Existing routes
-app.use("/api/users", userRouter);
-app.use("/api/tours", tourRouter);
-app.use("/api/tour-search", tourSearchRouter);
-app.use('/api/subscribers', subscriberRouter);
-app.use("/api/gallery", galleryRoutes);
-app.use("/api/generate", generateRouter);
-app.use("/api/posts", postRouter);
-app.use("/api/comments", commentRouter);
-app.use("/api/facts", factsRouter);
-app.use("/api/faqs", faqsRouter);
-app.use("/api/reviews", reviewRoutes);
-app.use("/api/global", globalRoutes);
-app.use("/api/bookings", bookingRouter);
-app.use("/api/notifications", notificationRouter);
-// app.use("/api/fixed-departures", fixedDepartureRouter);
-// app.use("/api/schema", schemaRoutes);
+// API v2 routes - selective endpoint upgrades
+app.use('/api/v2/tours', tourRouterV2);
 
 // Debug endpoint to show all registered routes
 app.get('/debug/routes', (req, res) => {
@@ -148,7 +144,10 @@ app.get('/debug/routes', (req, res) => {
   res.json(routes);
 });
 
-// Global error handler
-app.use(globalErrorHandler);
+// 404 Not Found handler (must be before error handler)
+app.use(notFoundHandler);
+
+// Global error handler (must be last)
+app.use(errorHandler);
 
 export default app;

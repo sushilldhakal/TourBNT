@@ -1,35 +1,79 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { MessageCircle, ThumbsUp, Share2, Trash2, Eye } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { getCommentsByPost, getCommentWithReplies, likeComment, viewComment, addReply, deleteComment } from '@/lib/api/comments';
+import { getCommentsByPost, likeComment, viewComment, addReply, deleteComment } from '@/lib/api/comments';
 import { timeAgo } from '@/lib/utils/timeAgo';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 
 interface Comment {
-    _id: string;
+    id?: string;
+    _id?: string; // Support both id and _id for compatibility
     post: string;
     user: {
-        _id: string;
+        id?: string;
+        _id?: string; // Support both id and _id
         name: string;
         email: string;
         avatar?: string;
-    };
+    } | null;
     text: string;
     approve: boolean;
-    likes: number;
-    views: number;
-    timestamp: string;
-    replies: Comment[];
+    likes?: number;
+    views?: number;
+    timestamp?: string;
+    replies?: Comment[];
     created_at: string;
     isLiked?: boolean;
 }
+
+// Helper function to convert any ID value to string (handles ObjectId objects)
+const idToString = (id: any): string => {
+    if (!id) return '';
+    if (typeof id === 'string') return id;
+    if (typeof id === 'object' && id.toString) return id.toString();
+    return String(id);
+};
+
+// Helper function to get comment ID (handles both id and _id, ensures string)
+const getCommentId = (comment: Comment): string => {
+    const id = comment.id || comment._id;
+    return idToString(id);
+};
+
+// Helper function to normalize comment data (convert _id to id, ensure strings)
+const normalizeComment = (comment: Partial<Comment> & { _id?: any; id?: any }): Comment => {
+    const commentId = idToString(comment.id || comment._id);
+    const userId = comment.user ? idToString(comment.user.id || (comment.user as any)._id) : '';
+    const user_id = comment.user ? idToString((comment.user as any)._id || comment.user.id) : '';
+
+    return {
+        ...comment,
+        id: commentId,
+        _id: commentId, // Use same value for both
+        user: comment.user ? {
+            ...comment.user,
+            id: userId,
+            _id: user_id,
+            name: comment.user.name || '',
+            email: comment.user.email || '',
+            avatar: comment.user.avatar,
+        } : null,
+        post: typeof comment.post === 'string' ? comment.post : idToString(comment.post),
+        text: comment.text || '',
+        approve: comment.approve ?? false,
+        likes: comment.likes ?? 0,
+        views: comment.views ?? 0,
+        created_at: comment.created_at || new Date().toISOString(),
+        replies: comment.replies?.map((reply) => normalizeComment(reply as any)) || [],
+    };
+};
 
 interface CommentComponentProps {
     comment: Comment;
@@ -40,39 +84,87 @@ interface CommentComponentProps {
 }
 
 const CommentComponent = ({ comment: initialComment, depth = 0, onRemove, isAdmin = false, postId }: CommentComponentProps) => {
-    const [comment, setComment] = useState(initialComment);
+    // Normalize comment data to ensure id and _id are both available
+    const normalizedComment = normalizeComment(initialComment);
+    const [comment, setComment] = useState(normalizedComment);
     const [isReplying, setIsReplying] = useState(false);
     const [replyContent, setReplyContent] = useState('');
-    const [isLiked, setIsLiked] = useState(initialComment.isLiked || false);
+    const [isLiked, setIsLiked] = useState(normalizedComment.isLiked || false);
     const queryClient = useQueryClient();
     const { userId } = useAuth();
+
+    // Get commentId from normalized comment - ensure it's always available
+    // Try multiple sources: comment state, normalizedComment, or initialComment
+    const commentId = useMemo(() => {
+        // Try to get ID from various sources
+        const idFromComment = getCommentId(comment);
+        const idFromNormalized = getCommentId(normalizedComment);
+        const idFromInitial = getCommentId(initialComment);
+
+        // Also try direct extraction from initialComment (might have _id but not id)
+        const directId = idToString((initialComment as any)?._id || (initialComment as any)?.id);
+
+        const finalId = idFromComment || idFromNormalized || idFromInitial || directId;
+
+        // Debug logging for nested comments
+        if (process.env.NODE_ENV === 'development') {
+            if (!finalId) {
+                console.warn('Comment ID not found:', {
+                    depth,
+                    comment: { id: comment.id, _id: comment._id },
+                    normalizedComment: { id: normalizedComment.id, _id: normalizedComment._id },
+                    initialComment: { id: (initialComment as any).id, _id: (initialComment as any)._id },
+                    directId
+                });
+            } else if (depth > 0) {
+                console.log('Nested comment ID found:', { depth, commentId: finalId, source: 'nested' });
+            }
+        }
+
+        return idToString(finalId);
+    }, [comment, normalizedComment, initialComment, depth]);
+
+    // Normalize replies that are already in the comment data (no need to fetch separately)
+    // Replies are already populated by the backend in getCommentsByPost
+    const displayComment = useMemo(() => {
+        if (comment.replies && Array.isArray(comment.replies) && comment.replies.length > 0) {
+            // Check if replies are already objects (populated) or just IDs
+            const normalizedReplies: Comment[] = comment.replies
+                .filter((reply: any) => {
+                    // Filter out ID strings, keep only objects
+                    if (!reply) return false;
+                    if (typeof reply === 'string') return false; // Skip ID strings
+                    return typeof reply === 'object';
+                })
+                .map((reply: unknown) => {
+                    // Normalize each reply, ensuring ID is extracted
+                    const normalized = normalizeComment(reply as Partial<Comment> & { _id?: string; id?: string });
+                    // Double-check that ID was extracted
+                    if (!normalized.id && !normalized._id) {
+                        console.warn('Reply missing ID after normalization:', reply);
+                    }
+                    return normalized;
+                });
+
+            if (normalizedReplies.length > 0) {
+                return {
+                    ...comment,
+                    replies: normalizedReplies
+                };
+            }
+        }
+        return comment;
+    }, [comment]);
 
     // Track view when comment is rendered
     useEffect(() => {
         // Only track view if this is a top-level comment (to avoid counting views for replies)
-        if (depth === 0) {
-            viewComment(comment._id).catch(error => {
+        if (depth === 0 && commentId) {
+            viewComment(commentId).catch(error => {
                 console.error('Error tracking comment view:', error);
             });
         }
-    }, [comment._id, depth]);
-
-    // Fetch replies if this comment has any
-    const { data: repliesData } = useQuery({
-        queryKey: ['comment-replies', comment._id],
-        queryFn: () => getCommentWithReplies(comment._id),
-        enabled: comment.replies && comment.replies.length > 0,
-    });
-
-    // Update comment with fetched replies
-    useEffect(() => {
-        if (repliesData) {
-            setComment(prevComment => ({
-                ...prevComment,
-                replies: repliesData.replies || []
-            }));
-        }
-    }, [repliesData]);
+    }, [commentId, depth]);
 
     // Like mutation
     const likeMutation = useMutation({
@@ -81,17 +173,17 @@ const CommentComponent = ({ comment: initialComment, depth = 0, onRemove, isAdmi
             if (!userId) {
                 throw new Error('User ID is required to like a comment');
             }
-            return likeComment(comment._id, userId);
+            return likeComment(commentId, userId);
         },
-        onSuccess: (data) => {
+        onSuccess: (data: any) => {
             setComment(prevComment => ({
                 ...prevComment,
-                likes: data.likes
+                likes: data?.likes ?? prevComment.likes
             }));
-            setIsLiked(data.isLiked);
+            setIsLiked(data?.isLiked ?? false);
             toast({
-                title: data.isLiked ? 'Liked' : 'Unliked',
-                description: data.isLiked ? 'You liked this comment' : 'You unliked this comment',
+                title: data?.isLiked ? 'Liked' : 'Unliked',
+                description: data?.isLiked ? 'You liked this comment' : 'You unliked this comment',
                 duration: 2000,
             });
         },
@@ -119,10 +211,11 @@ const CommentComponent = ({ comment: initialComment, depth = 0, onRemove, isAdmi
             }, commentId);
         },
         onSuccess: (data) => {
-            // Add the new reply to the comment
+            // Normalize and add the new reply to the comment
+            const normalizedReply = normalizeComment(data as Partial<Comment> & { _id?: string; id?: string });
             setComment(prevComment => ({
                 ...prevComment,
-                replies: [...(prevComment.replies || []), data]
+                replies: [...(prevComment.replies || []), normalizedReply]
             }));
 
             // Reset reply form
@@ -137,7 +230,7 @@ const CommentComponent = ({ comment: initialComment, depth = 0, onRemove, isAdmi
             });
 
             // Invalidate queries to refresh data
-            queryClient.invalidateQueries({ queryKey: ['comment-replies', comment._id] });
+            queryClient.invalidateQueries({ queryKey: ['comment-replies', commentId] });
             queryClient.invalidateQueries({ queryKey: ['comments', postId] });
         },
         onError: (error) => {
@@ -212,7 +305,18 @@ const CommentComponent = ({ comment: initialComment, depth = 0, onRemove, isAdmi
 
     const handleRemove = (event: React.MouseEvent) => {
         event.preventDefault();
-        onRemove(comment._id);
+        console.log('commentId', commentId);
+        // Ensure commentId is a valid string before removing
+        const validId = idToString(commentId);
+        if (!validId) {
+            toast({
+                title: 'Error',
+                description: 'Invalid comment ID',
+                variant: 'destructive',
+            });
+            return;
+        }
+        onRemove(validId);
     };
 
     const handleSubmitReply = (event: React.FormEvent) => {
@@ -238,7 +342,7 @@ const CommentComponent = ({ comment: initialComment, depth = 0, onRemove, isAdmi
 
         replyMutation.mutate({
             content: replyContent,
-            commentId: comment._id
+            commentId: commentId
         });
     };
 
@@ -246,18 +350,18 @@ const CommentComponent = ({ comment: initialComment, depth = 0, onRemove, isAdmi
         <Card className={`mb-4 ${depth > 0 ? 'ml-6' : ''}`}>
             <CardHeader className="flex flex-row items-center gap-4 space-y-0">
                 <Avatar>
-                    <AvatarImage src={comment.user?.avatar} alt={comment.user?.name || 'User avatar'} />
+                    <AvatarImage src={displayComment.user?.avatar} alt={displayComment.user?.name || 'User avatar'} />
                     <AvatarFallback>
-                        {comment.user?.name?.charAt(0).toUpperCase() || 'U'}
+                        {displayComment.user?.name?.charAt(0).toUpperCase() || 'U'}
                     </AvatarFallback>
                 </Avatar>
                 <div>
-                    <h3 className="font-semibold">{comment.user?.name || 'Anonymous'}</h3>
-                    <p className="text-sm text-muted-foreground">{timeAgo(new Date(comment.created_at))}</p>
+                    <h3 className="font-semibold">{displayComment.user?.name || 'Anonymous'}</h3>
+                    <p className="text-sm text-muted-foreground">{timeAgo(new Date(displayComment.created_at))}</p>
                 </div>
             </CardHeader>
             <CardContent>
-                <p>{comment.text}</p>
+                <p>{displayComment.text}</p>
             </CardContent>
             <CardFooter className="flex justify-between">
                 <div className="flex gap-4">
@@ -268,7 +372,7 @@ const CommentComponent = ({ comment: initialComment, depth = 0, onRemove, isAdmi
                         disabled={likeMutation.isPending}
                     >
                         <ThumbsUp className={`mr-2 h-4 w-4 ${isLiked ? 'fill-current' : ''}`} />
-                        {comment.likes || 0}
+                        {displayComment.likes ?? 0}
                     </Button>
                     <Button variant="ghost" size="sm" onClick={handleReply}>
                         <MessageCircle className="mr-2 h-4 w-4" />
@@ -280,7 +384,7 @@ const CommentComponent = ({ comment: initialComment, depth = 0, onRemove, isAdmi
                     </Button>
                     <div className="flex items-center text-muted-foreground">
                         <Eye className="mr-1 h-4 w-4" />
-                        <span className="text-sm">{comment.views || 0}</span>
+                        <span className="text-sm">{displayComment.views ?? 0}</span>
                     </div>
                 </div>
                 {isAdmin && (
@@ -305,18 +409,34 @@ const CommentComponent = ({ comment: initialComment, depth = 0, onRemove, isAdmi
                     </form>
                 </CardFooter>
             )}
-            {comment.replies && comment.replies.length > 0 && (
+            {displayComment.replies && displayComment.replies.length > 0 && (
                 <div className="px-4 pb-4">
-                    {comment.replies.map((reply, index) => (
-                        <CommentComponent
-                            key={reply?._id ?? `${comment?._id ?? 'comment'}-depth-${depth + 1}-idx-${index}`}
-                            comment={reply}
-                            depth={depth + 1}
-                            onRemove={onRemove}
-                            isAdmin={isAdmin}
-                            postId={postId}
-                        />
-                    ))}
+                    {displayComment.replies?.map((reply, index) => {
+                        // Ensure reply is properly normalized with ID
+                        const normalizedReply = normalizeComment(reply);
+                        const replyId = getCommentId(normalizedReply);
+
+                        // Debug logging for replies
+                        if (process.env.NODE_ENV === 'development' && !replyId) {
+                            console.warn('Reply ID not found:', {
+                                reply,
+                                normalizedReply: { id: normalizedReply.id, _id: normalizedReply._id },
+                                index,
+                                depth
+                            });
+                        }
+
+                        return (
+                            <CommentComponent
+                                key={replyId || `${commentId}-depth-${depth + 1}-idx-${index}`}
+                                comment={normalizedReply}
+                                depth={depth + 1}
+                                onRemove={onRemove}
+                                isAdmin={isAdmin}
+                                postId={postId}
+                            />
+                        );
+                    })}
                 </div>
             )}
         </Card>
@@ -355,8 +475,21 @@ export function CommentsSection({ postId }: CommentsSectionProps) {
     });
 
     const handleRemoveComment = (commentId: string) => {
+
+        console.log('commentId', commentId);
+        // Validate commentId before proceeding
+        const validId = idToString(commentId);
+        if (!validId) {
+            toast({
+                title: 'Error',
+                description: 'Invalid comment ID',
+                variant: 'destructive',
+            });
+            return;
+        }
+
         if (confirm('Are you sure you want to delete this comment?')) {
-            deleteCommentMutation.mutate(commentId);
+            deleteCommentMutation.mutate(validId);
         }
     };
 
@@ -364,10 +497,18 @@ export function CommentsSection({ postId }: CommentsSectionProps) {
         return <div className="text-center py-8">Loading comments...</div>;
     }
 
-    // Handle the response structure - it might be an array or an object with comments array
-    const comments = Array.isArray(commentsData)
+    // Handle the response structure
+    // extractResponseData returns { items: [...], pagination: {...} } from sendPaginatedResponse
+    const comments: Comment[] = Array.isArray(commentsData)
         ? commentsData
-        : commentsData?.comments || commentsData?.data || [];
+        : (commentsData as { items?: Comment[]; comments?: Comment[] })?.items
+        || (commentsData as { items?: Comment[]; comments?: Comment[] })?.comments
+        || [];
+
+    // Debug log to help troubleshoot
+    if (process.env.NODE_ENV === 'development') {
+        console.log('Comments data:', { commentsData, comments, commentsLength: comments.length });
+    }
 
     if (!comments || comments.length === 0) {
         return <div className="text-center py-8">No comments yet. Be the first to comment!</div>;
@@ -376,15 +517,19 @@ export function CommentsSection({ postId }: CommentsSectionProps) {
     return (
         <div className="space-y-6 mt-6">
             <h2 className="text-2xl font-bold">Comments ({comments.length})</h2>
-            {comments.map((comment: Comment) => (
-                <CommentComponent
-                    key={comment._id}
-                    comment={comment}
-                    onRemove={handleRemoveComment}
-                    isAdmin={true}
-                    postId={postId}
-                />
-            ))}
+            {comments.map((comment: Comment) => {
+                const normalizedComment = normalizeComment(comment);
+                const commentId = getCommentId(normalizedComment);
+                return (
+                    <CommentComponent
+                        key={commentId}
+                        comment={normalizedComment}
+                        onRemove={handleRemoveComment}
+                        isAdmin={true}
+                        postId={postId}
+                    />
+                );
+            })}
         </div>
     );
 }

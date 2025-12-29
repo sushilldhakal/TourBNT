@@ -1,13 +1,14 @@
 import { Request, Response } from 'express';
 import { validationResult } from 'express-validator';
 import Subscriber from './subscriberModel';
-import { HTTP_STATUS } from '../../utils/httpStatusCodes';
+import { HTTP_STATUS, sendSuccess, sendError, sendPaginatedResponse } from '../../utils/apiResponse';
+import { hybridPagination } from '../../utils/paginationUtils';
 
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
 
 /**
  * Subscribe a new email to newsletter
- * POST /api/subscribers
+ * POST /api/v1/subscribers
  * PUBLIC endpoint
  */
 export const createSubscriber = async (req: Request, res: Response) => {
@@ -68,34 +69,23 @@ export const createSubscriber = async (req: Request, res: Response) => {
 
 /**
  * Get all subscribers with pagination
- * GET /api/subscribers
+ * GET /api/v1/subscribers
  * Requires authentication and admin role
  */
 export const getAllSubscribers = async (req: Request, res: Response) => {
   try {
-    const { page, limit, skip } = req.pagination!;
-
-    // Get total count
-    const total = await Subscriber.countDocuments();
-
-    // Get paginated subscribers
-    const subscribers = await Subscriber.find()
-      .skip(skip)
-      .limit(limit)
-      .sort({ createdAt: -1 });
-
-    // Calculate total pages
-    const totalPages = Math.ceil(total / limit);
-
-    res.status(HTTP_STATUS.OK).json({
-      data: subscribers,
-      pagination: {
-        total,
-        page,
-        limit,
-        totalPages
+    // Use hybrid pagination utility
+    return hybridPagination(
+      Subscriber,
+      {},
+      req,
+      res,
+      {
+        sort: { createdAt: -1 },
+        memoryThreshold: 100,
+        message: 'Subscribers retrieved successfully'
       }
-    });
+    );
   } catch (error) {
     console.error('Error in getAllSubscribers:', error);
     res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
@@ -111,7 +101,7 @@ export const getAllSubscribers = async (req: Request, res: Response) => {
 
 /**
  * Unsubscribe an email from newsletter
- * DELETE /api/subscribers/:email
+ * DELETE /api/v1/subscribers/:email
  * PUBLIC endpoint
  */
 export const deleteSubscriber = async (req: Request, res: Response) => {

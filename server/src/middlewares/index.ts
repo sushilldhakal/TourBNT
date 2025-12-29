@@ -30,7 +30,8 @@ export type { Request
  } from './authenticate';
 
 // Error handling (existing)
-export { default as globalErrorHandler } from './globalErrorHandler';
+// Error handlers are now exported from utils/apiResponse
+export { errorHandler, notFoundHandler } from '../utils/apiResponse';
 
 // Multer (existing)
 export * from './multer';

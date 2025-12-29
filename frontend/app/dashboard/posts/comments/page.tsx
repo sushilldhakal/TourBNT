@@ -89,11 +89,18 @@ const createColumns = (
             accessorKey: "user",
             header: "User",
             cell: ({ row }) => {
-                const user = row.getValue("user") as User;
+                const user = row.getValue("user") as User | null;
+                if (!user || !user._id) {
+                    return (
+                        <div className="truncate max-w-[100px] text-muted-foreground">
+                            Anonymous
+                        </div>
+                    );
+                }
                 return (
                     <div className="truncate max-w-[100px]">
                         <Link href={`/dashboard/users/${user._id}`} className="text-primary hover:underline">
-                            {user.name}
+                            {user.name || 'Unknown'}
                         </Link>
                     </div>
                 );
@@ -114,7 +121,7 @@ const createColumns = (
                                     variant="ghost"
                                     size="sm"
                                     className="h-8 text-primary hover:text-primary"
-                                    onClick={() => handleAcceptComment(comment._id)}
+                                    onClick={() => handleAcceptComment(comment._id || comment.id)}
                                 >
                                     Accept
                                 </Button>
@@ -122,7 +129,7 @@ const createColumns = (
                                     variant="ghost"
                                     size="sm"
                                     className="h-8 text-destructive hover:text-destructive"
-                                    onClick={() => handleDeleteComment(comment._id)}
+                                    onClick={() => handleDeleteComment(comment._id || comment.id)}
                                 >
                                     Delete
                                 </Button>
@@ -137,10 +144,13 @@ const createColumns = (
             header: "Response to",
             cell: ({ row }) => {
                 const post = row.getValue("post") as Post;
+                if (!post || !post._id) {
+                    return <div className="truncate max-w-[200px] text-muted-foreground">Unknown Post</div>;
+                }
                 return (
                     <div className="truncate max-w-[200px]">
                         <Link href={`/dashboard/posts/edit/${post._id}`} className="text-primary hover:underline">
-                            {post.title}
+                            {post.title || 'Untitled'}
                         </Link>
                     </div>
                 );
@@ -246,57 +256,19 @@ export default function CommentsPage() {
         },
     });
 
-    const handleAcceptComment = (_id: string) => {
+    // Extract comments from the response structure
+    // extractResponseData returns { items: [...], pagination: {...} }
+    const comments = (initialCommentData as { items?: Comment[] })?.items || [];
+
+    const handleAcceptComment = React.useCallback((_id: string) => {
         const formdata = new FormData();
         formdata.append('approve', 'true');
         acceptMutation.mutate({ data: formdata, commentId: _id });
-    };
+    }, [acceptMutation]);
 
-    const handleDeleteComment = (_id: string) => {
+    const handleDeleteComment = React.useCallback((_id: string) => {
         deleteMutation.mutate(_id);
-    };
-
-    const handleBulkAccept = () => {
-        const selectedRows = table.getFilteredSelectedRowModel().rows;
-        const selectedIds = selectedRows.map((row) => row.original._id);
-
-        // Accept each comment individually
-        selectedIds.forEach((commentId) => {
-            const formdata = new FormData();
-            formdata.append('approve', 'true');
-            acceptMutation.mutate({ data: formdata, commentId });
-        });
-
-        // Clear selection after bulk accept
-        setRowSelection({});
-    };
-
-    const handleBulkDelete = () => {
-        const selectedRows = table.getFilteredSelectedRowModel().rows;
-        const selectedIds = selectedRows.map((row) => row.original._id);
-        deleteMutation.mutate(selectedIds.join(', '));
-        // Clear selection after bulk delete
-        setRowSelection({});
-    };
-
-    // Extract comments from API response
-    const comments = React.useMemo(() => {
-        if (!initialCommentData) return [];
-        // Handle different possible response structures
-        if (initialCommentData.data?.data?.comments) {
-            return initialCommentData.data.data.comments;
-        }
-        if (initialCommentData.data?.comments) {
-            return initialCommentData.data.comments;
-        }
-        if (Array.isArray(initialCommentData.comments)) {
-            return initialCommentData.comments;
-        }
-        if (Array.isArray(initialCommentData)) {
-            return initialCommentData;
-        }
-        return [];
-    }, [initialCommentData]);
+    }, [deleteMutation]);
 
     const columns = React.useMemo(
         () => createColumns(handleAcceptComment, handleDeleteComment),
@@ -321,6 +293,29 @@ export default function CommentsPage() {
             rowSelection,
         },
     });
+
+    const handleBulkAccept = () => {
+        const selectedRows = table.getFilteredSelectedRowModel().rows;
+        const selectedIds = selectedRows.map((row) => row.original._id || row.original.id);
+
+        // Accept each comment individually
+        selectedIds.forEach((commentId) => {
+            const formdata = new FormData();
+            formdata.append('approve', 'true');
+            acceptMutation.mutate({ data: formdata, commentId });
+        });
+
+        // Clear selection after bulk accept
+        setRowSelection({});
+    };
+
+    const handleBulkDelete = () => {
+        const selectedRows = table.getFilteredSelectedRowModel().rows;
+        const selectedIds = selectedRows.map((row) => row.original._id || row.original.id);
+        deleteMutation.mutate(selectedIds.join(', '));
+        // Clear selection after bulk delete
+        setRowSelection({});
+    };
 
     const currentPageSize = table.getState().pagination.pageSize.toString();
 

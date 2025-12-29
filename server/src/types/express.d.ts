@@ -8,6 +8,7 @@ import { Request } from "express";
 export interface AuthUser {
   id: string;
   roles: string[];
+  keepMeSignedIn?: boolean; // Preserved from JWT to maintain session duration preference
 }
 
 
@@ -21,8 +22,9 @@ declare global {
       // Pagination middleware
       pagination?: {
         page: number;
-        limit: number;
+        limit: number | 'all';
         skip: number;
+        useHybrid: boolean; // Flag to indicate if hybrid pagination should be used
       };
       // Filter/sort middleware
       filters?: Record<string, any>;

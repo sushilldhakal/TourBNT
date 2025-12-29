@@ -1,5 +1,5 @@
 
-import express, { RequestHandler } from "express";
+import express, { RequestHandler, Request, Response, NextFunction } from "express";
 import { addMedia, deleteMedia, getMedia, getSingleMedia, updateMedia } from "./galleryController";
 import { authenticate, authorizeRoles } from "../../middlewares/authenticate";
 import { uploadMultiple, uploadNone } from "../../middlewares/multer";
@@ -13,7 +13,7 @@ const galleryRoutes = express.Router();
 // Get all media (Protected, Admin or Seller) - with pagination
 /**
  * @swagger
- * /api/gallery:
+ * /api/v1/gallery:
  *   get:
  *     summary: Get all media
  *     description: Retrieve all gallery media items (admin/seller only)
@@ -37,9 +37,19 @@ const galleryRoutes = express.Router();
  *         content:
  *           application/json:
  *             schema:
- *               type: array
- *               items:
- *                 $ref: '#/components/schemas/GalleryItem'
+ *               allOf:
+ *                 - $ref: '#/components/schemas/StandardResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       type: object
+ *                       properties:
+ *                         items:
+ *                           type: array
+ *                           items:
+ *                             $ref: '#/components/schemas/GalleryItem'
+ *                         pagination:
+ *                           $ref: '#/components/schemas/PaginationMetadata'
  *       401:
  *         description: Unauthorized
  *         content:
@@ -56,7 +66,7 @@ const galleryRoutes = express.Router();
 galleryRoutes.get(
     '/',
     authenticate,
-    (req, res, next) => {
+    (req: Request, res: Response, next: NextFunction) => {
         // Normalize roles to lowercase for comparison
         if (req.user) {
             req.user.roles = req.user.roles.map((role: string) => role.toLowerCase());
@@ -64,14 +74,14 @@ galleryRoutes.get(
         next();
     },
     authorizeRoles('admin', 'seller') as RequestHandler,
-    paginationMiddleware,
+    paginationMiddleware(),
     asyncAuthHandler(getMedia)
 );
 
 // Upload media (Protected, Admin or Seller) - ONLY route with upload middleware
 /**
  * @swagger
- * /api/gallery:
+ * /api/v1/gallery:
  *   post:
  *     summary: Upload media
  *     description: Upload one or more media files to the gallery
@@ -100,9 +110,14 @@ galleryRoutes.get(
  *         content:
  *           application/json:
  *             schema:
- *               type: array
- *               items:
- *                 $ref: '#/components/schemas/GalleryItem'
+ *               allOf:
+ *                 - $ref: '#/components/schemas/StandardResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/GalleryItem'
  *       401:
  *         description: Unauthorized
  *         content:
@@ -121,7 +136,7 @@ galleryRoutes.post(
 // Bulk delete media (Protected, Admin or Seller)
 /**
  * @swagger
- * /api/gallery:
+ * /api/v1/gallery:
  *   delete:
  *     summary: Bulk delete media
  *     description: Delete multiple media items from the gallery
@@ -171,7 +186,7 @@ galleryRoutes.delete(
 // Get single media by ID (Public)
 /**
  * @swagger
- * /api/gallery/{mediaId}:
+ * /api/v1/gallery/{mediaId}:
  *   get:
  *     summary: Get media by ID
  *     description: Retrieve a specific media item by its ID
@@ -202,7 +217,7 @@ galleryRoutes.get('/:mediaId', authenticate, getSingleMedia as any);
 // Update media (Protected, Admin or Seller)
 /**
  * @swagger
- * /api/gallery/{mediaId}:
+ * /api/v1/gallery/{mediaId}:
  *   patch:
  *     summary: Update media
  *     description: Update media item details (caption, etc.)

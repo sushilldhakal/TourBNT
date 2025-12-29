@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { BookingService } from '../services/bookingService';
-import { sendSuccess, sendPaginatedResponse } from '../../../utils/responseHandler';
-import { HTTP_STATUS } from '../../../utils/httpStatusCodes';
+import { HTTP_STATUS, sendSuccess, sendPaginatedResponse } from '../../../utils/apiResponse';
 import createHttpError from 'http-errors';
 
 /**
@@ -79,10 +78,10 @@ export const getAllBookings = async (req: Request
         });
 
         sendPaginatedResponse(res, result.items, {
-            currentPage: result.page,
-            totalPages: result.totalPages,
+            page: result.page,
+            limit: result.limit,
             totalItems: result.totalItems,
-            itemsPerPage: result.limit
+            totalPages: result.totalPages
         }, 'Bookings retrieved successfully');
     } catch (error) {
         next(error);
@@ -163,10 +162,10 @@ export const getUserBookings = async (req: Request, res: Response, next: NextFun
             res,
             result.items,
             {
-                currentPage: result.page,
-                totalPages: result.totalPages,
-                totalItems: result.totalItems,
-                itemsPerPage: result.limit,
+                page: result.page,
+            limit: result.limit,
+            totalItems: result.totalItems,
+            totalPages: result.totalPages
             },
             'User bookings retrieved successfully'
         );
@@ -191,10 +190,10 @@ export const getTourBookings = async (req: Request, res: Response, next: NextFun
         });
 
         sendPaginatedResponse(res, result.items, {
-            currentPage: result.page,
-            totalPages: result.totalPages,
+            page: result.page,
+            limit: result.limit,
             totalItems: result.totalItems,
-            itemsPerPage: result.limit
+            totalPages: result.totalPages
         }, 'Tour bookings retrieved successfully');
     } catch (error) {
         next(error);

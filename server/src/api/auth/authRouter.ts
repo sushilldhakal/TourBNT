@@ -13,7 +13,7 @@ const authRouter = express.Router();
 
 /**
  * @swagger
- * /api/auth/register:
+ * /api/v1/auth/register:
  *   post:
  *     summary: Register a new user
  *     description: Create a new user account with name, email, and password
@@ -84,7 +84,7 @@ authRouter.post(
 
 /**
  * @swagger
- * /api/auth/login:
+ * /api/v1/auth/login:
  *   post:
  *     summary: User login
  *     description: Authenticate user with email and password, returns JWT token
@@ -165,7 +165,7 @@ authRouter.post(
 
 /**
  * @swagger
- * /api/auth/verify-email:
+ * /api/v1/auth/verify-email:
  *   post:
  *     summary: Verify email
  *     description: Verify user email with verification token
@@ -203,7 +203,7 @@ authRouter.post(
 
 /**
  * @swagger
- * /api/auth/forgot-password:
+ * /api/v1/auth/forgot-password:
  *   post:
  *     summary: Forgot password
  *     description: Request password reset email
@@ -243,7 +243,7 @@ authRouter.post(
 
 /**
  * @swagger
- * /api/auth/reset-password:
+ * /api/v1/auth/reset-password:
  *   post:
  *     summary: Reset password
  *     description: Reset user password with reset token

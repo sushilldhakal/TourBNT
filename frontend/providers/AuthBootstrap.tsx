@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect } from 'react';
-import { api } from '@/lib/api/apiClient';
-import useUserStore from '@/lib/store/useUserStore';
+import { api, extractResponseData } from '@/lib/api/apiClient';
+import useUserStore, { User } from '@/lib/store/useUserStore';
 
 /**
  * AuthBootstrap Component
@@ -17,8 +17,9 @@ export default function AuthBootstrap() {
     useEffect(() => {
         const bootstrap = async () => {
             try {
-                const res = await api.get('/api/users/me');
-                setUser(res.data);
+                const res = await api.get('/users/me');
+                const userData = extractResponseData<User>(res);
+                setUser(userData);
             } catch {
                 clearUser();
             } finally {

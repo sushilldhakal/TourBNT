@@ -1,5 +1,5 @@
 import rateLimit from 'express-rate-limit';
-import { HTTP_STATUS } from '../utils/httpStatusCodes';
+import { HTTP_STATUS } from '../utils/apiResponse';
 import { metricsCollector } from '../utils/metrics';
 
 /**

@@ -2,6 +2,9 @@ import axios, { AxiosError, AxiosRequestConfig } from 'axios';
 import { getApiTimeout } from '../performanceConfig';
 import useUserStore from '@/lib/store/useUserStore';
 
+// Flag to prevent multiple simultaneous redirects
+let isRedirecting = false;
+
 /**
  * Unified API Client for Next.js Frontend
  * HttpOnly cookie-based authentication - NO token management
@@ -10,7 +13,7 @@ import useUserStore from '@/lib/store/useUserStore';
 
 // Base API configuration
 export const api = axios.create({
-    baseURL: process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000',
+    baseURL: (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000') + '/api/v1',
     timeout: getApiTimeout('default'),
     withCredentials: true, // CRITICAL: Enables httpOnly cookie sending
     decompress: true,
@@ -22,7 +25,7 @@ export const api = axios.create({
 
 // Server-side API client (for SSR and public endpoints)
 export const serverApi = axios.create({
-    baseURL: process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000',
+    baseURL: (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000') + '/api/v1',
     timeout: getApiTimeout('default'),
     withCredentials: true,
     decompress: true,
@@ -32,28 +35,89 @@ export const serverApi = axios.create({
 // Response interceptor for 401 handling
 api.interceptors.response.use(
     (response) => response,
-    (error: AxiosError) => {
+    async (error: AxiosError) => {
         // Handle authentication failure (httpOnly cookie expired or invalid)
         if (error.response?.status === 401) {
-            console.error('401 Error Details:', {
-                url: error.config?.url,
-                method: error.config?.method,
-                headers: error.config?.headers,
-                data: error.response?.data,
-                status: error.response?.status
-            });
-
-            // Only redirect if it's a critical auth endpoint, not all 401s
-            const criticalEndpoints = ['/api/users/me'];
             const url = error.config?.url || '';
+            const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
+            const isProtectedRoute = currentPath.startsWith('/dashboard');
+            const isAuthEndpoint = url.includes('/users/me') || url.includes('/auth/');
+            const isOnLoginPage = currentPath.startsWith('/auth/login');
 
-            if (criticalEndpoints.some(endpoint => url.includes(endpoint))) {
-                // Clear user store
-                useUserStore.getState().clearUser();
+            // Don't interfere with login/logout endpoints - let them handle their own errors
+            const isLoginEndpoint = url.includes('/users/login') || url.includes('/auth/login');
+            const isLogoutEndpoint = url.includes('/users/logout') || url.includes('/auth/logout');
 
-                // Redirect to login if on protected route
-                if (typeof window !== 'undefined' && window.location.pathname.startsWith('/dashboard')) {
-                    window.location.href = '/auth/login';
+            if (isLoginEndpoint || isLogoutEndpoint) {
+                // Let login/logout endpoints handle their own errors
+                return Promise.reject(error);
+            }
+
+            // Handle all 401 errors on protected routes or auth endpoints
+            if (isProtectedRoute || isAuthEndpoint) {
+                // Check if this is a retry attempt (to avoid infinite loops)
+                const isRetry = (error.config as any)?._retry;
+
+                if (!isRetry) {
+                    // Mark as retry to prevent infinite loops
+                    (error.config as any)._retry = true;
+
+                    // Wait a bit longer to allow token refresh to complete (sliding session)
+                    // The backend might be refreshing the token, so give it time
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+
+                    try {
+                        // Retry the request once (token might have been refreshed)
+                        const retryResponse = await api.request(error.config!);
+                        console.log('✅ 401 retry succeeded:', url);
+                        return retryResponse;
+                    } catch (retryError: any) {
+                        // If retry also fails, the token is truly expired/invalid
+                        console.error('❌ 401 Error after retry:', {
+                            url: error.config?.url,
+                            method: error.config?.method,
+                            status: retryError?.response?.status || error.response?.status,
+                            currentPath,
+                            isProtectedRoute,
+                        });
+
+                        // Only clear user and redirect if we're on a protected route
+                        // Don't clear on auth endpoints that might be called from public pages
+                        // Don't redirect if already on login page (avoid redirect loops)
+                        if (isProtectedRoute && !isRedirecting && !isOnLoginPage) {
+                            isRedirecting = true;
+                            // Use a small delay to avoid race conditions with other state updates
+                            setTimeout(() => {
+                                useUserStore.getState().clearUser();
+                                if (typeof window !== 'undefined') {
+                                    const redirectPath = encodeURIComponent(currentPath);
+                                    console.log('🔄 Redirecting to login:', redirectPath);
+                                    window.location.href = `/auth/login?redirect=${redirectPath}`;
+                                }
+                            }, 100);
+                        }
+                    }
+                } else {
+                    // Already retried, this is a real 401 - clear user and redirect
+                    console.error('❌ 401 Error (already retried):', {
+                        url: error.config?.url,
+                        method: error.config?.method,
+                        currentPath,
+                        isProtectedRoute,
+                    });
+
+                    if (isProtectedRoute && !isRedirecting && !isOnLoginPage) {
+                        isRedirecting = true;
+                        // Use a small delay to avoid race conditions
+                        setTimeout(() => {
+                            useUserStore.getState().clearUser();
+                            if (typeof window !== 'undefined') {
+                                const redirectPath = encodeURIComponent(currentPath);
+                                console.log('🔄 Redirecting to login (retry failed):', redirectPath);
+                                window.location.href = `/auth/login?redirect=${redirectPath}`;
+                            }
+                        }, 100);
+                    }
                 }
             }
         }
@@ -146,8 +210,8 @@ export const createFormData = (data: Record<string, any>): FormData => {
  */
 export const extractResponseData = <T>(response: any): T => {
     // Handle nested data structure from server
-    if (response.data?.data) {
-        return response.data.data as T;
+    if (response.data?.items) {
+        return response.data.items as T;
     }
     return response.data as T;
 };

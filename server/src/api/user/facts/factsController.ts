@@ -2,78 +2,62 @@ import Facts from './factsModel';
 import { Response, Request, NextFunction } from 'express';
 import TourModel from '../../tours/tourModel';
 import createHttpError from 'http-errors';
+import { 
+    sendSuccess, 
+    sendPaginatedResponse,
+    HTTP_STATUS, 
+    sendAuthError,
+    handleForbidden,
+    handleUnauthorized,
+    sendNotFoundError,
+    handleResourceNotFound,
+    sendValidationError,
+    notFoundHandler
+} from '../../../utils/apiResponse';
+import { hybridPagination } from '../../../utils/paginationUtils';
 
 
 
 export const getUserFacts = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const requestedUserId = req.params.userId; // Get from URL params
+        const requestedUserId = req.params.userId;
         const authenticatedUserId = req.user?.id;
         const userRole = req.user?.roles || [];
 
         if (!req.user) {
-            return next(createHttpError(401, 'Not authenticated'));
+            return handleUnauthorized(res); // helper sends proper error
         }
 
-        let facts;
-
-        // Admin can view any user's facts
-        if (userRole.includes('admin')) {
-            facts = await Facts.find({ user: requestedUserId });
-        } else {
-            // Non-admin users can only view their own facts
-            // requireOwnerOrAdmin middleware already ensures this, but double-check
-            if (requestedUserId !== authenticatedUserId) {
-                return next(createHttpError(403, 'Not authorized to view these facts'));
-            }
-            facts = await Facts.find({ user: authenticatedUserId });
+        if (!userRole.includes('admin') && requestedUserId !== authenticatedUserId) {
+            return handleForbidden(res, 'Not authorized to view these facts');
         }
 
-        // Transform facts for response
-        const transformedFacts = facts.map(fact => ({
-            id: fact._id,
-            _id: fact._id,
-            name: fact.name,
-            field_type: fact.field_type,
-            value: fact.value,
-            icon: fact.icon,
-            user: fact.user,
-        }));
+        const facts = await Facts.find({ user: requestedUserId });
 
-        res.status(200).json(transformedFacts);
+        sendSuccess(res, facts, 'Facts retrieved successfully');
     } catch (error) {
-        console.error('Error fetching user facts:', error);
-        return next(createHttpError(500, 'Failed to fetch facts'));
+        next(error); // delegate unexpected errors to global errorHandler
     }
 };
 
+
 export const getAllFacts = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { page, limit, skip } = req.pagination || { page: 1, limit: 10, skip: 0 };
-
-        // Get total count for pagination metadata
-        const total = await Facts.countDocuments();
-
-        // Get paginated facts
-        const facts = await Facts.find()
-            .skip(skip)
-            .limit(limit);
-
-        // Calculate total pages
-        const totalPages = Math.ceil(total / limit);
-
-        res.status(200).json({
-            facts,
-            pagination: {
-                total,
-                page,
-                limit,
-                totalPages
+        // Use hybrid pagination utility
+        return hybridPagination(
+            Facts,
+            {},
+            req,
+            res,
+            {
+                sort: { createdAt: -1 },
+                memoryThreshold: 100,
+                message: 'Facts retrieved successfully'
             }
-        });
+        );
     } catch (error) {
         console.error('Error fetching facts:', error);
-        res.status(500).json({ message: 'Failed to fetch facts' });
+        next(error);
     }
 };
 
@@ -81,12 +65,12 @@ export const getSingleFacts = async (req: Request, res: Response, next: NextFunc
     const { factId } = req.params; // Note: param name should match route
     try {
         if (!req.user) {
-            return next(createHttpError(401, 'Not authenticated'));
+            return handleUnauthorized(res);
         }
 
         const fact = await Facts.findById(factId);
         if (!fact) {
-            return next(createHttpError(404, 'Fact not found'));
+            return sendNotFoundError(res, 'Fact not found');
         }
 
         const userId = req.user.id;
@@ -94,20 +78,19 @@ export const getSingleFacts = async (req: Request, res: Response, next: NextFunc
 
         // Check ownership: user must be the owner or admin
         if (fact.user.toString() !== userId && !isAdmin) {
-            return next(createHttpError(403, 'Not authorized to view this fact'));
+            return handleForbidden(res, 'Not authorized to view this fact');
         }
 
-        res.status(200).json({ fact });
+        sendSuccess(res, { fact }, 'Fact retrieved successfully');
     } catch (error) {
-        console.error('Error fetching fact:', error);
-        return next(createHttpError(500, 'Failed to fetch fact'));
+        return next(error);
     }
 };
 
 export const addFacts = async (req: Request, res: Response, next: NextFunction) => {
     try {
         if (!req.user) {
-            return res.status(401).json({ message: 'Not authenticated' });
+            return handleUnauthorized(res, 'Not authenticated');
         }
         const userId = req.user.id;  // Assuming user ID is available in the request
         const { name,
@@ -115,7 +98,6 @@ export const addFacts = async (req: Request, res: Response, next: NextFunction) 
             value,
             icon, } = req.body;
 
-        console.log("req.body", req.body)
         const newFacts = new Facts({
             name,
             field_type,
@@ -125,9 +107,9 @@ export const addFacts = async (req: Request, res: Response, next: NextFunction) 
         });
 
         await newFacts.save();
-        res.status(201).json(newFacts);
+        sendSuccess(res, newFacts, 'Fact created successfully', HTTP_STATUS.CREATED);
     } catch (error) {
-        res.status(500).json({ message: 'Failed to add facts' });
+        next(error);
     }
 };
 
@@ -135,7 +117,7 @@ export const addFacts = async (req: Request, res: Response, next: NextFunction) 
 export const updateFacts = async (req: Request, res: Response, next: NextFunction) => {
     try {
         if (!req.user) {
-            return res.status(401).json({ message: 'Not authenticated' });
+            return handleUnauthorized(res, 'Not authenticated');
         }
         const userId = req.user.id;  // Assuming user ID is available in the request
         const { factId } = req.params;
@@ -143,11 +125,11 @@ export const updateFacts = async (req: Request, res: Response, next: NextFunctio
         console.log("req.body", req.body, factId)
         const facts = await Facts.findById(factId);
         if (!facts) {
-            return res.status(404).json({ message: 'Fact not found' });
+            return handleResourceNotFound(res, 'Fact not found');
         }
 
         if (facts.user.toString() !== userId && !req.user.roles.includes('admin')) {
-            return res.status(403).json({ message: 'Not authorized to update this Fact' });
+            return handleForbidden(res, 'Not authorized to update this Fact');
         }
 
         // Update the master fact
@@ -159,7 +141,6 @@ export const updateFacts = async (req: Request, res: Response, next: NextFunctio
 
         // Cascade update to all tours that use this fact
         // Update tours where facts array contains an item with factId matching this fact's _id
-        console.log(`🔍 Looking for tours with factId: ${factId}`);
 
         const updateResult = await TourModel.updateMany(
             { 'facts.factId': factId },
@@ -176,19 +157,14 @@ export const updateFacts = async (req: Request, res: Response, next: NextFunctio
             }
         );
 
-        console.log(`✅ CASCADE UPDATE: Updated ${updateResult.modifiedCount} tours with fact changes`);
-        console.log(`   - Fact ID: ${factId}`);
-        console.log(`   - New name: "${name}"`);
-        console.log(`   - Tours matched: ${updateResult.matchedCount}`);
-        console.log(`   - Tours modified: ${updateResult.modifiedCount}`);
-
-        res.status(200).json({
+        
+        sendSuccess(res, {
             facts,
             toursUpdated: updateResult.modifiedCount
-        });
+        }, 'Fact updated successfully');
     } catch (error) {
         console.error('Error updating fact:', error);
-        res.status(500).json({ message: 'Failed to update Fact' });
+        next(error);
     }
 };
 
@@ -196,60 +172,45 @@ export const updateFacts = async (req: Request, res: Response, next: NextFunctio
 export const deleteFacts = async (req: Request, res: Response, next: NextFunction) => {
     try {
         if (!req.user) {
-            return res.status(401).json({ message: 'Not authenticated' });
+            return handleUnauthorized(res, 'Not authenticated');
         }
         const userId = req.user.id;  // Assuming user ID is available in the request
         const { factsId } = req.params;
         const facts = await Facts.findById(factsId);
         if (!facts) {
-            return res.status(404).json({ message: 'Facts not found' });
+            return handleResourceNotFound(res, 'Facts not found');
         }
 
         if (facts.user.toString() !== userId && !req.user.roles.includes('admin')) {
-            return res.status(403).json({ message: 'Not authorized to delete this facts' });
+            return handleForbidden(res, 'Not authorized to delete this facts');
         }
 
         await Facts.findByIdAndDelete(factsId);
-        res.status(204).send();
+        sendSuccess(res, null, 'Fact deleted successfully', HTTP_STATUS.NO_CONTENT);
     } catch (error) {
-        res.status(500).json({ message: 'Failed to delete facts' });
+        next(error);
     }
 };
 
 export const deleteMultipleFacts = async (req: Request, res: Response, next: NextFunction) => {
     try {
         if (!req.user) {
-            return res.status(401).json({ message: 'Not authenticated' });
+            return handleUnauthorized(res, 'Not authenticated');
         }
         const userId = req.user.id;
         const userRole = req.user.roles;
         const { ids } = req.body; // Changed from factIds to ids for RESTful consistency
 
         if (!Array.isArray(ids) || ids.length === 0) {
-            return res.status(400).json({
-                error: {
-                    code: 'INVALID_REQUEST',
-                    message: 'Invalid or empty ids array',
-                    timestamp: new Date().toISOString(),
-                    path: req.path
-                }
-            });
+            return sendValidationError(res, 'Invalid or empty ids array');
         }
 
-        console.log(`🗑️  Bulk delete request for ${ids.length} facts`);
 
         // Find all facts to verify ownership
         const factsToDelete = await Facts.find({ _id: { $in: ids } });
 
         if (factsToDelete.length === 0) {
-            return res.status(404).json({
-                error: {
-                    code: 'NOT_FOUND',
-                    message: 'No facts found with provided IDs',
-                    timestamp: new Date().toISOString(),
-                    path: req.path
-                }
-            });
+            return handleResourceNotFound(res, 'No facts found with provided IDs');
         }
 
         // Process each fact and track results
@@ -284,19 +245,12 @@ export const deleteMultipleFacts = async (req: Request, res: Response, next: Nex
         console.log(`   - Success: ${success.length}`);
         console.log(`   - Failed: ${failed.length}`);
 
-        res.status(200).json({
+        sendSuccess(res, {
             success,
             failed
-        });
+        }, 'Bulk delete operation completed');
     } catch (error) {
         console.error('Error deleting multiple facts:', error);
-        res.status(500).json({
-            error: {
-                code: 'INTERNAL_ERROR',
-                message: 'Failed to delete facts',
-                timestamp: new Date().toISOString(),
-                path: req.path
-            }
-        });
+        next(error);
     }
 };

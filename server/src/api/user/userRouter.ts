@@ -23,6 +23,7 @@ import { paginationMiddleware } from "../../middlewares/pagination";
 import { filterSortMiddleware } from "../../middlewares/filterSort";
 import { upload, uploadNone, uploadAvatar as uploadAvatarMiddleware, uploadSellerDocs } from '../../middlewares/multer';
 import { authLimiter } from '../../middlewares/rateLimiter';
+import { sendValidationError } from '../../utils/apiResponse';
 
 const userRouter = express.Router();
 
@@ -31,10 +32,10 @@ const userRouter = express.Router();
 // ============================================================================
 /**
  * @swagger
- * /api/users/login:
+ * /api/v1/users/login:
  *   post:
  *     summary: Login user (deprecated)
- *     description: Use POST /api/auth/login instead
+ *     description: Use POST /api/v1/auth/login instead
  *     tags: [Users]
  *     deprecated: true
  */
@@ -56,7 +57,7 @@ userRouter.post('/logout', authLimiter, logoutUser);
 
 /**
  * @swagger
- * /api/users/me:
+ * /api/v1/users/me:
  *   get:
  *     summary: Get current user
  *     description: Retrieve the currently authenticated user's information
@@ -66,14 +67,27 @@ userRouter.post('/logout', authLimiter, logoutUser);
  *     responses:
  *       200:
  *         description: User retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/StandardResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       $ref: '#/components/schemas/User'
  *       401:
  *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 userRouter.get('/me', authenticate, getCurrentUser);
 
 /**
  * @swagger
- * /api/users/me:
+ * /api/v1/users/me:
  *   patch:
  *     summary: Update current user profile
  *     description: Update the authenticated user's profile information
@@ -114,7 +128,7 @@ userRouter.patch('/me', authenticate, uploadSellerDocs, updateMyProfile);
 
 /**
  * @swagger
- * /api/users/me/password:
+ * /api/v1/users/me/password:
  *   patch:
  *     summary: Change current user password
  *     description: Change the authenticated user's password
@@ -148,7 +162,7 @@ userRouter.patch('/me/password', authenticate, changeMyPassword);
 
 /**
  * @swagger
- * /api/users/me/avatar:
+ * /api/v1/users/me/avatar:
  *   post:
  *     summary: Upload current user avatar
  *     description: Upload or update the authenticated user's avatar
@@ -187,7 +201,7 @@ userRouter.get('/me/avatar', authenticate, getUserAvatar);
 
 /**
  * @swagger
- * /api/users/me/settings:
+ * /api/v1/users/me/settings:
  *   get:
  *     summary: Get current user settings
  *     description: Retrieve the authenticated user's settings
@@ -227,7 +241,7 @@ userRouter.patch('/me/settings', uploadNone, authenticate, addOrUpdateSettings);
 
 /**
  * @swagger
- * /api/users/me/settings/key:
+ * /api/v1/users/me/settings/key:
  *   get:
  *     summary: Get decrypted API key
  *     description: Retrieve decrypted API key for the authenticated user
@@ -254,7 +268,7 @@ userRouter.get('/me/settings/key', authenticate, getDecryptedApiKey);
 
 /**
  * @swagger
- * /api/users/{userId}:
+ * /api/v1/users/{userId}:
  *   patch:
  *     summary: Update user by ID (owner or admin)
  *     description: Update user information. Users can update their own profile, admins can update any user.
@@ -338,7 +352,7 @@ userRouter.delete(
 
 /**
  * @swagger
- * /api/users:
+ * /api/v1/users:
  *   get:
  *     summary: Get all users (admin only)
  *     description: Retrieve a paginated list of all users
@@ -380,7 +394,7 @@ userRouter.get('/',
 
 /**
  * @swagger
- * /api/users/{userId}:
+ * /api/v1/users/{userId}:
  *   get:
  *     summary: Get user by ID (admin only)
  *     description: Retrieve a specific user's information. Admin access required.
@@ -410,7 +424,7 @@ userRouter.get('/:userId', [param('userId').isMongoId(), authenticate], authoriz
 
 /**
  * @swagger
- * /api/users/{userId}/role:
+ * /api/v1/users/{userId}/role:
  *   patch:
  *     summary: Change user role (admin only)
  *     description: Change a user's role. Admin access required.
@@ -452,7 +466,7 @@ userRouter.patch('/:userId/role', [param('userId').isMongoId(), authenticate], a
 
 /**
  * @swagger
- * /api/users/seller-applications:
+ * /api/v1/users/seller-applications:
  *   get:
  *     summary: Get all seller applications (admin only)
  *     description: Retrieve all seller applications
@@ -471,7 +485,7 @@ userRouter.get('/seller-applications', authenticate, authorizeRoles('admin'), ge
 
 /**
  * @swagger
- * /api/users/{userId}/approve-seller:
+ * /api/v1/users/{userId}/approve-seller:
  *   patch:
  *     summary: Approve seller application (admin only)
  *     description: Approve a user's seller application
@@ -497,7 +511,7 @@ userRouter.patch('/:userId/approve-seller', [param('userId').isMongoId(), authen
 
 /**
  * @swagger
- * /api/users/{userId}/reject-seller:
+ * /api/v1/users/{userId}/reject-seller:
  *   patch:
  *     summary: Reject seller application (admin only)
  *     description: Reject a user's seller application
@@ -532,7 +546,7 @@ userRouter.patch('/:userId/reject-seller', [param('userId').isMongoId(), authent
 
 /**
  * @swagger
- * /api/users/{userId}/seller-status:
+ * /api/v1/users/{userId}/seller-status:
  *   patch:
  *     summary: Update seller application status (admin only)
  *     description: Approve or reject a seller application
@@ -575,20 +589,16 @@ userRouter.patch('/:userId/seller-status', [param('userId').isMongoId(), authent
   } else if (status === 'rejected') {
     return rejectSellerApplication(req, res, next);
   } else {
-    return res.status(400).json({
-      error: {
-        code: 'INVALID_STATUS',
-        message: 'Status must be either "approved" or "rejected"',
-        timestamp: new Date().toISOString(),
-        path: req.path
-      }
-    });
+    return sendValidationError(res, 'Status must be either "approved" or "rejected"', [{
+      field: 'status',
+      message: 'Status must be either "approved" or "rejected"'
+    }]);
   }
 });
 
 /**
  * @swagger
- * /api/users/{userId}/delete-seller:
+ * /api/v1/users/{userId}/delete-seller:
  *   delete:
  *     summary: Delete seller application (admin only)
  *     description: Delete a user's seller application

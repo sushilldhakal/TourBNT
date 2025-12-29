@@ -9,7 +9,7 @@ const factsRouter = express.Router();
 
 /**
  * @swagger
- * /api/facts:
+ * /api/v1/facts:
  *   get:
  *     summary: Get all facts
  *     description: Retrieve all tour facts (Admin or Seller only)
@@ -116,7 +116,7 @@ const factsRouter = express.Router();
  */
 
 /**
- * GET /api/facts
+ * GET /api/v1/facts
  * List all facts (Admin or Seller only)
  */
 factsRouter.get(
@@ -128,7 +128,7 @@ factsRouter.get(
 );
 
 /**
- * POST /api/facts
+ * POST /api/v1/facts
  * Create a new fact (Admin or Seller only)
  */
 factsRouter.post(
@@ -147,7 +147,7 @@ factsRouter.delete(
 );
 
 /**
- * DELETE /api/facts
+ * DELETE /api/v1/facts
  * Bulk delete facts (Admin or Seller only)
  */
 factsRouter.delete(
@@ -159,7 +159,7 @@ factsRouter.delete(
 
 /**
  * @swagger
- * /api/facts/user/{userId}:
+ * /api/v1/facts/user/{userId}:
  *   get:
  *     summary: Get user's facts
  *     description: Retrieve all facts created by a specific user (owner or admin)
@@ -189,7 +189,7 @@ factsRouter.delete(
  */
 
 /**
- * GET /api/facts/user/:userId
+ * GET /api/v1/facts/user/:userId
  * Get facts created by a specific user
  * Owner of the facts or Admin
  */
@@ -202,7 +202,7 @@ factsRouter.get(
 
 /**
  * @swagger
- * /api/facts/{factId}:
+ * /api/v1/facts/{factId}:
  *   get:
  *     summary: Get fact by ID
  *     description: Retrieve a specific fact by its ID (owner or admin)
@@ -269,7 +269,7 @@ factsRouter.get(
  */
 
 /**
- * GET /api/facts/:factId
+ * GET /api/v1/facts/:factId
  * Get single fact (Owner or Admin)
  * Note: Ownership check is handled in the controller by looking up the fact's user field
  */
@@ -280,7 +280,7 @@ factsRouter.get(
 );
 
 /**
- * PATCH /api/facts/:factId
+ * PATCH /api/v1/facts/:factId
  * Update a fact (Owner or Admin)
  * Note: Ownership check is handled in the controller by looking up the fact's user field
  */

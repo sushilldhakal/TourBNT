@@ -4,6 +4,7 @@ import { config } from "../../config/config";
 import OpenAI from "openai";
 import UserSettings from "../user/userSettingModel";
 import { decrypt } from "../../utils/encryption";
+import { sendValidationError, sendError } from "../../utils/apiResponse";
 
 // const openai = new OpenAI({
 //     apiKey: config.openAIApiKey,
@@ -24,13 +25,16 @@ export const generateCompletion = async (req: Request
 
 
     if (!userId) {
-      return res.status(400).json({ error: 'User ID is required' });
+      return sendValidationError(res, 'User ID is required', [{
+        field: 'userId',
+        message: 'User ID is required'
+      }]);
     }
 
     // Fetch user settings from the database
     const settings = await UserSettings.findOne({ user: userId });
     if (!settings || !settings.openaiApiKey) {
-      return res.status(410).json({ error: 'Missing OpenAI API key' });
+      return sendError(res, 'Missing OpenAI API key', 410);
     }
 
     // Decrypt the OpenAI API key before using it

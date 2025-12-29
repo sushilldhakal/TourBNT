@@ -1,9 +1,13 @@
 import { Request, Response } from 'express';
 import { TourService } from '../services/tourService';
 import { extractTourFields } from '../utils/dataProcessors';
-import { sendSuccess, sendError, sendPaginatedResponse, asyncAuthHandler, RESPONSE_MESSAGES } from '../utils/responseHelpers';
+import { sendSuccess, sendError, sendPaginatedResponse, HTTP_STATUS } from '../../../utils/apiResponse';
+import { asyncAuthHandler } from '../../../utils/routeWrapper';
+import { RESPONSE_MESSAGES } from '../utils/constants';
 import { generateUniqueCode } from '../utils/codeGenerator';
-import { HTTP_STATUS } from '../../../utils/httpStatusCodes';
+import TourModel from '../tourModel';
+import { hybridPagination, PaginationParams } from '../../../utils/paginationUtils';
+import { normalizeDoc } from '../../../utils/normalizeDoc';
 
 /**
  * Refactored Tour Controller
@@ -12,35 +16,84 @@ import { HTTP_STATUS } from '../../../utils/httpStatusCodes';
 
 /**
  * Get all tours with filtering and pagination
+ * Automatically filters by user role:
+ * - Admin: Returns all tours (published and unpublished)
+ * - Seller: Returns only their own tours
  * Uses pagination and filter/sort middleware
  */
 export const getAllTours = asyncAuthHandler(async (req: Request, res: Response) => {
-  // Use pagination params from middleware
-  const paginationParams = req.pagination || { page: 1, limit: 10 };
+  try {
+    // Get pagination and sort from middleware (already parsed and validated)
+    const { page, limit, skip, useHybrid } = req.pagination!;
+    const { field: sortBy, order: sortOrder } = req.sort!;
 
-  // Use filters from middleware (AND logic - all filters must match)
-  const filters: any = {};
-  if (req.filters) {
-    if (req.filters.destination) filters.destination = req.filters.destination;
-    if (req.filters.category) filters['category.categoryName'] = { $regex: req.filters.category, $options: 'i' };
-    if (req.filters.status) filters.status = req.filters.status;
+    // Build filters from middleware (AND logic - all filters must match)
+    const filters: any = {};
+    if (req.filters) {
+      if (req.filters.destination) filters.destination = req.filters.destination;
+      if (req.filters.category) filters['category.categoryName'] = { $regex: req.filters.category, $options: 'i' };
+      if (req.filters.status) filters.status = req.filters.status;
+    }
+
+    // Build sort options from middleware
+    const sortOptions: any = { [sortBy]: sortOrder === 'desc' ? -1 : 1 };
+
+    // Build query based on user role
+    const authReq = req as Request;
+    const userId = authReq.user?.id;
+    const isAdmin = authReq.user?.roles?.includes('admin') || false;
+    const query: any = isAdmin ? {} : { author: userId };
+
+    // Merge filters into query
+    Object.assign(query, filters);
+
+    // For admins, don't filter by tourStatus (show all tours)
+    // For sellers, only show published tours
+    if (!isAdmin) {
+      query.tourStatus = 'Published';
+    }
+
+    // Use hybrid pagination for 'all' or > MAX_LIMIT
+    if (useHybrid) {
+      return hybridPagination(
+        TourModel,
+        query,
+        req,
+        res,
+        {
+          populate: [
+            { path: 'author', select: 'name email roles' },
+            {
+              path: 'category',
+              select: 'name description',
+              options: { strictPopulate: false }
+            }
+          ],
+          sort: sortOptions,
+          memoryThreshold: 100,
+          message: 'Tours retrieved successfully'
+        }
+      );
+    }
+
+    // Normal pagination (limit <= 100) - use service
+    const serviceParams: PaginationParams = {
+      page,
+      limit: limit as number, // Safe cast since useHybrid is false
+      sortBy,
+      sortOrder
+    };
+
+    const result = await TourService.getAllTours(filters, serviceParams, sortOptions, true);
+    return sendPaginatedResponse(res, result.items, {
+      page: result.page,
+      limit: result.limit,
+      totalItems: result.totalItems,
+      totalPages: result.totalPages
+    }, 'Tours retrieved successfully');
+  } catch (error: any) {
+    return sendError(res, error.message || 'Failed to fetch tours', HTTP_STATUS.INTERNAL_SERVER_ERROR);
   }
-
-  // Use sort params from middleware
-  const sortOptions: any = {};
-  if (req.sort) {
-    sortOptions[req.sort.field] = req.sort.order === 'desc' ? -1 : 1;
-  } else {
-    sortOptions.createdAt = -1; // Default sort
-  }
-
-  const result = await TourService.getAllTours(filters, paginationParams, sortOptions);
-  return sendPaginatedResponse(res, result.items, {
-    currentPage: result.page,
-    totalPages: result.totalPages,
-    totalItems: result.totalItems,
-    itemsPerPage: result.limit
-  }, 'Tours retrieved successfully');
 });
 
 /**
@@ -79,7 +132,7 @@ export const getTour = asyncAuthHandler(async (req: Request, res: Response) => {
  */
 export const createTour = asyncAuthHandler(async (req: Request, res: Response) => {
   const authReq = req as Request
-;
+    ;
   const userId = authReq.user?.id;
 
   if (!userId) {
@@ -106,7 +159,7 @@ export const createTour = asyncAuthHandler(async (req: Request, res: Response) =
  */
 export const updateTour = asyncAuthHandler(async (req: Request, res: Response) => {
   const authReq = req as Request
-;
+    ;
   const userId = authReq.user?.id;
   const isAdmin = authReq.user?.roles.includes('admin') || false;
   const { tourId } = req.params;
@@ -137,7 +190,7 @@ export const updateTour = asyncAuthHandler(async (req: Request, res: Response) =
  */
 export const deleteTour = asyncAuthHandler(async (req: Request, res: Response) => {
   const authReq = req as Request
-;
+    ;
   const userId = authReq.user?.id;
   const isAdmin = authReq.user?.roles.includes('admin') || false;
   const { tourId } = req.params;
@@ -173,10 +226,10 @@ export const searchTours = asyncAuthHandler(async (req: Request, res: Response) 
 
   const result = await TourService.searchTours(searchParams, { page, limit });
   return sendPaginatedResponse(res, result.items, {
-    currentPage: result.page,
-    totalPages: result.totalPages,
+    page: result.page,
+    limit: result.limit,
     totalItems: result.totalItems,
-    itemsPerPage: result.limit
+    totalPages: result.totalPages
   }, 'Tours retrieved successfully');
 });
 
@@ -187,13 +240,8 @@ export const getLatestTours = asyncAuthHandler(async (req: Request, res: Respons
   const limit = parseInt(req.query.limit as string) || 10;
   const tours = await TourService.getToursBy('latest', limit);
 
-  // Transform _id to id for frontend compatibility
-  const transformedTours = tours.map((tour: any) => ({
-    ...tour,
-    id: tour._id.toString()
-  }));
-
-  sendSuccess(res, { tours: transformedTours }, RESPONSE_MESSAGES.TOURS_RETRIEVED);
+  // No need for manual transformation - normalization is handled automatically
+  sendSuccess(res, tours, RESPONSE_MESSAGES.TOURS_RETRIEVED);
 });
 
 /**
@@ -202,7 +250,7 @@ export const getLatestTours = asyncAuthHandler(async (req: Request, res: Respons
 export const getToursByRating = asyncAuthHandler(async (req: Request, res: Response) => {
   const limit = parseInt(req.query.limit as string) || 10;
   const tours = await TourService.getToursBy('rating', limit);
-  sendSuccess(res, { tours }, RESPONSE_MESSAGES.TOURS_RETRIEVED);
+  sendSuccess(res, tours, RESPONSE_MESSAGES.TOURS_RETRIEVED);
 });
 
 /**
@@ -211,7 +259,7 @@ export const getToursByRating = asyncAuthHandler(async (req: Request, res: Respo
 export const getDiscountedTours = asyncAuthHandler(async (req: Request, res: Response) => {
   const limit = parseInt(req.query.limit as string) || 10;
   const tours = await TourService.getToursBy('discounted', limit);
-  sendSuccess(res, { tours }, RESPONSE_MESSAGES.TOURS_RETRIEVED);
+  sendSuccess(res, tours, RESPONSE_MESSAGES.TOURS_RETRIEVED);
 });
 
 /**
@@ -220,40 +268,16 @@ export const getDiscountedTours = asyncAuthHandler(async (req: Request, res: Res
 export const getSpecialOfferTours = asyncAuthHandler(async (req: Request, res: Response) => {
   const limit = parseInt(req.query.limit as string) || 10;
   const tours = await TourService.getToursBy('special-offers', limit);
-  sendSuccess(res, { tours }, RESPONSE_MESSAGES.TOURS_RETRIEVED);
+  sendSuccess(res, tours, RESPONSE_MESSAGES.TOURS_RETRIEVED);
 });
 
-/**
- * Get user's tours
- */
-export const getUserTours = asyncAuthHandler(async (req: Request, res: Response) => {
-  const authReq = req as Request
-;
-  const { userId } = req.params; // Use userId from route parameter
-  const isAdmin = authReq.user?.roles.includes('admin') || false;
-  // Security check: users can only access their own tours unless they're admin
-  if (!isAdmin && authReq.user?.id !== userId) {
-    return sendError(res, 'Access denied: Cannot access other user\'s tours', HTTP_STATUS.FORBIDDEN);
-  }
-
-  const page = parseInt(req.query.page as string) || 1;
-  const limit = parseInt(req.query.limit as string) || 10;
-
-  const result = await TourService.getUserTours(userId, isAdmin, { page, limit });
-  return sendPaginatedResponse(res, result.items, {
-    currentPage: result.page,
-    totalPages: result.totalPages,
-    totalItems: result.totalItems,
-    itemsPerPage: result.limit
-  }, 'Tours retrieved successfully');
-});
 
 /**
  * Get user's tour titles
  */
 export const getUserToursTitle = asyncAuthHandler(async (req: Request, res: Response) => {
   const authReq = req as Request
-;
+    ;
   const { userId } = req.params; // Use userId from route parameter
 
   // Security check: users can only access their own tours unless they're admin
@@ -268,24 +292,94 @@ export const getUserToursTitle = asyncAuthHandler(async (req: Request, res: Resp
 
 /**
  * Get current user's tours (httpOnly cookie auth)
+ * - Admin: Returns all tours (published and unpublished)
+ * - Seller/User: Returns only their own tours
+ * Returns only essential fields for listing: title, coverImage, id, author, price, tourStatus, code, createdAt, updatedAt
  */
 export const getMyTours = asyncAuthHandler(async (req: Request, res: Response) => {
-  const authReq = req as Request
-;
+  const authReq = req as Request;
   const userId = authReq.user!.id; // Get from authenticated cookie, not params
+  const isAdmin = authReq.user?.roles?.includes('admin') || false;
 
-  // Get pagination params
-  const page = parseInt(req.query.page as string) || 1;
-  const limit = parseInt(req.query.limit as string) || 10;
+  // Build query based on user role
+  const query = isAdmin ? {} : { author: userId };
 
-  const result = await TourService.getUserTours(userId, false, { page, limit });
+  // Helper function to normalize author (handles array, object with numeric keys, or single object)
+  const normalizeAuthor = (author: any): any => {
+    if (!author) return author;
+    
+    // Check if it's an object with numeric keys (converted array)
+    // e.g., { "0": {...}, "1": {...} }
+    const isObjectWithNumericKeys = typeof author === 'object' && 
+      !Array.isArray(author) && 
+      author !== null &&
+      Object.keys(author).every(key => /^\d+$/.test(key));
+    
+    // Convert object with numeric keys back to array
+    let authorArray: any[] = [];
+    if (isObjectWithNumericKeys) {
+      authorArray = Object.values(author);
+    } else if (Array.isArray(author)) {
+      authorArray = author;
+    } else {
+      // Single author object
+      authorArray = [author];
+    }
+    
+    // Normalize each author in the array
+    const normalizedAuthors = authorArray.map((auth: any) => {
+      if (!auth || typeof auth !== 'object') return auth;
+      
+      // Use normalizeDoc to handle nested normalization
+      const normalized = normalizeDoc(auth);
+      
+      // Ensure id exists and _id is removed
+      if (normalized._id && !normalized.id) {
+        normalized.id = normalized._id.toString();
+      }
+      if (normalized._id) {
+        delete normalized._id;
+      }
+      
+      return normalized;
+    });
+    
+    // Return as array (even if single item) for consistency
+    return normalizedAuthors;
+  };
 
-  return sendPaginatedResponse(res, result.items, {
-    currentPage: result.page,
-    totalPages: result.totalPages,
-    totalItems: result.totalItems,
-    itemsPerPage: result.limit
-  });
+  // Helper function to filter and format tour fields
+  const filterTourFields = (tour: any) => {
+    // First normalize the entire tour to handle nested structures
+    const normalizedTour = normalizeDoc(tour);
+    
+    return {
+      id: normalizedTour._id?.toString() || normalizedTour.id,
+      title: normalizedTour.title,
+      coverImage: normalizedTour.coverImage,
+      author: normalizeAuthor(normalizedTour.author), // Normalized author(s) with id instead of _id
+      price: normalizedTour.price,
+      tourStatus: normalizedTour.tourStatus,
+      code: normalizedTour.code,
+      createdAt: normalizedTour.createdAt,
+      updatedAt: normalizedTour.updatedAt,
+    };
+  };
+
+  // Use reusable hybrid pagination utility
+  return hybridPagination(
+    TourModel,
+    query,
+    req,
+    res,
+    {
+      fieldFilter: filterTourFields,
+      populate: [{ path: 'author', select: 'name email roles' }],
+      sort: { createdAt: -1 },
+      memoryThreshold: 100,
+      message: 'Tours retrieved successfully'
+    }
+  );
 });
 
 /**

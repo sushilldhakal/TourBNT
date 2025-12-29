@@ -3,9 +3,9 @@ import { config } from './config';
 
 // Configure Cloudinary
 cloudinary.config({
-  cloud_name: config.cloudinaryCloud,
-  api_key: config.cloudinaryApiKey,
-  api_secret: config.cloudinarySecret,
+  cloud_name: config.cloudinary.cloud,
+  api_key: config.cloudinary.apiKey,
+  api_secret: config.cloudinary.secret,
   secure: true
 });
 

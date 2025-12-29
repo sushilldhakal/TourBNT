@@ -22,7 +22,7 @@ export interface DestinationData {
  */
 export const getSellerDestinations = async () => {
     try {
-        const response = await api.get('/api/global/destinations/seller/visible');
+        const response = await api.get('/global/destinations/seller/visible');
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching seller destinations');
@@ -34,7 +34,7 @@ export const getSellerDestinations = async () => {
  */
 export const getUserDestinations = async () => {
     try {
-        const response = await api.get('/api/global/destinations/user-destinations');
+        const response = await api.get('/global/destinations/user-destinations');
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching user destinations');
@@ -46,7 +46,7 @@ export const getUserDestinations = async () => {
  */
 export const getAllDestinations = async () => {
     try {
-        const response = await api.get('/api/global/destinations/approved');
+        const response = await api.get('/global/destinations/approved');
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching destinations');
@@ -58,7 +58,7 @@ export const getAllDestinations = async () => {
  */
 export const getDestination = async (destinationId: string) => {
     try {
-        const response = await api.get(`/api/global/destinations/${destinationId}`);
+        const response = await api.get(`/global/destinations/${destinationId}`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching destination');
@@ -77,7 +77,7 @@ export const getDestinationById = async (destinationId: string) => {
  */
 export const toggleDestinationFavorite = async (destinationId: string) => {
     try {
-        const response = await api.patch(`/api/global/destinations/${destinationId}/favorite`);
+        const response = await api.patch(`/global/destinations/${destinationId}/favorite`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'toggling destination favorite');
@@ -89,7 +89,7 @@ export const toggleDestinationFavorite = async (destinationId: string) => {
  */
 export const toggleDestinationActiveStatus = async (destinationId: string) => {
     try {
-        const response = await api.patch(`/api/global/destinations/${destinationId}/toggle-active`);
+        const response = await api.patch(`/global/destinations/${destinationId}/toggle-active`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'toggling destination status');
@@ -101,7 +101,7 @@ export const toggleDestinationActiveStatus = async (destinationId: string) => {
  */
 export const addExistingDestinationToSeller = async (destinationId: string) => {
     try {
-        const response = await api.post(`/api/global/destinations/${destinationId}/add-to-list`);
+        const response = await api.post(`/global/destinations/${destinationId}/add-to-list`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'adding destination to list');
@@ -113,7 +113,7 @@ export const addExistingDestinationToSeller = async (destinationId: string) => {
  */
 export const removeExistingDestinationFromSeller = async (destinationId: string) => {
     try {
-        const response = await api.post(`/api/global/destinations/${destinationId}/remove-from-list`);
+        const response = await api.post(`/global/destinations/${destinationId}/remove-from-list`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'removing destination from list');
@@ -125,7 +125,7 @@ export const removeExistingDestinationFromSeller = async (destinationId: string)
  */
 export const addDestination = async (destinationData: FormData) => {
     try {
-        const response = await api.post('/api/global/destinations/submit', destinationData, {
+        const response = await api.post('/global/destinations/submit', destinationData, {
             headers: {
                 'Content-Type': 'multipart/form-data',
             },
@@ -141,7 +141,7 @@ export const addDestination = async (destinationData: FormData) => {
  */
 export const updateDestination = async (destinationId: string, destinationData: FormData) => {
     try {
-        const response = await api.patch(`/api/global/destinations/${destinationId}`, destinationData, {
+        const response = await api.patch(`/global/destinations/${destinationId}`, destinationData, {
             headers: {
                 'Content-Type': 'multipart/form-data',
             },
@@ -157,7 +157,7 @@ export const updateDestination = async (destinationId: string, destinationData: 
  */
 export const deleteDestination = async (destinationId: string) => {
     try {
-        const response = await api.delete(`/api/global/destinations/admin/${destinationId}`);
+        const response = await api.delete(`/global/destinations/admin/${destinationId}`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'deleting destination');
@@ -169,7 +169,7 @@ export const deleteDestination = async (destinationId: string) => {
  */
 export const getPendingDestinations = async () => {
     try {
-        const response = await api.get('/api/global/destinations/admin/pending');
+        const response = await api.get('/global/destinations/admin/pending');
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching pending destinations');
@@ -181,7 +181,7 @@ export const getPendingDestinations = async () => {
  */
 export const approveDestination = async (destinationId: string) => {
     try {
-        const response = await api.put(`/api/global/destinations/admin/${destinationId}/approve`);
+        const response = await api.put(`/global/destinations/admin/${destinationId}/approve`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'approving destination');
@@ -193,7 +193,7 @@ export const approveDestination = async (destinationId: string) => {
  */
 export const rejectDestination = async (destinationId: string, reason: string) => {
     try {
-        const response = await api.put(`/api/global/destinations/admin/${destinationId}/reject`, { reason });
+        const response = await api.put(`/global/destinations/admin/${destinationId}/reject`, { reason });
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'rejecting destination');
@@ -216,7 +216,7 @@ export const searchDestinations = async (searchParams: {
         if (searchParams.region) params.append('region', searchParams.region);
         if (searchParams.city) params.append('city', searchParams.city);
 
-        const response = await api.get(`/api/global/destinations/seller/search?${params.toString()}`);
+        const response = await api.get(`/global/destinations/seller/search?${params.toString()}`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'searching destinations');
@@ -228,7 +228,7 @@ export const searchDestinations = async (searchParams: {
  */
 export const getUserToursTitle = async (userId: string) => {
     try {
-        const response = await api.get(`/api/users/${userId}/tours/titles`);
+        const response = await api.get(`/users/${userId}/tours/titles`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching tour titles');

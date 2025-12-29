@@ -34,49 +34,72 @@ interface User {
     created_at?: string;
 }
 
+type UsersResponse =
+    | User[]
+    | { users: User[]; pagination?: { page: number; totalPages: number; totalItems: number; itemsPerPage: number } }
+    | { data: { users: User[]; pagination?: { page: number; totalPages: number; totalItems: number; itemsPerPage: number } } };
+
 export default function UsersPage() {
     const [searchTerm, setSearchTerm] = useState('');
     const [viewMode, setViewMode] = useState<ViewMode>('grid');
     const observerRef = useRef<HTMLDivElement>(null);
 
-    // Regular query for table view - use max allowed limit
-    const { data: tableData, isLoading: isLoadingTable, isError: isErrorTable, error: tableError } = useQuery({
-        queryKey: ['users', 'table'],
-        queryFn: async () => {
-            // Use maximum allowed limit (100)
-            const response = await getUsers({ page: 1, limit: 100 });
-            // Ensure response has the expected structure
-            if (!response || (!response.users && !Array.isArray(response))) {
-                throw new Error('Invalid response structure from API');
-            }
-            return response;
-        },
-        enabled: viewMode === 'list',
-        retry: 1,
-    });
-
-    // Infinite query for card view
+    // Single infinite query for both table and card views
     const {
         data: infiniteData,
         fetchNextPage,
         hasNextPage,
         isFetchingNextPage,
-        isLoading: isLoadingCards,
-        isError: isErrorCards,
+        isLoading,
+        isError,
+        error,
     } = useInfiniteQuery({
         queryKey: ['users', 'infinite'],
-        queryFn: ({ pageParam }: { pageParam: number }) => getUsers({ page: pageParam, limit: 20 }),
+        queryFn: ({ pageParam }: { pageParam: number }) => {
+            // Use consistent limit for both views
+            return getUsers({ page: pageParam, limit: 50 });
+        },
         initialPageParam: 1,
-        getNextPageParam: (lastPage) => {
-            const pagination = lastPage.pagination;
-            if (pagination && pagination.page < pagination.totalPages) {
-                return pagination.page + 1;
+        getNextPageParam: (lastPage: unknown) => {
+            if (typeof lastPage === 'object' && lastPage !== null) {
+                if ('pagination' in lastPage) {
+                    const pagination = (lastPage as { pagination?: { currentPage?: number; page?: number; totalPages?: number } }).pagination;
+                    if (pagination) {
+                        const currentPage = pagination.currentPage || pagination.page;
+                        if (typeof currentPage === 'number' && typeof pagination.totalPages === 'number') {
+                            if (currentPage < pagination.totalPages) {
+                                return currentPage + 1;
+                            }
+                        }
+                    }
+                }
+                if ('data' in lastPage && typeof lastPage.data === 'object' && lastPage.data !== null) {
+                    const data = lastPage.data as { pagination?: { currentPage?: number; page?: number; totalPages?: number } };
+                    if (data.pagination) {
+                        const currentPage = data.pagination.currentPage || data.pagination.page;
+                        if (typeof currentPage === 'number' && typeof data.pagination.totalPages === 'number') {
+                            if (currentPage < data.pagination.totalPages) {
+                                return currentPage + 1;
+                            }
+                        }
+                    }
+                }
             }
             return undefined;
         },
-        enabled: viewMode === 'grid',
         staleTime: 5 * 60 * 1000,
     });
+
+    // Load more pages initially for table view to show more users
+    useEffect(() => {
+        if (viewMode === 'list' && infiniteData && hasNextPage && !isFetchingNextPage) {
+            // Load 2 more pages for table view (total 3 pages = 150 users)
+            const loadedPages = infiniteData.pages.length;
+            if (loadedPages < 3) {
+                fetchNextPage();
+            }
+        }
+    }, [viewMode, infiniteData, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
     // Intersection observer for infinite scroll
     const handleObserver = useCallback(
@@ -89,7 +112,7 @@ export default function UsersPage() {
         [fetchNextPage, hasNextPage, isFetchingNextPage]
     );
 
-    // Set up intersection observer for infinite scroll
+    // Set up intersection observer for infinite scroll (only for grid view)
     useEffect(() => {
         if (viewMode !== 'grid') return;
 
@@ -110,50 +133,72 @@ export default function UsersPage() {
         };
     }, [handleObserver, viewMode]);
 
-    // Extract users from table data
-    const tableUsers: User[] = useMemo(() => {
-        if (!tableData) return [];
-        if (tableData.users && Array.isArray(tableData.users)) return tableData.users;
-        if (tableData.data?.users && Array.isArray(tableData.data.users)) return tableData.data.users;
-        if (Array.isArray(tableData)) return tableData;
-        return [];
-    }, [tableData]);
-
-    // Flatten all pages from infinite query for card view
-    const allCardUsers: User[] = useMemo(() => {
+    // Flatten all pages from infinite query - used for both table and card views
+    const allUsers: User[] = useMemo(() => {
         if (!infiniteData) return [];
-        return infiniteData.pages.flatMap((page) => {
-            if (page.users) return page.users;
-            if (page.data?.users) return page.data.users;
+        return infiniteData.pages.flatMap((page: unknown) => {
             if (Array.isArray(page)) return page;
+            if (typeof page === 'object' && page !== null) {
+                // Check for 'items' field (current API format)
+                if ('items' in page && Array.isArray(page.items)) {
+                    return page.items;
+                }
+                // Fallback: check for 'users' field
+                if ('users' in page && Array.isArray(page.users)) {
+                    return page.users;
+                }
+                // Fallback: check for nested 'data' structure
+                if ('data' in page && typeof page.data === 'object' && page.data !== null) {
+                    const data = page.data as { items?: User[]; users?: User[] };
+                    if (data.items && Array.isArray(data.items)) {
+                        return data.items;
+                    }
+                    if (data.users && Array.isArray(data.users)) {
+                        return data.users;
+                    }
+                }
+            }
             return [];
         });
     }, [infiniteData]);
 
-    // Filter users based on search term
-    const filteredTableUsers = useMemo(() => {
-        if (!searchTerm) return tableUsers;
+    // Filter users based on search term - used for both views
+    const filteredUsers = useMemo(() => {
+        if (!searchTerm) return allUsers;
         const term = searchTerm.toLowerCase();
-        return tableUsers.filter(
+        return allUsers.filter(
             (user) =>
                 user.name?.toLowerCase().includes(term) ||
                 user.email?.toLowerCase().includes(term) ||
                 user.roles?.toLowerCase().includes(term) ||
-                user.phone?.toLowerCase().includes(term)
+                (user.phone && String(user.phone).includes(term))
         );
-    }, [tableUsers, searchTerm]);
+    }, [allUsers, searchTerm]);
 
-    const filteredCardUsers = useMemo(() => {
-        if (!searchTerm) return allCardUsers;
-        const term = searchTerm.toLowerCase();
-        return allCardUsers.filter(
-            (user) =>
-                user.name?.toLowerCase().includes(term) ||
-                user.email?.toLowerCase().includes(term) ||
-                user.roles?.toLowerCase().includes(term) ||
-                user.phone?.toLowerCase().includes(term)
-        );
-    }, [allCardUsers, searchTerm]);
+    // Extract total users from pagination, handling different response structures
+    const totalUsers = useMemo(() => {
+        if (!infiniteData || infiniteData.pages.length === 0) return 0;
+        // Check all pages to find the highest totalItems value
+        let maxTotal = 0;
+        for (const page of infiniteData.pages) {
+            if (typeof page === 'object' && page !== null) {
+                if ('pagination' in page && page.pagination) {
+                    const pagination = page.pagination as { totalItems?: number; total?: number };
+                    const total = pagination.totalItems || pagination.total || 0;
+                    if (total > maxTotal) maxTotal = total;
+                }
+                if ('data' in page && typeof page.data === 'object' && page.data !== null) {
+                    const data = page.data as { pagination?: { totalItems?: number; total?: number } };
+                    if (data.pagination) {
+                        const total = data.pagination.totalItems || data.pagination.total || 0;
+                        if (total > maxTotal) maxTotal = total;
+                    }
+                }
+            }
+        }
+        // Return the max total found, or fallback to count of loaded users
+        return maxTotal > 0 ? maxTotal : allUsers.length;
+    }, [infiniteData, allUsers]);
 
     // Get initials for avatar fallback
     const getInitials = (name: string) => {
@@ -276,11 +321,11 @@ export default function UsersPage() {
     );
 
     const renderCardView = () => {
-        if (isLoadingCards) {
+        if (isLoading) {
             return <LoadingState type="cards" rows={6} />;
         }
 
-        if (isErrorCards) {
+        if (isError) {
             return (
                 <ErrorState
                     title="Error Loading Users"
@@ -290,7 +335,7 @@ export default function UsersPage() {
             );
         }
 
-        if (filteredCardUsers.length === 0) {
+        if (filteredUsers.length === 0) {
             return (
                 <EmptyState
                     icon={<Users className="h-16 w-16" />}
@@ -316,7 +361,7 @@ export default function UsersPage() {
         return (
             <>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {filteredCardUsers.map((user) => (
+                    {filteredUsers.map((user) => (
                         <Card
                             key={user._id || user.id}
                             className="overflow-hidden hover:shadow-md transition-shadow border-muted"
@@ -349,7 +394,7 @@ export default function UsersPage() {
                                     <Calendar className="h-3 w-3" />
                                     {user.createdAt || user.created_at
                                         ? format(
-                                            new Date(user.createdAt || user.created_at),
+                                            new Date(user.createdAt || user.created_at || new Date()),
                                             'MMM dd, yyyy'
                                         )
                                         : 'Member since login'}
@@ -392,18 +437,18 @@ export default function UsersPage() {
         }
 
         // Table view using DataTable component
-        if (isLoadingTable) {
+        if (isLoading) {
             return <LoadingState type="cards" rows={6} />;
         }
 
-        if (isErrorTable) {
-            console.error('Error loading users:', tableError);
+        if (isError) {
+            console.error('Error loading users:', error);
             return (
                 <ErrorState
                     title="Error Loading Users"
                     description={
-                        tableError instanceof Error
-                            ? `Failed to load users: ${tableError.message}`
+                        error instanceof Error
+                            ? `Failed to load users: ${error.message}`
                             : "We encountered an error while fetching user data. Please try again."
                     }
                     onRetry={() => {
@@ -413,21 +458,27 @@ export default function UsersPage() {
             );
         }
 
-        const totalUsers = tableData?.pagination?.total || 0;
-        const showingUsers = filteredTableUsers.length;
-        const hasMoreUsers = totalUsers > 100;
+        const showingUsers = filteredUsers.length;
+        const hasMoreUsers = totalUsers > allUsers.length;
 
         return (
             <div className="space-y-4">
                 {hasMoreUsers && (
                     <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
                         <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                            Showing first 100 users. Total users: {totalUsers}. Use filters or search to find specific users.
+                            Showing {allUsers.length} of {totalUsers} users. {hasNextPage && (
+                                <button
+                                    onClick={() => fetchNextPage()}
+                                    className="underline font-medium hover:text-yellow-900 dark:hover:text-yellow-100"
+                                >
+                                    Load more
+                                </button>
+                            )}
                         </p>
                     </div>
                 )}
                 <DataTable
-                    data={filteredTableUsers}
+                    data={filteredUsers}
                     columns={columns}
                     place="Search users by name, email, role, or phone..."
                     colum="name"
@@ -445,14 +496,14 @@ export default function UsersPage() {
                             <div>
                                 <CardTitle className="flex items-center gap-2 text-2xl">
                                     <Users className="h-6 w-6 text-primary" />
-                                    Users ({viewMode === 'grid' ? filteredCardUsers.length : filteredTableUsers.length})
+                                    Users ({filteredUsers.length})
                                 </CardTitle>
                                 <CardDescription className="mt-1">
                                     Manage all users of the system
                                 </CardDescription>
                             </div>
                             <div className="flex flex-col sm:flex-row gap-3">
-                                {viewMode === 'list' && (
+                                {viewMode === 'grid' && (
                                     <div className="relative">
                                         <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                                         <Input

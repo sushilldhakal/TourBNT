@@ -54,7 +54,7 @@ const mockCompanyInfo: CompanyInfo = {
 export const getCompanyInfo = async (): Promise<CompanyInfo> => {
     try {
         // In a real implementation, this would be an API call:
-        // const response = await api.get('/api/company-info');
+        // const response = await api.get('/company-info');
         // return response.data;
 
         // For now, return the mock data with a simulated delay

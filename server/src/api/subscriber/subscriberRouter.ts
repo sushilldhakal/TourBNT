@@ -8,7 +8,7 @@ const subscriberRouter = express.Router();
 
 /**
  * @swagger
- * /api/subscribers:
+ * /api/v1/subscribers:
  *   get:
  *     summary: Get all subscribers
  *     description: Retrieve all newsletter subscribers with pagination (admin only)
@@ -65,7 +65,7 @@ subscriberRouter.get('/', authenticate as any, authorizeRoles('admin'), paginati
 
 /**
  * @swagger
- * /api/subscribers:
+ * /api/v1/subscribers:
  *   post:
  *     summary: Subscribe to newsletter
  *     description: Add a new email to the newsletter subscription list (public endpoint)
@@ -106,15 +106,14 @@ subscriberRouter.post(
         body('email')
             .notEmpty()
             .withMessage('Email is required')
-            .isEmail()
-            .withMessage('Valid email is required')
+            // Allow comma/semicolon separated emails - validation happens in controller
     ],
     createSubscriber
 );
 
 /**
  * @swagger
- * /api/subscribers/{email}:
+ * /api/v1/subscribers/{email}:
  *   delete:
  *     summary: Unsubscribe from newsletter
  *     description: Remove an email from the newsletter subscription list (public endpoint)

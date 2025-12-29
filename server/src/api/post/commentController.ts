@@ -3,17 +3,31 @@ import Comment from './commentModel';  // Adjust the path as necessary
 import Post from './postModel';        // Adjust the path as necessary
 import createHttpError from 'http-errors';
 import CommentLike from './commentLikeModel';
+import { sendSuccess, sendError, sendPaginatedResponse } from '../../utils/apiResponse';
+import { hybridPagination } from '../../utils/paginationUtils';
 
 // Create a new comment
 export const addComment = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { post, user, text, likes } = req.body;
+    const _req = req as Request;
+    const { post, text, likes } = req.body;
+    
+    // Get user from authenticated request (preferred) or from body (for backward compatibility)
+    const userId = _req.user?.id || req.body.user;
+    
+    if (!userId) {
+      return next(createHttpError(400, 'User ID is required. Please log in to comment.'));
+    }
+
+    if (!post || !text) {
+      return next(createHttpError(400, 'Post ID and text are required'));
+    }
 
     const newComment = new Comment({
       post,
-      user,
+      user: userId, // Use authenticated user ID
       text,
-      likes,
+      likes: likes || 0,
       approve: false,
     });
 
@@ -22,7 +36,7 @@ export const addComment = async (req: Request, res: Response, next: NextFunction
     // Optionally, update the post to include the new comment
     await Post.findByIdAndUpdate(post, { $push: { comments: newComment._id } });
 
-    res.status(201).json(newComment);
+    sendSuccess(res, newComment, 'Comment created successfully', 201);
   } catch (err) {
     console.error("Error adding comment:", err);
     next(createHttpError(500, 'Failed to add comment'));
@@ -32,8 +46,21 @@ export const addComment = async (req: Request, res: Response, next: NextFunction
 // Add a reply to a comment
 export const addReply = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const _req = req as Request;
     const { commentId } = req.params;
-    const { user, text } = req.body;
+    const { text } = req.body;
+    
+    // Get user from authenticated request (preferred) or from body (for backward compatibility)
+    const userId = _req.user?.id || req.body.user;
+    
+    if (!userId) {
+      return next(createHttpError(400, 'User ID is required. Please log in to reply.'));
+    }
+    
+    if (!text) {
+      return next(createHttpError(400, 'Text is required'));
+    }
+    
     // Get the parent comment to access its post ID
     const parentComment = await Comment.findById(commentId);
 
@@ -44,7 +71,7 @@ export const addReply = async (req: Request, res: Response, next: NextFunction):
     // Create a new comment as a reply
     const newReply = new Comment({
       post: parentComment.post, // Use the same post ID as the parent
-      user,
+      user: userId, // Use authenticated user ID
       text,
       likes: 0,
       views: 0,
@@ -59,7 +86,7 @@ export const addReply = async (req: Request, res: Response, next: NextFunction):
       { $push: { replies: newReply._id } }
     );
 
-    res.status(201).json(newReply);
+    sendSuccess(res, newReply, 'Reply created successfully', 201);
   } catch (err) {
     console.error("Error adding reply:", err);
     next(createHttpError(500, 'Failed to add reply'));
@@ -113,10 +140,10 @@ export const likeComment = async (req: Request, res: Response, next: NextFunctio
     }
 
     // Return the updated comment along with the liked status
-    res.status(200).json({
+    sendSuccess(res, {
       ...updatedComment.toObject(),
       isLiked: !existingLike
-    });
+    }, 'Comment like toggled successfully');
   } catch (err) {
     console.error("Error toggling comment like:", err);
     next(createHttpError(500, 'Failed to toggle comment like'));
@@ -139,7 +166,7 @@ export const viewComment = async (req: Request, res: Response, next: NextFunctio
       return next(createHttpError(404, 'Comment not found'));
     }
 
-    res.status(200).json(updatedComment);
+    sendSuccess(res, updatedComment, 'Comment view tracked successfully');
   } catch (err) {
     console.error("Error tracking comment view:", err);
     next(createHttpError(500, 'Failed to track comment view'));
@@ -149,20 +176,55 @@ export const viewComment = async (req: Request, res: Response, next: NextFunctio
 export const editComment = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { commentId } = req.params; // Get the comment ID from the URL parameters
-    const { approve } = req.body;
+    let { approve } = req.body;
 
-    // Update the comment
-    const updatedComment = await Comment.findByIdAndUpdate(
-      commentId,
-      { approve }, // Only update the approve field
-      { new: true, runValidators: true } // Return the updated document and run validators
-    );
+    // Handle FormData: convert string "true"/"false" to boolean
+    // FormData sends values as strings, so "true" becomes string "true"
+    let approveValue: boolean;
+    if (typeof approve === 'string') {
+      approveValue = approve.toLowerCase() === 'true' || approve === '1';
+    } else if (typeof approve === 'boolean') {
+      approveValue = approve;
+    } else if (typeof approve === 'number') {
+      approveValue = approve === 1;
+    } else {
+      approveValue = false; // Default to false if not provided or invalid
+    }
 
-    if (!updatedComment) {
+    // Find the comment first
+    const comment = await Comment.findById(commentId);
+    if (!comment) {
       return next(createHttpError(404, 'Comment not found'));
     }
 
-    res.status(200).json(updatedComment);
+    // Update the approve field
+    comment.approve = approveValue;
+    
+    // Save the comment
+    await comment.save();
+
+    // Fetch fresh comment data with populated fields to avoid stale data
+    const updatedComment = await Comment.findOne({ _id: commentId })
+      .populate('user', 'name email avatar')
+      .populate('post', 'title author')
+      .populate({
+        path: 'replies',
+        populate: {
+          path: 'user',
+          select: 'name email avatar'
+        }
+      })
+      .lean()
+      .exec();
+
+    if (!updatedComment) {
+      return next(createHttpError(404, 'Comment not found after update'));
+    }
+
+    // Set cache control headers to prevent client-side caching
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+
+    sendSuccess(res, updatedComment, 'Comment updated successfully');
   } catch (err) {
     console.error("Error editing comment:", err);
     next(createHttpError(500, 'Failed to edit comment'));
@@ -174,37 +236,31 @@ export const getCommentsByPost = async (req: Request, res: Response, next: NextF
   try {
     const { postId } = req.params;
 
-    // Use pagination params from middleware if available
-    const { page, limit, skip } = req.pagination || { page: 1, limit: 10, skip: 0 };
-
     // Build query for comments on this post
     const query = { post: postId };
 
-    // Get comments with pagination
-    const comments = await Comment.find(query)
-      .populate('user', 'name email')
-      .populate({
-        path: 'replies',
-        populate: {
-          path: 'user',
-          select: 'name email'
-        }
-      })
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
-
-    // Get total count for pagination metadata
-    const totalItems = await Comment.countDocuments(query);
-    const totalPages = Math.ceil(totalItems / limit);
-
-    res.status(200).json({
-      page,
-      limit,
-      totalPages,
-      totalItems,
-      comments
-    });
+    // Use hybrid pagination utility
+    return hybridPagination(
+      Comment,
+      query,
+      req,
+      res,
+      {
+        populate: [
+          { path: 'user', select: 'name email avatar' },
+          {
+            path: 'replies',
+            populate: {
+              path: 'user',
+              select: 'name email avatar'
+            }
+          }
+        ],
+        sort: { createdAt: -1 },
+        memoryThreshold: 100,
+        message: 'Comments retrieved successfully'
+      }
+    );
   } catch (err) {
     console.error("Error fetching comments:", err);
     next(createHttpError(500, 'Failed to get comments'));
@@ -216,21 +272,24 @@ export const getCommentWithReplies = async (req: Request, res: Response, next: N
   try {
     const { commentId } = req.params;
 
+    // Use lean() to get plain object and ensure all fields are included
     const comment = await Comment.findById(commentId)
-      .populate('user', 'name email')
+      .populate('user', 'name email avatar')
       .populate({
         path: 'replies',
         populate: {
           path: 'user',
-          select: 'name email'
+          select: 'name email avatar'
         }
-      });
+      })
+      .lean() // Use lean to get plain object with all fields
+      .exec();
 
     if (!comment) {
       return next(createHttpError(404, 'Comment not found'));
     }
 
-    res.status(200).json(comment);
+    sendSuccess(res, comment, 'Comment with replies retrieved successfully');
   } catch (err) {
     console.error("Error fetching comment with replies:", err);
     next(createHttpError(500, 'Failed to get comment with replies'));
@@ -239,7 +298,7 @@ export const getCommentWithReplies = async (req: Request, res: Response, next: N
 
 export const getAllComments = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const _req = req as Request
-;
+    ;
   try {
     // Get pagination parameters from query
     const page = parseInt(req.query.page as string) || 1;
@@ -277,28 +336,23 @@ export const getAllComments = async (req: Request, res: Response, next: NextFunc
       .skip(skip)
       .limit(limit)
       .lean();
+console.log('comments', comments);
+    // Set cache control headers to prevent client-side caching
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
 
-
-    res.status(200).json({
-      success: true,
-      data: {
-        comments,
-        pagination: {
-          currentPage: page,
-          totalPages: Math.ceil(totalComments / limit),
-          totalItems: totalComments,
-          itemsPerPage: limit
-        }
-      }
-    });
+    sendPaginatedResponse(res, comments, {
+      page: page,
+      limit: limit,
+      totalItems: totalComments,
+      totalPages: Math.ceil(totalComments / limit)
+    }, 'All comments retrieved successfully');
   } catch (err) {
     console.error("Error fetching comments:", err);
     next(createHttpError(500, 'Failed to get comments'));
   }
 };
 export const getUnapprovedCommentsCount = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  const _req = req as Request
-;
+  const _req = req as Request;
   try {
     let unapprovedCount;
 
@@ -314,13 +368,14 @@ export const getUnapprovedCommentsCount = async (req: Request, res: Response, ne
     }
 
     // Send the count as response
-    res.status(200).json({ unapprovedCount });
+    sendSuccess(res, { unapprovedCount }, 'Unapproved comments count retrieved successfully');
   } catch (err) {
     console.error("Error fetching unapproved comments count:", err);
     next(createHttpError(500, 'Failed to get unapproved comments count'));
   }
 };
 
+// Delete a comment
 // Delete a comment
 export const deleteComment = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -346,7 +401,7 @@ export const deleteComment = async (req: Request, res: Response, next: NextFunct
     // Wait for all deletion operations to complete
     await Promise.all(deleteOperations);
 
-    res.status(200).json({ message: 'Comment deleted successfully' });
+    sendSuccess(res, null, 'Comment deleted successfully');
   } catch (err) {
     console.error("Error deleting comment:", err);
     next(createHttpError(500, 'Failed to delete comment'));

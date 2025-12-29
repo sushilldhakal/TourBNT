@@ -92,9 +92,10 @@ export {
 } from './comments';
 
 export {
-    subscribe,
-    unsubscribe,
-    getAllSubscribers,
+    subscribeEmail,
+    getSubscribers,
+    subscribeBulk,
+    unsubscribeEmail,
 } from './subscribers';
 
 export {

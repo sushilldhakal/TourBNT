@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import UserSettings from './userSettingModel';
 import { encrypt, decrypt } from '../../utils/encryption';
 import createHttpError from 'http-errors';
+import { HTTP_STATUS, sendAuthError, sendError, sendNotFoundError, sendSuccess, sendValidationError } from '../../utils/apiResponse';
 
 export const addOrUpdateSettings = async (req: Request
 , res: Response, next: NextFunction) => {
@@ -45,19 +46,18 @@ export const addOrUpdateSettings = async (req: Request
       googleApiKey: GOOGLE_API_KEY || (settings.googleApiKey ? '••••••••' : '')
     };
 
-    res.status(200).json({ message: 'Settings saved successfully', settings: responseSettings });
+    sendSuccess(res, responseSettings, 'Settings saved successfully');
   } catch (error) {
     next(error);
   }
 };
 
 
-export const getUserSettings = async (req: Request, res: Response, next: NextFunction) => {
+export const getUserSettings = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
-      throw new Error('User ID is required');
-       return next(createHttpError(401, 'Not authenticated'));
+      return sendAuthError(res, 'User ID is required');
     }
 
     let settings = await UserSettings.findOne({ user: userId });
@@ -83,30 +83,29 @@ export const getUserSettings = async (req: Request, res: Response, next: NextFun
       googleApiKey: settings.googleApiKey ? '••••••••' : ''
     };
 
-    res.status(200).json({ settings: responseSettings });
+    sendSuccess(res, responseSettings, 'Settings retrieved successfully');
   } catch (error) {
-    next(error);
+    return sendError(res, 'Error retrieving user settings', HTTP_STATUS.INTERNAL_SERVER_ERROR, 'SERVER_ERROR', error);
   }
 };
 
 // New method to get decrypted API keys when needed
 export const getDecryptedApiKey = async (req: Request
-, res: Response, next: NextFunction) => {
+, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
-      throw new Error('User ID is required');
-       return next(createHttpError(401, 'Not authenticated'));
+      return sendAuthError(res, 'User ID is required');
     }
     const { keyType } = req.query;
     // Ensure the requesting user has permission (either admin or the user themselves)
     if (!req.user) {
-      throw createHttpError(401, "Not authenticated");
+      return sendAuthError(res, 'Not authenticated');
     }
 
     const settings = await UserSettings.findOne({ user: userId });
     if (!settings) {
-      return res.status(404).json({ message: 'Settings not found' });
+      return sendNotFoundError(res, 'Settings not found');
     }
 
     let decryptedKey = '';
@@ -130,7 +129,7 @@ export const getDecryptedApiKey = async (req: Request
         fallbackKey = process.env.GOOGLE_API_KEY || '';
         break;
       default:
-        return res.status(400).json({ message: 'Invalid key type requested' });
+        return sendValidationError(res, 'Invalid key type requested');
     }
 
     // If decryption failed or returned an empty string, use the fallback from environment variables
@@ -157,8 +156,8 @@ export const getDecryptedApiKey = async (req: Request
         await settings.save();
       }
     }
-    res.status(200).json({ key: decryptedKey });
+    sendSuccess(res, { key: decryptedKey }, 'Decrypted API key retrieved successfully');
   } catch (error) {
-    next(error);
+    return sendError(res, 'Error retrieving decrypted API key', HTTP_STATUS.INTERNAL_SERVER_ERROR, 'SERVER_ERROR', error);
   }
 };

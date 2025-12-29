@@ -1,12 +1,13 @@
 import { Response } from 'express';
 import Notification from './notificationModel';
-import { Request
- } from '../../middlewares/authenticate';
-import { HTTP_STATUS } from '../../utils/httpStatusCodes';
+import {
+  Request
+} from '../../middlewares/authenticate';
+import { HTTP_STATUS, sendSuccess, sendError, sendPaginatedResponse } from '../../utils/apiResponse';
 
 // Get notifications for authenticated user
 export const getUserNotifications = async (req: Request
-, res: Response) => {
+  , res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
@@ -33,7 +34,7 @@ export const getUserNotifications = async (req: Request
       .populate('sender', 'name email')
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(limit);
+      .limit(Number(limit));
 
     const total = await Notification.countDocuments(query);
     const unreadCount = await Notification.countDocuments({
@@ -41,16 +42,12 @@ export const getUserNotifications = async (req: Request
       isRead: false
     });
 
-    res.status(HTTP_STATUS.OK).json({
-      data: notifications,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit)
-      },
-      unreadCount
-    });
+    return sendPaginatedResponse(res, notifications, {
+      page: page,
+      limit: limit as number,
+      totalItems: total,
+      totalPages: Math.ceil(total / Number(limit))
+    }, `Notifications retrieved successfully. Unread: ${unreadCount}`);
   } catch (error) {
     res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       error: {
@@ -66,7 +63,7 @@ export const getUserNotifications = async (req: Request
 
 // Mark notification as read
 export const markNotificationAsRead = async (req: Request
-, res: Response) => {
+  , res: Response) => {
   try {
     const userId = req.user?.id;
     const { id } = req.params;
@@ -102,9 +99,7 @@ export const markNotificationAsRead = async (req: Request
     notification.readAt = new Date();
     await notification.save();
 
-    res.status(HTTP_STATUS.OK).json({
-      data: notification
-    });
+    return sendSuccess(res, notification, 'Notification marked as read');
   } catch (error) {
     res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       error: {
@@ -120,7 +115,7 @@ export const markNotificationAsRead = async (req: Request
 
 // Delete notification
 export const deleteNotification = async (req: Request
-, res: Response) => {
+  , res: Response) => {
   try {
     const userId = req.user?.id;
     const { id } = req.params;

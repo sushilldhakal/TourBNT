@@ -17,11 +17,11 @@ import useUserStore, { User } from '../store/useUserStore';
  */
 export const fetchCurrentUser = async (): Promise<User | null> => {
     try {
-        const response = await api.get('/api/users/me');
-        const userData = response.data;
+        const response = await api.get('/users/me');
+        const userData = extractResponseData<User>(response);
         useUserStore.getState().setUser(userData);
         return userData;
-    } catch (error) {
+    } catch {
         // Not authenticated or session expired
         useUserStore.getState().clearUser();
         return null;
@@ -39,10 +39,20 @@ export const loginUser = async (credentials: {
     password: string;
     keepMeSignedIn?: boolean;
 }): Promise<User> => {
-    const response = await api.post('/api/users/login', credentials);
-    const userData = response.data.user;
-    useUserStore.getState().setUser(userData);
-    return userData;
+    const response = await api.post('/users/login', credentials);
+    
+    // Extract data from nested response structure: { success, message, data: { user: {...} } }
+    const responseData = extractResponseData<{ user: User } | User>(response);
+    const userData = 'user' in responseData ? responseData.user : responseData;
+    
+    // Ensure id is always a string (handle MongoDB ObjectId buffer conversion)
+    const normalizedUser: User = {
+        ...userData,
+        id: userData.id?.toString() || userData.id || null,
+    };
+    
+    useUserStore.getState().setUser(normalizedUser);
+    return normalizedUser;
 };
 
 /**
@@ -51,7 +61,7 @@ export const loginUser = async (credentials: {
  */
 export const logoutUser = async (): Promise<void> => {
     try {
-        await api.post('/api/users/logout');
+        await api.post('/users/logout');
     } finally {
         // Always clear user store, even if API call fails
         useUserStore.getState().clearUser();
@@ -68,7 +78,7 @@ export const logoutUser = async (): Promise<void> => {
  */
 export const getCurrentUser = async () => {
     try {
-        const response = await api.get('/api/users/me');
+        const response = await api.get('/users/me');
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching current user');
@@ -81,7 +91,7 @@ export const getCurrentUser = async () => {
  */
 export const updateMyProfile = async (data: FormData) => {
     try {
-        const response = await api.patch('/api/users/me', data, {
+        const response = await api.patch('/users/me', data, {
             headers: {
                 'Content-Type': 'multipart/form-data',
             },
@@ -101,7 +111,7 @@ export const changeMyPassword = async (data: {
     newPassword: string;
 }) => {
     try {
-        const response = await api.patch('/api/users/me/password', data);
+        const response = await api.patch('/users/me/password', data);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'changing password');
@@ -127,7 +137,7 @@ export const uploadMyAvatar = async (avatarData: File | FormData | string) => {
             formData.append('avatarUrl', avatarData);
         }
 
-        const response = await api.post('/api/users/me/avatar', formData, {
+        const response = await api.post('/users/me/avatar', formData, {
             headers: {
                 'Content-Type': 'multipart/form-data',
             },
@@ -145,7 +155,7 @@ export const uploadMyAvatar = async (avatarData: File | FormData | string) => {
  */
 export const getMyAvatar = async () => {
     try {
-        const response = await api.get('/api/users/me/avatar');
+        const response = await api.get('/users/me/avatar');
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching avatar');
@@ -158,7 +168,7 @@ export const getMyAvatar = async () => {
  */
 export const getMySettings = async () => {
     try {
-        const response = await api.get('/api/users/me/settings');
+        const response = await api.get('/users/me/settings');
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching user settings');
@@ -171,7 +181,7 @@ export const getMySettings = async () => {
  */
 export const updateMySettings = async (data: FormData) => {
     try {
-        const response = await api.patch('/api/users/me/settings', data, {
+        const response = await api.patch('/users/me/settings', data, {
             headers: {
                 'Content-Type': 'multipart/form-data',
             },
@@ -188,7 +198,7 @@ export const updateMySettings = async (data: FormData) => {
  */
 export const getMyDecryptedApiKey = async (keyType: string) => {
     try {
-        const response = await api.get(`/api/users/me/settings/key?keyType=${keyType}`);
+        const response = await api.get(`/users/me/settings/key?keyType=${keyType}`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, `fetching API key (${keyType})`);
@@ -213,7 +223,7 @@ export const getUsers = async (params?: { page?: number; limit?: number }) => {
             queryParams.append('limit', params.limit.toString());
         }
         
-        const url = `/api/users${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+        const url = `/users${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
         const response = await api.get(url);
         return extractResponseData(response);
     } catch (error) {
@@ -227,7 +237,7 @@ export const getUsers = async (params?: { page?: number; limit?: number }) => {
  */
 export const getUserById = async (userId: string) => {
     try {
-        const response = await api.get(`/api/users/${userId}`);
+        const response = await api.get(`/users/${userId}`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching user');
@@ -241,7 +251,7 @@ export const getUserById = async (userId: string) => {
  */
 export const updateUser = async (userId: string, data: FormData) => {
     try {
-        const response = await api.patch(`/api/users/${userId}`, data, {
+        const response = await api.patch(`/users/${userId}`, data, {
             headers: {
                 'Content-Type': 'multipart/form-data',
             },
@@ -258,7 +268,7 @@ export const updateUser = async (userId: string, data: FormData) => {
  */
 export const deleteUser = async (userId: string) => {
     try {
-        const response = await api.delete(`/api/users/${userId}`);
+        const response = await api.delete(`/users/${userId}`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'deleting user');
@@ -272,7 +282,7 @@ export const deleteUser = async (userId: string) => {
  */
 export const changeUserRole = async (userId: string, role: string) => {
     try {
-        const response = await api.patch(`/api/users/${userId}/role`, { role });
+        const response = await api.patch(`/users/${userId}/role`, { role });
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'changing user role');
@@ -288,7 +298,7 @@ export const changeUserRole = async (userId: string, role: string) => {
  */
 export const getSellerApplications = async () => {
     try {
-        const response = await api.get('/api/users/seller-applications');
+        const response = await api.get('/users/seller-applications');
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching seller applications');
@@ -301,7 +311,7 @@ export const getSellerApplications = async () => {
  */
 export const approveSellerApplication = async (userId: string) => {
     try {
-        const response = await api.patch(`/api/users/${userId}/approve-seller`);
+        const response = await api.patch(`/users/${userId}/approve-seller`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'approving seller application');
@@ -315,7 +325,7 @@ export const approveSellerApplication = async (userId: string) => {
  */
 export const rejectSellerApplication = async (userId: string, reason: string) => {
     try {
-        const response = await api.patch(`/api/users/${userId}/reject-seller`, { reason });
+        const response = await api.patch(`/users/${userId}/reject-seller`, { reason });
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'rejecting seller application');
@@ -338,7 +348,7 @@ export const updateSellerStatus = async (
         if (rejectionReason) {
             data.rejectionReason = rejectionReason;
         }
-        const response = await api.patch(`/api/users/${userId}/seller-status`, data);
+        const response = await api.patch(`/users/${userId}/seller-status`, data);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'updating seller status');
@@ -351,7 +361,7 @@ export const updateSellerStatus = async (
  */
 export const deleteSellerApplication = async (userId: string) => {
     try {
-        const response = await api.delete(`/api/users/${userId}/delete-seller`);
+        const response = await api.delete(`/users/${userId}/delete-seller`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'deleting seller application');
@@ -428,7 +438,7 @@ export const getUserAvatar = async (userId: string) => {
  */
 export const getUsersServer = async () => {
     try {
-        const response = await serverApi.get('/api/users');
+        const response = await serverApi.get('/users');
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching users (server)');
@@ -440,7 +450,7 @@ export const getUsersServer = async () => {
  */
 export const getUserByIdServer = async (userId: string) => {
     try {
-        const response = await serverApi.get(`/api/users/${userId}`);
+        const response = await serverApi.get(`/users/${userId}`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching user (server)');

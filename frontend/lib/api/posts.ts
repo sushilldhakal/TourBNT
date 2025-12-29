@@ -9,7 +9,7 @@ export const getPosts = async () => {
     try {
         // Add timestamp to prevent caching
         const timestamp = new Date().getTime();
-        const response = await api.get(`/api/posts?_t=${timestamp}`);
+        const response = await api.get(`/posts?_t=${timestamp}`);
 
         console.log('post detail', response)
         return extractResponseData(response);
@@ -30,7 +30,7 @@ export const getPost = async (id: string) => {
  */
 export const getAllUserPosts = async () => {
     try {
-        const response = await api.get('/api/posts/user');
+        const response = await api.get('/posts/user');
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching user posts');
@@ -44,7 +44,7 @@ export const getSinglePost = async (postId: string) => {
     try {
         // Add timestamp to prevent caching issues
         const timestamp = new Date().getTime();
-        const response = await api.get(`/api/posts/${postId}`, {
+        const response = await api.get(`/posts/${postId}`, {
             params: { _t: timestamp },
             headers: {
                 'Cache-Control': 'no-cache',
@@ -65,7 +65,7 @@ export const getSinglePost = async (postId: string) => {
  */
 export const addPost = async (postData: FormData) => {
     try {
-        const response = await api.post('/api/posts', postData, {
+        const response = await api.post('/posts', postData, {
             headers: {
                 'Content-Type': 'multipart/form-data',
             },
@@ -82,7 +82,7 @@ export const addPost = async (postData: FormData) => {
  */
 export const updatePost = async (postData: FormData, postId: string) => {
     try {
-        const response = await api.patch(`/api/posts/${postId}`, postData, {
+        const response = await api.patch(`/posts/${postId}`, postData, {
             headers: {
                 'Content-Type': 'multipart/form-data',
             },
@@ -98,7 +98,7 @@ export const updatePost = async (postData: FormData, postId: string) => {
  */
 export const deletePost = async (postId: string) => {
     try {
-        const response = await api.delete(`/api/posts/${postId}`);
+        const response = await api.delete(`/posts/${postId}`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'deleting post');
@@ -110,7 +110,7 @@ export const deletePost = async (postId: string) => {
  */
 export const likePost = async (postId: string, userId: string) => {
     try {
-        const response = await api.patch(`/api/posts/like/${postId}`, { userId });
+        const response = await api.patch(`/posts/like/${postId}`, { userId });
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'liking post');
@@ -122,7 +122,7 @@ export const likePost = async (postId: string, userId: string) => {
  */
 export const viewPost = async (postId: string) => {
     try {
-        const response = await api.patch(`/api/posts/view/${postId}`);
+        const response = await api.patch(`/posts/view/${postId}`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'tracking post view');
@@ -134,7 +134,7 @@ export const viewPost = async (postId: string) => {
  */
 export const getPostsServer = async () => {
     try {
-        const response = await serverApi.get('/api/posts');
+        const response = await serverApi.get('/posts');
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching posts (server)');
@@ -143,7 +143,7 @@ export const getPostsServer = async () => {
 
 export const getSinglePostServer = async (postId: string) => {
     try {
-        const response = await serverApi.get(`/api/posts/${postId}`);
+        const response = await serverApi.get(`/posts/${postId}`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching post (server)');

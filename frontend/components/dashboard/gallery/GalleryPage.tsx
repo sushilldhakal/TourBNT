@@ -188,17 +188,20 @@ export function GalleryPage({
      */
     const handleSelect = useCallback(
         (id: string, isMultiSelect: boolean) => {
+            // In picker mode with single selection, handle immediately but defer the callback
+            if (mode === 'picker' && !allowMultiple && onMediaSelect) {
+                const selectedItem = mediaItems.find((item) => item.id === id);
+                if (selectedItem) {
+                    // Defer the callback to avoid updating state during render
+                    queueMicrotask(() => {
+                        onMediaSelect(selectedItem.secureUrl);
+                    });
+                    return; // Don't update selection state for single-select picker
+                }
+            }
+
             setState((prev) => {
                 const newSelected = new Set(prev.selectedMedia);
-
-                // In picker mode with single selection, immediately return the URL
-                if (mode === 'picker' && !allowMultiple && onMediaSelect) {
-                    const selectedItem = mediaItems.find((item) => item.id === id);
-                    if (selectedItem) {
-                        onMediaSelect(selectedItem.secureUrl);
-                        return prev; // Don't update selection state
-                    }
-                }
 
                 if (isMultiSelect || allowMultiple) {
                     // Multi-select: toggle selection

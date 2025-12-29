@@ -59,7 +59,7 @@ function LoginPageContent() {
 
         if (token) {
             // Verify email
-            api.post('/api/users/verify-email', { token })
+            api.post('/auth/verify-email', { token })
                 .then(() => {
                     toast({
                         title: 'Email Verified',
@@ -114,7 +114,7 @@ function LoginPageContent() {
         } catch (error: any) {
             toast({
                 title: 'Login Failed',
-                description: error.response?.data?.message || 'Invalid credentials',
+                description: error.message || 'Invalid credentials',
                 variant: 'destructive',
             });
         } finally {
@@ -146,7 +146,7 @@ function LoginPageContent() {
 
         setIsRegistering(true);
         try {
-            await api.post('/api/users/register', { name, email, password, phone });
+            await api.post('/users/register', { name, email, password, phone });
             toast({
                 title: 'Registration Successful',
                 description: 'Please check your email to verify your account.',
@@ -174,7 +174,7 @@ function LoginPageContent() {
 
         setIsSendingReset(true);
         try {
-            await api.post('/api/users/forgot-password', { email });
+            await api.post('/auth/forgot-password', { email });
             toast({
                 title: 'Email Sent',
                 description: 'Please check your email for reset instructions.',
@@ -201,7 +201,7 @@ function LoginPageContent() {
 
         setIsResettingPassword(true);
         try {
-            await api.post('/api/users/reset-password', { token, password });
+            await api.post('/auth/reset-password', { token, password });
             toast({
                 title: 'Password Reset',
                 description: 'Your password has been reset successfully.',

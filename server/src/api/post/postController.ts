@@ -1,7 +1,8 @@
 import { NextFunction, Request, Response } from 'express';
 import Post from './postModel';  // Assuming Post model is in models folder
 import createHttpError from 'http-errors';
-import { HTTP_STATUS } from '../../utils/httpStatusCodes';
+import { HTTP_STATUS, sendSuccess, sendError, sendPaginatedResponse, sendNotFoundError, sendForbiddenError } from '../../utils/apiResponse';
+import { hybridPagination } from '../../utils/paginationUtils';
 
 // Add a new post
 export const addPost = async (req: Request,
@@ -9,7 +10,7 @@ export const addPost = async (req: Request,
   next: NextFunction): Promise<void> => {
   try {
     const _req = req as Request
-;
+      ;
     const { title, content, tags, image, status, enableComments } = req.body;
 
     // Parse the tags if it's a string, otherwise use as-is
@@ -30,10 +31,7 @@ export const addPost = async (req: Request,
 
     const savedPost = await newPost.save();
 
-    res.status(HTTP_STATUS.CREATED).json({
-      message: 'Post created successfully',
-      post: savedPost,
-    });
+    sendSuccess(res, savedPost, 'Post created successfully', HTTP_STATUS.CREATED);
   } catch (err) {
     console.error(err);
     next(createHttpError(500, 'Failed to add post'));
@@ -44,9 +42,6 @@ export const getAllPosts = async (req: Request,
   res: Response,
   next: NextFunction): Promise<void> => {
   try {
-    // Use pagination params from middleware
-    const { page, limit, skip } = req.pagination || { page: 1, limit: 10, skip: 0 };
-
     // Build query based on filters from middleware (AND logic - all filters must match)
     const query: any = {};
     if (req.filters) {
@@ -62,27 +57,19 @@ export const getAllPosts = async (req: Request,
       sort.createdAt = -1; // Default sort by createdAt descending
     }
 
-    // Fetch posts with pagination, filtering, and sorting
-    const posts = await Post.find(query)
-      .sort(sort)
-      .skip(skip)
-      .limit(limit)
-      .populate('author', 'name');
-
-    // Get total count for pagination metadata
-    const totalItems = await Post.countDocuments(query);
-    const totalPages = Math.ceil(totalItems / limit);
-
-    res.status(HTTP_STATUS.OK).json({
-      page,
-      limit,
-      totalPages,
-      totalItems,
-      posts: posts.map(post => ({
-        ...post.toObject(),
-        author: post.author
-      })),
-    });
+    // Use hybrid pagination utility
+    return hybridPagination(
+      Post,
+      query,
+      req,
+      res,
+      {
+        populate: [{ path: 'author', select: 'name' }],
+        sort,
+        memoryThreshold: 100,
+        message: 'Posts retrieved successfully'
+      }
+    );
   } catch (err) {
     console.error('Error fetching posts:', err);
     next(createHttpError(500, 'Failed to get posts'));
@@ -92,13 +79,8 @@ export const getAllPosts = async (req: Request,
 
 export const getAllUserPosts = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const _req = req as Request
-; // Assuming `userId` and `role` are available in _req
-    const { page = 1, limit = 10, sortBy = 'createdAt', sortOrder = 'desc', search } = req.query;
-
-    // Pagination
-    const pageNumber = parseInt(page as string, 10);
-    const pageSize = parseInt(limit as string, 10);
+    const _req = req as Request; // Assuming `userId` and `role` are available in _req
+    const { sortBy = 'createdAt', sortOrder = 'desc', search } = req.query;
 
     // Sorting order
     const sort: { [key: string]: 1 | -1 } = { [sortBy as string]: sortOrder === 'desc' ? -1 : 1 };
@@ -117,24 +99,22 @@ export const getAllUserPosts = async (req: Request, res: Response, next: NextFun
       query.title = { $regex: search, $options: 'i' };  // Case-insensitive search by title
     }
 
-    // Fetching posts with pagination, sorting, and filtering
-    const posts = await Post.find(query)
-      .sort(sort)
-      .skip((pageNumber - 1) * pageSize)
-      .limit(pageSize)
-      .populate("author", "name")
-      .populate("comments");
-
-    // Getting total count for pagination
-    const totalPosts = await Post.countDocuments(query);
-
-    res.status(HTTP_STATUS.OK).json({
-      page: pageNumber,
-      limit: pageSize,
-      totalPages: Math.ceil(totalPosts / pageSize),
-      totalPosts,
-      posts,
-    });
+    // Use hybrid pagination utility
+    return hybridPagination(
+      Post,
+      query,
+      req,
+      res,
+      {
+        populate: [
+          { path: 'author', select: 'name' },
+          { path: 'comments' }
+        ],
+        sort,
+        memoryThreshold: 100,
+        message: 'User posts retrieved successfully'
+      }
+    );
   } catch (err) {
     console.error("Error fetching posts:", err);
     next(createHttpError(500, 'Failed to get posts'));
@@ -150,7 +130,9 @@ export const getPost = async (req: Request, res: Response, next: NextFunction): 
   try {
     const { postId } = req.params;
 
-    const post = await Post.findById(postId)
+    // Force fresh query by using findOne with _id instead of findById
+    // This bypasses Mongoose's internal caching mechanism
+    const post = await Post.findOne({ _id: postId })
       .populate("author", "name avatar")
       .populate({
         path: 'comments',
@@ -165,21 +147,25 @@ export const getPost = async (req: Request, res: Response, next: NextFunction): 
           path: 'user',
           select: 'name avatar'
         }
-      });
+      })
+      .exec();
 
     if (!post) {
-      res.status(HTTP_STATUS.NOT_FOUND).json({ message: 'Post not found' });
-      return;
+      return sendNotFoundError(res, 'Post not found');
     }
+
+    // Convert to plain object to ensure we're working with fresh data
+    // This prevents any document-level caching issues
+    const postObject = post.toObject ? post.toObject() : post;
 
     const breadcrumbs = [
       {
-        label: post.title,
+        label: postObject.title,
         url: `/${postId}`,
       }
     ];
 
-    res.status(HTTP_STATUS.OK).json({ post, breadcrumbs });
+    sendSuccess(res, { post: postObject, breadcrumbs }, 'Post retrieved successfully');
   } catch (err) {
     console.error('Error in getPost:', err);
     next(createHttpError(500, 'Failed to get post'));
@@ -190,7 +176,7 @@ export const getPost = async (req: Request, res: Response, next: NextFunction): 
 export const getUserPost = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const _req = req as Request
-; // Assuming `userId` and `role` are available in _req
+      ; // Assuming `userId` and `role` are available in _req
     const { postId } = req.params;
 
     // Fetch the post by ID
@@ -206,8 +192,7 @@ export const getUserPost = async (req: Request, res: Response, next: NextFunctio
 
     // If no post is found, return 404
     if (!post) {
-      res.status(HTTP_STATUS.NOT_FOUND).json({ message: 'Post not found' });
-      return;
+      return sendNotFoundError(res, 'Post not found');
     }
 
     // Build breadcrumbs
@@ -223,7 +208,7 @@ export const getUserPost = async (req: Request, res: Response, next: NextFunctio
     }
 
     // Send the post and breadcrumbs in the response
-    res.status(HTTP_STATUS.OK).json({ post, breadcrumbs });
+    sendSuccess(res, { post, breadcrumbs }, 'User post retrieved successfully');
   } catch (err) {
     // Log and return a 500 error
     console.error("Error getting post:", err);
@@ -238,7 +223,7 @@ export const getUserPost = async (req: Request, res: Response, next: NextFunctio
 export const deletePost = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const _req = req as Request
-; // Assume user information (including role) is available in _req
+      ; // Assume user information (including role) is available in _req
     const { postId } = req.params;
 
     // Find the post by ID
@@ -246,29 +231,13 @@ export const deletePost = async (req: Request, res: Response, next: NextFunction
 
     // If the post doesn't exist, return a 404 error
     if (!post) {
-      res.status(HTTP_STATUS.NOT_FOUND).json({
-        error: {
-          code: 'POST_NOT_FOUND',
-          message: 'Post not found',
-          timestamp: new Date().toISOString(),
-          path: req.path
-        }
-      });
-      return;
+      return sendNotFoundError(res, 'Post not found');
     }
 
     // Check if the current user is the owner of the post or an admin
     const isAdmin = _req.user?.roles.includes('admin') || false;
     if (post.author.toString() !== _req.user?.id && !isAdmin) {
-      res.status(HTTP_STATUS.FORBIDDEN).json({
-        error: {
-          code: 'FORBIDDEN',
-          message: 'You are not authorized to delete this post',
-          timestamp: new Date().toISOString(),
-          path: req.path
-        }
-      });
-      return;
+      return sendForbiddenError(res, 'You are not authorized to delete this post');
     }
 
     // Delete the post
@@ -280,7 +249,7 @@ export const deletePost = async (req: Request, res: Response, next: NextFunction
     // Log the error for debugging
     console.error("Error deleting post:", err);
     // Return a 500 error with a custom message
-    next(createHttpError(500, 'Failed to delete post'));
+    return sendNotFoundError(res, 'Failed to delete post');
   }
 };
 
@@ -288,34 +257,34 @@ export const deletePost = async (req: Request, res: Response, next: NextFunction
 export const editPost = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const _req = req as Request
-;
+      ;
     const { postId } = req.params;
-    
+
     // Extract updates from req.body (now parsed by multer)
     const updates: any = {};
-    
+    console.log('Received updates:', req.body);
     // Handle title
     if (req.body.title !== undefined) {
       updates.title = req.body.title;
     }
-    
+
     // Handle status
     if (req.body.status !== undefined) {
       updates.status = req.body.status;
     }
-    
+
     // Handle content
     if (req.body.content !== undefined) {
       // Content might be a JSON string, parse it if needed
       const parsedContent = typeof req.body.content === 'string' ? req.body.content : JSON.stringify(req.body.content);
       updates.content = parsedContent;
     }
-    
+
     // Handle image
     if (req.body.image !== undefined) {
       updates.image = req.body.image;
     }
-    
+
     // Handle tags (FormData sends tags[] as array)
     if (req.body.tags !== undefined) {
       // If tags is a string, try to parse it, otherwise use as-is
@@ -335,7 +304,7 @@ export const editPost = async (req: Request, res: Response, next: NextFunction):
         updates.tags = parsedTags;
       }
     }
-    
+
     // Handle enableComments
     if (req.body.enableComments !== undefined) {
       updates.enableComments = req.body.enableComments === 'true' || req.body.enableComments === true;
@@ -348,27 +317,65 @@ export const editPost = async (req: Request, res: Response, next: NextFunction):
 
     // If the post doesn't exist, return a 404 error
     if (!post) {
-      res.status(HTTP_STATUS.NOT_FOUND).json({ message: 'Post not found' });
-      return;
+      return sendNotFoundError(res, 'Post not found');
     }
 
     // Check if the current user is the owner of the post or an admin
     const isAdmin = _req.user?.roles.includes('admin') || false;
     if (post.author.toString() !== _req.user?.id && !isAdmin) {
-      res.status(HTTP_STATUS.FORBIDDEN).json({ message: 'You are not authorized to edit this post' });
-      return;
+      return sendForbiddenError(res, 'You are not authorized to edit this post');
     }
 
-    // Update the post if authorized
-    const updatedPost = await Post.findByIdAndUpdate(postId, updates, {
-      new: true,  // Return the updated document
-      runValidators: true,  // Ensure validators are run
+    // Update the post fields manually to ensure all updates are applied
+    Object.keys(updates).forEach((key) => {
+      (post as any)[key] = updates[key];
     });
 
-    res.status(HTTP_STATUS.OK).json({
-      message: 'Post updated successfully',
-      post: updatedPost,
+    // Save the post to ensure all validators and hooks run
+    await post.save();
+
+    // Clear Mongoose model cache for this specific document to force fresh fetch
+    // This ensures we get the absolute latest data from the database
+    if (Post.collection) {
+      // Force a fresh query by using findOne with explicit conditions
+      await Post.findOne({ _id: postId }).lean().exec();
+    }
+
+    // Fetch the updated post fresh from database using findOne to bypass cache
+    // This prevents any Mongoose document-level caching issues
+    const updatedPostDoc = await Post.findOne({ _id: postId })
+      .populate("author", "name avatar")
+      .populate({
+        path: 'comments',
+        populate: {
+          path: 'user',
+          select: 'name avatar'
+        }
+      })
+      .populate({
+        path: 'comments.replies',
+        populate: {
+          path: 'user',
+          select: 'name avatar'
+        }
+      })
+      .exec();
+
+    if (!updatedPostDoc) {
+      return sendNotFoundError(res, 'Post not found after update');
+    }
+
+    // Convert to plain object to avoid any document caching issues
+    const updatedPost = updatedPostDoc.toObject ? updatedPostDoc.toObject() : updatedPostDoc;
+
+    console.log('Post updated successfully:', {
+      id: updatedPost._id || updatedPost.id,
+      title: updatedPost.title,
+      status: updatedPost.status,
+      updatedAt: updatedPost.updatedAt
     });
+
+    sendSuccess(res, updatedPost, 'Post updated successfully');
   } catch (err) {
     // Log and return a 500 error
     console.error("Error editing post:", err);

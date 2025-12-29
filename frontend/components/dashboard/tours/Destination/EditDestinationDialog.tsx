@@ -7,11 +7,12 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/use-toast";
 import { Save, X, Image as ImageIcon, Trash2, FileText } from "lucide-react";
-import { updateDestination, getUserToursTitle, getSellerDestinations, getUserDestinations, toggleDestinationActiveStatus } from "@/lib/api/destinations";
+import { updateDestination, getUserToursTitle, toggleDestinationActiveStatus } from "@/lib/api/destinations";
 import { GalleryPage } from "@/components/dashboard/gallery/GalleryPage";
 import { MultiSelect, SelectValue } from "@/components/ui/MultiSelect";
 import { NovelEditor } from "../../editor";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { useDestinationById } from "./useDestinationData";
 
 interface EditDestinationDialogProps {
     destinationId: string;
@@ -65,27 +66,11 @@ export const EditDestinationDialog = ({ destinationId, open, onOpenChange, onSuc
     });
 
     // Check user role
-
     const { userRole } = useAuth();
     const isAdmin = userRole === 'admin';
 
-
-    // Fetch destinations based on user role
-    const { data: globalDestinations } = useQuery({
-        queryKey: ['seller-destinations'],
-        queryFn: getSellerDestinations,
-        enabled: isAdmin,
-    });
-
-    const { data: userDestinations } = useQuery({
-        queryKey: ['user-destinations'],
-        queryFn: getUserDestinations,
-        enabled: !isAdmin,
-    });
-
-    // Choose the appropriate data source
-    const destinationsData = isAdmin ? globalDestinations : userDestinations;
-    const destination = destinationsData?.data?.find((dest: { _id: string }) => dest._id === destinationId);
+    // Use shared hook to get destination data
+    const { destination } = useDestinationById(destinationId);
 
     // Fetch tour titles
     const { data: tourTitles } = useQuery({
@@ -156,10 +141,10 @@ export const EditDestinationDialog = ({ destinationId, open, onOpenChange, onSuc
     useEffect(() => {
         if (open && destination) {
             form.reset({
-                name: destination.name,
+                name: destination.name || '',
                 description: destination.description || '',
                 coverImage: destination.coverImage || '',
-                isActive: destination.isActive,
+                isActive: destination.isActive ?? true,
                 country: destination.country || '',
                 region: destination.region || '',
                 city: destination.city || '',
@@ -197,13 +182,13 @@ export const EditDestinationDialog = ({ destinationId, open, onOpenChange, onSuc
     // Handle form submission
     const handleSubmit = (values: any) => {
         const formData = new FormData();
-        formData.append('name', values.name);
+        formData.append('name', values.name || '');
         formData.append('description', JSON.stringify(descriptionContent));
-        formData.append('coverImage', values.coverImage);
-        formData.append('isActive', values.isActive.toString());
-        formData.append('country', values.country);
-        formData.append('region', values.region);
-        formData.append('city', values.city);
+        formData.append('coverImage', values.coverImage || '');
+        formData.append('isActive', (values.isActive ?? destination?.isActive ?? true).toString());
+        formData.append('country', values.country || '');
+        formData.append('region', values.region || '');
+        formData.append('city', values.city || '');
 
         // If user is not admin, set approval status to pending for re-approval
         if (!isAdmin) {

@@ -24,7 +24,7 @@ const bookingRouter = express.Router();
 
 /**
  * @swagger
- * /api/bookings:
+ * /api/v1/bookings:
  *   post:
  *     summary: Create a new booking
  *     description: Create a booking for a tour (supports both authenticated users and guest bookings)
@@ -75,7 +75,12 @@ const bookingRouter = express.Router();
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/Booking'
+ *               allOf:
+ *                 - $ref: '#/components/schemas/StandardResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       $ref: '#/components/schemas/Booking'
  *       400:
  *         description: Validation error
  *         content:
@@ -87,7 +92,7 @@ bookingRouter.post('/', asyncAuthHandler(createBooking));
 
 /**
  * @swagger
- * /api/bookings/reference/{reference}:
+ * /api/v1/bookings/reference/{reference}:
  *   get:
  *     summary: Get booking by reference
  *     description: Retrieve booking details using booking reference number (PUBLIC - for guest booking lookup)
@@ -121,7 +126,7 @@ bookingRouter.get('/reference/:reference', asyncAuthHandler(getBookingByReferenc
 
 /**
  * @swagger
- * /api/bookings/my-bookings:
+ * /api/v1/bookings/my-bookings:
  *   get:
  *     summary: Get current user's bookings
  *     description: Retrieve all bookings for the authenticated user
@@ -150,7 +155,19 @@ bookingRouter.get('/reference/:reference', asyncAuthHandler(getBookingByReferenc
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/PaginatedResponse'
+ *               allOf:
+ *                 - $ref: '#/components/schemas/StandardResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       type: object
+ *                       properties:
+ *                         items:
+ *                           type: array
+ *                           items:
+ *                             $ref: '#/components/schemas/Booking'
+ *                         pagination:
+ *                           $ref: '#/components/schemas/PaginationMetadata'
  *       401:
  *         description: Unauthorized
  *         content:
@@ -162,7 +179,7 @@ bookingRouter.get('/my-bookings', authenticate, asyncAuthHandler(getUserBookings
 
 /**
  * @swagger
- * /api/bookings/stats:
+ * /api/v1/bookings/stats:
  *   get:
  *     summary: Get booking statistics
  *     description: Retrieve booking statistics and analytics (admin/seller only)
@@ -207,7 +224,7 @@ bookingRouter.get(
 
 /**
  * @swagger
- * /api/bookings:
+ * /api/v1/bookings:
  *   get:
  *     summary: Get all bookings
  *     description: Retrieve all bookings with pagination and filtering (admin/seller only)
@@ -277,7 +294,7 @@ bookingRouter.get(
 
 /**
  * @swagger
- * /api/bookings/{bookingId}:
+ * /api/v1/bookings/{bookingId}:
  *   get:
  *     summary: Get booking by ID
  *     description: Retrieve detailed information about a specific booking
@@ -315,7 +332,7 @@ bookingRouter.get('/:bookingId', authenticate, asyncAuthHandler(getBookingById))
 
 /**
  * @swagger
- * /api/bookings/{bookingId}/status:
+ * /api/v1/bookings/{bookingId}/status:
  *   patch:
  *     summary: Update booking status
  *     description: Update the status of a booking (admin/seller only)
@@ -372,7 +389,7 @@ bookingRouter.patch(
 
 /**
  * @swagger
- * /api/bookings/{bookingId}/payment:
+ * /api/v1/bookings/{bookingId}/payment:
  *   patch:
  *     summary: Update payment status
  *     description: Update the payment status of a booking (admin/seller only)
@@ -431,7 +448,7 @@ bookingRouter.patch(
 
 /**
  * @swagger
- * /api/bookings/{bookingId}:
+ * /api/v1/bookings/{bookingId}:
  *   delete:
  *     summary: Cancel booking
  *     description: Cancel a booking (authenticated users can cancel their own bookings)
@@ -482,7 +499,7 @@ bookingRouter.delete(
 
 /**
  * @swagger
- * /api/bookings/{bookingId}/voucher:
+ * /api/v1/bookings/{bookingId}/voucher:
  *   get:
  *     summary: Download booking voucher
  *     description: Download a PDF voucher for the booking
@@ -526,7 +543,7 @@ bookingRouter.get(
 // ============================================================================
 // OLD ROUTES REMOVED
 // ============================================================================
-// GET /api/bookings/user/:userId -> Replaced by GET /api/users/:userId/bookings (in userRouter)
-// POST /api/bookings/:bookingId/cancel -> Replaced by DELETE /api/bookings/:bookingId
+// GET /api/v1/bookings/user/:userId -> Replaced by GET /api/users/:userId/bookings (in userRouter)
+// POST /api/v1/bookings/:bookingId/cancel -> Replaced by DELETE /api/v1/bookings/:bookingId
 
 export default bookingRouter;

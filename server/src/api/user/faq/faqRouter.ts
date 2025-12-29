@@ -17,7 +17,7 @@ const faqsRouter = express.Router();
 
 /**
  * @swagger
- * /api/faqs:
+ * /api/v1/faqs:
  *   get:
  *     summary: Get all FAQs
  *     description: Retrieve all frequently asked questions with pagination (PUBLIC)
@@ -118,13 +118,13 @@ const faqsRouter = express.Router();
  */
 
 /**
- * GET /api/faqs
+ * GET /api/v1/faqs
  * List all FAQs (PUBLIC)
  */
 faqsRouter.get('/', paginationMiddleware, asyncAuthHandler(getAllFaqs));
 
 /**
- * POST /api/faqs
+ * POST /api/v1/faqs
  * Create FAQ (Admin or Seller)
  */
 faqsRouter.post(
@@ -136,7 +136,7 @@ faqsRouter.post(
 );
 
 /**
- * DELETE /api/faqs
+ * DELETE /api/v1/faqs
  * Bulk delete FAQs (Admin or Seller)
  */
 faqsRouter.delete(
@@ -148,7 +148,7 @@ faqsRouter.delete(
 
 /**
  * @swagger
- * /api/faqs/user/{userId}:
+ * /api/v1/faqs/user/{userId}:
  *   get:
  *     summary: Get user's FAQs
  *     description: Retrieve all FAQs created by a specific user (owner or admin)
@@ -178,7 +178,7 @@ faqsRouter.delete(
  */
 
 /**
- * GET /api/faqs/user/:userId
+ * GET /api/v1/faqs/user/:userId
  * Get FAQs created by a specific user (Owner or Admin)
  */
 faqsRouter.get(
@@ -190,7 +190,7 @@ faqsRouter.get(
 
 /**
  * @swagger
- * /api/faqs/{faqId}:
+ * /api/v1/faqs/{faqId}:
  *   get:
  *     summary: Get FAQ by ID
  *     description: Retrieve a specific FAQ by its ID (PUBLIC)
@@ -273,13 +273,13 @@ faqsRouter.get(
  */
 
 /**
- * GET /api/faqs/:faqId
+ * GET /api/v1/faqs/:faqId
  * Get single FAQ (PUBLIC)
  */
 faqsRouter.get('/:faqId', asyncAuthHandler(getSingleFaqs));
 
 /**
- * PATCH /api/faqs/:faqId
+ * PATCH /api/v1/faqs/:faqId
  * Update FAQ (Owner or Admin)
  * Note: Ownership check is handled in the controller by looking up the FAQ's user field
  */
@@ -291,7 +291,7 @@ faqsRouter.patch(
 );
 
 /**
- * DELETE /api/faqs/:faqId
+ * DELETE /api/v1/faqs/:faqId
  * Delete FAQ (Owner or Admin)
  * Note: Ownership check is handled in the controller by looking up the FAQ's user field
  */

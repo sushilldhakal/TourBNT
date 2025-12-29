@@ -24,7 +24,7 @@ import { format } from 'date-fns';
 import { useToast } from '@/components/ui/use-toast';
 import { DataTable } from '@/components/dashboard/DataTable';
 import { ActionDropdown } from '@/components/dashboard/shared/ActionDropdown';
-
+import Image from 'next/image'
 interface Author {
     name: string;
 }
@@ -88,19 +88,8 @@ export default function PostsPage() {
         }
     };
 
-    const posts = (data as any)?.posts || (data as any)?.data || [];
+    const posts = (data as any)?.items || (data as any)?.data || [];
     const tableData = posts;
-
-    // Debug logs - these will show you the actual data state
-    console.log('=== POSTS DEBUG ===');
-    console.log('isLoading:', isLoading);
-    console.log('isError:', isError);
-    console.log('data:', data);
-    console.log('posts array:', posts);
-    console.log('tableData:', tableData);
-    console.log('==================');
-
-
 
     const columns: any[] = [
         {
@@ -120,18 +109,17 @@ export default function PostsPage() {
                 <div className="max-w-xs">
                     <div className="image-area flex items-center gap-3">
                         <div className="relative group shrink-0">
-                            <img
-                                className="w-12 h-12 object-cover rounded-lg border shadow-xs transition-transform group-hover:scale-105"
-                                src={row.original.image || '/placeholder-image.jpg'}
+                            <Image src={row.original.image || '/placeholder-image.jpg'}
                                 alt={row.original.title || 'Post cover'}
-                                onError={(e) => {
-                                    e.currentTarget.src = '/placeholder-image.jpg';
-                                }}
+                                width={48}
+                                height={48}
+                                className="w-12 h-12 object-cover rounded-lg border shadow-xs transition-transform group-hover:scale-105"
                             />
+
                         </div>
 
                         <Link
-                            href={`/dashboard/posts/edit/${row.original._id}`}
+                            href={`/dashboard/posts/edit/${row.original.id}`}
                             className="font-medium text-foreground hover:text-primary transition-colors line-clamp-2"
                         >
                             {row.getValue('title')}
@@ -223,12 +211,12 @@ export default function PostsPage() {
                             {
                                 label: 'Edit Post',
                                 icon: <Edit3 className="h-3 w-3" />,
-                                href: `/dashboard/posts/edit/${post._id}`,
+                                href: `/dashboard/posts/edit/${post.id}`,
                             },
                             {
                                 label: 'Delete Post',
                                 icon: <Trash2 className="h-3 w-3" />,
-                                onClick: () => handleDeletePost(post._id),
+                                onClick: () => handleDeletePost(post.id),
                                 variant: 'destructive',
                             },
                         ]}

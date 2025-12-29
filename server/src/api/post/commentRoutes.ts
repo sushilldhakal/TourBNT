@@ -7,7 +7,7 @@ const commentRouter = express.Router();
 
 /**
  * @swagger
- * /api/comments:
+ * /api/v1/comments:
  *   get:
  *     summary: Get all comments
  *     description: Retrieve all comments (admin sees all, sellers see comments on their posts)

@@ -106,6 +106,11 @@ export interface Destination {
 }
 
 export interface DestinationTypes {
+    approvalStatus: string;
+    approvalStatus: string;
+    approvalStatus: string;
+    approvalStatus: string;
+    approvalStatus: any;
     _id: string;
     name: string;
     description: string;

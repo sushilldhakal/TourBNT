@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import TourModel from '../tourModel';
 import { Tour, PricingOption, DateRange } from '../tourTypes';
 import { PaginationParams, paginate } from '../../../utils/pagination';
+import { normalizeDoc } from '../../../utils/normalizeDoc';
 import createHttpError from 'http-errors';
 import { BaseService } from '../../../services/BaseService';
 import FactsModel from '../../user/facts/factsModel';
@@ -60,10 +61,9 @@ export class TourService extends BaseService<Tour> {
   /**
    * Get all tours with filtering and pagination
    */
-  static async getAllTours(filters: any = {}, paginationParams: PaginationParams, sortOptions?: any) {
+  static async getAllTours(filters: any = {}, paginationParams: PaginationParams, sortOptions?: any, includeUnpublished: boolean = false) {
     const now = new Date();
-    const baseQuery = {
-      tourStatus: 'Published',
+    const baseQuery: any = {
       // Filter out tours that are price locked (past their price lock date)
       $or: [
         { priceLockDate: { $exists: false } }, // Tours without price lock
@@ -72,6 +72,12 @@ export class TourService extends BaseService<Tour> {
       ],
       ...filters
     };
+
+    // Only filter by tourStatus if we want published tours only (for public/seller views)
+    // Admins can see all tours regardless of status
+    if (!includeUnpublished) {
+      baseQuery.tourStatus = 'Published';
+    }
 
     // Merge sort options into pagination params
     const paginationWithSort = { ...paginationParams };
@@ -102,7 +108,8 @@ export class TourService extends BaseService<Tour> {
       }
     }
 
-    return result;
+    // Normalize the result
+    return normalizeDoc(result);
   }
 
   /**
@@ -159,7 +166,8 @@ export class TourService extends BaseService<Tour> {
       tour.facts = enrichedFacts;
     }
 
-    return tour;
+    // Normalize the result
+    return normalizeDoc(tour);
   }
 
   /**
@@ -179,7 +187,10 @@ export class TourService extends BaseService<Tour> {
         updatedAt: new Date()
       });
 
-      return await newTour.save();
+      const savedTour = await newTour.save();
+
+      // Normalize the result
+      return normalizeDoc(savedTour);
     } catch (error: any) {
       console.error('Error creating tour:', error);
       if (error instanceof Error) {
@@ -216,7 +227,8 @@ export class TourService extends BaseService<Tour> {
       throw createHttpError(404, 'Tour not found or unauthorized');
     }
 
-    return updatedTour;
+    // Normalize the result
+    return normalizeDoc(updatedTour);
   }
 
   /**
@@ -238,7 +250,8 @@ export class TourService extends BaseService<Tour> {
       throw createHttpError(404, 'Tour not found or unauthorized');
     }
 
-    return deletedTour;
+    // Normalize the result
+    return normalizeDoc(deletedTour);
   }
 
   /**
@@ -333,14 +346,18 @@ export class TourService extends BaseService<Tour> {
 
     // Populate category with error handling
     try {
-      return await TourModel.populate(tours, {
+      const populatedTours = await TourModel.populate(tours, {
         path: 'category',
         select: 'name description',
         options: { strictPopulate: false }
       });
+
+      // Normalize the result
+      return normalizeDoc(populatedTours);
     } catch (error) {
       console.error('Error populating categories in getToursBy:', error);
-      return tours; // Return tours without populated categories if populate fails
+      // Return tours without populated categories if populate fails
+      return normalizeDoc(tours);
     }
   }
 
@@ -371,18 +388,22 @@ export class TourService extends BaseService<Tour> {
       }
     }
 
-    return result;
+    // Normalize the result
+    return normalizeDoc(result);
   }
 
   /**
    * Get user's tour titles only (for dropdowns)
    */
   static async getUserTourTitles(userId: string) {
-    return TourModel
+    const tours = await TourModel
       .find({ author: userId })
       .select('_id title code')
       .sort({ createdAt: -1 })
       .lean();
+
+    // Normalize the result
+    return normalizeDoc(tours);
   }
 
   /**

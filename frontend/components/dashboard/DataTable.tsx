@@ -55,6 +55,14 @@ interface DataTableProps<TData = unknown> {
     place?: string
     colum?: string
     initialColumnVisibility?: Record<string, boolean>
+    // Server-side pagination props (optional)
+    serverSidePagination?: {
+        totalCount: number // Total number of items on server
+        pageIndex: number // Current page (0-indexed)
+        pageSize: number // Items per page
+        onPageChange: (pageIndex: number) => void // Callback when page changes
+        onPageSizeChange: (pageSize: number) => void // Callback when page size changes
+    }
 }
 
 export function DataTable<TData = unknown>({
@@ -62,12 +70,40 @@ export function DataTable<TData = unknown>({
     columns,
     place = "Filter...",
     colum = "title",
-    initialColumnVisibility = {}
+    initialColumnVisibility = {},
+    serverSidePagination
 }: DataTableProps<TData>) {
     const [sorting, setSorting] = React.useState<SortingState>([])
     const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
     const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>(initialColumnVisibility)
     const [rowSelection, setRowSelection] = React.useState({})
+
+    // Use manual pagination for server-side, automatic for client-side
+    const paginationConfig = serverSidePagination
+        ? {
+            manualPagination: true,
+            pageCount: Math.ceil(serverSidePagination.totalCount / serverSidePagination.pageSize),
+            state: {
+                pagination: {
+                    pageIndex: serverSidePagination.pageIndex,
+                    pageSize: serverSidePagination.pageSize,
+                },
+            },
+            onPaginationChange: (updater: any) => {
+                const newState = typeof updater === 'function'
+                    ? updater({ pageIndex: serverSidePagination.pageIndex, pageSize: serverSidePagination.pageSize })
+                    : updater;
+                if (newState.pageIndex !== undefined && newState.pageIndex !== serverSidePagination.pageIndex) {
+                    serverSidePagination.onPageChange(newState.pageIndex);
+                }
+                if (newState.pageSize !== undefined && newState.pageSize !== serverSidePagination.pageSize) {
+                    serverSidePagination.onPageSizeChange(newState.pageSize);
+                }
+            },
+        }
+        : {
+            getPaginationRowModel: getPaginationRowModel(),
+        };
 
     const table = useReactTable({
         data,
@@ -75,7 +111,7 @@ export function DataTable<TData = unknown>({
         onSortingChange: setSorting,
         onColumnFiltersChange: setColumnFilters,
         getCoreRowModel: getCoreRowModel(),
-        getPaginationRowModel: getPaginationRowModel(),
+        ...paginationConfig,
         getSortedRowModel: getSortedRowModel(),
         getFilteredRowModel: getFilteredRowModel(),
         onColumnVisibilityChange: setColumnVisibility,
@@ -85,10 +121,18 @@ export function DataTable<TData = unknown>({
             columnFilters,
             columnVisibility,
             rowSelection,
+            ...(serverSidePagination ? {
+                pagination: {
+                    pageIndex: serverSidePagination.pageIndex,
+                    pageSize: serverSidePagination.pageSize,
+                },
+            } : {}),
         },
     })
 
-    const currentPageSize = table.getState().pagination.pageSize.toString();
+    const currentPageSize = table.getState().pagination.pageSize >= 100
+        ? 'all'
+        : table.getState().pagination.pageSize.toString();
 
     useEffect(() => {
         table.setSorting((sortingState) => {
@@ -251,11 +295,11 @@ export function DataTable<TData = unknown>({
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <span>Showing</span>
                         <Badge variant="outline">
-                            {table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1}-{Math.min((table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize, table.getFilteredRowModel().rows.length)}
+                            {table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1}-{Math.min((table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize, serverSidePagination ? serverSidePagination.totalCount : table.getFilteredRowModel().rows.length)}
                         </Badge>
                         <span>of</span>
                         <Badge variant="outline">
-                            {table.getFilteredRowModel().rows.length}
+                            {serverSidePagination ? serverSidePagination.totalCount : table.getFilteredRowModel().rows.length}
                         </Badge>
                         <span>results</span>
                     </div>
@@ -264,13 +308,28 @@ export function DataTable<TData = unknown>({
                         <div className="flex items-center gap-2">
                             <span className="text-sm text-muted-foreground">Rows per page:</span>
                             <Select
-                                value={currentPageSize}
+                                value={currentPageSize === '100' || currentPageSize === 'all' ? 'all' : currentPageSize}
                                 onValueChange={value => {
-                                    table.setPageSize(Number(value));
+                                    if (value === 'all') {
+                                        // For server-side: send "all" as string, for client-side: use large number
+                                        if (serverSidePagination) {
+                                            // Pass a special marker that we'll convert to "all" in the API call
+                                            serverSidePagination.onPageSizeChange(100);
+                                        } else {
+                                            table.setPageSize(100);
+                                        }
+                                    } else {
+                                        const newPageSize = Number(value);
+                                        if (serverSidePagination) {
+                                            serverSidePagination.onPageSizeChange(newPageSize);
+                                        } else {
+                                            table.setPageSize(newPageSize);
+                                        }
+                                    }
                                 }}
                             >
-                                <SelectTrigger className="w-20 h-8">
-                                    <SelectValue />
+                                <SelectTrigger className="w-24 h-8">
+                                    <SelectValue placeholder="Select..." />
                                 </SelectTrigger>
                                 <SelectContent>
                                     {[10, 20, 30, 40, 50].map(pageSize => (
@@ -278,21 +337,32 @@ export function DataTable<TData = unknown>({
                                             {pageSize}
                                         </SelectItem>
                                     ))}
+                                    <SelectItem value="all">All</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
 
                         <div className="flex items-center gap-2">
                             <span className="text-sm text-muted-foreground">
-                                Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
+                                {table.getPageCount() > 0 ? (
+                                    <>Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}</>
+                                ) : (
+                                    <>Page 1 of 1</>
+                                )}
                             </span>
 
                             <div className="flex items-center gap-1">
                                 <Button
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => table.firstPage()}
-                                    disabled={!table.getCanPreviousPage()}
+                                    onClick={() => {
+                                        if (serverSidePagination) {
+                                            serverSidePagination.onPageChange(0);
+                                        } else {
+                                            table.firstPage();
+                                        }
+                                    }}
+                                    disabled={serverSidePagination ? serverSidePagination.pageIndex === 0 : !table.getCanPreviousPage()}
                                     className="h-8 w-8 p-0"
                                 >
                                     <ChevronsLeft className="h-4 w-4" />
@@ -300,8 +370,14 @@ export function DataTable<TData = unknown>({
                                 <Button
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => table.previousPage()}
-                                    disabled={!table.getCanPreviousPage()}
+                                    onClick={() => {
+                                        if (serverSidePagination) {
+                                            serverSidePagination.onPageChange(serverSidePagination.pageIndex - 1);
+                                        } else {
+                                            table.previousPage();
+                                        }
+                                    }}
+                                    disabled={serverSidePagination ? serverSidePagination.pageIndex === 0 : !table.getCanPreviousPage()}
                                     className="h-8 w-8 p-0"
                                 >
                                     <ChevronLeft className="h-4 w-4" />
@@ -309,8 +385,15 @@ export function DataTable<TData = unknown>({
                                 <Button
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => table.nextPage()}
-                                    disabled={!table.getCanNextPage()}
+                                    onClick={() => {
+                                        if (serverSidePagination) {
+                                            const maxPage = Math.ceil(serverSidePagination.totalCount / serverSidePagination.pageSize) - 1;
+                                            serverSidePagination.onPageChange(Math.min(serverSidePagination.pageIndex + 1, maxPage));
+                                        } else {
+                                            table.nextPage();
+                                        }
+                                    }}
+                                    disabled={serverSidePagination ? serverSidePagination.pageIndex >= Math.ceil(serverSidePagination.totalCount / serverSidePagination.pageSize) - 1 : !table.getCanNextPage()}
                                     className="h-8 w-8 p-0"
                                 >
                                     <ChevronRight className="h-4 w-4" />
@@ -318,8 +401,15 @@ export function DataTable<TData = unknown>({
                                 <Button
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => table.lastPage()}
-                                    disabled={!table.getCanNextPage()}
+                                    onClick={() => {
+                                        if (serverSidePagination) {
+                                            const maxPage = Math.ceil(serverSidePagination.totalCount / serverSidePagination.pageSize) - 1;
+                                            serverSidePagination.onPageChange(maxPage);
+                                        } else {
+                                            table.lastPage();
+                                        }
+                                    }}
+                                    disabled={serverSidePagination ? serverSidePagination.pageIndex >= Math.ceil(serverSidePagination.totalCount / serverSidePagination.pageSize) - 1 : !table.getCanNextPage()}
                                     className="h-8 w-8 p-0"
                                 >
                                     <ChevronsRight className="h-4 w-4" />

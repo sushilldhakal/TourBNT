@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { api } from '@/lib/api/apiClient';
+import { api, extractResponseData } from '@/lib/api/apiClient';
 import useUserStore, { User } from '@/lib/store/useUserStore';
 import { logoutUser } from '@/lib/api/users';
 
@@ -37,14 +37,41 @@ export const useAuth = (): UseAuthReturn => {
             return;
         }
 
-        // Bootstrap: fetch current user on first load
+        // Check if we're on a public/auth route - skip bootstrap to avoid unnecessary 401s
+        const currentPath = window.location.pathname;
+        const publicRoutes = ['/auth/login', '/auth/register', '/auth/signup', '/auth/forgot', '/auth/verify'];
+        const isPublicRoute = publicRoutes.some(route => currentPath.startsWith(route));
+
+        // Skip bootstrap on public routes - user is clearly not logged in
+        if (isPublicRoute) {
+            setIsHydrated(true);
+            return;
+        }
+
+        // Bootstrap: fetch current user on first load (only on non-public routes)
         const bootstrap = async () => {
             try {
-                const response = await api.get('/api/users/me');
-                setUser(response.data);
-            } catch (err: any) {
-                // Silently clear user on auth failure (cookie expired, etc.)
-                clearUser();
+                const response = await api.get('/users/me');
+                const userData = extractResponseData<User>(response);
+
+                if (userData && userData.id) {
+                    setUser(userData);
+                } else {
+                    // Invalid user data received
+                    clearUser();
+                }
+            } catch (error: any) {
+                // Only clear user if we get a 401 (not authenticated)
+                // Other errors (network, server restart, etc.) shouldn't clear the user state
+                if (error?.response?.status === 401) {
+                    // Silently clear user on auth failure (cookie expired, etc.)
+                    clearUser();
+                } else {
+                    // For other errors (network, server restart, etc.), log but don't clear user
+                    // The cookie might still be valid, just the server isn't ready yet
+                    console.warn('Bootstrap auth check failed (non-401):', error?.message);
+                    // Don't clear user - might be a temporary server issue
+                }
             } finally {
                 setIsHydrated(true);
             }
@@ -63,10 +90,11 @@ export const useAuth = (): UseAuthReturn => {
 
     const refetch = async () => {
         try {
-            const response = await api.get('/api/users/me');
-            setUser(response.data);
-            return response.data;
-        } catch (err) {
+            const response = await api.get('/users/me');
+            const userData = extractResponseData<User>(response);
+            setUser(userData);
+            return userData;
+        } catch {
             clearUser();
             return null;
         }

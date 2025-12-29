@@ -10,7 +10,8 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/use-toast";
 import { Image as ImageIcon, Save, Trash2, X, FolderPlus } from "lucide-react";
-import { useDestination, useAllDestinations, useUserDestinations } from "./useDestination";
+import { useUserDestinations } from "./useDestination";
+import { getAllDestinations } from "@/lib/api/destinations";
 import { addDestination, addExistingDestinationToSeller, getUserToursTitle } from "@/lib/api/destinations";
 import { Destination } from "@/lib/types";
 import { GalleryPage } from "@/components/dashboard/gallery/GalleryPage";
@@ -63,15 +64,38 @@ const AddDestination = ({ onDestinationAdded }: AddDestinationProps) => {
     const [selectedDestinations, setSelectedDestinations] = useState<string[]>([]);
     const [addingDestinationId, setAddingDestinationId] = useState<string | null>(null);
 
-    // All destinations hook for MultiSelect
-    const { data: allDestinations, isLoading: isLoadingAll } = useAllDestinations();
-
-    // User's current destinations to filter out already added ones
+    // All destinations hook for MultiSelect - get all approved destinations
+    const { data: allDestinations, isLoading: isLoadingAll } = useQuery({
+        queryKey: ['all-approved-destinations'],
+        queryFn: async () => {
+            const response = await getAllDestinations();
+            // Handle both array and wrapped response formats
+            if (Array.isArray(response)) {
+                return response;
+            }
+            if (response && typeof response === 'object' && 'data' in response && Array.isArray((response as { data: unknown }).data)) {
+                return (response as { data: SearchDestination[] }).data;
+            }
+            return [];
+        },
+        enabled: true,
+    });
+    console.log("allDestinations", allDestinations)
+    // User's current destinations to filter out already added ones - returns array directly
     const { data: userDestinations } = useUserDestinations();
 
+    // Extract destinations array from the response
+    // getAllDestinations can return array directly or wrapped format
+    const allDestinationsArray = Array.isArray(allDestinations)
+        ? allDestinations
+        : [];
+
+    // useUserDestinations returns array directly
+    const userDestinationsArray = Array.isArray(userDestinations) ? userDestinations : [];
+
     // Filter out destinations that user already has
-    const availableDestinations = (allDestinations?.data || []).filter((destination: SearchDestination) =>
-        !(userDestinations?.data || []).some((userDest: Destination) => userDest._id === destination._id)
+    const availableDestinations = allDestinationsArray.filter((destination: SearchDestination) =>
+        !userDestinationsArray.some((userDest: Destination) => userDest._id === destination._id)
     );
 
     const [dialogOpen, setDialogOpen] = useState(false);

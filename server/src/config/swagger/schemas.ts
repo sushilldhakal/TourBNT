@@ -37,7 +37,7 @@
  *             path:
  *               type: string
  *               description: Request path
- *               example: "/api/auth/register"
+ *               example: "/api/v1/auth/register"
  *             requestId:
  *               type: string
  *               description: Unique request ID for tracking
@@ -49,7 +49,7 @@
  *             email: "Invalid email format"
  *             password: "Password must be at least 6 characters"
  *           timestamp: "2025-12-14T10:30:00Z"
- *           path: "/api/auth/register"
+ *           path: "/api/v1/auth/register"
  *
  *     RateLimitError:
  *       type: object
@@ -94,7 +94,7 @@
  *             limit: 5
  *             windowMs: 900000
  *           timestamp: "2025-12-14T10:30:00Z"
- *           path: "/api/auth/login"
+ *           path: "/api/v1/auth/login"
  *
  *     PaginationParams:
  *       type: object
@@ -175,30 +175,74 @@
  *     PaginatedResponse:
  *       type: object
  *       required:
+ *         - success
+ *         - message
  *         - data
- *         - pagination
  *       properties:
+ *         success:
+ *           type: boolean
+ *           description: Indicates if the request was successful
+ *           example: true
+ *         message:
+ *           type: string
+ *           description: Human-readable message
+ *           example: "Success"
  *         data:
- *           type: array
- *           items:
- *             type: object
- *           description: Array of resources
- *         pagination:
- *           $ref: '#/components/schemas/PaginationMetadata'
+ *           type: object
+ *           required:
+ *             - items
+ *             - pagination
+ *           properties:
+ *             items:
+ *               type: array
+ *               items:
+ *                 type: object
+ *               description: Array of normalized resources (no _id, __v fields)
+ *             pagination:
+ *               $ref: '#/components/schemas/PaginationMetadata'
  *       example:
- *         data: []
- *         pagination:
- *           total: 150
- *           page: 1
- *           limit: 10
- *           totalPages: 15
+ *         success: true
+ *         message: "Success"
+ *         data:
+ *           items: []
+ *           pagination:
+ *             total: 150
+ *             page: 1
+ *             limit: 10
+ *             totalPages: 15
+ *
+ *     StandardResponse:
+ *       type: object
+ *       required:
+ *         - success
+ *         - message
+ *         - data
+ *       properties:
+ *         success:
+ *           type: boolean
+ *           description: Indicates if the request was successful
+ *           example: true
+ *         message:
+ *           type: string
+ *           description: Human-readable message
+ *           example: "Success"
+ *         data:
+ *           type: object
+ *           description: Normalized resource data (no _id, __v fields, id field added)
+ *       example:
+ *         success: true
+ *         message: "Success"
+ *         data:
+ *           id: "507f1f77bcf86cd799439011"
+ *           title: "Sample Resource"
+ *           createdAt: "2025-12-14T10:30:00Z"
  *
  *     User:
  *       type: object
  *       properties:
- *         _id:
+ *         id:
  *           type: string
- *           description: User ID
+ *           description: User ID (normalized from _id)
  *         name:
  *           type: string
  *           description: User's full name
@@ -292,7 +336,7 @@
  *       example:
  *         token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
  *         user:
- *           _id: "507f1f77bcf86cd799439011"
+ *           id: "507f1f77bcf86cd799439011"
  *           name: "John Doe"
  *           email: "john@example.com"
  *           roles: "user"
@@ -343,7 +387,7 @@
  *     Fact:
  *       type: object
  *       properties:
- *         _id:
+ *         id:
  *           type: string
  *         label:
  *           type: string
@@ -353,7 +397,7 @@
  *     FAQ:
  *       type: object
  *       properties:
- *         _id:
+ *         id:
  *           type: string
  *         question:
  *           type: string
@@ -363,7 +407,7 @@
  *     GalleryItem:
  *       type: object
  *       properties:
- *         _id:
+ *         id:
  *           type: string
  *         url:
  *           type: string
@@ -398,7 +442,7 @@
  *     PricingOption:
  *       type: object
  *       properties:
- *         _id:
+ *         id:
  *           type: string
  *         name:
  *           type: string
@@ -444,7 +488,7 @@
  *     Tour:
  *       type: object
  *       properties:
- *         _id:
+ *         id:
  *           type: string
  *         title:
  *           type: string
@@ -593,7 +637,7 @@
  *     Booking:
  *       type: object
  *       properties:
- *         _id:
+ *         id:
  *           type: string
  *         tour:
  *           type: string
@@ -650,7 +694,7 @@
  *     Review:
  *       type: object
  *       properties:
- *         _id:
+ *         id:
  *           type: string
  *         tour:
  *           type: string
@@ -674,7 +718,7 @@
  *     Post:
  *       type: object
  *       properties:
- *         _id:
+ *         id:
  *           type: string
  *         title:
  *           type: string
@@ -695,7 +739,7 @@
  *     Subscriber:
  *       type: object
  *       properties:
- *         _id:
+ *         id:
  *           type: string
  *         email:
  *           type: string
@@ -707,7 +751,7 @@
  *     Category:
  *       type: object
  *       properties:
- *         _id:
+ *         id:
  *           type: string
  *         name:
  *           type: string
@@ -719,7 +763,7 @@
  *     Destination:
  *       type: object
  *       properties:
- *         _id:
+ *         id:
  *           type: string
  *         name:
  *           type: string
@@ -801,9 +845,9 @@
  *     Notification:
  *       type: object
  *       properties:
- *         _id:
+ *         id:
  *           type: string
- *           description: Notification ID
+ *           description: Notification ID (normalized from _id)
  *           example: "507f1f77bcf86cd799439011"
  *         recipient:
  *           type: string
@@ -813,7 +857,7 @@
  *           type: object
  *           description: User who triggered the notification
  *           properties:
- *             _id:
+ *             id:
  *               type: string
  *             name:
  *               type: string

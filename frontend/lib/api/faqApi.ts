@@ -8,7 +8,7 @@ import { api, extractResponseData, handleApiError } from "./apiClient";
  */
 export const getAllFaqs = async (page: number = 1, limit: number = 10) => {
     try {
-        const response = await api.get('/api/faqs', {
+        const response = await api.get('/faqs', {
             params: { page, limit }
         });
         return extractResponseData(response);
@@ -52,7 +52,7 @@ export const getSingleFaq = async (faqId: string) => {
  */
 export const addFaq = async (faqData: FormData) => {
     try {
-        const response = await api.post('/api/faqs', faqData);
+        const response = await api.post('/faqs', faqData);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'creating FAQ');
@@ -96,7 +96,7 @@ export const deleteFaq = async (faqId: string) => {
  */
 export const deleteMultipleFaqs = async (faqIds: string[]) => {
     try {
-        const response = await api.delete('/api/faqs', { data: { ids: faqIds } });
+        const response = await api.delete('/faqs', { data: { ids: faqIds } });
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'deleting multiple FAQs');

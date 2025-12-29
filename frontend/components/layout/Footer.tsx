@@ -7,9 +7,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ToastAction } from '@/components/ui/toast';
 import { useToast } from '@/components/ui/use-toast';
-import { getCompanyInfo, subscribe } from '@/lib/api';
 import { useMutation, useQuery } from '@tanstack/react-query';
-
+import { getCompanyInfo } from '@/lib/api/companyApi';
+import { subscribeEmail } from '@/lib/api/subscribers';
 export function Footer() {
     const { isFullWidth } = useLayout();
     const [email, setEmail] = useState('');
@@ -24,7 +24,7 @@ export function Footer() {
     });
 
     const mutation = useMutation({
-        mutationFn: (email: string) => subscribe({ email: [email] }),
+        mutationFn: (email: string) => subscribeEmail(email),
         onSuccess: () => {
             toast({
                 title: 'Success',

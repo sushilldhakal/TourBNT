@@ -127,7 +127,7 @@ export const usePendingCategories = () => {
   return useQuery<CategoryData[]>({
     queryKey: ['pending-categories'],
     queryFn: async () => {
-      const response = await api.get('/api/global/categories/admin/pending');
+      const response = await api.get('/global/categories/admin/pending');
       console.log('📦 Pending categories response:', response);
       
       // Check if response is already an array (direct API response)
@@ -190,7 +190,7 @@ export const useAllCategories = () => {
   return useQuery<CategoryData[]>({
     queryKey: ['all-categories'],
     queryFn: async () => {
-      const response = await api.get('/api/global/categories/seller/search'); // Get all approved categories
+      const response = await api.get('/global/categories/seller/search'); // Get all approved categories
       if (response.data.success) {
         // Transform backend data to match frontend CategoryData interface
         return response.data.data.map((category: BackendCategoryData): CategoryData => ({

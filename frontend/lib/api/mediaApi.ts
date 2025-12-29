@@ -79,11 +79,11 @@ export async function getAllMedia(
     try {
         const { pageParam, mediaType } = params;
 
-        const response = await api.get('/api/gallery', {
+        const response = await api.get('/gallery', {
             params: {
                 mediaType,
                 page: pageParam,
-                pageSize: 20, // Load 20 items per page for better performance
+                limit: 20, // Load 20 items per page for better performance (backend expects 'limit', not 'pageSize')
             },
         });
 
@@ -102,19 +102,30 @@ export async function getAllMedia(
         // Calculate total count based on mediaType
         let totalCount = 0;
         if (mediaType === 'images') {
-            totalCount = data.totalImages || 0;
+            totalCount = data.totalImages || data.total || 0;
         } else if (mediaType === 'pdfs') {
-            totalCount = data.totalPDFs || 0;
+            totalCount = data.totalPDFs || data.total || 0;
         } else if (mediaType === 'videos') {
-            totalCount = data.totalVideos || 0;
+            totalCount = data.totalVideos || data.total || 0;
         }
 
-        console.log('✅ Transformed resources:', resources.length, 'items');
+        // Extract pagination info
+        const currentPage = data.page || pageParam;
+        const totalPages = data.totalPages || 1;
+        const hasMore = currentPage < totalPages;
+
+        console.log('✅ Transformed resources:', resources.length, 'items', { currentPage, totalPages, hasMore });
 
         return {
             resources,
-            nextCursor: data.nextCursor || null,
+            nextCursor: hasMore ? (currentPage + 1) : null, // Use next page number as cursor
             totalCount,
+            // Include pagination info for debugging
+            pagination: {
+                page: currentPage,
+                totalPages,
+                hasMore,
+            },
         };
     } catch (error) {
         throw handleApiError(error, 'fetching media');
@@ -140,7 +151,7 @@ export async function uploadMedia(
         const { formData } = params;
         // Note: userId is no longer used - server gets it from httpOnly cookie
 
-        const response = await api.post('/api/gallery', formData, {
+        const response = await api.post('/gallery', formData, {
             headers: {
                 'Content-Type': 'multipart/form-data',
             },
@@ -251,7 +262,7 @@ export async function deleteMedia(
             backendMediaType = 'PDF';
         }
 
-        await api.delete('/api/gallery', {
+        await api.delete('/gallery', {
             data: {
                 imageIds: ids,
                 mediaType: backendMediaType
@@ -478,7 +489,7 @@ export async function updateMedia(
         if (description !== undefined) body.description = description;
         if (tags !== undefined) body.tags = tags; // Send as array, not JSON string
 
-        await api.patch(`/api/gallery/${imageId}`, body, {
+        await api.patch(`/gallery/${imageId}`, body, {
             params: { mediaType: backendMediaType },
             headers: {
                 'Content-Type': 'application/json',

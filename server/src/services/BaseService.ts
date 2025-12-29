@@ -1,5 +1,6 @@
 import mongoose, { Model, Document, FilterQuery } from 'mongoose';
 import { PaginationParams, paginate } from '../utils/pagination';
+import { normalizeDoc } from '../utils/normalizeDoc';
 import createHttpError from 'http-errors';
 
 /**
@@ -10,10 +11,31 @@ export class BaseService<T extends Document> {
     constructor(protected model: Model<T>) { }
 
     /**
+     * Normalize result data to ensure consistent API responses
+     * @param data - Data to normalize (single document, array, or pagination result)
+     * @returns Normalized data
+     */
+    protected normalizeResult(data: any): any {
+        if (!data) return data;
+
+        // Handle pagination results
+        if (data.items && Array.isArray(data.items)) {
+            return {
+                ...data,
+                items: normalizeDoc(data.items)
+            };
+        }
+
+        // Handle regular data (single documents or arrays)
+        return normalizeDoc(data);
+    }
+
+    /**
      * Get all items with optional filtering and pagination
      */
     async getAll(filters: FilterQuery<T> = {}, paginationParams: PaginationParams) {
-        return paginate(this.model, filters, paginationParams);
+        const result = await paginate(this.model, filters, paginationParams);
+        return this.normalizeResult(result);
     }
 
     /**
@@ -42,7 +64,7 @@ export class BaseService<T extends Document> {
             throw createHttpError(404, `${this.model.modelName} not found`);
         }
 
-        return item;
+        return this.normalizeResult(item);
     }
 
     /**
@@ -51,7 +73,8 @@ export class BaseService<T extends Document> {
     async create(data: Partial<T>) {
         try {
             const item = new this.model(data);
-            return await item.save();
+            const savedItem = await item.save();
+            return this.normalizeResult(savedItem);
         } catch (error: any) {
             if (error.name === 'ValidationError') {
                 throw createHttpError(400, `Validation error: ${error.message}`);
@@ -78,7 +101,7 @@ export class BaseService<T extends Document> {
             throw createHttpError(404, `${this.model.modelName} not found`);
         }
 
-        return item;
+        return this.normalizeResult(item);
     }
 
     /**
@@ -95,7 +118,7 @@ export class BaseService<T extends Document> {
             throw createHttpError(404, `${this.model.modelName} not found`);
         }
 
-        return item;
+        return this.normalizeResult(item);
     }
 
     /**
@@ -103,7 +126,8 @@ export class BaseService<T extends Document> {
      */
     async search(searchParams: any, paginationParams: PaginationParams) {
         const query = this.buildSearchQuery(searchParams);
-        return paginate(this.model, query, paginationParams);
+        const result = await paginate(this.model, query, paginationParams);
+        return this.normalizeResult(result);
     }
 
     /**

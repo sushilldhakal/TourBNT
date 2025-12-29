@@ -4,16 +4,19 @@ import { GalleryDocument } from './galleryTypes';
 // import cloudinary from '../config/cloudinary';
 import { v2 as cloudinary } from "cloudinary";
 import createHttpError from 'http-errors';
-import { Request
- } from '../../middlewares/authenticate';
+import {
+  Request
+} from '../../middlewares/authenticate';
 import mongoose from 'mongoose';
 import fs from 'fs';
 import User from "../user/userModel";
 import { EncryptedKeyService } from '../../services/encryptedKeyService';
+import { HTTP_STATUS, sendSuccess, sendError, sendPaginatedResponse } from '../../utils/apiResponse';
 
 // Removed unused CloudinaryApiResponse interface
 
-interface CloudinaryResource {
+  
+  interface CloudinaryResource {
   asset_id: string;
   public_id: string;
   folder: string;
@@ -30,7 +33,7 @@ interface CloudinaryResource {
 }
 
 export const getSingleMedia = async (req: Request
-, res: Response, next: NextFunction) => {
+  , res: Response, next: NextFunction) => {
   try {
     const { mediaId } = req.params; // Changed from publicId to mediaId
     const { mediaType: queryMediaType } = req.query as { mediaType: string };
@@ -115,7 +118,7 @@ export const getSingleMedia = async (req: Request
       return next(createHttpError(404, 'Image not found on Cloudinary'));
     }
     // Respond with image details
-    res.json({
+    const mediaResponse = {
       url: cloudinaryResource.secure_url,
       id: image._id,
       description: image.description,
@@ -131,7 +134,9 @@ export const getSingleMedia = async (req: Request
       created_at: cloudinaryResource.created_at,
       public_id: cloudinaryResource.public_id,
       secure_url: cloudinaryResource.secure_url,
-    });
+    };
+
+    return sendSuccess(res, mediaResponse, 'Media retrieved successfully');
   } catch (error: any) {
     console.error('🚨 getSingleMedia Error:', error);
     console.error('🔍 Error details:', {
@@ -214,15 +219,19 @@ const fetchResourceByPublicId = async (mediaType: string, publicId: string, owne
 };
 
 export const getMedia = async (req: Request
-, res: Response, next: NextFunction) => {
+  , res: Response, next: NextFunction) => {
   try {
     const { mediaType } = req.query;
-    const { page, limit, skip } = req.pagination!; // Get pagination from middleware
+    const page = parseInt(req.query.page as string) || 1;
+    const limitParam = req.query.limit as string;
+    const limit = limitParam === 'all' || parseInt(limitParam) >= 100
+      ? 'all'
+      : parseInt(limitParam) || 10;
 
     if (!['images', 'pdfs', 'videos'].includes(mediaType as string)) {
       return next(createHttpError(400, 'Invalid mediaType parameter'));
     }
-    console.log('🔍 getMedia called with:', { mediaType, page, limit, skip }, req.user);
+    console.log('🔍 getMedia called with:', { mediaType, page, limit }, req.user);
     if (!req.user) return next(createHttpError(401, 'User not authenticated'));
 
     const isAdmin = req.user.roles.includes('admin');
@@ -230,45 +239,120 @@ export const getMedia = async (req: Request
       ? {} // Admin can access all galleries
       : { user: new mongoose.Types.ObjectId(req.user.id) }; // Non-admin can access only their own gallery
 
-    // Fetch galleries without skip and limit
-    const galleries = await Gallery.find(query).sort({ createdAt: -1 }).exec();
+    // Helper function to extract and sort media from galleries
+    const extractAndSortMedia = (galleries: GalleryDocument[]) => {
+      const images = mediaType === 'images' ? galleries.flatMap(gallery => gallery.images) : [];
+      const pdfs = mediaType === 'pdfs' ? galleries.flatMap(gallery => gallery.PDF) : [];
+      const videos = mediaType === 'videos' ? galleries.flatMap(gallery => gallery.videos) : [];
 
-    // Separate media into different arrays
-    const images = mediaType === 'images' ? galleries.flatMap(gallery => gallery.images) : [];
-    const pdfs = mediaType === 'pdfs' ? galleries.flatMap(gallery => gallery.PDF) : [];
-    const videos = mediaType === 'videos' ? galleries.flatMap(gallery => gallery.videos) : [];
+      const sortedImages = images.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+      const sortedPdfs = pdfs.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+      const sortedVideos = videos.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
 
-    // Sort media
-    const sortedImages = images.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
-    const sortedPdfs = pdfs.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
-    const sortedVideos = videos.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+      return {
+        images: sortedImages,
+        pdfs: sortedPdfs,
+        videos: sortedVideos,
+        totalImages: images.length,
+        totalPDFs: pdfs.length,
+        totalVideos: videos.length
+      };
+    };
 
-    // Slice the media array for pagination
-    const responseMedia = mediaType === 'images'
-      ? sortedImages.slice(skip, skip + limit)
-      : mediaType === 'pdfs'
-        ? sortedPdfs.slice(skip, skip + limit)
-        : sortedVideos.slice(skip, skip + limit);
+    // Handle "All" option with hybrid approach
+    if (limit === 'all') {
+      try {
+        // First, get a rough estimate by counting galleries
+        const galleryCount = await Gallery.countDocuments(query);
+        const MEMORY_THRESHOLD = 100; // Threshold for total media items
 
-    // Calculate total count and pages
-    const totalMediaCount = mediaType === 'images'
-      ? sortedImages.length
-      : mediaType === 'pdfs'
-        ? sortedPdfs.length
-        : sortedVideos.length;
+        // Fetch all galleries
+        const allGalleries = await Gallery.find(query).sort({ createdAt: -1 }).lean().exec();
 
-    const totalPages = Math.ceil(totalMediaCount / limit);
+        // Extract and sort all media
+        const { images, pdfs, videos, totalImages, totalPDFs, totalVideos } = extractAndSortMedia(allGalleries as any);
 
-    res.json({
-      [mediaType as string]: responseMedia,
-      total: totalMediaCount,
-      page,
-      limit,
-      totalPages,
-      totalImages: mediaType === 'images' ? images.length : 0,
-      totalPDFs: mediaType === 'pdfs' ? pdfs.length : 0,
-      totalVideos: mediaType === 'videos' ? videos.length : 0
-    });
+        const allMedia = mediaType === 'images' ? images : mediaType === 'pdfs' ? pdfs : videos;
+        const totalMediaCount = allMedia.length;
+
+        if (totalMediaCount <= MEMORY_THRESHOLD) {
+          // Small dataset: Return all in standard response format
+          return res.status(HTTP_STATUS.OK).json({
+            success: true,
+            items: allMedia,
+            pagination: {
+              page: 1,
+              limit: totalMediaCount,
+              totalItems: totalMediaCount,
+              totalPages: 1
+            },
+            message: 'Media retrieved successfully',
+            totalImages,
+            totalPDFs,
+            totalVideos
+          });
+        } else {
+          // Large dataset: Stream to client (memory-efficient)
+          res.setHeader('Content-Type', 'application/json');
+          
+          // Start JSON response with standard format
+          res.write(`{"success":true,"items":[`);
+
+          let first = true;
+          for (const media of allMedia) {
+            if (!first) res.write(',');
+            res.write(JSON.stringify(media));
+            first = false;
+          }
+
+          // End JSON response with pagination info (standard format)
+          res.write(`],"pagination":{"page":1,"limit":${totalMediaCount},"totalItems":${totalMediaCount},"totalPages":1},"message":"Media retrieved successfully","totalImages":${totalImages},"totalPDFs":${totalPDFs},"totalVideos":${totalVideos}}`);
+          res.end();
+          return;
+        }
+      } catch (error: any) {
+        next(error);
+      }
+    }
+
+    // Normal pagination for numeric limit
+    const pageNum = parseInt(page.toString());
+    const limitNum = parseInt(limit.toString());
+    const skip = (pageNum - 1) * limitNum;
+
+    try {
+      // Fetch galleries
+      const galleries = await Gallery.find(query).sort({ createdAt: -1 }).lean().exec();
+
+      // Extract and sort media
+      const { images, pdfs, videos, totalImages, totalPDFs, totalVideos } = extractAndSortMedia(galleries as any);
+
+      // Get the appropriate media array
+      const allMedia = mediaType === 'images' ? images : mediaType === 'pdfs' ? pdfs : videos;
+      const totalMediaCount = allMedia.length;
+
+      // Apply pagination
+      const responseMedia = allMedia.slice(skip, skip + limitNum);
+      const totalPages = Math.ceil(totalMediaCount / limitNum);
+
+      // Return in standard format
+      return res.status(HTTP_STATUS.OK).json({
+        success: true,
+        items: responseMedia,
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          totalItems: totalMediaCount,
+          totalPages
+        },
+        message: 'Media retrieved successfully',
+        totalImages,
+        totalPDFs,
+        totalVideos
+      });
+    } catch (error: any) {
+      return sendError(res, `Failed to fetch media: ${error.message}`, HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    }
 
   } catch (error) {
     next(error);
@@ -362,7 +446,7 @@ const handleUploads = async (files: any, title: string | undefined, description:
 };
 
 export const addMedia = async (req: Request
-, res: Response, next: NextFunction) => {
+  , res: Response, next: NextFunction) => {
   const { description, title } = req.body;
   const files = req.files as { [fieldname: string]: Express.Multer.File[] };
 
@@ -406,7 +490,7 @@ export const addMedia = async (req: Request
     await gallery.save();
 
     console.log('✅ AddMedia: Upload process completed successfully');
-    res.status(201).json({ message: 'Media uploaded successfully', gallery });
+    return sendSuccess(res, { gallery }, 'Media uploaded successfully', 201);
   } catch (error) {
     console.error('❌ AddMedia: Error during upload process:', error);
     console.error('❌ AddMedia: Error stack:', error instanceof Error ? error.stack : 'No stack trace');
@@ -415,7 +499,7 @@ export const addMedia = async (req: Request
 };
 
 export const updateMedia = async (req: Request
-, res: Response, next: NextFunction) => {
+  , res: Response, next: NextFunction) => {
   try {
     const userId = req.user!.id; // Get userId from authenticated request
     const { mediaId } = req.params; // Changed from imageId to mediaId
@@ -475,7 +559,7 @@ export const updateMedia = async (req: Request
 
     await gallery.save();
 
-    res.json(mediaItem);
+    return sendSuccess(res, mediaItem, 'Media updated successfully');
   } catch (error) {
     next(error);
   }
@@ -483,7 +567,7 @@ export const updateMedia = async (req: Request
 
 
 export const deleteMedia = async (req: Request
-, res: Response, next: NextFunction) => {
+  , res: Response, next: NextFunction) => {
   try {
     const { user } = req;
     const { imageIds, mediaType } = req.body; // Expect an array of image IDs
@@ -609,10 +693,12 @@ export const deleteMedia = async (req: Request
     );
     await gallery.save();
 
-    res.status(200).json({
+    const deleteResponse = {
       message: `${mediaType.charAt(0).toUpperCase() + mediaType.slice(1)} deletion completed`,
       results
-    });
+    };
+
+    return sendSuccess(res, deleteResponse, 'Media deletion completed');
   } catch (error) {
     next(error);
   }

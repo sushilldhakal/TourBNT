@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import BookingModel from '../bookingModel';
 import { Booking } from '../bookingTypes';
 import { PaginationParams, paginate } from '../../../utils/pagination';
+import { normalizeDoc } from '../../../utils/normalizeDoc';
 import createHttpError from 'http-errors';
 import { BaseService } from '../../../services/BaseService';
 import Tour from '../../tours/tourModel';
@@ -120,7 +121,8 @@ export class BookingService extends BaseService<Booking> {
             result.items = populatedItems;
         }
 
-        return result;
+        // Normalize the result
+        return normalizeDoc(result);
     }
 
     /**
@@ -141,7 +143,8 @@ export class BookingService extends BaseService<Booking> {
             throw createHttpError(404, 'Booking not found');
         }
 
-        return booking;
+        // Normalize the result
+        return normalizeDoc(booking);
     }
 
     /**
@@ -158,7 +161,8 @@ export class BookingService extends BaseService<Booking> {
             throw createHttpError(404, 'Booking not found');
         }
 
-        return booking;
+        // Normalize the result
+        return normalizeDoc(booking);
     }
 
     /**
@@ -183,7 +187,8 @@ export class BookingService extends BaseService<Booking> {
             result.items = populatedItems;
         }
 
-        return result;
+        // Normalize the result
+        return normalizeDoc(result);
     }
 
     /**
@@ -202,7 +207,8 @@ export class BookingService extends BaseService<Booking> {
             result.items = populatedItems;
         }
 
-        return result;
+        // Normalize the result
+        return normalizeDoc(result);
     }
 
     /**
@@ -238,7 +244,8 @@ export class BookingService extends BaseService<Booking> {
             throw createHttpError(404, 'Booking not found');
         }
 
-        return booking;
+        // Normalize the result
+        return normalizeDoc(booking);
     }
 
     /**
@@ -274,7 +281,8 @@ export class BookingService extends BaseService<Booking> {
             throw createHttpError(404, 'Booking not found');
         }
 
-        return booking;
+        // Normalize the result
+        return normalizeDoc(booking);
     }
 
     /**
@@ -327,7 +335,7 @@ export class BookingService extends BaseService<Booking> {
 
         // Return booking data for voucher generation
         // In a real implementation, this would generate a PDF
-        return {
+        const voucherData = {
             bookingReference: booking.bookingReference,
             tour: booking.tour,
             customer: booking.user || booking.guestInfo,
@@ -342,6 +350,9 @@ export class BookingService extends BaseService<Booking> {
                 phone: booking.contactPhone
             }
         };
+
+        // Normalize the result
+        return normalizeDoc(voucherData);
     }
 
     /**

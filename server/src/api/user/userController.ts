@@ -8,8 +8,10 @@ import { validationResult } from "express-validator";
 import { config } from "../../config/config";
 import { sendResetPasswordEmail as sendResetPasswordEmailMaileroo, sendVerificationEmail as sendVerificationEmailMaileroo } from "../../controller/maileroo";
 import { uploadSellerDocuments } from "../../services/sellerDocumentService";
-import { HTTP_STATUS } from "../../utils/httpStatusCodes";
+import { hybridPagination } from "../../utils/paginationUtils";
+import { HTTP_STATUS } from "../../utils/apiResponse";
 import { getAuthCookieOptions, getClearCookieOptions, COOKIE_NAMES, COOKIE_DURATIONS } from "../../utils/cookieUtils";
+import { sendSuccess, sendPaginatedResponse } from "../../utils/apiResponse";
 
 // create user
 export const createUser = async (req: Request, res: Response, next: NextFunction) => {
@@ -50,11 +52,8 @@ export const createUser = async (req: Request, res: Response, next: NextFunction
 
     // Skip email sending in development mode
     if (isDevMode) {
-      res.status(HTTP_STATUS.CREATED).json({
-        message: 'User created successfully (auto-verified in development mode)',
-        user: { id: newUser._id, name: newUser.name, email: newUser.email }
-      });
-      return;
+      const userResponse = { id: newUser._id, name: newUser.name, email: newUser.email };
+      return sendSuccess(res, userResponse, 'User created successfully (auto-verified in development mode)', HTTP_STATUS.CREATED);
     }
 
     // Send verification email in production
@@ -64,14 +63,12 @@ export const createUser = async (req: Request, res: Response, next: NextFunction
         algorithm: 'HS256',
       });
       await sendVerificationEmailMaileroo(email, name, verificationToken);
-      res.status(HTTP_STATUS.CREATED).json({ message: 'Verification email sent. Please check your inbox.' });
+      return sendSuccess(res, null, 'Verification email sent. Please check your inbox.', HTTP_STATUS.CREATED);
     } catch (emailError) {
       console.error("Email sending failed:", emailError);
       // Still create the user but notify about email failure
-      res.status(HTTP_STATUS.CREATED).json({
-        message: 'User created successfully but verification email could not be sent. Please contact support.',
-        user: { id: newUser._id, name: newUser.name, email: newUser.email }
-      });
+      const userResponse = { id: newUser._id, name: newUser.name, email: newUser.email };
+      return sendSuccess(res, userResponse, 'User created successfully but verification email could not be sent. Please contact support.', HTTP_STATUS.CREATED);
     }
 
   } catch (err) {
@@ -99,11 +96,12 @@ export const loginUser = async (req: Request, res: Response, next: NextFunction)
 
     const expiresIn = keepMeSignedIn ? '30d' : '2h';
 
-    // Create JWT token with user ID and roles
+    // Create JWT token with user ID, roles, and keepMeSignedIn flag
     const token = sign(
       {
         sub: user._id.toString(),
         roles: user.roles || [], // Ensure roles is an array
+        keepMeSignedIn: keepMeSignedIn, // Store in JWT to preserve during sliding session
       },
       config.jwtSecret,
       { expiresIn }
@@ -116,17 +114,17 @@ export const loginUser = async (req: Request, res: Response, next: NextFunction)
     res.cookie(COOKIE_NAMES.AUTH_TOKEN, token, cookieOptions);
 
     // Return only user info, not token
-    res.json({
-      user: {
-        id: user._id,
-        roles: user.roles,
-        email: user.email,
-        name: user.name,
-        phone: user.phone,
-        verified: user.verified,
-        avatar: user.avatar,
-      }
-    });
+    const userResponse = {
+      id: user._id.toString(), // Convert MongoDB ObjectId to string
+      roles: user.roles,
+      email: user.email,
+      name: user.name,
+      phone: user.phone,
+      verified: user.verified,
+      avatar: user.avatar,
+    };
+
+    return sendSuccess(res, { user: userResponse }, 'Login successful');
 
   } catch (err) {
     console.error('Error while logging in user:', err);
@@ -144,7 +142,7 @@ export const logoutUser = (req: Request, res: Response) => {
 
 // Get current authenticated user
 export const getCurrentUser = async (req: Request
-, res: Response, next: NextFunction) => {
+  , res: Response, next: NextFunction) => {
   try {
     if (!req.user) {
       return next(createHttpError(HTTP_STATUS.UNAUTHORIZED, "Not authenticated"));
@@ -155,6 +153,28 @@ export const getCurrentUser = async (req: Request
     if (!user) {
       return next(createHttpError(HTTP_STATUS.NOT_FOUND, "User not found"));
     }
+
+    // Extend session cookie on successful authentication check (sliding session)
+    // This keeps users logged in as long as they're active
+    // Preserve the original "keep me signed in" preference from JWT
+    const keepMeSignedIn = req.user?.keepMeSignedIn === true;
+    const expiresIn = keepMeSignedIn ? '30d' : '2h';
+    const maxAge = keepMeSignedIn ? COOKIE_DURATIONS.LONG_SESSION : COOKIE_DURATIONS.SHORT_SESSION;
+
+    // Create a new token with extended expiration (preserving keepMeSignedIn preference)
+    const newToken = sign(
+      {
+        sub: user._id.toString(),
+        roles: user.roles || [],
+        keepMeSignedIn: keepMeSignedIn, // Preserve the original preference
+      },
+      config.jwtSecret,
+      { expiresIn }
+    );
+
+    // Set the new token with extended expiration (respecting original preference)
+    const cookieOptions = getAuthCookieOptions(maxAge);
+    res.cookie(COOKIE_NAMES.AUTH_TOKEN, newToken, cookieOptions);
 
     // Compute seller status from sellerInfo
     let sellerStatus = 'none';
@@ -168,8 +188,8 @@ export const getCurrentUser = async (req: Request
       }
     }
 
-    res.status(HTTP_STATUS.OK).json({
-      id: user._id,
+    const userResponse = {
+      id: user._id.toString(), // Convert MongoDB ObjectId to string
       name: user.name,
       email: user.email,
       roles: user.roles,
@@ -177,7 +197,9 @@ export const getCurrentUser = async (req: Request
       verified: user.verified,
       avatar: user.avatar,
       sellerStatus,
-    });
+    };
+
+    return sendSuccess(res, userResponse, 'User data retrieved successfully');
   } catch (error) {
     return next(createHttpError(HTTP_STATUS.INTERNAL_SERVER_ERROR, "Error fetching user data"));
   }
@@ -186,9 +208,6 @@ export const getCurrentUser = async (req: Request
 // Get all users
 export const getAllUsers = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    // Use pagination params from middleware
-    const { page, limit, skip } = req.pagination || { page: 1, limit: 10, skip: 0 };
-
     // Build query based on filters from middleware (AND logic - all filters must match)
     const query: any = {};
     if (req.filters) {
@@ -217,34 +236,26 @@ export const getAllUsers = async (req: Request, res: Response, next: NextFunctio
 
     console.log("Final query:", JSON.stringify(query, null, 2));
     console.log("Sort:", sort);
-    console.log("Pagination:", { page, limit, skip });
 
-    // Get total count for pagination metadata
-    const total = await userModel.countDocuments(query);
-    console.log("Total users matching query:", total);
-
-    // Get paginated users with filters and sorting
-    const users = await userModel.find(query)
-      .select('-password') // Exclude password field
-      .skip(skip)
-      .limit(limit)
-      .sort(sort);
-
-    console.log("users returned:", users.length);
-    console.log("User roles in result:", users.map(u => ({ id: u._id, name: u.name, role: u.roles })));
-    
-    // Calculate total pages
-    const totalPages = Math.ceil(total / limit);
-
-    res.json({
-      users,
-      pagination: {
-        total,
-        page,
-        limit,
-        totalPages
+    // Use hybrid pagination utility
+    // Note: We'll use select in the query builder, but hybridPagination uses lean() which doesn't support select
+    // So we'll filter password in the fieldFilter
+    return hybridPagination(
+      userModel,
+      query,
+      req,
+      res,
+      {
+        fieldFilter: (user: any) => {
+          // Exclude password field
+          const { password, ...userWithoutPassword } = user;
+          return userWithoutPassword;
+        },
+        sort,
+        memoryThreshold: 100,
+        message: 'Users retrieved successfully'
       }
-    });
+    );
   } catch (err) {
     console.error("Error in getAllUsers:", err);
     return next(createHttpError(500, "Error while getting users"));
@@ -254,19 +265,19 @@ export const getAllUsers = async (req: Request, res: Response, next: NextFunctio
 
 // Get a single user by ID (admin only)
 export const getUserById = async (req: Request
-, res: Response, next: NextFunction) => {
+  , res: Response, next: NextFunction) => {
   const { userId } = req.params;
   if (!userId) {
     return next(createHttpError(400, "User ID is required"));
   }
-  
+
   try {
     const user = await userModel.findById(userId);
     if (!user) {
       return next(createHttpError(404, "User not found"));
     }
-    
-    res.json(user);
+
+    return sendSuccess(res, user, 'User retrieved successfully');
   } catch (err) {
     return next(createHttpError(500, "Error while getting user"));
   }
@@ -376,11 +387,10 @@ export const updateUser = async (req: Request, res: Response, next: NextFunction
 
       console.log('✅ Seller application saved successfully for user:', userId);
 
-      return res.json({
+      return sendSuccess(res, {
         user: updatedUser,
-        message: "Seller application submitted successfully. It will be reviewed by our team.",
         documentsUploaded: Object.keys(uploadedDocuments)
-      });
+      }, "Seller application submitted successfully. It will be reviewed by our team.");
     } else {
       // Regular user update
       const { name, email, roles, password, phone } = req.body;
@@ -402,7 +412,7 @@ export const updateUser = async (req: Request, res: Response, next: NextFunction
         updateData,
         { new: true }
       );
-      res.json(updatedUser);
+      return sendSuccess(res, updatedUser, 'User updated successfully');
     }
   } catch (err) {
     console.error('Error while updating user:', err);
@@ -444,7 +454,7 @@ export const getSellerApplications = async (req: Request, res: Response, next: N
 
     // Transform the data to match frontend expectations
     const applications = users.map(user => ({
-      _id: user._id,
+      _id: user._id.toString(), // Convert MongoDB ObjectId to string
       name: user.name,
       email: user.email,
       phone: user.phone,
@@ -608,7 +618,7 @@ export const deleteUser = async (req: Request, res: Response, next: NextFunction
       // Return 204 No Content for successful deletion
       res.status(HTTP_STATUS.NO_CONTENT).send();
     } else {
-      res.status(HTTP_STATUS.NOT_FOUND).json({ message: 'User not found' });
+      return next(createHttpError(404, 'User not found'));
     }
   } catch (err) {
     return next(createHttpError(500, "Error while deleting user"));
@@ -814,7 +824,7 @@ export const updateMyProfile = async (req: Request, res: Response, next: NextFun
     } else {
       // Regular profile update
       const { name, email, phone, bankName, accountNumber, accountHolderName, branchCode } = req.body;
-      
+
       const updateData: any = {
         name: name || user.name,
         email: email || user.email,
@@ -854,9 +864,9 @@ export const updateMyProfile = async (req: Request, res: Response, next: NextFun
 
 // Change current user's password
 export const changeMyPassword = async (req: Request
-, res: Response, next: NextFunction) => {
+  , res: Response, next: NextFunction) => {
   const { currentPassword, newPassword } = req.body;
-  
+
   if (!currentPassword || !newPassword) {
     return next(createHttpError(400, "Current password and new password are required"));
   }
@@ -884,7 +894,7 @@ export const changeMyPassword = async (req: Request
 
     // Update password
     await userModel.findByIdAndUpdate(userId, { password: hashedPassword });
-    
+
     res.json({ message: "Password changed successfully" });
   } catch (err) {
     console.error('Error while changing password:', err);
@@ -894,7 +904,7 @@ export const changeMyPassword = async (req: Request
 
 // Update user by ID (admin only)
 export const updateUserById = async (req: Request
-, res: Response, next: NextFunction) => {
+  , res: Response, next: NextFunction) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(HTTP_STATUS.BAD_REQUEST).json({ errors: errors.array() });

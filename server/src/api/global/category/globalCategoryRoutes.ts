@@ -40,7 +40,7 @@ const deleteCategoryById = (req: any, res: any) => {
 // RESTful routes - PUBLIC
 /**
  * @swagger
- * /api/global/categories:
+ * /api/v1/global/categories:
  *   get:
  *     summary: Get all categories
  *     description: Retrieve all approved global categories with pagination
@@ -89,7 +89,7 @@ router.get('/', paginationMiddleware, getApprovedCategories);
 // RESTful routes - ADMIN ONLY
 /**
  * @swagger
- * /api/global/categories:
+ * /api/v1/global/categories:
  *   post:
  *     summary: Create new category (Admin only)
  *     description: Create a new category (admin only)
@@ -136,7 +136,7 @@ router.post('/', authenticate, authorizeRoles('admin'), uploadNone, submitCatego
 
 /**
  * @swagger
- * /api/global/categories/{id}:
+ * /api/v1/global/categories/{id}:
  *   patch:
  *     summary: Update category (Admin only)
  *     description: Update a category (admin only)
@@ -191,7 +191,7 @@ router.patch('/:id', authenticate, authorizeRoles('admin'), uploadNone, updateCa
 
 /**
  * @swagger
- * /api/global/categories/{id}:
+ * /api/v1/global/categories/{id}:
  *   delete:
  *     summary: Delete category (Admin only)
  *     description: Delete a category (admin only)
@@ -241,7 +241,7 @@ router.delete('/:id', authenticate, authorizeRoles('admin'), deleteCategoryById 
 // Legacy route for backward compatibility
 /**
  * @swagger
- * /api/global/categories/approved:
+ * /api/v1/global/categories/approved:
  *   get:
  *     summary: Get approved categories (legacy)
  *     description: Retrieve all approved global categories
@@ -261,7 +261,7 @@ router.get('/approved', getApprovedCategories);
 
 /**
  * @swagger
- * /api/global/categories/type/{type}:
+ * /api/v1/global/categories/type/{type}:
  *   get:
  *     summary: Get categories by type
  *     description: Retrieve categories filtered by type
@@ -298,7 +298,7 @@ router.get('/seller/favorites', getFavoriteCategories as any);
 // Parameterized routes (must come after specific routes)
 /**
  * @swagger
- * /api/global/categories/{categoryId}:
+ * /api/v1/global/categories/{categoryId}:
  *   get:
  *     summary: Get category by ID
  *     description: Retrieve a specific category by its ID
@@ -330,7 +330,7 @@ router.get('/:categoryId', getCategoryById);
 
 /**
  * @swagger
- * /api/global/categories/submit:
+ * /api/v1/global/categories/submit:
  *   post:
  *     summary: Submit new category (legacy)
  *     description: Submit a new category for approval (admin/seller only)

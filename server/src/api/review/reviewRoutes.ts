@@ -19,7 +19,7 @@ const router = express.Router({ mergeParams: true }); // mergeParams allows acce
 
 /**
  * @swagger
- * /api/reviews:
+ * /api/v1/reviews:
  *   get:
  *     summary: Get all reviews
  *     description: Retrieve all approved reviews across all tours (top-level collection endpoint)
@@ -85,7 +85,7 @@ router.get('/',
 // Protected routes - require authentication
 /**
  * @swagger
- * /api/reviews/pending:
+ * /api/v1/reviews/pending:
  *   get:
  *     summary: Get pending reviews
  *     description: Retrieve all reviews pending approval (admin/seller only)
@@ -110,7 +110,7 @@ router.get('/pending', authenticate, authorizeRoles('admin', 'seller'), getPendi
 
 /**
  * @swagger
- * /api/reviews/{reviewId}:
+ * /api/v1/reviews/{reviewId}:
  *   get:
  *     summary: Get review by ID
  *     description: Retrieve a specific review by ID (auto-increments view count)
@@ -145,7 +145,7 @@ router.get('/:reviewId',
 
 /**
  * @swagger
- * /api/reviews/{reviewId}/status:
+ * /api/v1/reviews/{reviewId}/status:
  *   patch:
  *     summary: Update review status
  *     description: Approve or reject a review (admin/seller only)
@@ -189,7 +189,7 @@ router.patch('/:reviewId/status', authenticate, authorizeRoles('admin', 'seller'
 
 /**
  * @swagger
- * /api/reviews/{reviewId}/replies:
+ * /api/v1/reviews/{reviewId}/replies:
  *   post:
  *     summary: Reply to review
  *     description: Add a reply to a review
@@ -225,7 +225,7 @@ router.post('/:reviewId/replies', authenticate, addReviewReply);
 
 /**
  * @swagger
- * /api/reviews/{reviewId}/likes:
+ * /api/v1/reviews/{reviewId}/likes:
  *   post:
  *     summary: Like review
  *     description: Like or unlike a review

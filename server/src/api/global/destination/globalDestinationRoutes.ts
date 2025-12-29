@@ -40,7 +40,7 @@ const deleteDestinationById = (req: any, res: any) => {
 // RESTful routes - PUBLIC
 /**
  * @swagger
- * /api/global/destinations:
+ * /api/v1/global/destinations:
  *   get:
  *     summary: Get all destinations
  *     description: Retrieve all approved global destinations with pagination
@@ -89,7 +89,7 @@ router.get('/', paginationMiddleware, getApprovedDestinations);
 // RESTful routes - ADMIN ONLY
 /**
  * @swagger
- * /api/global/destinations:
+ * /api/v1/global/destinations:
  *   post:
  *     summary: Create new destination (Admin only)
  *     description: Create a new destination (admin only)
@@ -138,7 +138,7 @@ router.post('/', authenticate, authorizeRoles('admin'), uploadNone, submitDestin
 
 /**
  * @swagger
- * /api/global/destinations/{id}:
+ * /api/v1/global/destinations/{id}:
  *   patch:
  *     summary: Update destination (Admin only)
  *     description: Update a destination (admin only)
@@ -195,7 +195,7 @@ router.patch('/:id', authenticate, authorizeRoles('admin'), uploadNone, updateDe
 
 /**
  * @swagger
- * /api/global/destinations/{id}:
+ * /api/v1/global/destinations/{id}:
  *   delete:
  *     summary: Delete destination (Admin only)
  *     description: Delete a destination (admin only)
@@ -245,7 +245,7 @@ router.delete('/:id', authenticate, authorizeRoles('admin'), deleteDestinationBy
 // Legacy route for backward compatibility
 /**
  * @swagger
- * /api/global/destinations/approved:
+ * /api/v1/global/destinations/approved:
  *   get:
  *     summary: Get approved destinations (legacy)
  *     description: Retrieve all approved global destinations
@@ -265,7 +265,7 @@ router.get('/approved', getApprovedDestinations);
 
 /**
  * @swagger
- * /api/global/destinations/country/{country}:
+ * /api/v1/global/destinations/country/{country}:
  *   get:
  *     summary: Get destinations by country
  *     description: Retrieve destinations filtered by country
@@ -301,7 +301,7 @@ router.get('/user-destinations', getUserDestinations as any); // New route for u
 
 /**
  * @swagger
- * /api/global/destinations/submit:
+ * /api/v1/global/destinations/submit:
  *   post:
  *     summary: Submit new destination (legacy)
  *     description: Submit a new destination for approval (admin/seller only)

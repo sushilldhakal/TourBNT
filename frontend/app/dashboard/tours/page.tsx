@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { deleteTour, getMyTours } from '@/lib/api/tours';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,18 +23,21 @@ import { format } from 'date-fns';
 import { useToast } from '@/components/ui/use-toast';
 import { DataTable } from '@/components/dashboard/DataTable';
 import { ActionDropdown } from '@/components/dashboard/shared/ActionDropdown';
-interface Author {
-    name: string;
-}
+import Image from 'next/image';
 
 export default function ToursPage() {
     const { toast } = useToast();
     const queryClient = useQueryClient();
+    const [page, setPage] = useState(0); // 0-indexed page
+    const [pageSize, setPageSize] = useState(10); // Items per page
 
-    // ✅ Correct pattern: No userId needed, server gets it from httpOnly cookie
+    // ✅ Use getMyTours which automatically filters by user role on the server:
+    // - Admin: Returns all tours
+    // - Seller/User: Returns only their own tours
+    // ✅ Server-side pagination: Fetch only the current page's data
     const { data, isLoading, isError } = useQuery({
-        queryKey: ['my-tours'],
-        queryFn: getMyTours,
+        queryKey: ['my-tours', page, pageSize],
+        queryFn: () => getMyTours({ pageParam: page, limit: pageSize }),
     });
     const deleteMutation = useMutation({
         mutationFn: deleteTour,
@@ -57,7 +61,8 @@ export default function ToursPage() {
         await deleteMutation.mutateAsync(tourId);
     };
 
-    const tableData = data; // Access the tours array
+    // Extract tours array from paginated response
+    const tableData = data?.items || data || []; // Handle both paginated response and direct array
 
     const columns: any[] = [
         {
@@ -77,7 +82,9 @@ export default function ToursPage() {
                 <div className="max-w-xs">
                     <div className="image-area flex items-center gap-3">
                         <div className="relative group shrink-0">
-                            <img
+                            <Image
+                                width={48}
+                                height={48}
                                 className="w-12 h-12 object-cover rounded-lg border shadow-xs transition-transform group-hover:scale-105"
                                 src={row.original.coverImage || '/placeholder-image.jpg'}
                                 alt={row.original.title || 'Tour cover'}
@@ -183,9 +190,19 @@ export default function ToursPage() {
             ),
             cell: ({ row }: any) => {
                 const createdAt = row.getValue('createdAt');
+                const updatedAt = row.original.updatedAt; // Get from original data
                 return (
-                    <div className="text-sm text-muted-foreground">
-                        {createdAt ? format(new Date(createdAt.toString()), 'MMM dd, yyyy') : '--'}
+                    <div className="text-sm text-muted-foreground space-y-1">
+                        <div>
+                            <span className="font-medium">Created:</span>{' '}
+                            {createdAt ? format(new Date(createdAt.toString()), 'MMM dd, yyyy') : '--'}
+                        </div>
+                        {updatedAt && (
+                            <div>
+                                <span className="font-medium">Updated:</span>{' '}
+                                {format(new Date(updatedAt.toString()), 'MMM dd, yyyy')}
+                            </div>
+                        )}
                     </div>
                 );
             },
@@ -263,6 +280,7 @@ export default function ToursPage() {
         }
 
         if (data && tableData && Array.isArray(tableData) && tableData.length > 0) {
+            const totalTours = data?.totalTours || data?.pagination?.totalTours || 0;
             return (
                 <DataTable
                     data={tableData}
@@ -270,6 +288,19 @@ export default function ToursPage() {
                     place="Filter Tours..."
                     colum="title"
                     initialColumnVisibility={{ actions: false }}
+                    serverSidePagination={{
+                        totalCount: totalTours,
+                        pageIndex: page,
+                        pageSize: pageSize,
+                        onPageChange: (newPage) => {
+                            setPage(newPage);
+                        },
+                        onPageSizeChange: (newPageSize) => {
+                            // If "All" is selected (10000), fetch all items
+                            setPageSize(newPageSize);
+                            setPage(0); // Reset to first page when changing page size
+                        },
+                    }}
                 />
             );
         }

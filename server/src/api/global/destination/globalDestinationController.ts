@@ -4,6 +4,14 @@ import GlobalDestination from './globalDestinationModel';
 import SellerDestinationPreferences from '../seller/sellerDestinationPreferencesModel';
 import Notification from '../../notifications/notificationModel';
 import User from '../../user/userModel';
+import { 
+  sendSuccess, 
+  sendError, 
+  sendAuthError, 
+  sendValidationError, 
+  sendForbiddenError,
+  sendNotFoundError
+} from '../../../utils/apiResponse';
 
 // Utility function to ensure user has sellerInfo
 const ensureSellerInfo = async (user: any, userId: string) => {
@@ -67,17 +75,9 @@ export const getApprovedDestinations = async (req: Request, res: Response): Prom
       .sort({ popularity: -1, name: 1 })
       .select('name description coverImage country region city coordinates popularity usageCount fullLocation');
 
-    res.json({
-      success: true,
-      data: destinations,
-      count: destinations.length
-    });
+    sendSuccess(res, destinations, 'Approved destinations retrieved successfully', 200);
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching approved destinations',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    return sendError(res, 'Error fetching approved destinations');
   }
 };
 
@@ -93,32 +93,21 @@ export const getDestinationsByCountry = async (req: Request, res: Response): Pro
       approvalStatus: 'approved'
     });
 
-    res.json({
-      success: true,
-      data: destinations,
-      count: destinations.length
-    });
+    sendSuccess(res, destinations, 'Destinations by country retrieved successfully', 200);
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching destinations by country',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    return sendError(res, 'Error fetching destinations by country');
   }
 };
 
 // Get destinations for seller (shows own destinations + enabled destinations from preferences)
 export const getSellerDestinations = async (req: Request
-, res: Response) => {
+  , res: Response) => {
   try {
     const sellerId = req.user?.id;
     const isAdmin = req.user?.roles.includes('admin') || false;
 
     if (!sellerId) {
-      return res.status(401).json({
-        success: false,
-        message: 'Authentication required'
-      });
+      return sendAuthError(res, 'Authentication required');
     }
 
     // If user is admin, return ALL destinations (no filtering by isActive)
@@ -134,11 +123,7 @@ export const getSellerDestinations = async (req: Request
         status: d.approvalStatus
       })));
 
-      return res.json({
-        success: true,
-        data: allDestinations,
-        count: allDestinations.length
-      });
+      return sendSuccess(res, allDestinations, 'All destinations retrieved successfully', 200);
     }
 
     // Get seller preferences first to check for hidden destinations
@@ -207,30 +192,19 @@ export const getSellerDestinations = async (req: Request
       new Date(a.submittedAt || a.createdAt).getTime()
     );
 
-    res.json({
-      success: true,
-      data: combinedDestinations,
-      count: combinedDestinations.length
-    });
+    sendSuccess(res, combinedDestinations, 'Seller destinations retrieved successfully');
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching seller destinations',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    return sendError(res, 'Error fetching seller destinations');
   }
 };
 
 // Search destinations for sellers (to discover existing destinations before creating new ones)
 export const searchDestinations = async (req: Request
-, res: Response) => {
+  , res: Response) => {
   try {
     const sellerId = req.user?.id;
     if (!sellerId) {
-      return res.status(401).json({
-        success: false,
-        message: 'Authentication required'
-      });
+      return sendAuthError(res, 'Authentication required');
     }
 
     const { query, country, region, city } = req.query;
@@ -266,30 +240,19 @@ export const searchDestinations = async (req: Request
       .sort({ usageCount: -1, popularity: -1, submittedAt: -1 })
       .limit(50);
 
-    res.json({
-      success: true,
-      data: destinations,
-      count: destinations.length
-    });
+    sendSuccess(res, destinations, 'Destinations search completed successfully', 200);
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error searching destinations',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    return sendError(res, 'Error searching destinations');
   }
 };
 
 // Get enabled destinations for seller (for tour creation)
 export const getEnabledDestinations = async (req: Request
-, res: Response) => {
+  , res: Response) => {
   try {
     const sellerId = req.user?.id;
     if (!sellerId) {
-      return res.status(401).json({
-        success: false,
-        message: 'Authentication required'
-      });
+      return sendAuthError(res, 'Authentication required');
     }
 
     const sellerPrefs = await SellerDestinationPreferences.findOne({ seller: sellerId })
@@ -303,30 +266,19 @@ export const getEnabledDestinations = async (req: Request
         .filter((pref: any) => pref.isEnabled && pref.destination)
         .sort((a: any, b: any) => (a.sortOrder || 0) - (b.sortOrder || 0)) : [];
 
-    res.json({
-      success: true,
-      data: enabledDestinations,
-      count: enabledDestinations.length
-    });
+    sendSuccess(res, enabledDestinations, 'Enabled destinations retrieved successfully');
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching enabled destinations',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    return sendError(res, 'Error fetching enabled destinations');
   }
 };
 
 // Get seller's favorite destinations
 export const getFavoriteDestinations = async (req: Request
-, res: Response) => {
+  , res: Response) => {
   try {
     const sellerId = req.user?.id;
     if (!sellerId) {
-      return res.status(401).json({
-        success: false,
-        message: 'Authentication required'
-      });
+      return sendAuthError(res, 'Authentication required');
     }
 
     const sellerPrefs = await SellerDestinationPreferences.findOne({ seller: sellerId })
@@ -340,23 +292,15 @@ export const getFavoriteDestinations = async (req: Request
         .filter((pref: any) => pref.isFavorite && pref.destination)
         .sort((a: any, b: any) => (a.sortOrder || 0) - (b.sortOrder || 0)) : [];
 
-    res.json({
-      success: true,
-      data: favoriteDestinations,
-      count: favoriteDestinations.length
-    });
+    sendSuccess(res, favoriteDestinations, 'Favorite destinations retrieved successfully');
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching favorite destinations',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    return sendError(res, 'Error fetching favorite destinations');
   }
 };
 
 // Submit new destination for approval
 export const submitDestination = async (req: Request
-, res: Response) => {
+  , res: Response) => {
   try {
     const {
       name,
@@ -375,19 +319,21 @@ export const submitDestination = async (req: Request
     const createdBy = req.user?.id;
 
     if (!createdBy) {
-      return res.status(401).json({
-        success: false,
-        message: 'Authentication required'
-      });
+      return sendAuthError(res, 'Authentication required');
     }
 
     // Validate required fields
     if (!name || !description || !country) {
-      return res.status(400).json({
-        success: false,
-        message: 'Missing required fields',
-        error: `Required fields missing: ${!name ? 'name, ' : ''}${!description ? 'description, ' : ''}${!country ? 'country' : ''}`
-      });
+      return sendValidationError(res, 'Missing required fields', [{
+        field: 'name',
+        message: 'Name is required'
+      }, {
+        field: 'description',
+        message: 'Description is required'
+      }, {
+        field: 'country',
+        message: 'Country is required'
+      }]);
     }
 
     // Check for duplicate destinations (exclude soft-deleted destinations)
@@ -416,10 +362,13 @@ export const submitDestination = async (req: Request
     console.log('🔍 Found existing destination:', existingDestination ? 'YES' : 'NO');
 
     if (existingDestination) {
-      return res.status(400).json({
-        success: false,
-        message: 'A destination with this name and location already exists'
-      });
+      return sendValidationError(res, 'A destination with this name and location already exists', [{
+        field: 'name',
+        message: 'Name is required'
+      }, {
+        field: 'country',
+        message: 'Country is required'
+      }]);
     }
 
     const destination = new GlobalDestination({
@@ -464,30 +413,19 @@ export const submitDestination = async (req: Request
       console.log(`✅ Added destination "${destination.name}" to user ${createdBy} destination list as pending`);
     }
 
-    res.status(201).json({
-      success: true,
-      message: 'Destination submitted for approval',
-      data: destination
-    });
+    sendSuccess(res, destination, 'Destination submitted for approval', 201);
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error submitting destination',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    return sendError(res, 'Error submitting destination');
   }
 };
 
 // Admin: Get pending destinations
 export const getPendingDestinations = async (req: Request
-, res: Response) => {
+  , res: Response) => {
   try {
     // Check if user is admin
     if (!req.user?.roles?.includes('admin')) {
-      return res.json({
-        success: false,
-        message: 'Admin access required'
-      });
+      return sendForbiddenError(res, 'Admin access required');
     }
 
     const pendingDestinations = await GlobalDestination.find({
@@ -496,30 +434,19 @@ export const getPendingDestinations = async (req: Request
       .populate('createdBy', 'name email')
       .sort({ submittedAt: -1 });
 
-    res.json({
-      success: true,
-      data: pendingDestinations,
-      count: pendingDestinations.length
-    });
+    sendSuccess(res, pendingDestinations, 'Pending destinations retrieved successfully', 200);
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching pending destinations',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    return sendError(res, 'Error fetching pending destinations');
   }
 };
 
 // Admin: Approve destination
 export const approveDestination = async (req: Request
-, res: Response) => {
+  , res: Response) => {
   try {
     // Check if user is admin
     if (!req.user?.roles?.includes('admin')) {
-      return res.status(403).json({
-        success: false,
-        message: 'Admin access required'
-      });
+      return sendForbiddenError(res, 'Admin access required');
     }
 
     const { destinationId } = req.params;
@@ -527,10 +454,7 @@ export const approveDestination = async (req: Request
 
     const destination = await GlobalDestination.findById(destinationId);
     if (!destination) {
-      return res.status(404).json({
-        success: false,
-        message: 'Destination not found'
-      });
+      return sendNotFoundError(res, 'Destination not found');
     }
 
     destination.isApproved = true;
@@ -580,24 +504,17 @@ export const approveDestination = async (req: Request
       data: destination
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error approving destination',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    return sendError(res, 'Error approving destination');
   }
 };
 
 // Admin: Reject destination
 export const rejectDestination = async (req: Request
-, res: Response) => {
+  , res: Response) => {
   try {
     // Check if user is admin
     if (!req.user?.roles?.includes('admin')) {
-      return res.status(403).json({
-        success: false,
-        message: 'Admin access required'
-      });
+      return sendForbiddenError(res, 'Admin access required');
     }
 
     const { destinationId } = req.params;
@@ -605,18 +522,15 @@ export const rejectDestination = async (req: Request
     const rejectedBy = req.user.id;
 
     if (!reason) {
-      return res.status(400).json({
-        success: false,
+      return sendValidationError(res, 'Rejection reason is required', [{
+        field: 'reason',
         message: 'Rejection reason is required'
-      });
+      }]);
     }
 
     const destination = await GlobalDestination.findById(destinationId);
     if (!destination) {
-      return res.status(404).json({
-        success: false,
-        message: 'Destination not found'
-      });
+      return sendNotFoundError(res, 'Destination not found');
     }
 
     destination.isApproved = false;
@@ -665,35 +579,25 @@ export const rejectDestination = async (req: Request
       data: destination
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error rejecting destination',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    return sendError(res, 'Error rejecting destination');
   }
 };
 
 // Admin: Delete destination (HARD DELETE - completely remove from database)
 export const deleteDestination = async (req: Request
-, res: Response) => {
+  , res: Response) => {
   try {
     console.log('🚀 Admin hard deleting destination:', req.user?.roles);
     // Check if user is admin
     if (!req.user?.roles?.includes('admin')) {
-      return res.status(403).json({
-        success: false,
-        message: 'Admin access required'
-      });
+      return sendForbiddenError(res, 'Admin access required');
     }
 
     const { destinationId } = req.params;
 
     const destination = await GlobalDestination.findById(destinationId);
     if (!destination) {
-      return res.status(404).json({
-        success: false,
-        message: 'Destination not found'
-      });
+      return sendNotFoundError(res, 'Destination not found');
     }
 
     // HARD DELETE: completely remove from database
@@ -713,35 +617,25 @@ export const deleteDestination = async (req: Request
       message: 'Destination permanently deleted from database'
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error deleting destination',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    return sendError(res, 'Error deleting destination');
   }
 };
 
 // Update destination (sellers can update their own destinations, admins can update any)
 export const updateDestination = async (req: Request
-, res: Response) => {
+  , res: Response) => {
   try {
     const { destinationId } = req.params;
     const userId = req.user?.id;
     const userRole = req.user?.roles;
 
     if (!userId) {
-      return res.status(401).json({
-        success: false,
-        message: 'Authentication required'
-      });
+      return sendAuthError(res, 'Authentication required');
     }
 
     const destination = await GlobalDestination.findById(destinationId);
     if (!destination) {
-      return res.status(404).json({
-        success: false,
-        message: 'Destination not found'
-      });
+      return sendNotFoundError(res, 'Destination not found');
     }
 
     // Check permissions: sellers can only update their own destinations, admins can update any
@@ -749,10 +643,7 @@ export const updateDestination = async (req: Request
     const isAdmin = req.user?.roles.includes('admin') || false;
 
     if (!isOwner && !isAdmin) {
-      return res.status(403).json({
-        success: false,
-        message: 'You can only update destinations you created'
-      });
+      return sendForbiddenError(res, 'You can only update destinations you created');
     }
 
     const {
@@ -771,11 +662,11 @@ export const updateDestination = async (req: Request
 
     // Validate required fields
     if (!name || !description || !country) {
-      return res.status(400).json({
-        success: false,
-        message: 'Missing required fields',
-        error: `Required fields missing: ${!name ? 'name, ' : ''}${!description ? 'description, ' : ''}${!country ? 'country' : ''}`
-      });
+      const missingFields = [];
+      if (!name) missingFields.push({ field: 'name', message: 'name is required' });
+      if (!description) missingFields.push({ field: 'description', message: 'description is required' });
+      if (!country) missingFields.push({ field: 'country', message: 'country is required' });
+      return sendValidationError(res, 'Missing required fields', missingFields);
     }
 
     // Check for duplicate destinations (excluding current one)
@@ -790,10 +681,10 @@ export const updateDestination = async (req: Request
     });
 
     if (existingDestination) {
-      return res.status(400).json({
-        success: false,
+      return sendValidationError(res, 'A destination with this name and location already exists', [{
+        field: 'name',
         message: 'A destination with this name and location already exists'
-      });
+      }]);
     }
 
     // Check if this is only an isActive toggle by comparing the boolean value change
@@ -855,22 +746,15 @@ export const updateDestination = async (req: Request
       data: destination
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error updating destination',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    return sendError(res, 'Error updating destination');
   }
 };
 export const updateDestinationPreferences = async (req: Request
-, res: Response) => {
+  , res: Response) => {
   try {
     const sellerId = req.user?.id;
     if (!sellerId) {
-      return res.status(401).json({
-        success: false,
-        message: 'Authentication required'
-      });
+      return sendAuthError(res, 'Authentication required');
     }
 
     const { preferences, globalSettings } = req.body;
@@ -924,24 +808,17 @@ export const updateDestinationPreferences = async (req: Request
       data: sellerPrefs
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error updating destination preferences',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    return sendError(res, 'Error updating destination preferences');
   }
 };
 
 // Toggle favorite destination
 export const toggleFavoriteDestination = async (req: Request
-, res: Response) => {
+  , res: Response) => {
   try {
     const sellerId = req.user?.id;
     if (!sellerId) {
-      return res.status(401).json({
-        success: false,
-        message: 'Authentication required'
-      });
+      return sendAuthError(res, 'Authentication required');
     }
 
     const { destinationId } = req.params;
@@ -980,17 +857,13 @@ export const toggleFavoriteDestination = async (req: Request
       data: sellerPrefs
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error updating favorite status',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    return sendError(res, 'Error updating favorite status');
   }
 };
 
 // Add existing destination to seller's list
 export const addExistingDestinationToSeller = async (req: Request
-, res: Response): Promise<void> => {
+  , res: Response): Promise<void> => {
 
   try {
     const { destinationId } = req.params;
@@ -999,19 +872,14 @@ export const addExistingDestinationToSeller = async (req: Request
     if (!sellerId) {
 
 
-      res.status(401).json({
-        success: false,
-        message: 'Authentication required'
-      });
-      return;
+      return sendAuthError(res, 'Authentication required');
     }
 
     if (!mongoose.Types.ObjectId.isValid(destinationId)) {
-      res.status(400).json({
-        success: false,
+      return sendValidationError(res, 'Invalid destination ID', [{
+        field: 'destinationId',
         message: 'Invalid destination ID'
-      });
-      return;
+      }]);
     }
     console.log("req.user?.id;", req.user?.id)
     console.log("destinationId", destinationId)
@@ -1029,11 +897,7 @@ export const addExistingDestinationToSeller = async (req: Request
 
     if (!destination) {
       console.log("Destination not found or not approved");
-      res.status(404).json({
-        success: false,
-        message: 'Approved destination not found'
-      });
-      return;
+      return sendNotFoundError(res, 'Approved destination not found');
     }
 
     // Find or create seller preferences
@@ -1152,18 +1016,14 @@ export const addExistingDestinationToSeller = async (req: Request
       }
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error adding destination to your list',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    return sendError(res, 'Error adding destination to your list');
   }
 };
 
 // Toggle destination active status (user-specific, not global)
 // This endpoint toggles the user's personal isActive status for a destination
 export const toggleDestinationActiveStatus = async (req: Request
-, res: Response) => {
+  , res: Response) => {
   try {
     const { destinationId } = req.params;
     const sellerId = req.user?.id;
@@ -1171,10 +1031,7 @@ export const toggleDestinationActiveStatus = async (req: Request
     console.log(`🔄 Toggle request for destination ${destinationId} by seller ${sellerId}`);
 
     if (!sellerId) {
-      return res.status(401).json({
-        success: false,
-        message: 'Authentication required'
-      });
+      return sendAuthError(res, 'Authentication required');
     }
     // Find the user and their destination preferences
     const user = await User.findById(sellerId);
@@ -1186,10 +1043,7 @@ export const toggleDestinationActiveStatus = async (req: Request
     });
 
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
+      return sendNotFoundError(res, 'User not found');
     }
 
     if (!user.sellerInfo) {
@@ -1224,10 +1078,7 @@ export const toggleDestinationActiveStatus = async (req: Request
         await user.save();
         console.log(`✅ SellerInfo initialized for user ${sellerId}`);
       } else {
-        return res.status(404).json({
-          success: false,
-          message: 'User is not a seller'
-        });
+        return sendNotFoundError(res, 'User is not a seller');
       }
     }
 
@@ -1245,10 +1096,7 @@ export const toggleDestinationActiveStatus = async (req: Request
     });
 
     if (!globalDestination) {
-      return res.status(404).json({
-        success: false,
-        message: 'Destination not found'
-      });
+      return sendNotFoundError(res, 'Destination not found');
     }
 
     // Check if destination is approved OR if user is the creator
@@ -1256,10 +1104,7 @@ export const toggleDestinationActiveStatus = async (req: Request
     const isApproved = globalDestination.approvalStatus === 'approved';
 
     if (!isApproved && !isCreator) {
-      return res.status(404).json({
-        success: false,
-        message: 'Destination not approved and you are not the creator'
-      });
+      return sendNotFoundError(res, 'Destination not approved and you are not the creator');
     }
 
     // Find the destination in user's destination array
@@ -1302,10 +1147,7 @@ export const toggleDestinationActiveStatus = async (req: Request
 
     // Toggle the user's specific isActive status
     if (!user.sellerInfo.destination) {
-      return res.status(404).json({
-        success: false,
-        message: 'Destination not found in user preferences'
-      });
+      return sendNotFoundError(res, 'Destination not found in user preferences');
     }
 
     const userDestination = user.sellerInfo.destination[userDestinationIndex];
@@ -1313,18 +1155,18 @@ export const toggleDestinationActiveStatus = async (req: Request
 
     // Don't allow activating pending destinations (unless user is creator)
     if (!userDestination.isActive && userDestination.approvalStatus === 'pending' && !isCreator) {
-      return res.status(400).json({
-        success: false,
+      return sendValidationError(res, 'Cannot activate pending destination. Wait for admin approval.', [{
+        field: 'isActive',
         message: 'Cannot activate pending destination. Wait for admin approval.'
-      });
+      }]);
     }
 
     // Don't allow activating rejected destinations
     if (!userDestination.isActive && userDestination.approvalStatus === 'rejected') {
-      return res.status(400).json({
-        success: false,
+      return sendValidationError(res, 'Cannot activate rejected destination.', [{
+        field: 'isActive',
         message: 'Cannot activate rejected destination.'
-      });
+      }]);
     }
 
     userDestination.isActive = !userDestination.isActive;
@@ -1346,25 +1188,18 @@ export const toggleDestinationActiveStatus = async (req: Request
     });
   } catch (error) {
     console.error('❌ Error in toggleDestinationActiveStatus:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error toggling destination status',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    return sendError(res, 'Error toggling destination status');
   }
 };
 
 // Get user-specific destinations with their personal active status
 export const getUserDestinations = async (req: Request
-, res: Response) => {
+  , res: Response) => {
   try {
     const sellerId = req.user?.id;
 
     if (!sellerId) {
-      return res.status(401).json({
-        success: false,
-        message: 'Authentication required'
-      });
+      return sendAuthError(res, 'Authentication required');
     }
 
     // Find the user and populate their destinations
@@ -1376,10 +1211,7 @@ export const getUserDestinations = async (req: Request
     });
 
     if (!user || !user.sellerInfo) {
-      return res.status(404).json({
-        success: false,
-        message: 'Seller not found'
-      });
+      return sendNotFoundError(res, 'Seller not found');
     }
 
     // Get user's destination preferences with global destination data
@@ -1415,24 +1247,17 @@ export const getUserDestinations = async (req: Request
 
   } catch (error) {
     console.error('❌ Error in getUserDestinations:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching user destinations',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    return sendError(res, 'Error fetching user destinations');
   }
 };
 
 // Fix destinations with deletedAt but approved status (temporary fix)
 export const fixDeletedApprovedDestinations = async (req: Request
-, res: Response) => {
+  , res: Response) => {
   try {
     // Check if user is admin
     if (!req.user?.roles?.includes('admin')) {
-      return res.status(403).json({
-        success: false,
-        message: 'Admin access required'
-      });
+      return sendForbiddenError(res, 'Admin access required');
     }
 
     // Find destinations that are approved but have deletedAt
@@ -1470,16 +1295,12 @@ export const fixDeletedApprovedDestinations = async (req: Request
       }
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error fixing destinations',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    return sendError(res, 'Error fixing destinations');
   }
 };
 
 export const removeExistingDestinationFromSeller = async (req: Request
-, res: Response): Promise<void> => {
+  , res: Response): Promise<void> => {
   try {
     const { destinationId } = req.params;
     const sellerId = req.user?.id;
@@ -1488,19 +1309,14 @@ export const removeExistingDestinationFromSeller = async (req: Request
     console.log("destinationId", destinationId)
 
     if (!sellerId) {
-      res.status(401).json({
-        success: false,
-        message: 'Authentication required'
-      });
-      return;
+      return sendAuthError(res, 'Authentication required');
     }
 
     if (!mongoose.Types.ObjectId.isValid(destinationId)) {
-      res.status(400).json({
-        success: false,
+      return sendValidationError(res, 'Invalid destination ID', [{
+        field: 'destinationId',
         message: 'Invalid destination ID'
-      });
-      return;
+      }]);
     }
 
     // Find seller preferences
@@ -1508,11 +1324,7 @@ export const removeExistingDestinationFromSeller = async (req: Request
     console.log("sellerPrefs", sellerPrefs)
 
     if (!sellerPrefs) {
-      res.status(404).json({
-        success: false,
-        message: 'No destination preferences found'
-      });
-      return;
+      return sendNotFoundError(res, 'No destination preferences found');
     }
 
     console.log("Current destination preferences:", sellerPrefs.destinationPreferences);
@@ -1622,11 +1434,7 @@ export const removeExistingDestinationFromSeller = async (req: Request
     );
 
     if (sellerPrefs.destinationPreferences.length === initialLength) {
-      res.status(404).json({
-        success: false,
-        message: 'Destination not found in your list'
-      });
-      return;
+      return sendNotFoundError(res, 'Destination not found in your list');
     }
 
     // Decrease seller count on the destination that was removed from preferences
@@ -1659,10 +1467,6 @@ export const removeExistingDestinationFromSeller = async (req: Request
       data: sellerPrefs
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error removing destination from your list',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    return sendError(res, 'Error removing destination from your list');
   }
 };

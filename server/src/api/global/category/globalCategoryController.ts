@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import GlobalCategory from './globalCategoryModel';
 import SellerCategoryPreferences from '../seller/sellerCategoryPreferencesModel';
 import User from '../../user/userModel';
+import { sendSuccess, sendError, sendPaginatedResponse, sendValidationError, sendNotFoundError } from '../../../utils/apiResponse';
 
 // Utility function to ensure user has sellerInfo
 const ensureSellerInfo = async (user: any, userId: string) => {
@@ -46,11 +47,10 @@ export const getCategoryById = async (req: Request, res: Response): Promise<void
     const { categoryId } = req.params;
 
     if (!categoryId) {
-      res.status(400).json({
-        success: false,
+      return sendValidationError(res, 'Category ID is required', [{
+        field: 'categoryId',
         message: 'Category ID is required'
-      });
-      return;
+      }]);
     }
 
     const category = await GlobalCategory.findById(categoryId)
@@ -65,10 +65,7 @@ export const getCategoryById = async (req: Request, res: Response): Promise<void
       return;
     }
 
-    res.json({
-      success: true,
-      data: category
-    });
+    return sendSuccess(res, category, 'Category retrieved successfully');
   } catch (error) {
     console.error('Error fetching category by ID:', error);
     res.status(500).json({
@@ -89,10 +86,7 @@ export const getApprovedCategories = async (req: Request, res: Response): Promis
       .populate('metadata.parentCategory', 'name slug')
       .sort({ createdAt: -1 });
 
-    res.json({
-      success: true,
-      data: categories
-    });
+    return sendSuccess(res, categories, 'Approved categories retrieved successfully');
   } catch (error) {
     console.error('Error fetching approved categories:', error);
     res.status(500).json({
@@ -125,11 +119,12 @@ export const getCategoriesByType = async (req: Request, res: Response): Promise<
       .sort({ popularity: -1, name: 1 })
       .select('name description slug imageUrl type popularity usageCount');
 
-    res.json({
-      success: true,
-      data: categories,
+    const categoriesData = {
+      categories,
       count: categories.length
-    });
+    };
+
+    return sendSuccess(res, categoriesData, 'Categories retrieved successfully');
   } catch (error) {
     res.status(500).json({
       success: false,
@@ -142,7 +137,7 @@ export const getCategoriesByType = async (req: Request, res: Response): Promise<
 // Get user-specific categories (from user.sellerInfo.category array)
 // This includes user's personal active/inactive status for each category
 export const getUserCategories = async (req: Request
-, res: Response): Promise<void> => {
+  , res: Response): Promise<void> => {
   try {
     const userId = req.user?.id;
 
@@ -221,7 +216,7 @@ export const getUserCategories = async (req: Request
 
 // Get categories for seller (shows own categories + searchable approved categories)
 export const getSellerCategories = async (req: Request
-, res: Response): Promise<void> => {
+  , res: Response): Promise<void> => {
   try {
     const sellerId = req.user?.id;
     const userRole = req.user?.roles;
@@ -268,7 +263,7 @@ export const getSellerCategories = async (req: Request
 
 // Search categories for sellers (to discover existing categories before creating new ones)
 export const searchCategories = async (req: Request
-, res: Response): Promise<void> => {
+  , res: Response): Promise<void> => {
   try {
     const sellerId = req.user?.id;
     if (!sellerId) {
@@ -322,7 +317,7 @@ export const searchCategories = async (req: Request
 
 // Get enabled categories for seller (for tour creation)
 export const getEnabledCategories = async (req: Request
-, res: Response): Promise<void> => {
+  , res: Response): Promise<void> => {
   try {
     const sellerId = req.user?.id;
     if (!sellerId) {
@@ -360,7 +355,7 @@ export const getEnabledCategories = async (req: Request
 
 // Submit new category for approval
 export const submitCategory = async (req: Request
-, res: Response): Promise<void> => {
+  , res: Response): Promise<void> => {
   try {
     console.log('📝 submitCategory - req.body:', req.body);
     console.log('📝 submitCategory - req.body keys:', Object.keys(req.body));
@@ -460,7 +455,7 @@ export const submitCategory = async (req: Request
 
 // Update category
 export const updateCategory = async (req: Request
-, res: Response): Promise<void> => {
+  , res: Response): Promise<void> => {
   try {
     const { categoryId } = req.params;
     const sellerId = req.user?.id;
@@ -572,7 +567,7 @@ export const updateCategory = async (req: Request
 
 // Admin: Get pending categories
 export const getPendingCategories = async (req: Request
-, res: Response): Promise<void> => {
+  , res: Response): Promise<void> => {
   try {
     // Check if user is admin
     if (!req.user?.roles?.includes('admin')) {
@@ -605,7 +600,7 @@ export const getPendingCategories = async (req: Request
 
 // Admin: Approve category
 export const approveCategory = async (req: Request
-, res: Response): Promise<void> => {
+  , res: Response): Promise<void> => {
   try {
     // Check if user is admin
     if (!req.user?.roles?.includes('admin')) {
@@ -669,7 +664,7 @@ export const approveCategory = async (req: Request
 
 // Admin: Reject category
 export const rejectCategory = async (req: Request
-, res: Response): Promise<void> => {
+  , res: Response): Promise<void> => {
   try {
     // Check if user is admin
     if (!req.user?.roles?.includes('admin')) {
@@ -742,7 +737,7 @@ export const rejectCategory = async (req: Request
 
 // Admin: Delete category
 export const deleteCategory = async (req: Request
-, res: Response): Promise<void> => {
+  , res: Response): Promise<void> => {
   try {
     // Check if user is admin
     if (!req.user?.roles?.includes('admin')) {
@@ -781,7 +776,7 @@ export const deleteCategory = async (req: Request
 
 // Update seller category preferences
 export const updateCategoryPreferences = async (req: Request
-, res: Response): Promise<void> => {
+  , res: Response): Promise<void> => {
   try {
     const sellerId = req.user?.id;
     if (!sellerId) {
@@ -851,7 +846,7 @@ export const updateCategoryPreferences = async (req: Request
 
 // Get favorite categories
 export const getFavoriteCategories = async (req: Request
-, res: Response): Promise<void> => {
+  , res: Response): Promise<void> => {
   try {
     const sellerId = req.user?.id;
 
@@ -899,7 +894,7 @@ export const getFavoriteCategories = async (req: Request
 
 // Toggle favorite category
 export const toggleFavoriteCategory = async (req: Request
-, res: Response) => {
+  , res: Response) => {
   try {
     const sellerId = req.user?.id;
     if (!sellerId) {
@@ -955,7 +950,7 @@ export const toggleFavoriteCategory = async (req: Request
 
 // Add existing category to seller's list
 export const addExistingCategoryToSeller = async (req: Request
-, res: Response): Promise<void> => {
+  , res: Response): Promise<void> => {
   try {
     const { categoryId } = req.params;
     const sellerId = req.user?.id;
@@ -1089,7 +1084,7 @@ export const addExistingCategoryToSeller = async (req: Request
 // Toggle category active status (user-specific, not global)
 // This endpoint toggles the user's personal isActive status for a category
 export const toggleCategoryActiveStatus = async (req: Request
-, res: Response) => {
+  , res: Response) => {
   try {
     const { categoryId } = req.params;
     const sellerId = req.user?.id;
@@ -1259,7 +1254,7 @@ export const toggleCategoryActiveStatus = async (req: Request
 
 // Remove existing category from seller's list (user-specific)
 export const removeExistingCategoryFromSeller = async (req: Request
-, res: Response): Promise<void> => {
+  , res: Response): Promise<void> => {
   try {
     const { categoryId } = req.params;
     const sellerId = req.user?.id;

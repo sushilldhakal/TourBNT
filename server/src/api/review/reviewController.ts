@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import Tour from '../tours/tourModel';
 import mongoose from 'mongoose';
 import { Review } from './reviewModel';
+import { sendSuccess, sendError, sendPaginatedResponse } from '../../utils/apiResponse';
 
 // Get average rating for a tour
 export const getTourRating = async (req: Request, res: Response) => {
@@ -22,16 +23,19 @@ export const getTourRating = async (req: Request, res: Response) => {
         ]);
 
         if (stats.length === 0) {
-            return res.json({
+            const ratingData = {
                 averageRating: 0,
                 numberOfReviews: 0
-            });
+            };
+            return sendSuccess(res, ratingData, 'Tour rating retrieved successfully');
         }
 
-        res.json({
+        const ratingData = {
             averageRating: stats[0].averageRating,
             numberOfReviews: stats[0].numberOfReviews
-        });
+        };
+
+        return sendSuccess(res, ratingData, 'Tour rating retrieved successfully');
     } catch (error) {
         res.status(500).json({ message: 'Error calculating tour rating', error });
     }
@@ -112,10 +116,10 @@ export const getAllApprovedReviews = async (req: Request, res: Response) => {
 
         // Calculate total and pagination
         const total = allReviews.length;
-        const totalPages = Math.ceil(total / limit);
+        const totalPages = Math.ceil(total / Number(limit));
 
         // Apply pagination
-        const paginatedReviews = allReviews.slice(skip, skip + limit);
+        const paginatedReviews = allReviews.slice(skip, skip + Number(limit));
 
         console.log(`Found ${total} reviews, returning page ${page} with ${paginatedReviews.length} reviews`);
 
@@ -146,7 +150,7 @@ export const addReview = async (req: Request, res: Response) => {
         const { tourId } = req.params;
         const { rating, comment } = req.body;
         const userId = (req as Request
-).user?.id;
+        ).user?.id;
 
         // Ensure user is authenticated
         if (!userId) {
@@ -290,7 +294,7 @@ export const getTourReviews = async (req: Request, res: Response) => {
 export const getPendingReviews = async (req: Request, res: Response) => {
     try {
         const authReq = req as Request
-;
+            ;
         const userId = authReq.user?.id;
 
         // Ensure user is authenticated
@@ -376,7 +380,7 @@ export const getPendingReviews = async (req: Request, res: Response) => {
 export const getAllReviews = async (req: Request, res: Response) => {
     try {
         const authReq = req as Request
-;
+            ;
         const userId = authReq.user?.id;
 
         // Ensure user is authenticated
@@ -483,7 +487,7 @@ export const updateReviewStatus = async (req: Request, res: Response) => {
         const { reviewId } = req.params;
         const { status } = req.body; // 'approved', 'rejected', or 'pending'
         const authReq = req as Request
-;
+            ;
         const userId = authReq.user?.id;
 
         // Validate inputs
@@ -586,7 +590,7 @@ export const addReviewReply = async (req: Request, res: Response) => {
         const { reviewId } = req.params;
         const { comment } = req.body;
         const userId = (req as Request
-).user?.id;
+        ).user?.id;
 
         // Ensure user is authenticated
         if (!userId) {
@@ -697,7 +701,7 @@ export const likeReview = async (req: Request, res: Response) => {
     try {
         const { reviewId } = req.params;
         const userId = (req as Request
-).user?.id;
+        ).user?.id;
 
         // Ensure user is authenticated
         if (!userId) {
@@ -761,7 +765,7 @@ export const likeReviewReply = async (req: Request, res: Response) => {
     try {
         const { tourId, reviewId, replyId } = req.params;
         const userId = (req as Request
-).user?.id;
+        ).user?.id;
 
         // Ensure user is authenticated
         if (!userId) {

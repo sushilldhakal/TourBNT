@@ -27,7 +27,7 @@ export const generateCompletion = async (
 ): Promise<GenerateCompletionResponse> => {
     try {
         const response = await api.post<GenerateCompletionResponse>(
-            '/api/ai/generate',
+            '/ai/generate',
             params
         );
 

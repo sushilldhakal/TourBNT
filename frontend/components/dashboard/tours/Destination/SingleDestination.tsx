@@ -11,13 +11,14 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/use-toast";
 import { Edit, FileText, MapPin, Image as ImageIcon, Save, Trash2, X, Eye, EyeOff, Globe, Users, Star, Calendar } from "lucide-react";
-import { updateDestination, removeExistingDestinationFromSeller, deleteDestination, getUserToursTitle, getSellerDestinations, getUserDestinations, toggleDestinationActiveStatus } from "@/lib/api/destinations";
+import { updateDestination, removeExistingDestinationFromSeller, deleteDestination, getUserToursTitle, toggleDestinationActiveStatus } from "@/lib/api/destinations";
 import { GalleryPage } from "@/components/dashboard/gallery/GalleryPage";
 
 import { MultiSelect, SelectValue } from "@/components/ui/MultiSelect";
 import RichTextRenderer from "@/components/RichTextRenderer";
 import { NovelEditor } from "../../editor";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { useDestinationById } from "./useDestinationData";
 
 interface SingleDestinationProps {
     destinationId: string;
@@ -78,35 +79,17 @@ const SingleDestination = ({ destinationId, onUpdate, onDelete }: SingleDestinat
             country: '',
             region: '',
             city: '',
-            featuredTours: []
+            featuredTours: [],
+            approvalStatus: ''
         }
     });
 
-    // Check user role to determine which data source to use
+    // Check user role
     const { userRole } = useAuth();
     const isAdmin = userRole === 'admin';
 
-    // Fetch destinations based on user role
-    // Admin: Use global destinations, Seller: Use user-specific destinations
-    const { data: globalDestinations, isLoading: globalLoading, isError: globalError } = useQuery({
-        queryKey: ['seller-destinations'],
-        queryFn: getSellerDestinations,
-        enabled: isAdmin, // Only fetch for admin users
-    });
-
-    const { data: userDestinations, isLoading: userLoading, isError: userError } = useQuery({
-        queryKey: ['user-destinations'],
-        queryFn: getUserDestinations,
-        enabled: !isAdmin, // Only fetch for non-admin users
-    });
-
-    // Choose the appropriate data source
-    const destinationsData = isAdmin ? globalDestinations : userDestinations;
-    const isLoading = isAdmin ? globalLoading : userLoading;
-    const isError = isAdmin ? globalError : userError;
-
-    // Find the specific destination from the appropriate data source
-    const destination = destinationsData?.data?.find((dest: { _id: string }) => dest._id === destinationId);
+    // Use shared hook to get destination data
+    const { destination, isLoading, isError } = useDestinationById(destinationId);
 
 
     // Fetch tour titles
@@ -162,9 +145,9 @@ const SingleDestination = ({ destinationId, onUpdate, onDelete }: SingleDestinat
 
             // Invalidate the appropriate query based on user role
             if (isAdmin) {
-                queryClient.invalidateQueries({ queryKey: ['seller-destinations'] });
+                queryClient.invalidateQueries({ queryKey: ['destinations'] });
             } else {
-                queryClient.invalidateQueries({ queryKey: ['user-destinations'] });
+                queryClient.invalidateQueries({ queryKey: ['seller-destinations'] });
             }
 
             onUpdate();
@@ -197,6 +180,10 @@ const SingleDestination = ({ destinationId, onUpdate, onDelete }: SingleDestinat
                 description: "The destination has been removed from your list successfully.",
             });
             setDeleteDialogOpen(false);
+            // Invalidate all destination-related queries to ensure UI updates
+            queryClient.invalidateQueries({ queryKey: ['destinations'] });
+            queryClient.invalidateQueries({ queryKey: ['seller-destinations'] });
+            queryClient.invalidateQueries({ queryKey: ['pending-destinations'] });
             onUpdate();
             if (onDelete) onDelete();
         },
@@ -216,7 +203,7 @@ const SingleDestination = ({ destinationId, onUpdate, onDelete }: SingleDestinat
                 name: destination.name,
                 description: destination.description || '',
                 coverImage: destination.coverImage || '',
-                isActive: destination.isActive,
+                isActive: destination?.isActive ?? true,
                 country: destination.country || '',
                 region: destination.region || '',
                 city: destination.city || '',
@@ -286,7 +273,7 @@ const SingleDestination = ({ destinationId, onUpdate, onDelete }: SingleDestinat
             values.isActive !== originalValues.isActive;
 
         // Check featured tours changes
-        const originalTours = Array.isArray(destination.featuredTours)
+        const originalTours = destination && Array.isArray(destination.featuredTours)
             ? destination.featuredTours.map((tour: string) => typeof tour === 'string' ? tour : tour)
             : [];
         const updatedTours = values.featuredTours || [];
@@ -349,7 +336,7 @@ const SingleDestination = ({ destinationId, onUpdate, onDelete }: SingleDestinat
                 name: destination.name,
                 description: destination.description || '',
                 coverImage: destination.coverImage || '',
-                isActive: destination.isActive,
+                isActive: destination?.isActive ?? true,
                 country: destination.country || '',
                 region: destination.region || '',
                 city: destination.city || '',
@@ -360,7 +347,7 @@ const SingleDestination = ({ destinationId, onUpdate, onDelete }: SingleDestinat
             form.setValue('name', destination.name);
             form.setValue('description', destination.description || '');
             form.setValue('coverImage', destination.coverImage || '');
-            form.setValue('isActive', destination.isActive);
+            form.setValue('isActive', destination?.isActive ?? true);
             form.setValue('country', destination.country || '');
             form.setValue('region', destination.region || '');
             form.setValue('city', destination.city || '');
@@ -421,6 +408,9 @@ const SingleDestination = ({ destinationId, onUpdate, onDelete }: SingleDestinat
             </CardContent>
         </Card>
     );
+
+    // Return null if destination is not found
+    if (!isLoading && !destination) return null;
 
     if (isError) return (
         <Card className="shadow-xs border-destructive/50 bg-destructive/5">
@@ -732,21 +722,21 @@ const SingleDestination = ({ destinationId, onUpdate, onDelete }: SingleDestinat
                                     </div>
                                 </div>
                             )}
-                            {destination.approvalStatus && (
+                            {destination?.approvalStatus && (
                                 <div className="absolute top-3 left-3">
                                     <Badge
                                         className={cn(
                                             "shadow-lg backdrop-blur-sm",
-                                            destination.approvalStatus === 'pending'
+                                            destination?.approvalStatus === 'pending'
                                                 ? "bg-orange-500/90 hover:bg-orange-600/90 text-white border-orange-400/50"
-                                                : destination.isApproved
+                                                : destination?.isApproved
                                                     ? "bg-green-500/90 hover:bg-green-600/90 text-white border-green-400/50"
                                                     : "bg-gray-500/90 hover:bg-gray-600/90 text-white border-gray-400/50"
                                         )}
                                     >
 
                                         <Calendar className="h-3 w-3 mr-1" />
-                                        {destination.approvalStatus === 'pending' ? 'Pending Approval' : destination.approvalStatus === 'approved' ? 'Approved' : 'Rejected'}
+                                        {destination?.approvalStatus === 'pending' ? 'Pending Approval' : destination?.approvalStatus === 'approved' ? 'Approved' : 'Rejected'}
 
                                     </Badge>
                                 </div>
@@ -757,19 +747,19 @@ const SingleDestination = ({ destinationId, onUpdate, onDelete }: SingleDestinat
                                 <Badge
                                     className={cn(
                                         "shadow-lg backdrop-blur-sm",
-                                        destination.approvalStatus === 'pending'
+                                        destination?.approvalStatus === 'pending'
                                             ? "bg-orange-500/90 hover:bg-orange-600/90 text-white border-orange-400/50"
-                                            : destination.isActive
+                                            : destination?.isActive
                                                 ? "bg-green-500/90 hover:bg-green-600/90 text-white border-green-400/50"
                                                 : "bg-gray-500/90 hover:bg-gray-600/90 text-white border-gray-400/50"
                                     )}
                                 >
-                                    {destination.approvalStatus === 'pending' ? (
+                                    {destination?.approvalStatus === 'pending' ? (
                                         <>
                                             <Calendar className="h-3 w-3 mr-1" />
                                             Pending Approval
                                         </>
-                                    ) : destination.isActive ? (
+                                    ) : destination?.isActive ? (
                                         <>
                                             <Eye className="h-3 w-3 mr-1" />
                                             Active
@@ -816,8 +806,8 @@ const SingleDestination = ({ destinationId, onUpdate, onDelete }: SingleDestinat
                                         <span className="text-xs font-medium text-green-700 dark:text-green-300 uppercase tracking-wide">Status</span>
                                     </div>
                                     <p className="text-sm font-semibold text-green-900 dark:text-green-100">
-                                        {destination.approvalStatus === 'approved' ? 'Approved' :
-                                            destination.approvalStatus === 'pending' ? 'Pending' : 'Draft'}
+                                        {destination?.approvalStatus === 'approved' ? 'Approved' :
+                                            destination?.approvalStatus === 'pending' ? 'Pending' : 'Draft'}
                                     </p>
                                 </div>
 
@@ -841,17 +831,17 @@ const SingleDestination = ({ destinationId, onUpdate, onDelete }: SingleDestinat
 
                                                 <div className="text-left">
                                                     <div className="text-sm font-medium text-white">
-                                                        {destination.isActive ? 'Live' : 'Hidden'}
+                                                        {destination?.isActive ? 'Live' : 'Hidden'}
                                                     </div>
                                                     <div className="text-xs text-white/70">
-                                                        {destination.isActive ? 'Customers can see' : 'Not visible'}
+                                                        {destination?.isActive ? 'Customers can see' : 'Not visible'}
                                                     </div>
                                                 </div>
                                             </div>
                                             <div className="text-right">
 
                                                 <Switch
-                                                    checked={destination.isActive}
+                                                    checked={destination?.isActive ?? false}
                                                     onCheckedChange={() => toggleActiveMutation.mutate()}
                                                     disabled={toggleActiveMutation.isPending}
                                                     className="data-[state=checked]:bg-green-500"

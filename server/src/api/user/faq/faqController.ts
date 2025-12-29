@@ -2,7 +2,7 @@
 import Faqs from './faqModel';
 import { Response, Request, NextFunction } from 'express';
 import TourModel from '../../tours/tourModel';
-import createHttpError from 'http-errors';
+import { sendSuccess, sendPaginatedResponse, HTTP_STATUS, handleUnauthorized, handleForbidden, handleResourceNotFound, handleInvalidId } from '../../../utils/apiResponse';
 
 
 export const getUserFaqs = async (req: Request, res: Response, next: NextFunction) => {
@@ -12,7 +12,7 @@ export const getUserFaqs = async (req: Request, res: Response, next: NextFunctio
         const userRole = req.user?.roles || [];
 
         if (!req.user) {
-            return next(createHttpError(401, 'Not authenticated'));
+            return handleUnauthorized(res, 'Not authenticated');
         }
 
         let faqs;
@@ -24,29 +24,19 @@ export const getUserFaqs = async (req: Request, res: Response, next: NextFunctio
             // Non-admin users can only view their own FAQs
             // requireOwnerOrAdmin middleware already ensures this, but double-check
             if (requestedUserId !== authenticatedUserId) {
-                return next(createHttpError(403, 'Not authorized to view these FAQs'));
+                return handleForbidden(res, 'Not authorized to view these FAQs');
             }
             faqs = await Faqs.find({ user: authenticatedUserId });
         }
 
-        // Transform FAQs for response
-        const transformedFaqs = faqs.map(faq => ({
-            id: faq._id,
-            _id: faq._id,
-            question: faq.question,
-            answer: faq.answer,
-            user: faq.user,
-        }));
-
-        res.status(200).json(transformedFaqs);
+        sendSuccess(res, faqs, 'FAQs retrieved successfully');
     } catch (error) {
         console.error('Error fetching user FAQs:', error);
-        return next(createHttpError(500, 'Failed to fetch FAQs'));
+        return next(error);
     }
 };
 
-export const getAllFaqs = async (req: Request
-, res: Response, next: NextFunction) => {
+export const getAllFaqs = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { page, limit, skip } = (req as any).pagination;
 
@@ -57,18 +47,14 @@ export const getAllFaqs = async (req: Request
 
         const totalPages = Math.ceil(total / limit);
 
-        res.status(200).json({
-            faqs,
-            pagination: {
-                total,
-                page,
-                limit,
-                totalPages
-            }
-        });
+        sendPaginatedResponse(res, faqs, {
+            page: page,
+            limit: limit,
+            totalItems: total,
+            totalPages: totalPages
+        }, 'FAQs retrieved successfully');
     } catch (error) {
-        console.error('Error fetching FAQs:', error);
-        res.status(500).json({ message: 'Failed to fetch FAQs' });
+        next(error);
     }
 };
 
@@ -78,31 +64,30 @@ export const getSingleFaqs = async (req: Request, res: Response, next: NextFunct
     try {
         const faq = await Faqs.findById(faqId);
         if (!faq) {
-            return next(createHttpError(404, 'FAQ not found'));
+            return handleResourceNotFound(res, 'FAQ not found');
         }
 
         // If user is authenticated, check ownership (optional - currently public)
         if (req.user) {
             const userId = req.user.id;
             const isAdmin = req.user.roles.includes('admin');
-            
+
             // Only check ownership if user is authenticated (optional check)
             // Since this is a public route, we don't enforce ownership
             // But we can still return the FAQ
         }
 
-        res.status(200).json({ faq });
+        sendSuccess(res, { faq }, 'FAQ retrieved successfully');
     } catch (error) {
         console.error('Error fetching FAQ:', error);
-        return next(createHttpError(500, 'Failed to fetch FAQ'));
+        return next(error);
     }
 };
 
-export const addFaqs = async (req: Request
-, res: Response, next: NextFunction) => {
+export const addFaqs = async (req: Request, res: Response, next: NextFunction) => {
     try {
         if (!req.user) {
-            return res.status(401).json({ message: 'Not authenticated' });
+            return handleUnauthorized(res, 'Not authenticated');
         }
         const userId = req.user.id;  // Assuming user ID is available in the request
         const { question,
@@ -115,9 +100,9 @@ export const addFaqs = async (req: Request
         });
 
         await newFaqs.save();
-        res.status(201).json(newFaqs);
+        sendSuccess(res, newFaqs, 'FAQ created successfully', HTTP_STATUS.CREATED);
     } catch (error) {
-        res.status(500).json({ message: 'Failed to add faqs' });
+        next(error);
     }
 };
 
@@ -128,20 +113,20 @@ export const updateFaqs = async (req: Request, res: Response, next: NextFunction
             return res.status(401).json({ message: 'Not authenticated' });
         }
         const userId = req.user.id;  // Assuming user ID is available in the request
-        
+
         const { faqId } = req.params;
         const { question, answer } = req.body;
         console.log("req.user", userId, faqId, question, answer)
         const faqs = await Faqs.findById(faqId);
         if (!faqs) {
-            return res.status(404).json({ message: 'FAQ not found' });
+            return handleResourceNotFound(res, 'FAQ not found');
         }
 
         if (faqs.user.toString() !== userId && !req.user?.roles.includes('admin')) {
-            return res.status(403).json({ message: 'Not authorized to update this FAQ' });
+            return handleForbidden(res, 'Not authorized to update this FAQ');
         }
 
-        
+
         if (question) {
             faqs.question = question;
         }
@@ -173,59 +158,49 @@ export const updateFaqs = async (req: Request, res: Response, next: NextFunction
         console.log(`   - Tours matched: ${updateResult.matchedCount}`);
         console.log(`   - Tours modified: ${updateResult.modifiedCount}`);
 
-        res.status(200).json({
+        sendSuccess(res, {
             faqs,
             toursUpdated: updateResult.modifiedCount
-        });
+        }, 'FAQ updated successfully');
     } catch (error) {
-        console.error('Error updating FAQ:', error);
-        res.status(500).json({ message: 'Failed to update FAQ' });
+        next(error);
     }
 };
 
 
 export const deleteFaqs = async (req: Request
-, res: Response, next: NextFunction) => {
+    , res: Response, next: NextFunction) => {
     try {
         if (!req.user) {
-            return res.status(401).json({ message: 'Not authenticated' });
+            return handleUnauthorized(res, 'Not authenticated');
         }
         const userId = req.user.id;
         const { faqId } = req.params;
         const faqs = await Faqs.findById(faqId);
 
         if (!faqs) {
-            return res.status(404).json({ message: 'FAQ not found' });
+            return handleResourceNotFound(res, 'FAQ not found');
         }
 
         if (faqs.user.toString() !== userId && !req.user?.roles.includes('admin')) {
-            return res.status(403).json({ message: 'Not authorized to delete this FAQ' });
+            return handleForbidden(res, 'Not authorized to delete this FAQ');
         }
 
         await Faqs.findByIdAndDelete(faqId);
-        res.status(204).send();
+        sendSuccess(res, null, 'FAQ deleted successfully', HTTP_STATUS.NO_CONTENT);
     } catch (error) {
-        console.error('Error deleting FAQ:', error);
-        res.status(500).json({ message: 'Failed to delete FAQ' });
+        next(error);
     }
 };
 
-export const bulkDeleteFaqs = async (req: Request
-, res: Response, next: NextFunction) => {
+export const bulkDeleteFaqs = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const userId = req.user?.id;
         const userRole = req.user?.roles;
         const { ids } = req.body; // Expecting an array of FAQ IDs
 
         if (!Array.isArray(ids) || ids.length === 0) {
-            return res.status(400).json({
-                error: {
-                    code: 'INVALID_REQUEST',
-                    message: 'Invalid or empty ids array',
-                    timestamp: new Date().toISOString(),
-                    path: req.path
-                }
-            });
+            return handleInvalidId(res, 'Invalid or empty ids array');
         }
 
         console.log(`🗑️  Bulk delete request for ${ids.length} FAQs`);
@@ -261,19 +236,12 @@ export const bulkDeleteFaqs = async (req: Request
 
         console.log(`✅ Bulk delete completed: ${success.length} succeeded, ${failed.length} failed`);
 
-        res.status(200).json({
+        sendSuccess(res, {
             success,
             failed
-        });
+        }, 'Bulk delete operation completed');
     } catch (error) {
         console.error('Error in bulk delete FAQs:', error);
-        res.status(500).json({
-            error: {
-                code: 'INTERNAL_SERVER_ERROR',
-                message: 'Failed to delete FAQs',
-                timestamp: new Date().toISOString(),
-                path: req.path
-            }
-        });
+        next(error);
     }
 };

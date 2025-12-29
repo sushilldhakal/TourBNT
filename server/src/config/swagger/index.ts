@@ -29,7 +29,7 @@ Comprehensive RESTful API for tour booking and management platform. This API fol
 
 The API implements rate limiting to protect against abuse:
 
-- **Authentication Endpoints** (\`/api/auth/*\`): 5 requests per 15 minutes per IP
+- **Authentication Endpoints** (\`/api/v1/auth/*\`): 5 requests per 15 minutes per IP
 - **General Endpoints**: 100 requests per 15 minutes per IP
 
 Rate limit information is included in response headers:
@@ -37,6 +37,55 @@ Rate limit information is included in response headers:
 - \`X-RateLimit-Remaining\`: Requests remaining in current window
 - \`X-RateLimit-Reset\`: Unix timestamp when limit resets
 - \`Retry-After\`: Seconds until limit resets (on 429 responses)
+
+## Response Format
+
+All API responses follow a consistent structure with automatic document normalization:
+
+### Success Responses
+\`\`\`json
+{
+  "success": true,
+  "message": "Success",
+  "data": {
+    "id": "507f1f77bcf86cd799439011",  // Normalized from _id
+    "title": "Sample Resource",
+    "createdAt": "2025-12-14T10:30:00Z"
+    // Note: No _id or __v fields in response
+  }
+}
+\`\`\`
+
+### Paginated Responses
+\`\`\`json
+{
+  "success": true,
+  "message": "Success", 
+  "data": {
+    "items": [
+      {
+        "id": "507f1f77bcf86cd799439011",  // Normalized from _id
+        "title": "Sample Resource"
+        // Note: No _id or __v fields in response
+      }
+    ],
+    "pagination": {
+      "total": 150,
+      "page": 1,
+      "limit": 10,
+      "totalPages": 15
+    }
+  }
+}
+\`\`\`
+
+### Document Normalization
+All Mongoose documents are automatically normalized before being sent in responses:
+- **_id** field is converted to **id** (string format)
+- **__v** version field is removed
+- Nested documents are recursively normalized
+- Consistent key ordering is maintained
+- Performance optimized with LRU caching
 
 ## Pagination
 
@@ -82,7 +131,7 @@ All errors follow a consistent structure:
     "message": "Human-readable message",
     "details": { /* Additional context */ },
     "timestamp": "2025-12-14T10:30:00Z",
-    "path": "/api/endpoint"
+    "path": "/api/v1/endpoint"
   }
 }
 \`\`\`
@@ -103,23 +152,23 @@ All errors follow a consistent structure:
 
 Most endpoints require authentication using JWT tokens:
 
-1. Obtain a token via \`POST /api/auth/login\`
+1. Obtain a token via \`POST /api/v1/auth/login\`
 2. Include token in Authorization header: \`Bearer <token>\`
 3. Token expires based on \`keepMeSignedIn\` setting
 
 ## Nested Resources
 
 The API uses nested routes for related resources:
-- \`/api/users/{userId}/tours\` - User's tours
-- \`/api/tours/{tourId}/reviews\` - Tour reviews
-- \`/api/posts/{postId}/comments\` - Post comments
+- \`/api/v1/users/{userId}/tours\` - User's tours
+- \`/api/v1/tours/{tourId}/reviews\` - Tour reviews
+- \`/api/v1/posts/{postId}/comments\` - Post comments
 
 ## Automatic View Tracking
 
 GET requests to certain resources automatically increment view counts:
-- Tours: \`GET /api/tours/{tourId}\`
-- Posts: \`GET /api/posts/{postId}\`
-- Reviews: \`GET /api/reviews/{reviewId}\`
+- Tours: \`GET /api/v1/tours/{tourId}\`
+- Posts: \`GET /api/v1/posts/{postId}\`
+- Reviews: \`GET /api/v1/reviews/{reviewId}\`
 
 No explicit view tracking calls are needed from clients.
         `,
@@ -262,7 +311,7 @@ No explicit view tracking calls are needed from clients.
                                     email: 'Invalid email format',
                                 },
                                 timestamp: '2025-12-14T10:30:00Z',
-                                path: '/api/auth/register',
+                                path: '/api/v1/auth/register',
                             },
                         },
                     },
@@ -280,7 +329,7 @@ No explicit view tracking calls are needed from clients.
                                 code: 'AUTHENTICATION_FAILED',
                                 message: 'Invalid credentials',
                                 timestamp: '2025-12-14T10:30:00Z',
-                                path: '/api/auth/login',
+                                path: '/api/v1/auth/login',
                             },
                         },
                     },
@@ -298,7 +347,7 @@ No explicit view tracking calls are needed from clients.
                                 code: 'AUTHORIZATION_FAILED',
                                 message: 'Insufficient permissions',
                                 timestamp: '2025-12-14T10:30:00Z',
-                                path: '/api/users',
+                                path: '/api/v1/users',
                             },
                         },
                     },
@@ -316,7 +365,7 @@ No explicit view tracking calls are needed from clients.
                                 code: 'NOT_FOUND',
                                 message: 'Resource not found',
                                 timestamp: '2025-12-14T10:30:00Z',
-                                path: '/api/tours/123',
+                                path: '/api/v1/tours/123',
                             },
                         },
                     },
@@ -334,7 +383,7 @@ No explicit view tracking calls are needed from clients.
                                 code: 'CONFLICT',
                                 message: 'Email already exists',
                                 timestamp: '2025-12-14T10:30:00Z',
-                                path: '/api/auth/register',
+                                path: '/api/v1/auth/register',
                             },
                         },
                     },

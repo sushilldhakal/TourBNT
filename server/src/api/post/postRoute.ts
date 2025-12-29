@@ -24,7 +24,7 @@ const postRouter = express.Router();
 
 /**
  * @swagger
- * /api/posts:
+ * /api/v1/posts:
  *   get:
  *     summary: Get all posts
  *     description: Retrieve all published blog posts with pagination and filtering
@@ -61,20 +61,19 @@ const postRouter = express.Router();
  *         content:
  *           application/json:
  *             schema:
- *               type: object
- *               properties:
- *                 page:
- *                   type: number
- *                 limit:
- *                   type: number
- *                 totalPages:
- *                   type: number
- *                 totalItems:
- *                   type: number
- *                 posts:
- *                   type: array
- *                   items:
- *                     $ref: '#/components/schemas/Post'
+ *               allOf:
+ *                 - $ref: '#/components/schemas/StandardResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       type: object
+ *                       properties:
+ *                         items:
+ *                           type: array
+ *                           items:
+ *                             $ref: '#/components/schemas/Post'
+ *                         pagination:
+ *                           $ref: '#/components/schemas/PaginationMetadata'
  */
 postRouter.get('/',
   paginationMiddleware,
@@ -84,7 +83,7 @@ postRouter.get('/',
 
 /**
  * @swagger
- * /api/posts:
+ * /api/v1/posts:
  *   post:
  *     summary: Create a new post
  *     description: Create a new blog post (RESTful endpoint)
@@ -116,7 +115,12 @@ postRouter.get('/',
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/Post'
+ *               allOf:
+ *                 - $ref: '#/components/schemas/StandardResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       $ref: '#/components/schemas/Post'
  *       401:
  *         description: Unauthorized
  *         content:
@@ -128,7 +132,7 @@ postRouter.post('/', uploadNone, authenticate, authorizeRoles('admin', 'seller')
 
 /**
  * @swagger
- * /api/posts/user:
+ * /api/v1/posts/user:
  *   get:
  *     summary: Get current user's posts
  *     description: Retrieve all posts created by the authenticated user
@@ -155,7 +159,7 @@ postRouter.get('/user', authenticate, getAllUserPosts);
 
 /**
  * @swagger
- * /api/posts/user/{userId}:
+ * /api/v1/posts/user/{userId}:
  *   get:
  *     summary: Get user's posts
  *     description: Retrieve all posts created by a specific user
@@ -189,7 +193,7 @@ postRouter.get('/user/:userId', authenticate, getUserPost);
 
 /**
  * @swagger
- * /api/posts/{postId}:
+ * /api/v1/posts/{postId}:
  *   get:
  *     summary: Get post by ID
  *     description: Retrieve a specific post by its ID with automatic view tracking
@@ -292,7 +296,7 @@ postRouter.delete('/:postId', authenticate, deletePost);
 
 /**
  * @swagger
- * /api/posts/{postId}/comments:
+ * /api/v1/posts/{postId}/comments:
  *   get:
  *     summary: Get comments for a post
  *     description: Retrieve all comments for a specific post (PUBLIC)
@@ -379,7 +383,7 @@ postRouter.post('/:postId/comments', authenticate, addComment);
 postRouter.post('/comment/:postId', authenticate, addComment); // Add comment to a specific post
 postRouter.get('/comment/post/:postId', getCommentsByPost);    // Get comments for a specific post
 postRouter.get('/comment/unapproved/count', authenticate, getUnapprovedCommentsCount);
-postRouter.patch('/comment/:commentId', authenticate, editComment); // Edit comment by ID
+postRouter.patch('/comment/:commentId', authenticate, uploadNone, editComment); // Edit comment by ID
 postRouter.delete('/comment/:commentId', authenticate, deleteComment); // Delete comment by ID
 
 // New comment functionality routes
@@ -392,7 +396,7 @@ export default postRouter;
 
 /**
  * @swagger
- * /api/posts/comment/{postId}:
+ * /api/v1/posts/comment/{postId}:
  *   post:
  *     summary: Add comment to post
  *     description: Add a new comment to a specific post

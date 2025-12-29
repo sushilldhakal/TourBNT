@@ -11,10 +11,13 @@ import { CookieOptions } from 'express';
  * @returns Cookie options object
  */
 export const getAuthCookieOptions = (maxAge?: number): CookieOptions => {
+    const isProduction = process.env.NODE_ENV === 'production';
+    
     const options: CookieOptions = {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+        secure: isProduction, // Only require secure in production
+        sameSite: isProduction ? 'strict' : 'lax', // Use 'lax' for development (works better in incognito)
+        path: '/', // CRITICAL: Set path to root so cookie is sent with all requests
     };
 
     // Add maxAge if provided
@@ -34,10 +37,13 @@ export const getAuthCookieOptions = (maxAge?: number): CookieOptions => {
  * @returns Cookie options object for clearing
  */
 export const getClearCookieOptions = (): CookieOptions => {
+    const isProduction = process.env.NODE_ENV === 'production';
+    
     const options: CookieOptions = {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+        secure: isProduction, // Only require secure in production
+        sameSite: isProduction ? 'strict' : 'lax', // Use 'lax' for development (works better in incognito)
+        path: '/', // CRITICAL: Must match the path used when setting the cookie
     };
 
     // Don't set domain - let browser handle it automatically

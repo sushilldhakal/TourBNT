@@ -1,30 +1,26 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { AlertTriangle, Check, MapPin, Plus, Search, X } from "lucide-react";
-import { useDestination, useUserDestinations, usePendingDestinations } from "./useDestination";
-import { useState, useMemo, useEffect } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { useMutation } from "@tanstack/react-query";
-import { toast } from "@/components/ui/use-toast";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertTriangle, Check, MapPin, Plus, X } from "lucide-react";
+import { useDestinationsRoleBased, usePendingDestinations } from "./useDestination";
+import { useState, useMemo } from "react";
+import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { approveDestination, rejectDestination } from "@/lib/api/destinations";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import AddDestination from "./AddDestination";
-import SingleDestination from "./SingleDestination";
-import DestinationTableRow from "./DestinationTableRow";
-import DestinationGridCard from "./DestinationGridCard";
-import { Destination as Dest, DestinationTypes } from "@/lib/types";
+import DestinationGridView from "./DestinationGridView";
+import DestinationTableView from "./DestinationTableView";
+import { DestinationTypes } from "@/lib/types";
 import { ViewToggle, ViewMode } from "../ViewToggle";
 import { getViewPreference, setViewPreference } from "@/lib/utils/viewPreferences";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { isAdminOrSeller } from "@/lib/utils/roles";
+import Image from "next/image";
 
 const Destination = () => {
     const queryClient = useQueryClient();
-    const [searchQuery, setSearchQuery] = useState("");
     const [isAddingDestination, setIsAddingDestination] = useState(false);
     const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
     const [selectedDestination, setSelectedDestination] = useState<DestinationTypes | null>(null);
@@ -32,11 +28,7 @@ const Destination = () => {
     const [view, setView] = useState<ViewMode>(() => getViewPreference('destinations'));
 
     // Load view preference on mount and save when it changes
-    useEffect(() => {
-        const savedView = getViewPreference('destinations');
-        setView(savedView);
-    }, []);
-
+    // Remove the effect that synchronously sets state from a value already accessible at initialization
     // Save view preference when it changes
     const handleViewChange = (newView: ViewMode) => {
         setView(newView);
@@ -46,6 +38,7 @@ const Destination = () => {
     // Check user role for admin access
     const { userRole } = useAuth();
     const isAdmin = userRole === 'admin';
+    const canAccessDestinations = isAdminOrSeller(userRole);
     const isAdminView = useMemo(() => {
         return userRole === 'admin';
     }, [userRole]);
@@ -54,36 +47,68 @@ const Destination = () => {
     const { data: destinations, isLoading, isError } = useDestinationsRoleBased();
 
     // Fetch pending destinations for admin users
-    const { data: pendingDestinations, isLoading: pendingLoading, isError: pendingError } = usePendingDestinations();
+    const { data: pendingDestinations, isError: pendingError } = usePendingDestinations();
 
-    // Filter destinations based on search query
-    const filteredDestinations = destinations?.filter((destination: DestinationTypes) => {
-        const nameMatch = destination.name.toLowerCase().includes(searchQuery.toLowerCase());
-        const countryMatch = destination.country?.toLowerCase().includes(searchQuery.toLowerCase());
-        const cityMatch = destination.city?.toLowerCase().includes(searchQuery.toLowerCase());
-        const regionMatch = destination.region?.toLowerCase().includes(searchQuery.toLowerCase());
-        return nameMatch || countryMatch || cityMatch || regionMatch;
+    // Mutations for approving and rejecting destinations
+    const approveMutation = useMutation({
+        mutationFn: (destinationId: string) => approveDestination(destinationId),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['pending-destinations'] });
+            queryClient.invalidateQueries({ queryKey: ['destinations'] });
+            queryClient.invalidateQueries({ queryKey: ['seller-destinations'] });
+        },
     });
+
+    const rejectMutation = useMutation({
+        mutationFn: ({ destinationId, reason }: { destinationId: string; reason: string }) =>
+            rejectDestination(destinationId, reason),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['pending-destinations'] });
+            queryClient.invalidateQueries({ queryKey: ['destinations'] });
+            queryClient.invalidateQueries({ queryKey: ['seller-destinations'] });
+            setRejectDialogOpen(false);
+            setRejectReason("");
+            setSelectedDestination(null);
+        },
+    });
+
 
     // This function will be called when a destination is successfully added
     const handleDestinationAdded = () => {
         setIsAddingDestination(false);
         // Invalidate the appropriate query based on user role
         if (isAdmin) {
-            queryClient.invalidateQueries({ queryKey: ['seller-destinations'] });
+            queryClient.invalidateQueries({ queryKey: ['destinations'] });
         } else {
-            queryClient.invalidateQueries({ queryKey: ['user-destinations'] });
+            queryClient.invalidateQueries({ queryKey: ['seller-destinations'] });
         }
         queryClient.invalidateQueries({ queryKey: ['pending-destinations'] });
     };
 
+    // Remove the debug console.logs that reference .data and .count
+    // destinations is already an array, not { data: [], count: number }
     console.log("destinations response:", destinations);
-    console.log("destinations data:", destinations?.data);
-    console.log("destinations count:", destinations?.count);
     console.log("isLoading:", isLoading);
     console.log("isError:", isError);
     console.log("isAdmin:", isAdmin);
     console.log("isAdminView:", isAdminView);
+
+    // Check if user has access to destinations (admin or seller only)
+    if (!canAccessDestinations) {
+        return (
+            <div className="space-y-6">
+                <div className="flex flex-col items-center justify-center text-center space-y-3 p-12">
+                    <MapPin className="h-12 w-12 text-muted-foreground" />
+                    <div className="space-y-1">
+                        <p className="text-lg font-medium">Access Restricted</p>
+                        <p className="text-sm text-muted-foreground">
+                            You need admin or seller privileges to access destinations.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">
@@ -94,28 +119,6 @@ const Destination = () => {
                 </div>
 
                 <div className="flex flex-col sm:flex-row gap-3">
-                    <div className="relative">
-                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                        <Input
-                            type="search"
-                            placeholder="Search destinations..."
-                            className="pl-8 w-full sm:w-[250px] bg-background"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                        />
-                        {searchQuery && (
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                className="absolute right-0 top-0 h-full aspect-square rounded-l-none"
-                                onClick={() => setSearchQuery("")}
-                            >
-                                <X className="h-4 w-4" />
-                                <span className="sr-only">Clear search</span>
-                            </Button>
-                        )}
-                    </div>
-
                     <ViewToggle view={view} onViewChange={handleViewChange} />
 
                     <Button
@@ -152,27 +155,28 @@ const Destination = () => {
                     // Admin View: Show both pending and approved destinations
                     <>
                         {/* Pending Destinations Section */}
-                        {pendingDestinations?.data && pendingDestinations.data.length >= 1 && (
+                        {pendingDestinations && pendingDestinations.length >= 1 && (
                             <>
                                 <div className="flex items-center gap-2 mb-6">
                                     <AlertTriangle className="h-5 w-5 text-orange-500" />
                                     <h2 className="text-xl font-semibold">Pending Destinations for Approval</h2>
                                     <Badge variant="outline" className="ml-2 bg-orange-100 text-orange-700 border-orange-300">
-                                        {pendingDestinations?.data?.length || 0} pending
+                                        {pendingDestinations?.length || 0} pending
                                     </Badge>
                                 </div>
 
                                 <div className="space-y-6 mb-8">
-                                    {pendingDestinations.data.map((destination) => (
+                                    {pendingDestinations.map((destination) => (
                                         <Card key={destination._id} className="overflow-hidden py-0 border-orange-200  from-orange-50 to-amber-50 hover:shadow-lg transition-all duration-200">
                                             <div className="flex flex-col lg:flex-row">
                                                 {/* Image Section */}
                                                 <div className="lg:w-80 h-48 lg:h-auto relative overflow-hidden bg-muted">
                                                     {destination.coverImage ? (
-                                                        <img
+                                                        <Image
                                                             src={destination.coverImage}
                                                             alt={destination.name}
-                                                            className="w-full h-full object-cover"
+                                                            fill
+                                                            className="object-cover"
                                                         />
                                                     ) : (
                                                         <div className="w-full h-full bg-gradient-to-br from-muted to-muted/80 flex items-center justify-center">
@@ -316,209 +320,81 @@ const Destination = () => {
                             </Card>
                         )}
 
-
                         {/* Approved Destinations Section */}
                         <div className="flex items-center gap-2 mb-4">
                             <MapPin className="h-5 w-5 text-green-500" />
                             <h2 className="text-xl font-semibold">All Destinations</h2>
                             <Badge variant="outline" className="ml-2">
-                                {filteredDestinations?.length || 0} total
+                                {destinations?.length || 0} total
                             </Badge>
                         </div>
 
-                        <Card className="py-0">
-                            <CardContent className="p-0">
-                                {isLoading ? (
-                                    view === 'list' ? (
-                                        // Loading state - List view
-                                        <div className="p-6 space-y-4">
-                                            {Array.from({ length: 5 }).map((_, index) => (
-                                                <div key={index} className="flex items-center gap-4">
-                                                    <Skeleton className="h-16 w-16 rounded" />
-                                                    <div className="flex-1 space-y-2">
-                                                        <Skeleton className="h-4 w-[200px]" />
-                                                        <Skeleton className="h-3 w-[150px]" />
-                                                    </div>
-                                                    <Skeleton className="h-8 w-20" />
-                                                </div>
-                                            ))}
+                        {isError ? (
+                            // Error state
+                            <Card className="py-0">
+                                <CardContent className="p-6">
+                                    <div className="flex flex-col items-center justify-center text-center space-y-3">
+                                        <X className="h-8 w-8 text-destructive" />
+                                        <div className="space-y-1">
+                                            <p className="text-lg font-medium text-destructive">Failed to load destinations</p>
+                                            <p className="text-sm text-muted-foreground">There was an error loading your destinations.</p>
                                         </div>
-                                    ) : (
-                                        // Loading state - Grid view
-                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-6">
-                                            {Array.from({ length: 6 }).map((_, index) => (
-                                                <Card key={index} className="overflow-hidden py-0">
-                                                    <Skeleton className="h-48 w-full" />
-                                                    <CardContent className="p-4 space-y-3">
-                                                        <Skeleton className="h-5 w-3/4" />
-                                                        <Skeleton className="h-4 w-1/2" />
-                                                        <Skeleton className="h-16 w-full" />
-                                                    </CardContent>
-                                                </Card>
-                                            ))}
-                                        </div>
-                                    )
-                                ) : isError ? (
-                                    // Error state
-                                    <div className="p-6">
-                                        <div className="flex flex-col items-center justify-center text-center space-y-3">
-                                            <X className="h-8 w-8 text-destructive" />
-                                            <div className="space-y-1">
-                                                <p className="text-lg font-medium text-destructive">Failed to load destinations</p>
-                                                <p className="text-sm text-muted-foreground">There was an error loading your destinations.</p>
-                                            </div>
-                                            <Button
-                                                variant="outline"
-                                                onClick={() => {
-                                                    queryClient.invalidateQueries({
-                                                        queryKey: ['seller-destinations']
-                                                    });
-                                                }}
-                                                className="mt-2"
-                                            >
-                                                Try Again
-                                            </Button>
-                                        </div>
+                                        <Button
+                                            variant="outline"
+                                            onClick={() => {
+                                                queryClient.invalidateQueries({
+                                                    queryKey: ['destinations']
+                                                });
+                                            }}
+                                            className="mt-2"
+                                        >
+                                            Try Again
+                                        </Button>
                                     </div>
-                                ) : filteredDestinations && filteredDestinations.length > 0 ? (
-                                    view === 'list' ? (
-                                        // List/Table view
-                                        <div className="overflow-x-auto">
-                                            <table className="w-full">
-                                                <thead className="border-b bg-muted/50">
-                                                    <tr>
-                                                        <th className="text-left p-4 font-semibold text-sm">Destination</th>
-                                                        <th className="text-left p-4 font-semibold text-sm">Location</th>
-                                                        <th className="text-left p-4 font-semibold text-sm">Description</th>
-                                                        <th className="text-left p-4 font-semibold text-sm">Status</th>
-                                                        <th className="text-right p-4 font-semibold text-sm">Actions</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {filteredDestinations.map((destination) => (
-                                                        <DestinationTableRow
-                                                            key={destination._id}
-                                                            destinationId={destination._id}
-                                                            onUpdate={() => {
-                                                                if (isAdminView) {
-                                                                    queryClient.invalidateQueries({ queryKey: ['seller-destinations'] });
-                                                                } else {
-                                                                    queryClient.invalidateQueries({ queryKey: ['user-destinations'] });
-                                                                }
-                                                            }}
-                                                            onDelete={() => {
-                                                                if (isAdminView) {
-                                                                    queryClient.refetchQueries({ queryKey: ['seller-destinations'], exact: false });
-                                                                } else {
-                                                                    queryClient.refetchQueries({ queryKey: ['user-destinations'], exact: false });
-                                                                }
-                                                            }}
-                                                        />
-                                                    ))}
-                                                </tbody>
-                                            </table>
+                                </CardContent>
+                            </Card>
+                        ) : destinations && destinations.length > 0 ? (
+                            view === 'list' ? (
+                                <DestinationTableView
+                                    destinations={destinations}
+                                    isLoading={isLoading}
+                                    onRefresh={handleDestinationAdded}
+                                />
+                            ) : (
+                                <DestinationGridView
+                                    destinations={destinations}
+                                    isLoading={isLoading}
+                                    onRefresh={handleDestinationAdded}
+                                />
+                            )
+                        ) : (
+                            // Empty state
+                            <Card className="py-0">
+                                <CardContent className="p-6">
+                                    <div className="flex flex-col items-center justify-center text-center space-y-3">
+                                        <MapPin className="h-8 w-8 text-muted-foreground" />
+                                        <div className="space-y-1">
+                                            <p className="text-lg font-medium">No destinations found</p>
+                                            <p className="text-sm text-muted-foreground">Get started by adding your first destination.</p>
                                         </div>
-                                    ) : (
-                                        // Grid view
-                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-6">
-                                            {filteredDestinations.map((destination) => (
-                                                <DestinationGridCard
-                                                    key={destination._id}
-                                                    destinationId={destination._id}
-                                                    onUpdate={() => {
-                                                        if (isAdminView) {
-                                                            queryClient.invalidateQueries({ queryKey: ['seller-destinations'] });
-                                                        } else {
-                                                            queryClient.invalidateQueries({ queryKey: ['user-destinations'] });
-                                                        }
-                                                    }}
-                                                    onDelete={() => {
-                                                        if (isAdminView) {
-                                                            queryClient.refetchQueries({ queryKey: ['seller-destinations'], exact: false });
-                                                        } else {
-                                                            queryClient.refetchQueries({ queryKey: ['user-destinations'], exact: false });
-                                                        }
-                                                    }}
-                                                />
-                                            ))}
-                                        </div>
-                                    )
-                                ) : destinations?.data && destinations.data.length > 0 ? (
-                                    // No search results
-                                    <div className="p-6">
-                                        <div className="flex flex-col items-center justify-center text-center space-y-3">
-                                            <Search className="h-8 w-8 text-muted-foreground" />
-                                            <div className="space-y-1">
-                                                <p className="text-lg font-medium">No matching destinations</p>
-                                                <p className="text-sm text-muted-foreground">Try adjusting your search query.</p>
-                                            </div>
-                                            <Button
-                                                variant="outline"
-                                                onClick={() => setSearchQuery("")}
-                                                className="mt-2"
-                                            >
-                                                Clear Search
-                                            </Button>
-                                        </div>
+                                        <Button
+                                            onClick={() => setIsAddingDestination(true)}
+                                            className="mt-2"
+                                        >
+                                            Add Destination
+                                        </Button>
                                     </div>
-                                ) : (
-                                    // Empty state
-                                    <div className="p-6">
-                                        <div className="flex flex-col items-center justify-center text-center space-y-3">
-                                            <MapPin className="h-8 w-8 text-muted-foreground" />
-                                            <div className="space-y-1">
-                                                <p className="text-lg font-medium">No destinations found</p>
-                                                <p className="text-sm text-muted-foreground">Get started by adding your first destination.</p>
-                                            </div>
-                                            <Button
-                                                onClick={() => setIsAddingDestination(true)}
-                                                className="mt-2"
-                                            >
-                                                Add Destination
-                                            </Button>
-                                        </div>
-                                    </div>
-                                )}
-                            </CardContent>
-                        </Card>
+                                </CardContent>
+                            </Card>
+                        )}
                     </>
                 ) : (
                     // Seller View: Regular Destinations
-                    <Card className="py-0">
-                        <CardContent className="p-0">
-                            {isLoading ? (
-                                view === 'list' ? (
-                                    // Loading state - List view
-                                    <div className="p-6 space-y-4">
-                                        {Array.from({ length: 5 }).map((_, index) => (
-                                            <div key={index} className="flex items-center gap-4">
-                                                <Skeleton className="h-16 w-16 rounded" />
-                                                <div className="flex-1 space-y-2">
-                                                    <Skeleton className="h-4 w-[200px]" />
-                                                    <Skeleton className="h-3 w-[150px]" />
-                                                </div>
-                                                <Skeleton className="h-8 w-20" />
-                                            </div>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    // Loading state - Grid view
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-6">
-                                        {Array.from({ length: 6 }).map((_, index) => (
-                                            <Card key={index} className="overflow-hidden py-0">
-                                                <Skeleton className="h-48 w-full" />
-                                                <CardContent className="p-4 space-y-3">
-                                                    <Skeleton className="h-5 w-3/4" />
-                                                    <Skeleton className="h-4 w-1/2" />
-                                                    <Skeleton className="h-16 w-full" />
-                                                </CardContent>
-                                            </Card>
-                                        ))}
-                                    </div>
-                                )
-                            ) : isError ? (
-                                // Error state
-                                <div className="p-6">
+                    <>
+                        {isError ? (
+                            // Error state
+                            <Card className="py-0">
+                                <CardContent className="p-6">
                                     <div className="flex flex-col items-center justify-center text-center space-y-3">
                                         <X className="h-8 w-8 text-destructive" />
                                         <div className="space-y-1">
@@ -537,79 +413,32 @@ const Destination = () => {
                                             Try Again
                                         </Button>
                                     </div>
-                                </div>
-                            ) : filteredDestinations && filteredDestinations.length > 0 ? (
-                                view === 'list' ? (
-                                    // List/Table view
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full">
-                                            <thead className="border-b bg-muted/50">
-                                                <tr>
-                                                    <th className="text-left p-4 font-semibold text-sm">Destination</th>
-                                                    <th className="text-left p-4 font-semibold text-sm">Location</th>
-                                                    <th className="text-left p-4 font-semibold text-sm">Description</th>
-                                                    <th className="text-left p-4 font-semibold text-sm">Status</th>
-                                                    <th className="text-right p-4 font-semibold text-sm">Actions</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {filteredDestinations.map((destination) => (
-                                                    <DestinationTableRow
-                                                        key={destination._id}
-                                                        destinationId={destination._id}
-                                                        onUpdate={() => {
-                                                            if (isAdminView) {
-                                                                queryClient.invalidateQueries({ queryKey: ['seller-destinations'] });
-                                                            } else {
-                                                                queryClient.invalidateQueries({ queryKey: ['user-destinations'] });
-                                                            }
-                                                        }}
-                                                        onDelete={() => {
-                                                            if (isAdminView) {
-                                                                queryClient.refetchQueries({ queryKey: ['seller-destinations'], exact: false });
-                                                            } else {
-                                                                queryClient.refetchQueries({ queryKey: ['user-destinations'], exact: false });
-                                                            }
-                                                        }}
-                                                    />
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                ) : (
-                                    // Grid view
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-6">
-                                        {filteredDestinations.map((destination) => (
-                                            <DestinationGridCard
-                                                key={destination._id}
-                                                destinationId={destination._id}
-                                                onUpdate={() => {
-                                                    if (isAdminView) {
-                                                        queryClient.invalidateQueries({ queryKey: ['seller-destinations'] });
-                                                    } else {
-                                                        queryClient.invalidateQueries({ queryKey: ['user-destinations'] });
-                                                    }
-                                                }}
-                                                onDelete={() => {
-                                                    if (isAdminView) {
-                                                        queryClient.refetchQueries({ queryKey: ['seller-destinations'], exact: false });
-                                                    } else {
-                                                        queryClient.refetchQueries({ queryKey: ['user-destinations'], exact: false });
-                                                    }
-                                                }}
-                                            />
-                                        ))}
-                                    </div>
-                                )
+                                </CardContent>
+                            </Card>
+                        ) : destinations && destinations.length > 0 ? (
+                            view === 'list' ? (
+                                <DestinationTableView
+                                    destinations={destinations}
+                                    isLoading={isLoading}
+                                    onRefresh={handleDestinationAdded}
+                                />
                             ) : (
-                                // Empty state
-                                <div className="p-6">
+                                <DestinationGridView
+                                    destinations={destinations}
+                                    isLoading={isLoading}
+                                    onRefresh={handleDestinationAdded}
+                                />
+                            )
+                        ) : (
+                            // Empty state
+                            <Card className="py-0">
+                                <CardContent className="p-6">
                                     <div className="flex flex-col items-center justify-center text-center space-y-3">
                                         <MapPin className="h-8 w-8 text-muted-foreground" />
                                         <div className="space-y-1">
                                             <p className="text-lg font-medium">No destinations found</p>
                                             <p className="text-sm text-muted-foreground">
-                                                {searchQuery ? "No destinations match your search." : "No destinations have been created yet."}
+                                                No destinations have been created yet.
                                             </p>
                                         </div>
                                         <Button
@@ -619,10 +448,10 @@ const Destination = () => {
                                             Add Destination
                                         </Button>
                                     </div>
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
+                                </CardContent>
+                            </Card>
+                        )}
+                    </>
                 )}
             </div>
 

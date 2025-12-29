@@ -23,7 +23,7 @@ export interface CategoryData {
  */
 export const getSellerCategories = async () => {
     try {
-        const response = await api.get('/api/global/categories/seller/visible');
+        const response = await api.get('/global/categories/seller/visible');
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching seller categories');
@@ -35,7 +35,7 @@ export const getSellerCategories = async () => {
  */
 export const getUserCategories = async () => {
     try {
-        const response = await api.get('/api/global/categories/user-categories');
+        const response = await api.get('/global/categories/user-categories');
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching user categories');
@@ -47,7 +47,7 @@ export const getUserCategories = async () => {
  */
 export const getAllCategories = async () => {
     try {
-        const response = await api.get('/api/global/categories/approved');
+        const response = await api.get('/global/categories/approved');
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching categories');
@@ -59,7 +59,7 @@ export const getAllCategories = async () => {
  */
 export const getCategory = async (categoryId: string) => {
     try {
-        const response = await api.get(`/api/global/categories/${categoryId}`);
+        const response = await api.get(`/global/categories/${categoryId}`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching category');
@@ -78,7 +78,7 @@ export const getCategoryById = async (categoryId: string) => {
  */
 export const toggleCategoryFavorite = async (categoryId: string) => {
     try {
-        const response = await api.put(`/api/global/categories/${categoryId}/favorite`);
+        const response = await api.put(`/global/categories/${categoryId}/favorite`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'toggling category favorite');
@@ -90,7 +90,7 @@ export const toggleCategoryFavorite = async (categoryId: string) => {
  */
 export const addExistingCategoryToSeller = async (categoryId: string) => {
     try {
-        const response = await api.post(`/api/global/categories/${categoryId}/add-to-list`);
+        const response = await api.post(`/global/categories/${categoryId}/add-to-list`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'adding category to list');
@@ -102,7 +102,7 @@ export const addExistingCategoryToSeller = async (categoryId: string) => {
  */
 export const removeExistingCategoryFromSeller = async (categoryId: string) => {
     try {
-        const response = await api.post(`/api/global/categories/${categoryId}/remove-from-list`);
+        const response = await api.post(`/global/categories/${categoryId}/remove-from-list`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'removing category from list');
@@ -114,7 +114,7 @@ export const removeExistingCategoryFromSeller = async (categoryId: string) => {
  */
 export const toggleCategoryActiveStatus = async (categoryId: string) => {
     try {
-        const response = await api.patch(`/api/global/categories/${categoryId}/toggle-active`);
+        const response = await api.patch(`/global/categories/${categoryId}/toggle-active`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'toggling category status');
@@ -126,7 +126,7 @@ export const toggleCategoryActiveStatus = async (categoryId: string) => {
  */
 export const addCategory = async (categoryData: FormData) => {
     try {
-        const response = await api.post('/api/global/categories/submit', categoryData, {
+        const response = await api.post('/global/categories/submit', categoryData, {
             headers: {
                 'Content-Type': 'multipart/form-data',
             },
@@ -142,7 +142,7 @@ export const addCategory = async (categoryData: FormData) => {
  */
 export const updateCategory = async (categoryId: string, categoryData: FormData) => {
     try {
-        const response = await api.patch(`/api/global/categories/${categoryId}`, categoryData, {
+        const response = await api.patch(`/global/categories/${categoryId}`, categoryData, {
             headers: {
                 'Content-Type': 'multipart/form-data',
             },
@@ -158,7 +158,7 @@ export const updateCategory = async (categoryId: string, categoryData: FormData)
  */
 export const deleteCategory = async (categoryId: string) => {
     try {
-        const response = await api.delete(`/api/global/categories/admin/${categoryId}`);
+        const response = await api.delete(`/global/categories/admin/${categoryId}`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'deleting category');
@@ -170,7 +170,7 @@ export const deleteCategory = async (categoryId: string) => {
  */
 export const getPendingCategories = async () => {
     try {
-        const response = await api.get('/api/global/categories/admin/pending');
+        const response = await api.get('/global/categories/admin/pending');
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching pending categories');
@@ -182,7 +182,7 @@ export const getPendingCategories = async () => {
  */
 export const approveCategory = async (categoryId: string) => {
     try {
-        const response = await api.put(`/api/global/categories/admin/${categoryId}/approve`);
+        const response = await api.put(`/global/categories/admin/${categoryId}/approve`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'approving category');
@@ -194,7 +194,7 @@ export const approveCategory = async (categoryId: string) => {
  */
 export const rejectCategory = async (categoryId: string, reason: string) => {
     try {
-        const response = await api.put(`/api/global/categories/admin/${categoryId}/reject`, { reason });
+        const response = await api.put(`/global/categories/admin/${categoryId}/reject`, { reason });
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'rejecting category');
@@ -213,7 +213,7 @@ export const searchCategories = async (searchParams: {
         if (searchParams.query) params.append('query', searchParams.query);
         if (searchParams.parentCategory) params.append('parentCategory', searchParams.parentCategory);
 
-        const response = await api.get(`/api/global/categories/seller/search?${params.toString()}`);
+        const response = await api.get(`/global/categories/seller/search?${params.toString()}`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'searching categories');
@@ -225,7 +225,7 @@ export const searchCategories = async (searchParams: {
  */
 export const getEnabledCategories = async () => {
     try {
-        const response = await api.get('/api/global/categories/user-categories');
+        const response = await api.get('/global/categories/user-categories');
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching enabled categories');
@@ -237,7 +237,7 @@ export const getEnabledCategories = async () => {
  */
 export const getFavoriteCategories = async () => {
     try {
-        const response = await api.get('/api/global/categories/seller/favorites');
+        const response = await api.get('/global/categories/seller/favorites');
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching favorite categories');

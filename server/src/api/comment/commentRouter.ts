@@ -11,7 +11,7 @@ const commentRouter = express.Router();
 
 /**
  * @swagger
- * /api/comments:
+ * /api/v1/comments:
  *   get:
  *     summary: Get all comments
  *     description: Retrieve all comments (admin sees all, sellers see comments on their posts)
@@ -68,7 +68,7 @@ commentRouter.get('/', authenticate, authorizeRoles('admin', 'seller') as any, p
 
 /**
  * @swagger
- * /api/comments/{commentId}/replies:
+ * /api/v1/comments/{commentId}/replies:
  *   post:
  *     summary: Add reply to comment
  *     description: Add a reply to a specific comment
@@ -119,7 +119,7 @@ commentRouter.post('/:commentId/replies', authenticate, addReply);
 
 /**
  * @swagger
- * /api/comments/{commentId}/likes:
+ * /api/v1/comments/{commentId}/likes:
  *   post:
  *     summary: Like/unlike a comment
  *     description: Toggle like status on a comment

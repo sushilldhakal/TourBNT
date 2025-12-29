@@ -77,9 +77,6 @@ export default function EditPostPage() {
         enabled: !!params.id,
     });
 
-    console.log("params", post);
-
-
     // Update post mutation
     const updatePostMutation = useMutation({
         mutationFn: (data: FormData) => updatePost(data, params.id),

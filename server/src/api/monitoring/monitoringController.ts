@@ -4,11 +4,11 @@
 
 import { Request, Response } from 'express';
 import { metricsCollector } from '../../utils/metrics';
-import { HTTP_STATUS } from '../../utils/httpStatusCodes';
+import { HTTP_STATUS, sendSuccess, sendError } from '../../utils/apiResponse';
 
 /**
  * Get API metrics dashboard
- * GET /api/monitoring/dashboard
+ * GET /api/v1/monitoring/dashboard
  */
 export const getDashboard = (req: Request, res: Response): void => {
     try {
@@ -18,26 +18,20 @@ export const getDashboard = (req: Request, res: Response): void => {
 
         const metrics = metricsCollector.getDashboardMetrics(windowMs);
 
-        res.status(HTTP_STATUS.OK).json({
-            success: true,
-            message: 'Metrics retrieved successfully',
-            data: {
-                timeWindow: `${windowMinutes} minutes`,
-                metrics
-            }
-        });
+        const metricsData = {
+            timeWindow: `${windowMinutes} minutes`,
+            metrics
+        };
+
+        return sendSuccess(res, metricsData, 'Metrics retrieved successfully');
     } catch (error) {
-        res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
-            success: false,
-            message: 'Failed to retrieve metrics',
-            error: error instanceof Error ? error.message : 'Unknown error'
-        });
+        return sendError(res, 'Failed to retrieve metrics', HTTP_STATUS.INTERNAL_SERVER_ERROR, 'SERVER_ERROR', error);
     }
 };
 
 /**
  * Get health check status
- * GET /api/monitoring/health
+ * GET /api/v1/monitoring/health
  */
 export const getHealthCheck = (req: Request, res: Response): void => {
     const metrics = metricsCollector.getDashboardMetrics(5 * 60 * 1000); // Last 5 minutes
@@ -71,5 +65,5 @@ export const getHealthCheck = (req: Request, res: Response): void => {
         ? HTTP_STATUS.OK
         : HTTP_STATUS.SERVICE_UNAVAILABLE;
 
-    res.status(statusCode).json(health);
+    return sendSuccess(res, health, `Health check: ${health.status}`, statusCode);
 };

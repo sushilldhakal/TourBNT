@@ -38,7 +38,7 @@ export const getTours = async ({
     pageParam?: number;
     limit?: number;
 }): Promise<ToursResponse> => {
-    const url = `/api/tours?page=${pageParam + 1}&limit=${limit}`;
+    const url = `/tours?page=${pageParam + 1}&limit=${limit}`;
 
     try {
         const response = await api.get(url, { timeout: 15000 });
@@ -123,24 +123,74 @@ export const getTours = async ({
 };
 
 /**
- * Get tours by user ID (admin only)
- */
-export const getUsersTours = async (userId: string) => {
-    try {
-        const response = await api.get(`/api/users/${userId}/tours`);
-        return extractResponseData(response);
-    } catch (error) {
-        throw handleApiError(error, 'fetching user tours');
-    }
-};
-
-/**
  * Get current user's tours (uses httpOnly cookie for auth)
+ * - Admin: Returns all tours
+ * - Seller/User: Returns only their own tours
+ * Supports pagination
  */
-export const getMyTours = async () => {
+export const getMyTours = async ({
+    pageParam = 0,
+    limit = 10
+}: {
+    pageParam?: number;
+    limit?: number;
+} = {}): Promise<ToursResponse> => {
     try {
-        const response = await api.get('/api/tours/me');
-        return extractResponseData(response);
+        // Convert limit >= 100 to "all" for hybrid memory-friendly API
+        const limitParam = limit >= 100 ? 'all' : limit;
+        const url = `/tours/me?page=${pageParam + 1}&limit=${limitParam}`;
+        const response = await api.get(url, { timeout: 30000 }); // Increased timeout for large datasets
+
+        if (!response.data) {
+            throw new Error('Invalid response format: No data received');
+        }
+
+        // Standard format from sendPaginatedResponse: { success: true, data: T[], pagination: {...} }
+        if (response.data?.success && Array.isArray(response.data?.data) && response.data?.pagination) {
+            const tours = response.data.data;
+            const pagination = response.data.pagination;
+            return {
+                items: tours,
+                nextCursor: pagination.currentPage < pagination.totalPages ? pagination.currentPage : undefined,
+                pagination: {
+                    currentPage: pagination.currentPage - 1, // Convert to 0-indexed
+                    totalPages: pagination.totalPages,
+                    totalTours: pagination.totalItems,
+                    hasNextPage: pagination.currentPage < pagination.totalPages,
+                    hasPrevPage: pagination.currentPage > 1,
+                    limit: pagination.itemsPerPage
+                },
+                currentPage: pagination.currentPage - 1, // Convert to 0-indexed
+                totalPages: pagination.totalPages,
+                totalTours: pagination.totalItems,
+                hasNextPage: pagination.currentPage < pagination.totalPages,
+                hasPrevPage: pagination.currentPage > 1
+            };
+        }
+
+        // Fallback: if data array is directly available without pagination
+        if (response.data?.success && Array.isArray(response.data?.data)) {
+            const tours = response.data.data;
+            return {
+                items: tours,
+                nextCursor: undefined,
+                pagination: {
+                    currentPage: pageParam,
+                    totalPages: 1,
+                    totalTours: tours.length,
+                    hasNextPage: false,
+                    hasPrevPage: false,
+                    limit
+                },
+                currentPage: pageParam,
+                totalPages: 1,
+                totalTours: tours.length,
+                hasNextPage: false,
+                hasPrevPage: false
+            };
+        }
+
+        throw new Error('Invalid response format: Could not find tours array');
     } catch (error) {
         throw handleApiError(error, 'fetching my tours');
     }
@@ -151,7 +201,7 @@ export const getMyTours = async () => {
  */
 export const getUserToursTitle = async (userId: string) => {
     try {
-        const response = await api.get(`/api/users/${userId}/tours/titles`);
+        const response = await api.get(`/users/${userId}/tours/titles`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching user tour titles');
@@ -163,7 +213,7 @@ export const getUserToursTitle = async (userId: string) => {
  */
 export const getLatestTours = async () => {
     try {
-        const response = await api.get('/api/tours/latest');
+        const response = await api.get('/tours/latest');
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching latest tours');
@@ -175,7 +225,7 @@ export const getLatestTours = async () => {
  */
 export const getSingleTour = async (tourId: string) => {
     try {
-        const response = await api.get(`/api/tours/${tourId}`);
+        const response = await api.get(`/tours/${tourId}`);
         const tourData = response.data.tour || response.data;
         const breadcrumbs = response.data.breadcrumbs || [];
 
@@ -201,7 +251,7 @@ export const getTourById = async (tourId: string) => {
  */
 export const createTour = async (data: FormData) => {
     try {
-        const response = await api.post('/api/tours', data, {
+        const response = await api.post('/tours', data, {
             headers: {
                 'Content-Type': 'multipart/form-data',
             },
@@ -218,7 +268,7 @@ export const createTour = async (data: FormData) => {
  */
 export const updateTour = async (tourId: string, data: FormData) => {
     try {
-        const response = await api.patch(`/api/tours/${tourId}`, data, {
+        const response = await api.patch(`/tours/${tourId}`, data, {
             headers: {
                 'Content-Type': 'multipart/form-data',
             },
@@ -234,7 +284,7 @@ export const updateTour = async (tourId: string, data: FormData) => {
  */
 export const deleteTour = async (tourId: string) => {
     try {
-        const response = await api.delete(`/api/tours/${tourId}`);
+        const response = await api.delete(`/tours/${tourId}`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'deleting tour');
@@ -261,7 +311,7 @@ export const getToursServer = async (params?: {
     limit?: number;
 }) => {
     try {
-        const response = await serverApi.get('/api/tours', { params });
+        const response = await serverApi.get('/tours', { params });
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching tours (server)');
@@ -270,7 +320,7 @@ export const getToursServer = async (params?: {
 
 export const getSingleTourServer = async (tourId: string) => {
     try {
-        const response = await serverApi.get(`/api/tours/${tourId}`);
+        const response = await serverApi.get(`/tours/${tourId}`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching tour (server)');

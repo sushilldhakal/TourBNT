@@ -11,7 +11,7 @@ const router = express.Router();
 
 /**
  * @swagger
- * /api/notifications:
+ * /api/v1/notifications:
  *   get:
  *     summary: Get user notifications
  *     description: Retrieve paginated list of notifications for authenticated user
@@ -69,7 +69,7 @@ router.get('/', authenticate, paginationMiddleware, getUserNotifications as any)
 
 /**
  * @swagger
- * /api/notifications/{id}/read:
+ * /api/v1/notifications/{id}/read:
  *   patch:
  *     summary: Mark notification as read
  *     description: Mark a specific notification as read for authenticated user
@@ -102,7 +102,7 @@ router.patch('/:id/read', authenticate, markNotificationAsRead as any);
 
 /**
  * @swagger
- * /api/notifications/{id}:
+ * /api/v1/notifications/{id}:
  *   delete:
  *     summary: Delete notification
  *     description: Delete a specific notification for authenticated user
