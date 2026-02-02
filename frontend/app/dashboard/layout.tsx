@@ -1,10 +1,12 @@
 'use client';
 
+import '../dashboard.css';
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { DashboardLayoutClient } from '@/components/dashboard/layout/DashboardLayoutClient';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { canAccessDashboard } from '@/lib/utils/roles';
+import { redirectToLogin } from '@/lib/api/apiClient';
 
 export default function DashboardLayout({
     children,
@@ -21,7 +23,9 @@ export default function DashboardLayout({
         }
 
         if (!isAuthenticated) {
-            router.push('/auth/login?redirect=/dashboard');
+            // Preserve the current path for redirect after login
+            const currentPath = typeof window !== 'undefined' ? window.location.pathname + window.location.search : '/dashboard';
+            redirectToLogin(currentPath as string);
             return;
         }
 
@@ -29,7 +33,7 @@ export default function DashboardLayout({
             router.push('/?error=unauthorized');
             return;
         }
-    }, [isHydrated, isAuthenticated, user.roles, router]);
+    }, [isHydrated, isAuthenticated, user.roles, router, user]);
 
     // Show loading while useAuth is fetching user data
     if (!isHydrated) {

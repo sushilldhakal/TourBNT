@@ -2,21 +2,7 @@ import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/ca
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
-
-interface PageHeaderProps {
-    icon: React.ReactNode;
-    title: string;
-    description: string;
-    action?: {
-        label: string;
-        href: string;
-        icon?: React.ReactNode;
-    };
-    badge?: {
-        label: string;
-        variant?: 'default' | 'secondary' | 'outline';
-    };
-}
+import type { PageHeaderProps } from "@/types/dashboard";
 
 export function PageHeader({ icon, title, description, action, badge }: PageHeaderProps) {
     return (

@@ -1,48 +1,35 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useApprovedDestinations } from "@/lib/queries";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { MapPin, ChevronLeft, ChevronRight, Globe, Building } from "lucide-react";
 import { useEffect, useState, useMemo } from "react";
-import { useLayout } from '@/providers/LayoutProvider';
 import {
     Carousel,
     CarouselContent,
     CarouselItem,
     type CarouselApi
-} from "@/components/ui/carousel";
+} from "@/components/ui/carousel-lazy";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import RichTextRenderer from "@/components/RichTextRenderer";
 import { getApprovedDestinations } from "@/lib/api/globalApi";
+import { ContentContainer } from "@/components/layout/PublicLayoutClient";
+import { Destination } from "@/types/types";
+import Image from "next/image";
 
-interface Destination {
-    _id: string;
-    name: string;
-    coverImage: string;
-    description: string;
-    country: string;
-    region?: string;
-    city?: string;
-    popularity?: number;
-    featuredTours?: any[];
-    createdAt: string;
-}
+
 
 export default function DestinationTour() {
-    const { isFullWidth } = useLayout();
     const [api, setApi] = useState<CarouselApi | null>(null);
 
-    const { data, isLoading } = useQuery({
-        queryKey: ['approvedDestinations'],
-        queryFn: getApprovedDestinations,
-        staleTime: 5 * 60 * 1000,
-    });
+    const { data: destinationResponse, isLoading } = useApprovedDestinations();
 
     const sortedDestinations = useMemo(() => {
-        if (!data?.data || !Array.isArray(data.data)) return [];
-        return [...data.data]
+        const items = (destinationResponse as { items?: Destination[] })?.items;
+        if (!items) return [];
+        return [...items]
             .sort((a: Destination, b: Destination) => {
                 if (a.popularity && b.popularity) {
                     return b.popularity - a.popularity;
@@ -50,7 +37,7 @@ export default function DestinationTour() {
                 return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
             })
             .slice(0, 8);
-    }, [data?.data]);
+    }, [destinationResponse]);
 
     useEffect(() => {
         if (!api) return;
@@ -63,8 +50,8 @@ export default function DestinationTour() {
 
     if (isLoading) {
         return (
-            <div className="py-16">
-                <div className={`mx-auto ${isFullWidth ? 'max-w-full' : 'max-w-7xl'} px-4 transition-all duration-300`}>
+            <div className="py-16 w-full">
+                <ContentContainer className="px-4 transition-all duration-300">
                     <div className="flex items-center justify-between mb-6">
                         <h2 className="text-2xl font-bold">Popular Destinations</h2>
                     </div>
@@ -73,14 +60,14 @@ export default function DestinationTour() {
                             <div key={i} className="bg-muted rounded-lg h-64"></div>
                         ))}
                     </div>
-                </div>
+                </ContentContainer>
             </div>
         );
     }
 
     return (
-        <div className="py-16 bg-secondary/10">
-            <div className={`mx-auto ${isFullWidth ? 'max-w-full' : 'max-w-7xl'} px-4 transition-all duration-300`}>
+        <div className="py-16 bg-secondary/10 w-full">
+            <ContentContainer className="px-4 transition-all duration-300">
                 <div className="flex items-center justify-between mb-8">
                     <div className="flex items-center gap-2">
                         <Globe className="text-primary h-6 w-6" />
@@ -123,15 +110,17 @@ export default function DestinationTour() {
                 >
                     <CarouselContent className="-ml-2 md:-ml-4">
                         {sortedDestinations.map((destination: Destination) => (
-                            <CarouselItem key={destination._id} className="pl-2 md:pl-4 md:basis-1/2 lg:basis-1/4">
+                            <CarouselItem key={destination.id} className="pl-2 md:pl-4 md:basis-1/2 lg:basis-1/4">
                                 <Card className="overflow-hidden p-0 h-full border-0 shadow-lg hover:shadow-xl transition-all duration-300 group">
                                     <div className="relative h-80 overflow-hidden">
                                         {/* Background Image */}
-                                        <img
+                                        <Image
+                                            width={60}
+                                            height={60}
                                             src={destination.coverImage}
                                             alt={destination.name}
                                             className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
-                                        />
+                                        />featuredTours
 
                                         {/* Gradient Overlay */}
                                         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-black/20"></div>
@@ -200,7 +189,7 @@ export default function DestinationTour() {
                         ))}
                     </CarouselContent>
                 </Carousel>
-            </div>
+            </ContentContainer>
         </div>
     );
 }

@@ -1,44 +1,33 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useApprovedCategories } from "@/lib/queries";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, Folder, FolderOpen } from "lucide-react";
 import { useEffect, useState, useMemo } from "react";
-import { useLayout } from '@/providers/LayoutProvider';
 import {
     Carousel,
     CarouselContent,
     CarouselItem,
     type CarouselApi
-} from "@/components/ui/carousel";
+} from "@/components/ui/carousel-lazy";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { getApprovedCategories } from "@/lib/api/globalApi";
-
-interface CategoryData {
-    _id: string;
-    name: string;
-    description: string;
-    imageUrl?: string;
-    usageCount?: number;
-}
+import { ContentContainer } from "@/components/layout/PublicLayoutClient";
+import type { CategoryData } from "@/types/types";
 
 export default function ExploreCategories() {
-    const { isFullWidth } = useLayout();
     const [api, setApi] = useState<CarouselApi | null>(null);
 
-    const { data, isLoading } = useQuery({
-        queryKey: ['approvedCategories'],
-        queryFn: getApprovedCategories,
-        staleTime: 5 * 60 * 1000,
-    });
+    const { data, isLoading } = useApprovedCategories();
     const categories: CategoryData[] = useMemo(() => {
-        if (!data?.data || !Array.isArray(data.data)) return [];
-        return [...data.data]
-            .sort((a: CategoryData, b: CategoryData) => (b.usageCount || 0) - (a.usageCount || 0))
+        const raw = Array.isArray(data) ? data : (data as { data?: CategoryData[] })?.data;
+        if (!raw || !Array.isArray(raw)) return [];
+        return [...raw]
+            .sort((a, b) => (b.usageCount || 0) - (a.usageCount || 0))
             .slice(0, 12);
-    }, [data?.data]);
+    }, [data]);
 
     useEffect(() => {
         if (!api) return;
@@ -51,8 +40,8 @@ export default function ExploreCategories() {
 
     if (isLoading) {
         return (
-            <div className="py-16 bg-secondary/10">
-                <div className={`mx-auto ${isFullWidth ? 'max-w-full' : 'max-w-7xl'} px-4 transition-all duration-300`}>
+            <div className="py-16 bg-secondary/10 w-full">
+                <ContentContainer className="px-4 transition-all duration-300">
                     <div className="flex items-center justify-between mb-8">
                         <div className="flex items-center gap-2">
                             <Folder className="text-primary h-6 w-6" />
@@ -64,7 +53,7 @@ export default function ExploreCategories() {
                             <div key={i} className="bg-muted rounded-lg h-40" />
                         ))}
                     </div>
-                </div>
+                </ContentContainer>
             </div>
         );
     }
@@ -72,8 +61,8 @@ export default function ExploreCategories() {
     if (!categories.length) return null;
 
     return (
-        <div className="py-16 bg-secondary/10">
-            <div className={`mx-auto ${isFullWidth ? 'max-w-full' : 'max-w-7xl'} px-4 transition-all duration-300`}>
+        <div className="py-16 bg-secondary/10 w-full">
+            <ContentContainer className="px-4 transition-all duration-300">
                 <div className="flex items-center justify-between mb-8">
                     <div className="flex items-center gap-2">
                         <Folder className="text-primary h-6 w-6" />
@@ -177,7 +166,7 @@ export default function ExploreCategories() {
                         ))}
                     </CarouselContent>
                 </Carousel>
-            </div>
+            </ContentContainer>
         </div>
     );
 }

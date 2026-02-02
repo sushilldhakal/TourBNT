@@ -1,4 +1,4 @@
-import { FaqData } from "../types";
+import type { FaqData } from "@/types/faq";
 import { api, extractResponseData, handleApiError } from "./apiClient";
 
 /**

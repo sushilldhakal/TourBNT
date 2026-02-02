@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
+import { useCacheManager } from '@/lib/queries/cacheUtils';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,7 +24,7 @@ export function AddSubscriber() {
     const [singleEmail, setSingleEmail] = useState('');
     const [bulkEmails, setBulkEmails] = useState('');
     const [activeTab, setActiveTab] = useState<'single' | 'bulk'>('single');
-    const queryClient = useQueryClient();
+    const { invalidateSubscribers } = useCacheManager();
 
     const subscribeMutation = useMutation({
         mutationFn: (emailInput: string) => subscribeEmail(emailInput),
@@ -42,7 +43,7 @@ export function AddSubscriber() {
             }
             setSingleEmail('');
             setBulkEmails('');
-            queryClient.invalidateQueries({ queryKey: ['subscribers'] });
+            invalidateSubscribers();
         },
         onError: (error: any) => {
             // Try to extract results from error response

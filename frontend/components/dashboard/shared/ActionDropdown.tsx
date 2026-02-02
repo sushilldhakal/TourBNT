@@ -9,18 +9,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { MoreHorizontal } from "lucide-react";
 import Link from "next/link";
-
-interface ActionItem {
-    label: string;
-    icon: React.ReactNode;
-    onClick?: () => void;
-    variant?: 'default' | 'destructive';
-    href?: string;
-}
-
-interface ActionDropdownProps {
-    actions: ActionItem[];
-}
+import type { ActionDropdownProps } from "@/types/dashboard";
 
 export function ActionDropdown({ actions }: ActionDropdownProps) {
     return (

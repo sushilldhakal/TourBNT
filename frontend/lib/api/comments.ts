@@ -5,7 +5,7 @@ import { api, handleApiError, extractResponseData } from './apiClient';
  */
 export const addComment = async (commentData: FormData, postId: string) => {
     try {
-        const response = await api.post(`/posts/comment/${postId}`, commentData, {
+        const response = await api.post(`/posts/${postId}/comments`, commentData, {
             headers: {
                 'Content-Type': 'multipart/form-data',
             },
@@ -18,10 +18,15 @@ export const addComment = async (commentData: FormData, postId: string) => {
 
 /**
  * Get all comments (admin)
+ * Uses limit=all to fetch all comments for client-side pagination
  */
 export const getAllComments = async () => {
     try {
-        const response = await api.get('/comments');
+        const response = await api.get('/comments', {
+            params: {
+                limit: 'all', // Triggers hybrid pagination on backend
+            }
+        });
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching comments');
@@ -33,7 +38,7 @@ export const getAllComments = async () => {
  */
 export const editComment = async (commentData: FormData, commentId: string) => {
     try {
-        const response = await api.patch(`/posts/comment/${commentId}`, commentData, {
+        const response = await api.patch(`/comments/${commentId}`, commentData, {
             headers: {
                 'Content-Type': 'multipart/form-data',
             },
@@ -49,7 +54,7 @@ export const editComment = async (commentData: FormData, commentId: string) => {
  */
 export const getCommentsByPost = async (postId: string) => {
     try {
-        const response = await api.get(`/posts/comment/post/${postId}`);
+        const response = await api.get(`/posts/${postId}/comments`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching post comments');
@@ -64,7 +69,7 @@ export const deleteComment = async (commentId: string) => {
         throw new Error('Comment ID is required to delete a comment');
     }
     try {
-        const response = await api.delete(`/posts/comment/${commentId}`);
+        const response = await api.delete(`/comments/${commentId}`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'deleting comment');
@@ -76,7 +81,7 @@ export const deleteComment = async (commentId: string) => {
  */
 export const getUnapprovedCommentsCount = async () => {
     try {
-        const response = await api.get('/posts/comment/unapproved/count');
+        const response = await api.get('/comments/unapproved/count');
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching unapproved comments count');
@@ -91,7 +96,7 @@ export const addReply = async (
     commentId: string
 ) => {
     try {
-        const response = await api.post(`/posts/comment/reply/${commentId}`, data);
+        const response = await api.post(`/comments/reply/${commentId}`, data);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'adding reply');
@@ -103,22 +108,10 @@ export const addReply = async (
  */
 export const likeComment = async (commentId: string, userId: string) => {
     try {
-        const response = await api.patch(`/posts/comment/like/${commentId}`, { userId });
+        const response = await api.patch(`/comments/like/${commentId}`, { userId });
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'liking comment');
-    }
-};
-
-/**
- * Increment view count for a comment
- */
-export const viewComment = async (commentId: string) => {
-    try {
-        const response = await api.patch(`/posts/comment/view/${commentId}`);
-        return extractResponseData(response);
-    } catch (error) {
-        throw handleApiError(error, 'tracking comment view');
     }
 };
 
@@ -127,7 +120,7 @@ export const viewComment = async (commentId: string) => {
  */
 export const getCommentWithReplies = async (commentId: string) => {
     try {
-        const response = await api.get(`/posts/comment/${commentId}/replies`);
+        const response = await api.get(`/comments/${commentId}/replies`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching comment with replies');

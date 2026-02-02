@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { Tour } from '@/lib/types';
+import { Tour } from '@/types/types';
 
 // Dynamic imports for heavy client components to optimize bundle size
 // These components are loaded on-demand to reduce initial bundle size

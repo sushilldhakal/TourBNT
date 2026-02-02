@@ -1,6 +1,6 @@
 "use client";
 
-import { useQueryClient } from "@tanstack/react-query";
+import { useCacheManager } from "@/lib/queries/cacheUtils";
 import { deleteFaq, deleteMultipleFaqs } from "@/lib/api/faqApi";
 import { toast } from "@/components/ui/use-toast";
 import AddFaq from "./AddFaq";
@@ -8,11 +8,12 @@ import FaqGridCard from "./FaqGridCard";
 import FaqTableRow from "./FaqTableRow";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { HelpCircle, Plus, Search, Trash2 } from "lucide-react";
+import { DashboardCardHeader } from "@/components/dashboard/layout/CardHeader";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useFaq } from "./useFaq";
+import { useFaq } from '@/lib/hooks/tours';
 import { ViewToggle } from "../ViewToggle";
 import { getViewPreference, setViewPreference } from "@/lib/utils/viewPreferences";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -27,7 +28,7 @@ import { useAuth } from "@/lib/hooks/useAuth";
 
 const TourFaqs = () => {
     const { userId } = useAuth();
-    const queryClient = useQueryClient();
+    const { invalidateFaq } = useCacheManager();
     const [searchQuery, setSearchQuery] = useState("");
     const [isAddFaqOpen, setIsAddFaqOpen] = useState(false);
     const [view, setView] = useState<'grid' | 'list'>(() => getViewPreference('faq'));
@@ -48,9 +49,7 @@ const TourFaqs = () => {
                 title: 'FAQ deleted successfully',
                 description: 'The FAQ has been removed.',
             });
-            queryClient.invalidateQueries({
-                queryKey: ['Faq', userId],
-            });
+            invalidateFaq(userId);
         } catch (error) {
             toast({
                 title: 'Failed to delete FAQ',
@@ -90,9 +89,7 @@ const TourFaqs = () => {
             });
             setSelectedFaqs(new Set());
             setBulkDeleteDialogOpen(false);
-            queryClient.invalidateQueries({
-                queryKey: ['Faq', userId],
-            });
+            invalidateFaq(userId);
         } catch (error) {
             toast({
                 title: 'Failed to delete FAQs',
@@ -108,53 +105,53 @@ const TourFaqs = () => {
     );
 
     return (
-        <div className="container mx-auto px-4 py-6 max-w-7xl">
+        <div className="container mx-auto px-4 py-8 max-w-6xl">
             <div className="flex flex-col space-y-6">
-                {/* Header Section */}
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                    <div className="flex items-center gap-2">
-                        <HelpCircle className="h-6 w-6 text-primary" />
-                        <h1 className="text-2xl font-bold tracking-tight">Frequently Asked Questions</h1>
-                    </div>
-                    <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-                        <div className="relative flex-1 sm:flex-initial">
-                            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                            <Input
-                                placeholder="Search FAQs..."
-                                className="pl-9 w-full sm:w-[300px]"
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                            />
-                        </div>
-                        <ViewToggle view={view} onViewChange={handleViewChange} />
-                        {selectedFaqs.size > 0 && view === 'list' && (
+                <DashboardCardHeader
+                    variant="compact"
+                    icon={HelpCircle}
+                    badge="Tours"
+                    title="Frequently Asked Questions"
+                    description="Answer common questions about your tours"
+                    actions={
+                        <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                            <div className="relative flex-1 sm:flex-initial">
+                                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                                <Input
+                                    placeholder="Search FAQs..."
+                                    className="pl-9 w-full sm:w-[300px]"
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                />
+                            </div>
+                            <ViewToggle view={view} onViewChange={handleViewChange} />
+                            {selectedFaqs.size > 0 && view === 'list' && (
+                                <Button
+                                    variant="destructive"
+                                    onClick={() => setBulkDeleteDialogOpen(true)}
+                                    className="flex items-center gap-2"
+                                >
+                                    <Trash2 className="h-4 w-4" />
+                                    Delete ({selectedFaqs.size})
+                                </Button>
+                            )}
                             <Button
-                                variant="destructive"
-                                onClick={() => setBulkDeleteDialogOpen(true)}
+                                onClick={() => setIsAddFaqOpen(!isAddFaqOpen)}
                                 className="flex items-center gap-2"
                             >
-                                <Trash2 className="h-4 w-4" />
-                                Delete ({selectedFaqs.size})
+                                {isAddFaqOpen ? "Close Form" : "Add New FAQ"}
+                                <Plus className="h-4 w-4" />
                             </Button>
-                        )}
-                        <Button
-                            onClick={() => setIsAddFaqOpen(!isAddFaqOpen)}
-                            className="flex items-center gap-2"
-                        >
-                            {isAddFaqOpen ? "Close Form" : "Add New FAQ"}
-                            <Plus className="h-4 w-4" />
-                        </Button>
-                    </div>
-                </div>
+                        </div>
+                    }
+                />
 
                 {/* Add FAQ Form */}
                 {isAddFaqOpen && (
                     <div className="w-full">
                         <AddFaq onFaqAdded={() => {
                             if (userId) {
-                                queryClient.invalidateQueries({
-                                    queryKey: ['Faq', userId]
-                                });
+                                invalidateFaq(userId);
                                 setIsAddFaqOpen(false);
                             }
                         }} />

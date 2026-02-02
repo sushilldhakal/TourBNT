@@ -1,10 +1,8 @@
 'use client';
 
-import { useLayout } from '@/providers/LayoutProvider';
 import { useState } from 'react';
 
 export default function ApplySellerPage() {
-    const { isFullWidth } = useLayout();
     const [formData, setFormData] = useState({
         businessName: '',
         contactName: '',
@@ -31,7 +29,7 @@ export default function ApplySellerPage() {
     };
 
     return (
-        <div className={`${isFullWidth ? 'container-fluid' : 'container'} mx-auto px-4 py-16 transition-all duration-300`}>
+        <div className="w-full mx-auto px-4 py-16 transition-all duration-300">
             <div className="max-w-4xl mx-auto">
                 <div className="text-center mb-12">
                     <h1 className="text-4xl font-bold mb-4">Become a Seller</h1>

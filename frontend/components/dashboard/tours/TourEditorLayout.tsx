@@ -69,9 +69,9 @@ export function TourEditorLayout({
 
                     {/* Sidebar Navigation */}
                     <aside className="space-y-6 lg:sticky lg:top-4 lg:self-start lg:h-[calc(100vh-2rem)] lg:overflow-y-auto">
-                        <Card className="border shadow-sm">
+                        <Card className="border shadow-sm pt-0" >
                             <CardContent className="p-4">
-                                <TabsList className="flex flex-col h-auto bg-transparent space-y-1 w-full">
+                                <TabsList className="flex flex-col h-auto bg-transparent space-y-1 w-full pt-0 pb-0">
                                     {tourEditorTabs.map((tab) => {
                                         const Icon = tab.icon;
                                         return (

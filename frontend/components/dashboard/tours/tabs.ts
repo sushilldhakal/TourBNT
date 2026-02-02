@@ -6,21 +6,16 @@ import {
     Package,
     Image,
     HelpCircle,
+    Star,
 } from 'lucide-react';
-import { LucideIcon } from 'lucide-react';
+import type { TourTab } from '@/types/tour';
+
+export type { TourTab } from '@/types/tour';
 
 /**
  * Tour Editor Tab Configuration
  * Defines all tab sections for the tour editor with icons and labels
  */
-
-export interface TourTab {
-    id: string;
-    title: string;
-    icon: LucideIcon;
-    description?: string;
-}
-
 export const tourEditorTabs: TourTab[] = [
     {
         id: 'overview',
@@ -63,6 +58,12 @@ export const tourEditorTabs: TourTab[] = [
         title: 'FAQs',
         icon: HelpCircle,
         description: 'Frequently asked questions',
+    },
+    {
+        id: 'reviews',
+        title: 'Reviews',
+        icon: Star,
+        description: 'Tour reviews',
     },
 ];
 

@@ -8,7 +8,6 @@
 export { NodeSelector } from "./node-selector";
 export { LinkSelector, isValidUrl } from "./link-selector";
 export { ColorSelector } from "./color-selector";
-export { MathSelector } from "./math-selector";
 export { TextButtons } from "./text-buttons";
 
 export type { NodeSelectorProps } from "./node-selector";

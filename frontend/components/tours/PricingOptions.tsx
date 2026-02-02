@@ -1,7 +1,7 @@
 'use client';
 
 import { formatPrice } from '@/lib/tourUtils';
-import { PricingGroup, PricingOption } from '@/lib/types';
+import { PricingGroup, PricingOption } from '@/types/types';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Users, Calendar } from 'lucide-react';

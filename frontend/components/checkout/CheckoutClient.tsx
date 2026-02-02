@@ -7,9 +7,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { BookingWizard } from '@/components/cart/BookingWizard';
+import { CheckoutSteps } from '@/components/cart/CheckoutSteps';
 import { toast } from '@/components/ui/use-toast';
-import { useProcessPayment } from '@/lib/hooks/useBooking';
+import { useProcessPayment } from '@/lib/queries/useBooking';
 import { getCartBookings, clearCart, CartBooking } from '@/lib/cartUtils';
 
 export default function CheckoutClient() {
@@ -116,7 +116,7 @@ export default function CheckoutClient() {
     return (
         <div className="min-h-screen bg-background">
             {/* Booking Wizard Header */}
-            <BookingWizard currentStep={1} />
+            <CheckoutSteps currentStep={1} />
 
             {/* Main Checkout Content */}
             <div className="container mx-auto px-4 py-8">

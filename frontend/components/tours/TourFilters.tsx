@@ -1,6 +1,6 @@
 'use client';
 
-import { Category, Destination } from '@/lib/types';
+import { Category, Destination } from '@/types/types';
 import {
     Select,
     SelectContent,

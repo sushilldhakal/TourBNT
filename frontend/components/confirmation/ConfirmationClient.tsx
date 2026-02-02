@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { CheckCircle, Mail, Calendar, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { BookingWizard } from '@/components/cart/BookingWizard';
+import { CheckoutSteps } from '@/components/cart/CheckoutSteps';
 
 export default function ConfirmationClient() {
     const router = useRouter();
@@ -17,7 +17,7 @@ export default function ConfirmationClient() {
     return (
         <div className="min-h-screen bg-background">
             {/* Booking Wizard Header */}
-            <BookingWizard currentStep={2} />
+            <CheckoutSteps currentStep={2} />
 
             {/* Main Confirmation Content */}
             <div className="container mx-auto px-4 py-12">

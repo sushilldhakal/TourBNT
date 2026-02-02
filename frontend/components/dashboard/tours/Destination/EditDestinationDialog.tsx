@@ -1,58 +1,40 @@
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { useForm } from "react-hook-form";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { toast } from "@/components/ui/use-toast";
-import { Save, X, Image as ImageIcon, Trash2, FileText } from "lucide-react";
-import { updateDestination, getUserToursTitle, toggleDestinationActiveStatus } from "@/lib/api/destinations";
-import { GalleryPage } from "@/components/dashboard/gallery/GalleryPage";
-import { MultiSelect, SelectValue } from "@/components/ui/MultiSelect";
-import { NovelEditor } from "../../editor";
+import { Save, Image as ImageIcon, Trash2, FileText, MapPin, Star, Loader2 } from "lucide-react";
+import { Gallery } from "@/components/dashboard/gallery/Gallery";
+import { MultiSelect } from "@/components/ui/MultiSelect";
+
+const NovelEditor = dynamic(() => import("@/components/dashboard/editor/NovelEditor"), { ssr: false });
 import { useAuth } from "@/lib/hooks/useAuth";
-import { useDestinationById } from "./useDestinationData";
-
-interface EditDestinationDialogProps {
-    destinationId: string;
-    open: boolean;
-    onOpenChange: (open: boolean) => void;
-    onSuccess: () => void;
-}
-
-interface TourTitle {
-    _id: string;
-    title: string;
-    code?: string;
-}
-
-interface TourObject {
-    _id?: string;
-    id?: string;
-    title?: string;
-}
-
-interface DescriptionContent {
-    type?: string;
-    content?: Array<{
-        type?: string;
-        content?: Array<{
-            type?: string;
-            text?: string;
-        }>;
-    }>;
-}
+import { useDestinationById, useTourTitles, useUpdateDestination } from '@/lib/queries/useDestinations';
+import { EditDestinationDialogProps, TourTitle, TourObject, DescriptionContent } from "@/types/types";
+import Image from "next/image";
 
 export const EditDestinationDialog = ({ destinationId, open, onOpenChange, onSuccess }: EditDestinationDialogProps) => {
-    const { userId } = useAuth();
+    const { userId, userRole } = useAuth();
+    const isAdmin = userRole === 'admin';
+    const { destination } = useDestinationById(destinationId);
+    const { data: tourTitles } = useTourTitles(userId || '');
 
-
-    const queryClient = useQueryClient();
     const [dialogOpen, setDialogOpen] = useState(false);
     const [descriptionContent, setDescriptionContent] = useState<DescriptionContent | string>('');
 
-    const form = useForm({
+    const form = useForm<{
+        name: string;
+        description: string;
+        coverImage: string;
+        isActive: boolean;
+        country: string;
+        region: string;
+        city: string;
+        featuredTours: string[];
+        reason: string;
+    }>({
         defaultValues: {
             name: '',
             description: '',
@@ -61,126 +43,62 @@ export const EditDestinationDialog = ({ destinationId, open, onOpenChange, onSuc
             country: '',
             region: '',
             city: '',
-            featuredTours: []
+            featuredTours: [] as string[],
+            reason: ''
         }
     });
 
-    // Check user role
-    const { userRole } = useAuth();
-    const isAdmin = userRole === 'admin';
-
-    // Use shared hook to get destination data
-    const { destination } = useDestinationById(destinationId);
-
-    // Fetch tour titles
-    const { data: tourTitles } = useQuery({
-        queryKey: ['tourTitles', userId],
-        queryFn: () => getUserToursTitle(userId!),
-        enabled: !!userId,
-    });
-
-    // Update destination mutation
-    const updateMutation = useMutation({
-        mutationFn: (data: FormData) => updateDestination(destinationId, data),
+    const updateMutation = useUpdateDestination(destinationId, {
         onSuccess: () => {
-            toast({
-                title: "Destination updated",
-                description: isAdmin
-                    ? "The destination has been updated successfully."
-                    : "Your changes have been submitted for admin approval.",
-            });
             onOpenChange(false);
-            queryClient.invalidateQueries({ queryKey: ['destination', destinationId] });
-            if (userId) {
-                queryClient.invalidateQueries({ queryKey: ['tourTitles', userId] });
-            }
-            if (isAdmin) {
-                queryClient.invalidateQueries({ queryKey: ['seller-destinations'] });
-            } else {
-                queryClient.invalidateQueries({ queryKey: ['user-destinations'] });
-            }
             onSuccess();
         },
-        onError: (error) => {
-            toast({
-                title: "Failed to update",
-                description: `There was an error updating the destination: ${error.message}`,
-                variant: "destructive",
-            });
-        }
     });
 
-    // Toggle active status mutation
-    const toggleActiveMutation = useMutation({
-        mutationFn: () => toggleDestinationActiveStatus(destinationId),
-        onSuccess: (data) => {
-            toast({
-                title: "Status updated",
-                description: data.message || "Destination status has been updated successfully.",
-            });
-            if (data.data?.isActive !== undefined) {
-                form.setValue('isActive', data.data.isActive);
-            }
-            if (isAdmin) {
-                queryClient.invalidateQueries({ queryKey: ['seller-destinations'] });
-            } else {
-                queryClient.invalidateQueries({ queryKey: ['user-destinations'] });
-            }
-            onSuccess();
-        },
-        onError: (error) => {
-            toast({
-                title: "Failed to update status",
-                description: `There was an error: ${error.message}`,
-                variant: "destructive",
-            });
-        }
-    });
 
-    // Initialize form when dialog opens
     useEffect(() => {
-        if (open && destination) {
-            form.reset({
-                name: destination.name || '',
-                description: destination.description || '',
-                coverImage: destination.coverImage || '',
-                isActive: destination.isActive ?? true,
-                country: destination.country || '',
-                region: destination.region || '',
-                city: destination.city || '',
-                featuredTours: destination.featuredTours || []
-            });
-
-            // Initialize rich text editor content
-            if (destination.description) {
-                try {
-                    const isLikelyJSON = destination.description.trim().startsWith('{') && destination.description.trim().endsWith('}');
-                    if (isLikelyJSON) {
-                        setDescriptionContent(JSON.parse(destination.description));
-                    } else {
-                        setDescriptionContent({
-                            type: "doc",
-                            content: [{
-                                type: "paragraph",
-                                content: [{ type: "text", text: destination.description }]
-                            }]
-                        });
-                    }
-                } catch (e) {
+        if (!open || !destinationId || !destination) return;
+        form.reset({
+            name: destination.name || '',
+            description: destination.description || '',
+            coverImage: destination.coverImage || '',
+            isActive: destination.isActive ?? true,
+            country: destination.country || '',
+            region: destination.region || '',
+            city: destination.city || '',
+            reason: destination.reason || '',
+            featuredTours: (destination.featuredTours || []) as string[],
+        });
+        if (destination.description) {
+            try {
+                const isLikelyJSON = destination.description.trim().startsWith('{') && destination.description.trim().endsWith('}');
+                if (isLikelyJSON) {
+                    setDescriptionContent(JSON.parse(destination.description));
+                } else {
                     setDescriptionContent({
-                        type: "doc",
-                        content: [{
-                            type: "paragraph",
-                            content: [{ type: "text", text: destination.description }]
-                        }]
+                        type: 'doc',
+                        content: [{ type: 'paragraph', content: [{ type: 'text', text: destination.description }] }],
                     });
                 }
+            } catch {
+                setDescriptionContent({
+                    type: 'doc',
+                    content: [{ type: 'paragraph', content: [{ type: 'text', text: destination.description }] }],
+                });
             }
         }
-    }, [open, destination, form]);
+    }, [open, destinationId, destination, form]);
 
-    // Handle form submission
-    const handleSubmit = (values: any) => {
+    const handleSubmit = (values: { name: string; description: string; coverImage: string; isActive: boolean; country: string; region: string; city: string; featuredTours: string[], reason: string }) => {
+        // Validate reason is required for change requests (non-admin editing approved destination)
+        if (!isAdmin && destination?.approvalStatus === 'approved' && (!values.reason || values.reason.trim().length < 10)) {
+            form.setError('reason', {
+                type: 'manual',
+                message: 'Reason is required and must be at least 10 characters when requesting changes to an approved destination'
+            });
+            return;
+        }
+
         const formData = new FormData();
         formData.append('name', values.name || '');
         formData.append('description', JSON.stringify(descriptionContent));
@@ -189,6 +107,7 @@ export const EditDestinationDialog = ({ destinationId, open, onOpenChange, onSuc
         formData.append('country', values.country || '');
         formData.append('region', values.region || '');
         formData.append('city', values.city || '');
+        formData.append('reason', values.reason || '');
 
         // If user is not admin, set approval status to pending for re-approval
         if (!isAdmin) {
@@ -218,254 +137,350 @@ export const EditDestinationDialog = ({ destinationId, open, onOpenChange, onSuc
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                    <DialogTitle>Edit Destination</DialogTitle>
-                    <DialogDescription>
-                        Update the destination details below
-                    </DialogDescription>
-                </DialogHeader>
+            <DialogContent className="!max-w-4xl p-0 gap-0 overflow-hidden">
+                {/* Header with subtle background */}
+                <div className="bg-muted/50 px-6 py-5 border-b">
+                    <DialogHeader>
+                        <DialogTitle className="text-xl font-semibold">Edit Destination</DialogTitle>
+                        <DialogDescription className="text-muted-foreground">
+                            Update the destination details below
+                        </DialogDescription>
+                    </DialogHeader>
+                </div>
 
                 <Form {...form}>
-                    <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <FormField
-                                control={form.control}
-                                name="name"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Destination Name</FormLabel>
-                                        <FormControl>
-                                            <Input placeholder="e.g., Kathmandu" {...field} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                            <FormField
-                                control={form.control}
-                                name="country"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Country</FormLabel>
-                                        <FormControl>
-                                            <Input placeholder="e.g., Nepal" {...field} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                            <FormField
-                                control={form.control}
-                                name="region"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Region</FormLabel>
-                                        <FormControl>
-                                            <Input placeholder="e.g., Bagmati" {...field} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                            <FormField
-                                control={form.control}
-                                name="city"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>City</FormLabel>
-                                        <FormControl>
-                                            <Input placeholder="e.g., Kathmandu" {...field} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
+                    <form onSubmit={form.handleSubmit(handleSubmit)} className="flex flex-col">
+                        <div className="max-h-[65vh] overflow-y-auto px-6 py-6">
+                            <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+                                {/* Left Column - Form Fields */}
+                                <div className="lg:col-span-3 space-y-5">
+                                    {/* Location Details Card */}
+                                    <div className="rounded-lg border bg-card p-5 space-y-4">
+                                        <h3 className="text-sm font-medium text-foreground flex items-center gap-2">
+                                            <MapPin className="h-4 w-4 text-primary" />
+                                            Location Details
+                                        </h3>
+
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <FormField
+                                                control={form.control}
+                                                name="name"
+                                                render={({ field }) => (
+                                                    <FormItem>
+                                                        <FormLabel className="text-xs font-medium text-muted-foreground">Name</FormLabel>
+                                                        <FormControl>
+                                                            <Input
+                                                                placeholder="e.g. Kathmandu"
+                                                                className="h-10"
+                                                                {...field}
+                                                            />
+                                                        </FormControl>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
+                                            <FormField
+                                                control={form.control}
+                                                name="country"
+                                                render={({ field }) => (
+                                                    <FormItem>
+                                                        <FormLabel className="text-xs font-medium text-muted-foreground">Country</FormLabel>
+                                                        <FormControl>
+                                                            <Input
+                                                                placeholder="e.g. Nepal"
+                                                                className="h-10"
+                                                                {...field}
+                                                            />
+                                                        </FormControl>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
+                                            <FormField
+                                                control={form.control}
+                                                name="city"
+                                                render={({ field }) => (
+                                                    <FormItem>
+                                                        <FormLabel className="text-xs font-medium text-muted-foreground">City</FormLabel>
+                                                        <FormControl>
+                                                            <Input
+                                                                placeholder="e.g. Kathmandu"
+                                                                className="h-10"
+                                                                {...field}
+                                                            />
+                                                        </FormControl>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
+                                            <FormField
+                                                control={form.control}
+                                                name="region"
+                                                render={({ field }) => (
+                                                    <FormItem>
+                                                        <FormLabel className="text-xs font-medium text-muted-foreground">Region</FormLabel>
+                                                        <FormControl>
+                                                            <Input
+                                                                placeholder="e.g. Bagmati"
+                                                                className="h-10"
+                                                                {...field}
+                                                            />
+                                                        </FormControl>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
+                                        </div>
+
+                                        {/* Reason Field inside Location Details */}
+                                        <FormField
+                                            control={form.control}
+                                            name="reason"
+                                            render={({ field }) => {
+                                                const isRequired = !isAdmin && destination?.approvalStatus === 'approved' || destination?.approvalStatus === 'rejected';
+                                                return (
+                                                    <FormItem>
+                                                        <FormLabel className="text-xs font-medium text-muted-foreground">
+                                                            {isRequired
+                                                                ? 'Reason for Change Request *'
+                                                                : 'Reason for Adding Destination'}
+                                                        </FormLabel>
+                                                        <FormControl>
+                                                            <Input
+                                                                placeholder={
+                                                                    isRequired
+                                                                        ? "e.g., Location name changed, incorrect coordinates, updated information needed... (required, min 10 characters)"
+                                                                        : "e.g., Popular tourist destination with high demand, unique cultural significance, etc."
+                                                                }
+                                                                className="h-10"
+                                                                {...field}
+                                                            />
+                                                        </FormControl>
+                                                        <FormMessage />
+                                                        {isRequired && (
+                                                            <p className="text-xs text-muted-foreground mt-1.5">
+                                                                Required when requesting changes to an approved destination (minimum 10 characters)
+                                                            </p>
+                                                        )}
+                                                    </FormItem>
+                                                );
+                                            }}
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Right Column - Image & Featured Tours */}
+                                <div className="lg:col-span-2 space-y-5">
+                                    {/* Cover Image Card */}
+                                    <div className="rounded-lg border bg-card p-5 space-y-4">
+                                        <h3 className="text-sm font-medium text-foreground flex items-center gap-2">
+                                            <ImageIcon className="h-4 w-4 text-primary" />
+                                            Cover Image
+                                        </h3>
+
+                                        <FormField
+                                            control={form.control}
+                                            name="coverImage"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    {field.value ? (
+                                                        <div className="relative rounded-lg overflow-hidden aspect-[4/3] group">
+                                                            <Image
+                                                                src={field.value as string || "/placeholder.svg"}
+                                                                alt={form.getValues('name') || 'Destination cover'}
+                                                                fill
+                                                                className="object-cover transition-transform group-hover:scale-105"
+                                                                sizes="(max-width: 768px) 100vw, 300px"
+                                                            />
+                                                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                                                <Button
+                                                                    type="button"
+                                                                    size="sm"
+                                                                    variant="secondary"
+                                                                    className="h-9"
+                                                                    onClick={() => setDialogOpen(true)}
+                                                                >
+                                                                    <ImageIcon className="h-4 w-4 mr-2" />
+                                                                    Change
+                                                                </Button>
+                                                                <Button
+                                                                    type="button"
+                                                                    size="sm"
+                                                                    variant="destructive"
+                                                                    className="h-9"
+                                                                    onClick={() => handleRemoveImage(field.onChange)}
+                                                                >
+                                                                    <Trash2 className="h-4 w-4" />
+                                                                </Button>
+                                                            </div>
+                                                        </div>
+                                                    ) : (
+                                                        <button
+                                                            type="button"
+                                                            className="w-full aspect-[4/3] rounded-lg border-2 border-dashed border-muted-foreground/25 hover:border-primary/50 hover:bg-muted/50 transition-colors flex flex-col items-center justify-center gap-3 cursor-pointer"
+                                                            onClick={() => setDialogOpen(true)}
+                                                        >
+                                                            <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center">
+                                                                <ImageIcon className="h-6 w-6 text-muted-foreground" />
+                                                            </div>
+                                                            <div className="text-center">
+                                                                <p className="text-sm font-medium text-foreground">Upload cover image</p>
+                                                                <p className="text-xs text-muted-foreground">Click to browse gallery</p>
+                                                            </div>
+                                                        </button>
+                                                    )}
+                                                    <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+                                                        <DialogContent
+                                                            className="!max-w-[80vw] !max-h-[90vh] overflow-auto"
+                                                            onInteractOutside={(e) => e.preventDefault()}
+                                                        >
+                                                            <DialogHeader>
+                                                                <DialogTitle>
+                                                                    {field.value ? 'Change cover image' : 'Select cover image'}
+                                                                </DialogTitle>
+                                                                <DialogDescription>
+                                                                    Choose an image from your gallery
+                                                                </DialogDescription>
+                                                            </DialogHeader>
+                                                            <Gallery
+                                                                mode="picker"
+                                                                onMediaSelect={(coverImage) =>
+                                                                    handleImageSelect(coverImage as string, field.onChange)
+                                                                }
+                                                            />
+                                                        </DialogContent>
+                                                    </Dialog>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                    </div>
+
+                                    {/* Featured Tours (if admin) */}
+                                    {isAdmin && (
+                                        <div className="rounded-lg border bg-card p-5 space-y-4">
+                                            <h3 className="text-sm font-medium text-foreground flex items-center gap-2">
+                                                <Star className="h-4 w-4 text-primary" />
+                                                Featured Tours
+                                            </h3>
+
+                                            <FormField
+                                                control={form.control}
+                                                name="featuredTours"
+                                                render={({ field }) => {
+                                                    // Normalize field value to string array
+                                                    let normalizedValue: string[] = [];
+                                                    if (Array.isArray(field.value)) {
+                                                        normalizedValue = field.value
+                                                            .map((val) => {
+                                                                if (typeof val === 'string') {
+                                                                    return val;
+                                                                } else if (val && typeof val === 'object') {
+                                                                    // Handle TourObject or SelectValue objects
+                                                                    return (val as TourObject)._id || (val as TourObject).id || '';
+                                                                }
+                                                                return '';
+                                                            })
+                                                            .filter((val) => val !== '');
+                                                    }
+
+                                                    return (
+                                                        <FormItem>
+                                                            <FormControl>
+                                                                <MultiSelect
+                                                                    options={(tourTitles as TourTitle[] || []).map((item: TourTitle) => ({
+                                                                        value: item._id,
+                                                                        label: item.code ? `${item.title} (${item.code})` : item.title,
+                                                                    }))}
+                                                                    defaultValue={normalizedValue}
+                                                                    onValueChange={(selectedValues: string[]) => {
+                                                                        field.onChange(selectedValues);
+                                                                    }}
+                                                                    placeholder="Select featured tours"
+                                                                    className="w-full"
+                                                                />
+                                                            </FormControl>
+                                                            <FormMessage />
+                                                        </FormItem>
+                                                    );
+                                                }}
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Full width Description */}
+                            <div className="mt-5">
+                                <div className="rounded-lg border bg-card p-5 space-y-4">
+                                    <FormField
+                                        control={form.control}
+                                        name="description"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel className="text-sm font-medium flex items-center gap-2">
+                                                    <FileText className="h-4 w-4 text-primary" />
+                                                    Description
+                                                </FormLabel>
+                                                <FormControl>
+                                                    <div className="border rounded-lg overflow-hidden bg-background">
+                                                        <NovelEditor
+                                                            initialValue={typeof descriptionContent === 'string'
+                                                                ? { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: descriptionContent }] }] }
+                                                                : descriptionContent}
+                                                            onContentChange={(content) => {
+                                                                setDescriptionContent(content);
+                                                                let textContent = "";
+                                                                if (content.content) {
+                                                                    content.content.forEach(node => {
+                                                                        if (node.type === 'paragraph' && node.content) {
+                                                                            node.content.forEach(textNode => {
+                                                                                if (textNode.type === 'text') {
+                                                                                    textContent += textNode.text + " ";
+                                                                                }
+                                                                            });
+                                                                            textContent += "\n";
+                                                                        }
+                                                                    });
+                                                                }
+                                                                field.onChange(textContent.trim());
+                                                            }}
+                                                        />
+                                                    </div>
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                </div>
+                            </div>
                         </div>
 
-                        <FormField
-                            control={form.control}
-                            name="featuredTours"
-                            render={({ field }) => {
-                                let fieldValue: string[] = [];
-                                if (Array.isArray(field.value)) {
-                                    if (Array.isArray(field.value[0])) {
-                                        fieldValue = field.value[0];
-                                    } else {
-                                        fieldValue = field.value;
-                                    }
-                                    if (fieldValue.length > 0 && fieldValue[0] && typeof fieldValue[0] === 'object') {
-                                        fieldValue = (fieldValue as unknown as TourObject[]).map((item) => item._id || item.id || '');
-                                    }
-                                }
-
-                                const currentValues: SelectValue[] = Array.isArray(fieldValue) ?
-                                    fieldValue.map(val => {
-                                        if (typeof val === 'string') {
-                                            return { value: val, label: val } as SelectValue;
-                                        } else if (val && typeof val === 'object' && 'value' in val) {
-                                            return val as SelectValue;
-                                        }
-                                        return { value: '', label: '' } as SelectValue;
-                                    }).filter(val => {
-                                        const typedVal = val as { value: string; label: string };
-                                        return typedVal.value !== '';
-                                    }) : [];
-
-                                return (
-                                    <FormItem>
-                                        <FormLabel>Featured Tours</FormLabel>
-                                        <FormControl>
-                                            <MultiSelect
-                                                options={(tourTitles?.data || []).map((item: TourTitle) => ({
-                                                    value: item._id,
-                                                    label: item.code ? `${item.title} (${item.code})` : item.title,
-                                                }))}
-                                                value={currentValues}
-                                                onValueChange={(selectedValues: SelectValue[]) => {
-                                                    const ids = selectedValues.map((val: SelectValue) =>
-                                                        typeof val === 'string' ? val : val.value
-                                                    );
-                                                    field.onChange(ids);
-                                                }}
-                                                placeholder="Select featured tours"
-                                                className="w-full"
-                                                maxDisplayValues={2}
-                                            />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                );
-                            }}
-                        />
-
-                        <FormField
-                            control={form.control}
-                            name="coverImage"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel className="flex items-center gap-2">
-                                        <ImageIcon className="h-4 w-4 text-primary" />
-                                        Cover Image
-                                    </FormLabel>
-                                    {field.value ? (
-                                        <div className="relative mt-1 rounded-md overflow-hidden">
-                                            <img
-                                                src={field.value as string}
-                                                alt={form.getValues('name') || 'Destination cover'}
-                                                className="w-full h-[200px] object-cover"
-                                            />
-                                            <div className="absolute top-2 right-2 flex gap-2">
-                                                <Button
-                                                    type="button"
-                                                    size="icon"
-                                                    variant="secondary"
-                                                    className="h-8 w-8 bg-background/80 backdrop-blur-xs"
-                                                    onClick={() => window.open(field.value as string, '_blank')}
-                                                >
-                                                    <ImageIcon className="h-4 w-4" />
-                                                </Button>
-                                                <Button
-                                                    type="button"
-                                                    size="icon"
-                                                    variant="destructive"
-                                                    className="h-8 w-8 bg-background/80 backdrop-blur-xs"
-                                                    onClick={() => handleRemoveImage(field.onChange)}
-                                                >
-                                                    <Trash2 className="h-4 w-4" />
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                                className="w-full h-[100px] flex flex-col items-center justify-center gap-2 border-dashed mt-1"
-                                                onClick={() => setDialogOpen(true)}
-                                            >
-                                                <ImageIcon className="h-6 w-6 text-muted-foreground" />
-                                                <span className="text-muted-foreground">Select a cover image</span>
-                                            </Button>
-                                            <DialogContent
-                                                className="max-w-[90%] max-h-[90%] overflow-auto"
-                                                onInteractOutside={(e) => e.preventDefault()}
-                                            >
-                                                <DialogHeader>
-                                                    <DialogTitle>Select Cover Image</DialogTitle>
-                                                    <DialogDescription>
-                                                        Choose an image from your gallery
-                                                    </DialogDescription>
-                                                </DialogHeader>
-                                                <GalleryPage
-                                                    mode="picker"
-                                                    onMediaSelect={(coverImage) =>
-                                                        handleImageSelect(coverImage as string, field.onChange)
-                                                    }
-                                                />
-                                            </DialogContent>
-                                        </Dialog>
-                                    )}
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-
-                        <FormField
-                            control={form.control}
-                            name="description"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel className="flex items-center gap-2">
-                                        <FileText className="h-4 w-4 text-primary" />
-                                        Description
-                                    </FormLabel>
-                                    <FormControl>
-                                        <div className="border rounded-md">
-                                            <NovelEditor
-                                                initialValue={typeof descriptionContent === 'string'
-                                                    ? { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: descriptionContent }] }] }
-                                                    : descriptionContent}
-                                                onContentChange={(content) => {
-                                                    setDescriptionContent(content);
-                                                    let textContent = "";
-                                                    if (content.content) {
-                                                        content.content.forEach(node => {
-                                                            if (node.type === 'paragraph' && node.content) {
-                                                                node.content.forEach(textNode => {
-                                                                    if (textNode.type === 'text') {
-                                                                        textContent += textNode.text + " ";
-                                                                    }
-                                                                });
-                                                                textContent += "\n";
-                                                            }
-                                                        });
-                                                    }
-                                                    field.onChange(textContent.trim());
-                                                }}
-                                            />
-                                        </div>
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-
-                        <div className="flex justify-end gap-3 pt-4">
+                        {/* Footer */}
+                        <div className="border-t bg-muted/30 px-6 py-4 flex items-center justify-end gap-3">
                             <Button
                                 type="button"
-                                variant="outline"
+                                variant="ghost"
                                 onClick={() => onOpenChange(false)}
                             >
-                                <X className="h-4 w-4 mr-2" />
                                 Cancel
                             </Button>
                             <Button
                                 type="submit"
                                 disabled={updateMutation.isPending}
+                                className="min-w-[120px]"
                             >
-                                <Save className="h-4 w-4 mr-2" />
-                                {updateMutation.isPending ? "Saving..." : "Save Changes"}
+                                {updateMutation.isPending ? (
+                                    <>
+                                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                        Saving...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Save className="h-4 w-4 mr-2" />
+                                        Save Changes
+                                    </>
+                                )}
                             </Button>
                         </div>
                     </form>

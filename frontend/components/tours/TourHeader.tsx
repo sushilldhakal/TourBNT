@@ -1,6 +1,6 @@
 import React from 'react';
 import { Badge } from '@/components/ui/badge';
-import { Category } from '@/lib/types';
+import { Category } from '@/types/types';
 
 interface TourHeaderProps {
     title: string;

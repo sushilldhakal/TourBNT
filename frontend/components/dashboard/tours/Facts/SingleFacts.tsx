@@ -18,8 +18,8 @@ import { Edit, FileText, Save, Tag, TagsIcon, Trash2, Type, X } from "lucide-rea
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { FactData } from "./useFacts";
-import { useFactItem } from "./useFactItem";
+import type { FactData } from "@/types/facts";
+import { useFactItem } from '@/lib/hooks/tours';
 
 interface SingleFactProps {
     fact?: FactData;

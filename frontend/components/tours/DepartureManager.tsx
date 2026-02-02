@@ -9,7 +9,7 @@ import {
     Departure,
     PricingOption,
     TourDates,
-} from '@/lib/types';
+} from '@/types/types';
 import {
     formatPrice,
     formatDate,

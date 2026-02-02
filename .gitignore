@@ -15,7 +15,20 @@ node_modules/
 package-lock.json
 yarn.lock
 pnpm-lock.yaml
-/.md
+
+# ============================================
+# Markdown / Documentation (exclude internal docs)
+# ============================================
+*.md
+!README.md
+!QUICK_START.md
+!CONTRIBUTING.md
+!CHANGELOG.md
+!LICENSE
+!ROLE_MANAGEMENT.md
+frontend/docs/
+**/lib/**/README.md
+
 # ============================================
 # Environment Variables (NEVER COMMIT)
 # ============================================
@@ -104,7 +117,7 @@ Thumbs.db
 next-env.d.ts
 
 # ============================================
-# Certificates & Keys (SECURITY)
+# Certificates, Keys & Secrets (SECURITY)
 # ============================================
 *.pem
 *.key
@@ -112,6 +125,12 @@ next-env.d.ts
 *.crt
 *.p12
 *.pfx
+secrets.json
+credentials.json
+**/secrets*.json
+**/*credentials*.json
+config.local.*
+*.local
 
 # ============================================
 # Docker (Exclude local docker-compose files)
@@ -207,12 +226,6 @@ public/uploads/
 # ============================================
 # Keep These Files (Safe to commit)
 # ============================================
-!README.md
-!QUICK_START.md
-!CONTRIBUTING.md
-!CHANGELOG.md
-!LICENSE
-!ROLE_MANAGEMENT.md
 !.env.example
 !.env.production.example
 !.dockerignore

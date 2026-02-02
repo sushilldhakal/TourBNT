@@ -8,7 +8,9 @@
 export * from './apiClient';
 
 // Export all API modules
+export * as authApi from './authApi';
 export * as tourApi from './tours';
+export * as toursApi from './tours';
 export * as postApi from './posts';
 export * as userApi from './users';
 // Removed duplicate gallery API - use mediaApi instead

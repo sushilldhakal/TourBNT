@@ -8,9 +8,10 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { loginUser } from "@/lib/api/users";
-import { api } from "@/lib/api/apiClient";
+import { api, extractResponseData } from "@/lib/api/apiClient";
+import useUserStore, { type User } from "@/lib/store/useUserStore";
 import { canAccessDashboard } from "@/lib/utils/roles";
-import { Mail, Lock, User, Phone, CheckCircle2, AlertCircle, Loader2, EyeIcon, EyeOffIcon } from "lucide-react";
+import { Mail, Lock, UserIcon, Phone, CheckCircle2, Loader2, EyeIcon, EyeOffIcon } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +19,68 @@ function LoginPageContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const { toast } = useToast();
+    const { user, setUser } = useUserStore();
+
+    // Redirect already-logged-in users: dashboard access → /dashboard, else → /
+    const [checkingAuth, setCheckingAuth] = useState(true);
+    const hasRedirectedRef = useRef(false);
+
+    useEffect(() => {
+        let cancelled = false;
+        const redirectParam = searchParams.get('redirect');
+        const targetFromRedirect = redirectParam ? decodeURIComponent(redirectParam) : null;
+
+        const redirectIfLoggedIn = (roles: string) => {
+            if (hasRedirectedRef.current) return;
+            hasRedirectedRef.current = true;
+            if (canAccessDashboard(roles)) {
+                const path = targetFromRedirect && targetFromRedirect.startsWith('/dashboard') ? targetFromRedirect : '/dashboard';
+                router.replace(path);
+            } else {
+                router.replace('/');
+            }
+        };
+
+        if (user.id && user.roles) {
+            redirectIfLoggedIn(user.roles);
+            return;
+        }
+
+        const AUTH_CHECK_TIMEOUT_MS = 8000;
+
+        const checkExistingAuth = async () => {
+            const timeoutId = setTimeout(() => {
+                if (!cancelled) setCheckingAuth(false);
+            }, AUTH_CHECK_TIMEOUT_MS);
+            try {
+                const response = await api.get('/users/me');
+                if (cancelled) return;
+                clearTimeout(timeoutId);
+
+                const userData = extractResponseData<User>(response);
+
+                if (!userData?.id) {
+                    setCheckingAuth(false);
+                    return;
+                }
+
+                const roles = Array.isArray(userData.roles)
+                    ? (userData.roles[0] ?? '')
+                    : (userData.roles ?? '');
+                setUser({ ...userData, roles });
+
+                redirectIfLoggedIn(roles);
+            } catch {
+                if (!cancelled) {
+                    clearTimeout(timeoutId);
+                    setCheckingAuth(false);
+                }
+            }
+        };
+
+        checkExistingAuth();
+        return () => { cancelled = true; };
+    }, [router, setUser, user.id, user.roles, searchParams]);
 
     // Separate show/hide states for different password fields
     const [showLoginPassword, setShowLoginPassword] = useState(false);
@@ -67,10 +130,13 @@ function LoginPageContent() {
                     });
                     setShowForm('login');
                 })
-                .catch((error: any) => {
+                .catch((error: unknown) => {
+                    const msg = error && typeof error === 'object' && 'response' in error
+                        ? (error as { response?: { data?: { message?: string } } }).response?.data?.message
+                        : undefined;
                     toast({
                         title: 'Verification Failed',
-                        description: error.response?.data?.message || 'Verification failed',
+                        description: msg ?? 'Verification failed',
                         variant: 'destructive',
                     });
                 });
@@ -105,16 +171,13 @@ function LoginPageContent() {
                 description: 'Welcome back!',
             });
 
-            // Check if user can access dashboard
-            if (canAccessDashboard(user.roles)) {
-                router.push('/dashboard');
-            } else {
-                router.push('/');
-            }
-        } catch (error: any) {
+            // Client-side navigation: store is already updated by loginUser(), no reload needed
+            router.replace('/dashboard');
+        } catch (error: unknown) {
+            const msg = error instanceof Error ? error.message : 'Invalid credentials';
             toast({
                 title: 'Login Failed',
-                description: error.message || 'Invalid credentials',
+                description: msg,
                 variant: 'destructive',
             });
         } finally {
@@ -152,10 +215,13 @@ function LoginPageContent() {
                 description: 'Please check your email to verify your account.',
             });
             setShowForm('verify');
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const msg = error && typeof error === 'object' && 'response' in error
+                ? (error as { response?: { data?: { message?: string } } }).response?.data?.message
+                : undefined;
             toast({
                 title: 'Registration Failed',
-                description: error.response?.data?.message || 'Registration failed',
+                description: msg ?? 'Registration failed',
                 variant: 'destructive',
             });
         } finally {
@@ -179,10 +245,13 @@ function LoginPageContent() {
                 title: 'Email Sent',
                 description: 'Please check your email for reset instructions.',
             });
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const msg = error && typeof error === 'object' && 'response' in error
+                ? (error as { response?: { data?: { message?: string } } }).response?.data?.message
+                : undefined;
             toast({
                 title: 'Error',
-                description: error.response?.data?.message || 'Failed to send reset email',
+                description: msg ?? 'Failed to send reset email',
                 variant: 'destructive',
             });
         } finally {
@@ -207,16 +276,27 @@ function LoginPageContent() {
                 description: 'Your password has been reset successfully.',
             });
             router.push('/auth/login');
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const msg = error && typeof error === 'object' && 'response' in error
+                ? (error as { response?: { data?: { message?: string } } }).response?.data?.message
+                : undefined;
             toast({
                 title: 'Error',
-                description: error.response?.data?.message || 'Failed to reset password',
+                description: msg ?? 'Failed to reset password',
                 variant: 'destructive',
             });
         } finally {
             setIsResettingPassword(false);
         }
     };
+
+    if (checkingAuth) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/20 via-primary/10 to-secondary/20">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/20 via-primary/10 to-secondary/20 p-4">
@@ -302,7 +382,7 @@ function LoginPageContent() {
                             </Button>
 
                             <div className="text-center text-sm">
-                                Don't have an account?{' '}
+                                {"Don't have an account?"}{' '}
                                 <Button
                                     variant="link"
                                     className="p-0 h-auto"
@@ -325,7 +405,7 @@ function LoginPageContent() {
                             <div className="space-y-2">
                                 <Label htmlFor="name">Full Name</Label>
                                 <div className="relative">
-                                    <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                                    <UserIcon className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                                     <Input
                                         id="name"
                                         type="text"
@@ -521,7 +601,7 @@ function LoginPageContent() {
                     <Card>
                         <CardHeader>
                             <CardTitle>Check Your Email</CardTitle>
-                            <CardDescription>We've sent you a verification link</CardDescription>
+                            <CardDescription>We&apos;ve sent you a verification link</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <div className="flex flex-col items-center justify-center py-6 text-center">

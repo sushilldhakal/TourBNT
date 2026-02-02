@@ -16,30 +16,8 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import Image from 'next/image';
-
-interface Tour {
-    id: string;
-    title: string;
-    coverImage: string;
-    destination: string;
-    duration: number;
-}
-
-interface PricingOption {
-    id: string;
-    name: string;
-    price: number;
-    description: string;
-}
-
-interface TravelerInfo {
-    firstName: string;
-    lastName: string;
-    email: string;
-    phone: string;
-    dateOfBirth: string;
-    passportNumber?: string;
-}
+import type { Tour, PricingOption } from '@/types/types';
+import type { TravelerInfo } from '@/types/app';
 
 interface BookingSummaryProps {
     tour: Tour;
@@ -81,7 +59,7 @@ export function BookingSummary({
                         <div className="flex gap-4">
                             <div className="relative h-24 w-32 rounded-lg overflow-hidden flex-shrink-0">
                                 <Image
-                                    src={tour.coverImage}
+                                    src={tour.coverImage ?? ''}
                                     alt={tour.title}
                                     fill
                                     className="object-cover"
@@ -91,11 +69,11 @@ export function BookingSummary({
                                 <h3 className="font-semibold text-lg">{tour.title}</h3>
                                 <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
                                     <MapPin className="h-4 w-4" />
-                                    {tour.destination}
+                                    {typeof tour.destination === 'string' ? tour.destination : (tour.destination as { name?: string })?.name ?? ''}
                                 </div>
                                 <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
                                     <Calendar className="h-4 w-4" />
-                                    {tour.duration} days
+                                    {tour.duration != null ? `${tour.duration} days` : '—'}
                                 </div>
                             </div>
                         </div>
@@ -112,7 +90,7 @@ export function BookingSummary({
                             <div>
                                 <p className="text-sm font-medium text-muted-foreground">Package</p>
                                 <p className="text-base font-semibold">{pricing.name}</p>
-                                <p className="text-sm text-muted-foreground">{pricing.description}</p>
+                                {pricing.description != null && <p className="text-sm text-muted-foreground">{pricing.description}</p>}
                             </div>
                         </div>
                     </CardContent>

@@ -1,45 +1,38 @@
 "use client";
 
 import * as React from "react";
-import { useQuery } from "@tanstack/react-query";
-import { getApprovedReviews } from "@/lib/api";
+import { useApprovedReviews } from "@/lib/queries";
 import { Star, Quote } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent } from "@/components/ui/card";
 import {
-    Carousel,
+    CarouselWithPlugins,
     CarouselContent,
     CarouselItem,
     CarouselNext,
     CarouselPrevious,
     type CarouselApi,
-} from "@/components/ui/carousel";
+} from "@/components/ui/carousel-with-plugins-lazy";
 import { cn } from "@/lib/utils";
-import Autoplay from "embla-carousel-autoplay";
-import { Review } from "@/lib/types";
-import { useLayout } from '@/providers/LayoutProvider';
+import { Review } from "@/types/types";
 import Link from "next/link";
+import { ContentContainer } from "@/components/layout/PublicLayoutClient";
 
 const ReviewSlider = () => {
-    const { isFullWidth } = useLayout();
     const [api, setApi] = React.useState<CarouselApi>();
     const [current, setCurrent] = React.useState(0);
     const [count, setCount] = React.useState(0);
 
-    const { data, isLoading, isError } = useQuery<{ reviews: Review[] }>({
-        queryKey: ['reviews'],
-        queryFn: () => getApprovedReviews() as Promise<{ reviews: Review[] }>,
-        staleTime: 5 * 60 * 1000,
-    });
-
+    const { data, isLoading, isError } = useApprovedReviews();
     const approvedReviews = React.useMemo(() => {
-        if (!data?.reviews) return [];
-        return data.reviews.sort((a: Review, b: Review) => {
+        const list = Array.isArray(data) ? data : (data as { reviews?: Review[] })?.reviews ?? [];
+        if (!list.length) return [];
+        return [...list].sort((a: Review, b: Review) => {
             if (a.likes && b.likes && a.likes !== b.likes) return b.likes - a.likes;
             if (a.views && b.views && a.views !== b.views) return b.views - a.views;
             return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
         }).slice(0, 9);
-    }, [data?.reviews]);
+    }, [data]);
 
     const renderStars = (rating: number) => {
         return Array(5).fill(0).map((_, i) => (
@@ -56,8 +49,8 @@ const ReviewSlider = () => {
 
     if (isLoading) {
         return (
-            <div className="py-16 bg-primary/5">
-                <div className={`mx-auto px-4 transition-all duration-300 ${isFullWidth ? 'max-w-full' : 'max-w-7xl'}`}>
+            <div className="py-16 bg-primary/5 w-full">
+                <ContentContainer className="px-4 transition-all duration-300">
                     <div className="text-center mb-10">
                         <h2 className="text-3xl font-bold">What Our Customers Say</h2>
                         <p className="text-muted-foreground mt-2">Read testimonials from our satisfied travelers</p>
@@ -69,15 +62,15 @@ const ReviewSlider = () => {
                             <div className="w-20 h-4 bg-muted rounded"></div>
                         </div>
                     </div>
-                </div>
+                </ContentContainer>
             </div>
         );
     }
 
     if (isError || !data) {
         return (
-            <div className="py-16 bg-primary/5">
-                <div className={`mx-auto px-4 transition-all duration-300 ${isFullWidth ? 'max-w-full' : 'max-w-7xl'}`}>
+            <div className="py-16 bg-primary/5 w-full">
+                <ContentContainer className="px-4 transition-all duration-300">
                     <div className="text-center mb-10">
                         <h2 className="text-3xl font-bold">What Our Customers Say</h2>
                         <p className="text-muted-foreground mt-2">Read testimonials from our satisfied travelers</p>
@@ -88,15 +81,15 @@ const ReviewSlider = () => {
                             <p className="text-sm text-muted-foreground mt-2">Please check back later.</p>
                         </div>
                     </div>
-                </div>
+                </ContentContainer>
             </div>
         );
     }
 
     if (approvedReviews.length === 0) {
         return (
-            <div className="py-16 bg-primary/5">
-                <div className={`mx-auto px-4 transition-all duration-300 ${isFullWidth ? 'max-w-full' : 'max-w-7xl'}`}>
+            <div className="py-16 bg-primary/5 w-full">
+                <ContentContainer className="px-4 transition-all duration-300">
                     <div className="text-center mb-10">
                         <h2 className="text-3xl font-bold">What Our Customers Say</h2>
                         <p className="text-muted-foreground mt-2">Read testimonials from our satisfied travelers</p>
@@ -107,20 +100,20 @@ const ReviewSlider = () => {
                             <p className="text-sm text-muted-foreground mt-2">Be the first to share your experience!</p>
                         </div>
                     </div>
-                </div>
+                </ContentContainer>
             </div>
         );
     }
 
     return (
-        <div className="py-16 bg-primary/5">
-            <div className={`mx-auto px-4 transition-all duration-300 ${isFullWidth ? 'max-w-full' : 'max-w-7xl'}`}>
+        <div className="py-16 bg-primary/5 w-full">
+            <ContentContainer className="px-4 transition-all duration-300">
                 <div className="text-center mb-10">
                     <h2 className="text-3xl font-bold">What Our Customers Say</h2>
                     <p className="text-muted-foreground mt-2">Read testimonials from our satisfied travelers</p>
                 </div>
                 <div className="relative mx-auto">
-                    <Carousel setApi={setApi} className="w-full" opts={{ loop: true, align: "center" }} plugins={[Autoplay({ delay: 5000 })]}>
+                    <CarouselWithPlugins setApi={setApi} className="w-full" opts={{ loop: true, align: "center" }} autoplayConfig={{ delay: 5000 }}>
                         <CarouselContent>
                             {approvedReviews.map((review: Review, index: number) => (
                                 <CarouselItem key={review._id} className="md:basis-2/3 lg:basis-2/5 pl-4">
@@ -164,7 +157,7 @@ const ReviewSlider = () => {
                         </CarouselContent>
                         <CarouselPrevious className="left-2" />
                         <CarouselNext className="right-2" />
-                    </Carousel>
+                    </CarouselWithPlugins>
                     <div className="flex justify-center gap-3 mt-8">
                         {Array.from({ length: count }).map((_, index) => (
                             <button key={index} className={cn("relative flex items-center justify-center transition-all duration-500 ease-in-out", current === index ? "scale-110" : "hover:scale-105")} onClick={() => api?.scrollTo(index)} aria-label={`Go to slide ${index + 1}`}>
@@ -179,7 +172,7 @@ const ReviewSlider = () => {
                         ))}
                     </div>
                 </div>
-            </div>
+            </ContentContainer>
         </div>
     );
 };

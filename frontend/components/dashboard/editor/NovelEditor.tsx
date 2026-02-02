@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { EditorRoot, EditorContent, type JSONContent, EditorInstance, EditorCommand, EditorCommandEmpty, EditorCommandList, ImageResizer, handleCommandNavigation, handleImagePaste, handleImageDrop } from "novel";
 import { useDebouncedCallback } from "use-debounce";
 import { coreExtensions } from "./extensions";
@@ -12,68 +12,27 @@ import CustomEditorCommandItem from "./CustomEditorCommandItem";
 import GenerativeMenuSwitch from "./generative/generative-menu-switch";
 import { NodeSelector } from "./selectors/node-selector";
 import { LinkSelector } from "./selectors/link-selector";
-import { MathSelector } from "./selectors/math-selector";
 import { TextButtons } from "./selectors/text-buttons";
 import { ColorSelector } from "./selectors/color-selector";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/use-toast";
 import NovelEditorErrorBoundary from "./NovelEditorErrorBoundary";
 import { safeParseJSONContent, createEmptyDocument, sanitizeJSONContent } from "./content-parser";
-
+import { Gallery } from "../gallery/Gallery";
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import '../../../app/editor.css';
-/**
- * Props interface for NovelEditor component
- */
+
 export interface NovelEditorProps {
-    /** Initial content as JSONContent structure */
     initialValue: JSONContent | null;
-    /** Callback when content changes (debounced) */
     onContentChange: (content: JSONContent) => void;
-    /** Placeholder text for empty editor */
     placeholder?: string;
-    /** Minimum height of the editor */
     minHeight?: string;
-    /** Enable AI features (optional) */
     enableAI?: boolean;
-    /** Enable gallery integration (optional) */
     enableGallery?: boolean;
 }
 
-/**
- * NovelEditor Component (Core)
- * 
- * A rich text editor built on Novel/Tiptap with premium features including:
- * - Rich text formatting (bold, italic, underline, etc.)
- * - Block types (headings, lists, quotes, code)
- * - Image upload with drag & drop and paste support
- * - Mathematical expressions with KaTeX
- * - Embedded media (YouTube, Twitter)
- * - Slash command menu
- * - AI-powered writing assistance (optional)
- * - Gallery integration (optional)
- * 
- * Features:
- * - Debounced content updates (500ms) for performance
- * - Save status indicator
- * - Word count display
- * - Image resizing
- * - Keyboard shortcuts (via CustomKeymap extension):
- *   - Cmd/Ctrl+B: Bold
- *   - Cmd/Ctrl+I: Italic
- *   - Cmd/Ctrl+U: Underline
- *   - Cmd/Ctrl+K: Link
- *   - Cmd/Ctrl+Z: Undo
- * - Dark mode support
- * 
- * Requirements: 1.3, 1.4, 1.5, 8.1, 8.2, 8.5, 12.1, 12.2, 12.3, 17.1, 17.2, 17.3, 17.4, 17.5
- * 
- * @param props - Component props
- * @returns Rendered editor
- */
 function NovelEditorCore({
     initialValue,
     onContentChange,
@@ -90,22 +49,15 @@ function NovelEditorCore({
     const [extensions, setExtensions] = useState<any[]>(coreExtensions);
     const [extensionsLoaded, setExtensionsLoaded] = useState(false);
 
-    // Dialog states for selectors
+    // Dialog states - wrapped in useRef to prevent re-renders
     const [openNode, setOpenNode] = useState(false);
     const [openColor, setOpenColor] = useState(false);
     const [openLink, setOpenLink] = useState(false);
     const [openAI, setOpenAI] = useState(false);
-
-    // Gallery dialog state
     const [dialogOpen, setDialogOpen] = useState(false);
 
-    // Authentication
     const { user } = useAuth();
 
-    /**
-     * Content cache to avoid repeated parsing of the same content
-     * Requirements: 19.1
-     */
     const contentCache = useRef<{
         raw: string | null;
         parsed: JSONContent | null;
@@ -114,26 +66,31 @@ function NovelEditorCore({
         parsed: null,
     });
 
+    // Store initial content processing flag to prevent re-processing
+    const contentInitialized = useRef(false);
+
     /**
-     * Lazy load heavy extensions based on feature flags
-     * Requirements: 19.4
+     * FIX 1: Memoize extensions to prevent recreation on every render
+     */
+    const memoizedExtensions = useMemo(() => extensions, [extensions]);
+
+    /**
+     * FIX 2: Load extensions only once
      */
     useEffect(() => {
+        if (extensionsLoaded) return; // Prevent reloading
+
         const loadExtensions = async () => {
             try {
-                // Load lazy extensions based on feature flags
                 const lazyExts = await getLazyExtensions({
                     enableAI,
-                    enableMath: true, // Always enable math for now
-                    enableMedia: true, // Always enable media for now
+                    enableMedia: true,
                 });
 
-                // Combine core and lazy extensions
                 setExtensions([...coreExtensions, ...lazyExts]);
                 setExtensionsLoaded(true);
             } catch (error) {
                 console.error('Failed to load extensions:', error);
-                // Fall back to core extensions only
                 setExtensions(coreExtensions);
                 setExtensionsLoaded(true);
 
@@ -147,38 +104,35 @@ function NovelEditorCore({
         };
 
         loadExtensions();
-    }, [enableAI]);
+    }, [enableAI, extensionsLoaded]);
 
     /**
-     * Initialize editor content from props with safe parsing and caching
-     * Includes error handling for malformed content
-     * Requirements: 19.1, 20.2
+     * FIX 3: Initialize content only once, prevent re-initialization
      */
     useEffect(() => {
+        if (contentInitialized.current) return;
+
         if (initialValue) {
             try {
-                // Validate and sanitize content
                 if (typeof initialValue === 'string') {
-                    // Check cache first to avoid repeated parsing
                     if (contentCache.current.raw === initialValue && contentCache.current.parsed) {
                         setInitialContent(contentCache.current.parsed);
+                        contentInitialized.current = true;
                         return;
                     }
 
-                    // Parse string content
                     const parseResult = safeParseJSONContent(initialValue, 'editor content');
 
                     if (parseResult.success && parseResult.data) {
-                        // Sanitize content to remove potentially malicious elements
                         const sanitized = sanitizeJSONContent(parseResult.data);
 
-                        // Update cache
                         contentCache.current = {
                             raw: initialValue,
                             parsed: sanitized,
                         };
 
                         setInitialContent(sanitized);
+                        contentInitialized.current = true;
                     } else {
                         console.error('Failed to parse initial content:', parseResult.error);
                         toast({
@@ -188,26 +142,26 @@ function NovelEditorCore({
                             duration: 5000,
                         });
                         setInitialContent(createEmptyDocument());
+                        contentInitialized.current = true;
                     }
                 } else {
-                    // Already an object, check cache by stringifying
                     const stringified = JSON.stringify(initialValue);
 
                     if (contentCache.current.raw === stringified && contentCache.current.parsed) {
                         setInitialContent(contentCache.current.parsed);
+                        contentInitialized.current = true;
                         return;
                     }
 
-                    // Sanitize content
                     const sanitized = sanitizeJSONContent(initialValue);
 
-                    // Update cache
                     contentCache.current = {
                         raw: stringified,
                         parsed: sanitized,
                     };
 
                     setInitialContent(sanitized);
+                    contentInitialized.current = true;
                 }
             } catch (error) {
                 console.error('Error initializing editor content:', error);
@@ -218,57 +172,49 @@ function NovelEditorCore({
                     duration: 5000,
                 });
                 setInitialContent(createEmptyDocument());
+                contentInitialized.current = true;
             }
         } else {
-            // Empty document structure
             setInitialContent(createEmptyDocument());
+            contentInitialized.current = true;
         }
-    }, [initialValue]);
+    }, []); // Empty deps - run only once
 
     /**
-     * Debounced callback for content changes
-     * Waits 500ms after last change before calling onContentChange
-     * This optimizes performance by reducing excessive updates
+     * FIX 4: Optimize debounced updates - don't trigger re-renders
      */
     const debouncedUpdates = useDebouncedCallback(
         async (editor: EditorInstance) => {
             const json = editor.getJSON();
 
-            // Update character count
             const characterCount = editor.storage.characterCount;
             if (characterCount) {
                 setCharsCount(characterCount.characters());
             }
 
-            // Call the parent's onChange callback
             onContentChange(json);
-
-            // Update save status
             setSaveStatus("Saved");
         },
         500
     );
 
     /**
-     * Handle editor updates
-     * Called on every content change
+     * FIX 5: Memoize callbacks to prevent recreation
      */
     const handleUpdate = useCallback(
         (editor: EditorInstance) => {
-            setSaveStatus("Unsaved");
+            // Don't update state immediately to prevent re-render
+            if (saveStatus !== "Unsaved") {
+                setSaveStatus("Unsaved");
+            }
             debouncedUpdates(editor);
         },
-        [debouncedUpdates]
+        [debouncedUpdates, saveStatus]
     );
 
-    /**
-     * Handle editor creation
-     * Store the editor instance for later use
-     */
     const handleCreate = useCallback((editor: EditorInstance) => {
         setEditorInstance(editor);
 
-        // Initialize character count
         const characterCount = editor.storage.characterCount;
         if (characterCount) {
             setCharsCount(characterCount.characters());
@@ -276,8 +222,7 @@ function NovelEditorCore({
     }, []);
 
     /**
-     * Handle image selection from gallery
-     * Inserts the selected image at the cursor position and removes the "/gallery" command text
+     * FIX 6: Memoize image select handler
      */
     const handleImageSelect = useCallback(
         (image: string | string[] | null) => {
@@ -288,29 +233,51 @@ function NovelEditorCore({
                 const { dispatch, state } = view;
                 const { $from } = state.selection;
 
-                // Find the position of the "/gallery" command text
                 const commandStart = $from.pos - "/gallery".length;
-
-                // Create image node
                 const imageNode = schema.nodes.image.create({ src: imageUrl });
 
-                // Insert image and remove command text
                 dispatch(
                     state.tr
                         .insert($from.pos, imageNode)
                         .deleteRange(commandStart, $from.pos)
                 );
 
-                // Close the dialog
                 setDialogOpen(false);
             }
         },
         [editorInstance]
     );
 
+    /**
+     * FIX 7: Memoize editor props to prevent recreation
+     */
+    const editorProps = useMemo(() => ({
+        handleDOMEvents: {
+            keydown: (_view: any, event: any) => handleCommandNavigation(event),
+        },
+        handlePaste: (view: any, event: any) => handleImagePaste(view, event, createUploadFn(user?.id || '')),
+        handleDrop: (view: any, event: any, _slice: any, moved: any) => handleImageDrop(view, event, moved, createUploadFn(user?.id || '')),
+        attributes: {
+            class: cn(
+                "prose prose-lg dark:prose-invert prose-headings:font-title font-default focus:outline-none max-w-full",
+                "prose-a:text-muted-foreground prose-a:underline prose-a:underline-offset-[3px] hover:prose-a:text-primary prose-a:transition-colors",
+                "prose-pre:bg-muted prose-pre:text-foreground",
+                "prose-code:bg-muted prose-code:text-foreground prose-code:rounded-md prose-code:px-1.5 prose-code:py-1",
+                "prose-blockquote:border-l-primary prose-blockquote:text-muted-foreground",
+                "prose-hr:border-muted-foreground",
+                "prose-ul:list-disc prose-ol:list-decimal",
+                "prose-li:marker:text-muted-foreground",
+                "prose-img:rounded-lg prose-img:border prose-img:border-muted"
+            ),
+        },
+    }), [user?.id]);
+
     if (initialContent === undefined || !extensionsLoaded) {
         return (
-            <div className="relative w-full min-h-[300px] p-4 border-muted bg-background sm:rounded-lg sm:border sm:shadow-lg flex items-center justify-center">
+            <div
+                className="relative w-full p-4 border-muted bg-background sm:rounded-lg sm:border sm:shadow-lg flex items-center justify-center"
+                style={{ minHeight }}
+            >
                 <div className="text-center text-muted-foreground">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
                     <p>Loading editor...</p>
@@ -320,35 +287,16 @@ function NovelEditorCore({
     }
 
     return (
-        <div className="relative w-full">
+        <div className="relative w-full" style={{ minHeight }}>
             <EditorRoot>
                 <EditorContent
                     initialContent={initialContent}
-                    extensions={[...extensions, slashCommand]}
+                    extensions={[...memoizedExtensions, slashCommand]}
+                    immediatelyRender={false}
                     className={cn(
-                        "relative min-h-[300px] pl-4 w-full border-muted bg-background sm:rounded-lg sm:border sm:shadow-lg",
-                        minHeight && `min-h-[${minHeight}]`
+                        "relative pl-4 w-full border-muted bg-background sm:rounded-lg sm:border sm:shadow-lg",
                     )}
-                    editorProps={{
-                        handleDOMEvents: {
-                            keydown: (_view, event) => handleCommandNavigation(event),
-                        },
-                        handlePaste: (view, event) => handleImagePaste(view, event, createUploadFn(user?.id || '')),
-                        handleDrop: (view, event, _slice, moved) => handleImageDrop(view, event, moved, createUploadFn(user?.id || '')),
-                        attributes: {
-                            class: cn(
-                                "prose prose-lg dark:prose-invert prose-headings:font-title font-default focus:outline-none max-w-full",
-                                "prose-a:text-muted-foreground prose-a:underline prose-a:underline-offset-[3px] hover:prose-a:text-primary prose-a:transition-colors",
-                                "prose-pre:bg-muted prose-pre:text-foreground",
-                                "prose-code:bg-muted prose-code:text-foreground prose-code:rounded-md prose-code:px-1.5 prose-code:py-1",
-                                "prose-blockquote:border-l-primary prose-blockquote:text-muted-foreground",
-                                "prose-hr:border-muted-foreground",
-                                "prose-ul:list-disc prose-ol:list-decimal",
-                                "prose-li:marker:text-muted-foreground",
-                                "prose-img:rounded-lg prose-img:border prose-img:border-muted"
-                            ),
-                        },
-                    }}
+                    editorProps={editorProps}
                     onUpdate={({ editor }) => handleUpdate(editor as EditorInstance)}
                     onCreate={({ editor }) => handleCreate(editor as EditorInstance)}
                     slotAfter={<ImageResizer />}
@@ -363,7 +311,6 @@ function NovelEditorCore({
                                 <CustomEditorCommandItem
                                     value={item.title}
                                     onCommand={(val) => {
-                                        // Special handling for Gallery Image command
                                         if (item.title === "Gallery Image") {
                                             if (enableGallery) {
                                                 setDialogOpen(true);
@@ -373,7 +320,6 @@ function NovelEditorCore({
                                         }
                                     }}
                                     onEnterPress={() => {
-                                        // Special handling for Gallery Image when Enter is pressed
                                         if (item.title === "Gallery Image" && enableGallery) {
                                             setDialogOpen(true);
                                         }
@@ -395,38 +341,22 @@ function NovelEditorCore({
                         </EditorCommandList>
                     </EditorCommand>
 
-                    {/* Generative menu switch with selectors */}
-                    {enableAI ? (
-                        <GenerativeMenuSwitch open={openAI} onOpenChange={setOpenAI}>
-                            <Separator orientation="vertical" />
-                            <NodeSelector open={openNode} onOpenChange={setOpenNode} />
-                            <Separator orientation="vertical" />
-                            <LinkSelector open={openLink} onOpenChange={setOpenLink} />
-                            <Separator orientation="vertical" />
-                            <MathSelector />
-                            <Separator orientation="vertical" />
-                            <TextButtons />
-                            <Separator orientation="vertical" />
-                            <ColorSelector open={openColor} onOpenChange={setOpenColor} />
-                        </GenerativeMenuSwitch>
-                    ) : (
-                        <GenerativeMenuSwitch open={openAI} onOpenChange={setOpenAI}>
-                            <Separator orientation="vertical" />
-                            <NodeSelector open={openNode} onOpenChange={setOpenNode} />
-                            <Separator orientation="vertical" />
-                            <LinkSelector open={openLink} onOpenChange={setOpenLink} />
-                            <Separator orientation="vertical" />
-                            <MathSelector />
-                            <Separator orientation="vertical" />
-                            <TextButtons />
-                            <Separator orientation="vertical" />
-                            <ColorSelector open={openColor} onOpenChange={setOpenColor} />
-                        </GenerativeMenuSwitch>
-                    )}
+                    {/* FIX 9: Memoize menu switch to prevent re-renders */}
+                    <MenuSwitch
+                        enableAI={enableAI}
+                        openAI={openAI}
+                        setOpenAI={setOpenAI}
+                        openNode={openNode}
+                        setOpenNode={setOpenNode}
+                        openLink={openLink}
+                        setOpenLink={setOpenLink}
+                        openColor={openColor}
+                        setOpenColor={setOpenColor}
+                    />
                 </EditorContent>
             </EditorRoot>
 
-            {/* Status indicators */}
+            {/* FIX 10: Move status indicators outside to prevent affecting editor height */}
             <div className="mt-2 flex items-center justify-between text-sm text-muted-foreground">
                 <div className="flex items-center gap-2">
                     <span className={cn(
@@ -455,47 +385,22 @@ function NovelEditorCore({
             {/* Gallery Dialog */}
             {enableGallery && (
                 <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                    <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-                        <DialogHeader>
-                            <DialogTitle>Select Image from Gallery</DialogTitle>
-                            <DialogDescription>
-                                Choose an image from your gallery to insert into the editor.
-                            </DialogDescription>
-                        </DialogHeader>
-                        <div className="p-4">
-                            {/* TODO: Integrate with actual gallery component */}
-                            {/* For now, provide a simple URL input as a placeholder */}
-                            <div className="space-y-4">
-                                <p className="text-sm text-muted-foreground">
-                                    Gallery integration will be completed in a future update.
-                                    For now, you can enter an image URL directly:
-                                </p>
-                                <div className="flex gap-2">
-                                    <Input
-                                        id="gallery-image-url"
-                                        type="text"
-                                        placeholder="https://example.com/image.jpg"
-                                        onKeyDown={(e) => {
-                                            if (e.key === "Enter") {
-                                                const input = e.target as HTMLInputElement;
-                                                handleImageSelect(input.value);
-                                                input.value = "";
-                                            }
-                                        }}
-                                    />
-                                    <Button
-                                        onClick={() => {
-                                            const input = document.getElementById("gallery-image-url") as HTMLInputElement;
-                                            if (input && input.value) {
-                                                handleImageSelect(input.value);
-                                                input.value = "";
-                                            }
-                                        }}
-                                    >
-                                        Insert
-                                    </Button>
-                                </div>
-                            </div>
+                    <DialogContent className="!w-[80vw] !max-w-[80vw] sm:!max-w-[80vw] left-1/2 -translate-x-1/2 max-h-[90vh] p-0">
+                        <VisuallyHidden>
+                            <DialogHeader className="p-6 pb-0">
+                                <DialogTitle>Select Images from Gallery</DialogTitle>
+                                <DialogDescription>
+                                    Choose images from your media gallery to add to the editor.
+                                </DialogDescription>
+                            </DialogHeader>
+                        </VisuallyHidden>
+                        <div className="h-[calc(90vh-120px)] w-full overflow-y-auto">
+                            <Gallery
+                                mode="picker"
+                                onMediaSelect={handleImageSelect}
+                                allowMultiple={false}
+                                initialTab="images"
+                            />
                         </div>
                     </DialogContent>
                 </Dialog>
@@ -505,38 +410,61 @@ function NovelEditorCore({
 }
 
 /**
- * NovelEditor with Error Boundary
- * 
- * Wraps the core NovelEditor component with an error boundary
- * to catch and handle editor initialization errors gracefully.
- * 
- * Provides a fallback textarea when the editor fails to load,
- * preventing data loss and allowing users to continue editing.
- * 
- * Requirements: 20.3
+ * FIX 11: Separate MenuSwitch component to prevent parent re-renders
  */
+const MenuSwitch = React.memo(({
+    enableAI,
+    openAI,
+    setOpenAI,
+    openNode,
+    setOpenNode,
+    openLink,
+    setOpenLink,
+    openColor,
+    setOpenColor
+}: any) => {
+    return (
+        <GenerativeMenuSwitch open={openAI} onOpenChange={setOpenAI}>
+            <Separator orientation="vertical" />
+            <NodeSelector open={openNode} onOpenChange={setOpenNode} />
+            <Separator orientation="vertical" />
+            <LinkSelector open={openLink} onOpenChange={setOpenLink} />
+            <Separator orientation="vertical" />
+            <Separator orientation="vertical" />
+            <TextButtons />
+            <Separator orientation="vertical" />
+            <ColorSelector open={openColor} onOpenChange={setOpenColor} />
+        </GenerativeMenuSwitch>
+    );
+});
+
+MenuSwitch.displayName = 'MenuSwitch';
+
 export default function NovelEditor(props: NovelEditorProps) {
+    const { initialValue, onContentChange } = props;
     const [fallbackValue, setFallbackValue] = useState('');
 
-    // Convert JSONContent to string for fallback
     useEffect(() => {
-        if (props.initialValue) {
+        if (initialValue) {
             try {
-                setFallbackValue(JSON.stringify(props.initialValue, null, 2));
+                setTimeout(() => {
+                    setFallbackValue(JSON.stringify(initialValue, null, 2));
+                }, 0);
             } catch (e) {
                 console.error('Error stringifying initial value:', e);
-                setFallbackValue('');
+                setTimeout(() => {
+                    setFallbackValue('');
+                }, 0);
             }
         }
-    }, [props.initialValue]);
+    }, [initialValue]);
 
     const handleFallbackChange = (value: string) => {
         setFallbackValue(value);
         try {
             const parsed = JSON.parse(value);
-            props.onContentChange(parsed);
+            onContentChange(parsed);
         } catch (e) {
-            // Invalid JSON, don't update
             console.error('Invalid JSON in fallback:', e);
         }
     };

@@ -1,19 +1,14 @@
 'use client';
 
-import { useLayout } from '@/providers/LayoutProvider';
 import ToursBreadcrumb from '@/components/tours/ToursBreadcrumb';
 import TourFilters from '@/components/tours/TourFilters';
+import { ContentContainer } from '@/components/layout/PublicLayoutClient';
 import TourCard from '@/components/tours/TourCard';
 import TourSearch from '@/components/tours/TourSearch';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { getTours } from '@/lib/api/tours';
-import { getAllCategories } from '@/lib/api/categories';
-import { getAllDestinations } from '@/lib/api/destinations';
+import { useToursInfinite, useApprovedCategories, useApprovedDestinations } from '@/lib/queries';
 import { useRef, useCallback, useEffect, useState, useMemo } from 'react';
 
 export default function ToursPage() {
-    const { isFullWidth } = useLayout();
-
     // Filter state management
     const [selectedCategory, setSelectedCategory] = useState<string>('all');
     const [selectedDestination, setSelectedDestination] = useState<string>('all');
@@ -26,7 +21,6 @@ export default function ToursPage() {
     // Intersection observer ref for infinite scroll
     const observerRef = useRef<HTMLDivElement>(null);
 
-    // Fetch tours with infinite scroll
     const {
         data: toursData,
         fetchNextPage,
@@ -35,33 +29,12 @@ export default function ToursPage() {
         isLoading: isLoadingTours,
         isError: isErrorTours,
         error: toursError,
-    } = useInfiniteQuery({
-        queryKey: ['tours'],
-        queryFn: ({ pageParam }: { pageParam: number }) => getTours({ page: pageParam, limit: 12 }),
-        initialPageParam: 1,
-        getNextPageParam: (lastPage) => lastPage.nextPage,
-        staleTime: 5 * 60 * 1000, // 5 minutes
-        refetchOnWindowFocus: false,
-        retry: 2,
-    });
+    } = useToursInfinite(12);
 
-    // Fetch categories for filtering
-    const { data: categories = [] } = useQuery({
-        queryKey: ['global-categories-approved'],
-        queryFn: getAllCategories,
-        staleTime: 5 * 60 * 1000,
-        refetchOnWindowFocus: false,
-        retry: 2,
-    });
-
-    // Fetch destinations for filtering
-    const { data: destinations = [] } = useQuery({
-        queryKey: ['global-destinations-approved'],
-        queryFn: getAllDestinations,
-        staleTime: 5 * 60 * 1000,
-        refetchOnWindowFocus: false,
-        retry: 2,
-    });
+    const { data: categoriesData } = useApprovedCategories();
+    const { data: destinationsData } = useApprovedDestinations();
+    const categories = Array.isArray(categoriesData) ? categoriesData : [];
+    const destinations = Array.isArray(destinationsData) ? destinationsData : (destinationsData as { items?: unknown[] })?.items ?? [];
 
     // Intersection observer callback for infinite scroll
     const handleObserver = useCallback(
@@ -93,7 +66,7 @@ export default function ToursPage() {
     }, [handleObserver]);
 
     // Flatten all pages of tours
-    const allTours = toursData?.pages.flatMap((page) => page.tours) ?? [];
+    const allTours = toursData?.pages.flatMap((page) => page?.items ?? []) ?? [];
 
 
     // Dynamic price range generation
@@ -285,7 +258,7 @@ export default function ToursPage() {
 
             {/* Breadcrumb Navigation */}
             <ToursBreadcrumb />
-            <div className={`${isFullWidth ? 'w-full px-4' : ' mx-auto max-w-7xl  px-4'} py-4 sm:py-6 lg:py-8 transition-all duration-300`}>
+            <ContentContainer className="px-4 py-4 sm:py-6 lg:py-8 transition-all duration-300">
                 {/* Main Content Area */}
                 <main id="main-content" className={`py-4 sm:py-6 lg:py-8 transition-all duration-300`}>
                     {/* ARIA live region for screen readers */}
@@ -423,7 +396,7 @@ export default function ToursPage() {
                         </div>
                     </aside>
                 </div>
-            </div>
+            </ContentContainer>
 
         </>
     );

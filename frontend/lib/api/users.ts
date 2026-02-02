@@ -19,8 +19,22 @@ export const fetchCurrentUser = async (): Promise<User | null> => {
     try {
         const response = await api.get('/users/me');
         const userData = extractResponseData<User>(response);
-        useUserStore.getState().setUser(userData);
-        return userData;
+        
+        // Normalize roles: server returns array, frontend expects string
+        let normalizedRoles: string = '';
+        if (Array.isArray(userData.roles)) {
+            normalizedRoles = userData.roles[0] || '';
+        } else if (typeof userData.roles === 'string') {
+            normalizedRoles = userData.roles;
+        }
+        
+        const normalizedUser: User = {
+            ...userData,
+            roles: normalizedRoles,
+        };
+        
+        useUserStore.getState().setUser(normalizedUser);
+        return normalizedUser;
     } catch {
         // Not authenticated or session expired
         useUserStore.getState().clearUser();
@@ -40,18 +54,36 @@ export const loginUser = async (credentials: {
     keepMeSignedIn?: boolean;
 }): Promise<User> => {
     const response = await api.post('/users/login', credentials);
-    
-    // Extract data from nested response structure: { success, message, data: { user: {...} } }
-    const responseData = extractResponseData<{ user: User } | User>(response);
-    const userData = 'user' in responseData ? responseData.user : responseData;
-    
-    // Ensure id is always a string (handle MongoDB ObjectId buffer conversion)
+
+    const body = response?.data;
+    let userData: any = null;
+    if (body?.data) {
+        const data = body.data;
+        userData = data?.user ?? data;
+    } else if (body?.user) {
+        userData = body.user;
+    } else if (body?.id || body?.email) {
+        userData = body;
+    }
+
+    if (!userData || (typeof userData !== 'object')) {
+        throw new Error('Invalid login response: no user data');
+    }
+
+    const normalizedRoles: string = Array.isArray(userData.roles)
+        ? (userData.roles[0] ?? '')
+        : (userData.roles ?? '');
+
     const normalizedUser: User = {
         ...userData,
-        id: userData.id?.toString() || userData.id || null,
+        id: userData.id?.toString?.() ?? userData.id ?? null,
+        roles: normalizedRoles,
     };
-    
+
+    // Update store immediately
     useUserStore.getState().setUser(normalizedUser);
+    
+    // IMPORTANT: Return the normalized user so handleLogin can verify it
     return normalizedUser;
 };
 

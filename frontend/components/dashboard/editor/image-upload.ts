@@ -193,10 +193,8 @@ const uploadImageFiles = async (
             // Log compression results
             if (compressed.size < file.size) {
                 const savedMB = ((file.size - compressed.size) / 1024 / 1024).toFixed(2);
-                console.log(`Compressed ${file.name}: saved ${savedMB}MB`);
             }
         } catch (error) {
-            console.warn(`Failed to compress ${file.name}, using original:`, error);
             compressedFiles.push(file);
         }
     }
@@ -369,7 +367,11 @@ export const createUploadFn = (userId: string) => createImageUpload({
 
             if (progressToast) {
                 // Update existing toast (not directly supported, so we'll just log)
-                console.log(`Upload progress: ${progress}% - ${message}`);
+                toast({
+                    title: 'Uploading Image',
+                    description: `${message} (${progress}%)`,
+                    duration: 30000, // Long duration, will be dismissed on completion
+                });
             } else {
                 progressToast = toast({
                     title: 'Uploading Image',

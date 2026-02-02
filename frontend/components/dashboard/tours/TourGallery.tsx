@@ -1,16 +1,14 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useFormContext } from 'react-hook-form';
 import {
     X,
-    Plus,
     ImageIcon,
     ChevronLeft,
     ChevronRight,
     GripVertical,
     AlertTriangle,
-    Upload,
 } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -23,8 +21,11 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
-import { getDefaultGalleryItem } from '@/lib/utils/defaultTourValues';
+import { useTourContext } from '@/providers/TourProvider';
 import type { GalleryItem } from '@/lib/schemas/tourEditor';
+import { Gallery } from '@/components/dashboard/gallery/Gallery';
+import Image from 'next/image';
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 
 /**
  * TourGallery Component
@@ -33,67 +34,46 @@ import type { GalleryItem } from '@/lib/schemas/tourEditor';
  */
 
 export function TourGallery() {
-    const { setValue, watch } = useFormContext();
-    const [imageArray, setImageArray] = useState<GalleryItem[]>([]);
+
+    const { galleryFields, appendGallery, galleryRemove, galleryMove } = useTourContext();
+    const { watch } = useFormContext();
+
+
     const [viewerOpen, setViewerOpen] = useState(false);
     const [selectedIndex, setSelectedIndex] = useState(0);
     const [deleteIndex, setDeleteIndex] = useState<number | null>(null);
     const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+    const [galleryPickerOpen, setGalleryPickerOpen] = useState(false);
 
     // Watch gallery from form
-    const gallery = watch('gallery') || [];
+    const gallery = watch('gallery') as GalleryItem[];
 
-    // Sync gallery from form to local state
-    useEffect(() => {
-        if (Array.isArray(gallery) && gallery.length > 0) {
-            setImageArray(gallery);
-        }
-    }, [gallery]);
+    // Open gallery picker dialog
+    const handleOpenGalleryPicker = () => {
+        setGalleryPickerOpen(true);
+    };
 
-    // Handle file upload
-    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const files = e.target.files;
-        if (!files || files.length === 0) return;
+    const handleMediaSelect = (urls: string | string[]) => {
+        const urlArray = Array.isArray(urls) ? urls : [urls];
 
-        // Create preview URLs for uploaded files
-        const newItems: GalleryItem[] = [];
-        Array.from(files).forEach((file) => {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                const newItem: GalleryItem = {
-                    image: reader.result as string,
-                    tempId: `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-                };
-                newItems.push(newItem);
-
-                // Update state when all files are read
-                if (newItems.length === files.length) {
-                    setImageArray((prev) => {
-                        const updated = [...prev, ...newItems];
-                        setValue('gallery', updated, { shouldDirty: true });
-                        return updated;
-                    });
-                }
-            };
-            reader.readAsDataURL(file);
+        // Add each URL to gallery using appendGallery
+        urlArray.forEach((url) => {
+            appendGallery({
+                image: url,
+            });
         });
 
-        // Reset input
-        e.target.value = '';
+        // Close picker
+        setGalleryPickerOpen(false);
     };
 
     // Handle remove image
     const handleRemoveImage = (index: number) => {
         setDeleteIndex(index);
     };
-
     const handleDeleteConfirm = () => {
         if (deleteIndex !== null) {
-            setImageArray((prev) => {
-                const filtered = prev.filter((_, i) => i !== deleteIndex);
-                setValue('gallery', filtered, { shouldDirty: true });
-                return filtered;
-            });
+            galleryRemove(deleteIndex);
             setDeleteIndex(null);
         }
     };
@@ -117,14 +97,7 @@ export function TourGallery() {
         e.preventDefault();
         if (draggedIndex === null || draggedIndex === dropIndex) return;
 
-        setImageArray((prev) => {
-            const newArray = [...prev];
-            const [draggedItem] = newArray.splice(draggedIndex, 1);
-            newArray.splice(dropIndex, 0, draggedItem);
-            setValue('gallery', newArray, { shouldDirty: true });
-            return newArray;
-        });
-
+        galleryMove(draggedIndex, dropIndex);
         setDraggedIndex(null);
     };
 
@@ -139,12 +112,12 @@ export function TourGallery() {
     };
 
     const goNext = () => {
-        setSelectedIndex((prev) => (prev + 1) % imageArray.length);
+        setSelectedIndex((prev) => (prev + 1) % gallery.length);
     };
 
     const goPrev = () => {
         setSelectedIndex((prev) =>
-            prev === 0 ? imageArray.length - 1 : prev - 1
+            prev === 0 ? gallery.length - 1 : prev - 1
         );
     };
 
@@ -161,47 +134,40 @@ export function TourGallery() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    {/* Upload Button */}
+                    {/* Gallery Picker Button */}
                     <div className="flex items-center justify-between">
                         <Label>Gallery Images</Label>
-                        <div>
-                            <input
-                                type="file"
-                                id="gallery-upload"
-                                accept="image/*"
-                                multiple
-                                onChange={handleFileUpload}
-                                className="hidden"
-                            />
-                            <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => document.getElementById('gallery-upload')?.click()}
-                            >
-                                <Plus className="h-4 w-4 mr-2" />
-                                Add Images
-                            </Button>
-                        </div>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={handleOpenGalleryPicker}
+                        >
+                            <ImageIcon className="h-4 w-4 mr-2" />
+                            Select from Gallery
+                        </Button>
                     </div>
 
                     {/* Image Grid */}
-                    {imageArray.length > 0 ? (
+                    {gallery.length > 0 ? (
                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                            {imageArray.map((item, index) => (
-                                <GalleryImageItem
-                                    key={item.tempId || item._id || index}
-                                    item={item}
-                                    index={index}
-                                    onRemove={() => handleRemoveImage(index)}
-                                    onClick={() => handleImageClick(index)}
-                                    onDragStart={(e) => handleDragStart(e, index)}
-                                    onDragOver={handleDragOver}
-                                    onDrop={(e) => handleDrop(e, index)}
-                                    onDragEnd={handleDragEnd}
-                                    isDragging={draggedIndex === index}
-                                />
-                            ))}
+                            {galleryFields.map((field, index) => {
+                                const item = gallery[index];
+                                return (
+                                    <GalleryImageItem
+                                        key={field.id}
+                                        item={item}
+                                        index={index}
+                                        onRemove={() => handleRemoveImage(index)}
+                                        onClick={() => handleImageClick(index)}
+                                        onDragStart={(e) => handleDragStart(e, index)}
+                                        onDragOver={handleDragOver}
+                                        onDrop={(e) => handleDrop(e, index)}
+                                        onDragEnd={handleDragEnd}
+                                        isDragging={draggedIndex === index}
+                                    />
+                                );
+                            })}
                         </div>
                     ) : (
                         <div className="flex flex-col items-center justify-center p-12 rounded-lg border-2 border-dashed border-border text-center bg-secondary/20">
@@ -214,10 +180,10 @@ export function TourGallery() {
                             </p>
                             <Button
                                 type="button"
-                                onClick={() => document.getElementById('gallery-upload')?.click()}
+                                onClick={handleOpenGalleryPicker}
                             >
-                                <Upload className="h-4 w-4 mr-2" />
-                                Upload Images
+                                <ImageIcon className="h-4 w-4 mr-2" />
+                                Select from Gallery
                             </Button>
                         </div>
                     )}
@@ -226,15 +192,15 @@ export function TourGallery() {
 
             {/* Image Viewer Dialog */}
             <Dialog open={viewerOpen} onOpenChange={setViewerOpen}>
-                <DialogContent className="max-w-4xl p-4">
+                <DialogContent className="max-w-6xl p-4">
                     <DialogTitle className="sr-only">Image Gallery Viewer</DialogTitle>
                     <DialogDescription className="sr-only">
                         Full screen image viewer with navigation controls
                     </DialogDescription>
                     <div className="relative w-full h-[70vh] flex items-center justify-center bg-muted rounded-md">
-                        {imageArray[selectedIndex] ? (
-                            <img
-                                src={imageArray[selectedIndex].image}
+                        {gallery[selectedIndex] ? (
+                            <Image
+                                src={gallery[selectedIndex].image}
                                 alt={`Gallery ${selectedIndex + 1}`}
                                 className="max-h-full max-w-full object-contain"
                             />
@@ -243,7 +209,7 @@ export function TourGallery() {
                         )}
 
                         {/* Navigation Buttons */}
-                        {imageArray.length > 1 && (
+                        {gallery.length > 1 && (
                             <>
                                 <Button
                                     variant="ghost"
@@ -266,9 +232,9 @@ export function TourGallery() {
                     </div>
 
                     {/* Dots Navigation */}
-                    {imageArray.length > 1 && (
+                    {gallery.length > 1 && (
                         <div className="flex justify-center gap-2 mt-4">
-                            {imageArray.map((_, i) => (
+                            {gallery.map((_, i) => (
                                 <button
                                     key={i}
                                     onClick={() => setSelectedIndex(i)}
@@ -305,6 +271,30 @@ export function TourGallery() {
                             Delete
                         </Button>
                     </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Gallery Picker Dialog */}
+            <Dialog open={galleryPickerOpen} onOpenChange={setGalleryPickerOpen}>
+                <DialogContent className="!w-[80vw] !max-w-[80vw] sm:!max-w-[80vw] left-1/2 -translate-x-1/2 max-h-[90vh] p-0">
+                    <VisuallyHidden>
+
+                        <DialogHeader className="p-6 pb-0">
+                            <DialogTitle>Select Images from Gallery</DialogTitle>
+                            <DialogDescription>
+                                Choose images from your media gallery to add to the tour. You can also upload new images.
+                            </DialogDescription>
+                        </DialogHeader>
+                    </VisuallyHidden>
+                    {/* Use the existing Gallery component in picker mode */}
+                    <div className="h-[calc(90vh-120px)] w-full overflow-y-auto">
+                        <Gallery
+                            mode="picker"
+                            onMediaSelect={handleMediaSelect}
+                            allowMultiple={true}
+                            initialTab="images"
+                        />
+                    </div>
                 </DialogContent>
             </Dialog>
         </div>
@@ -370,9 +360,10 @@ function GalleryImageItem({
                         <p className="text-xs">Failed to load</p>
                     </div>
                 ) : (
-                    <img
+                    <Image
                         src={item.image}
-                        alt={`Gallery ${index + 1}`}
+                        alt={item.alt || `Gallery ${index + 1}`}
+                        fill
                         className="w-full h-full object-cover"
                         onError={() => setImageError(true)}
                     />

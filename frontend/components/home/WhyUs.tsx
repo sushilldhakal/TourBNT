@@ -1,10 +1,9 @@
 "use client";
 
-import { useLayout } from '@/providers/LayoutProvider';
 import { BookOpen, CheckCircle, Lightbulb, DollarSign } from 'lucide-react';
+import { ContentContainer } from '@/components/layout/PublicLayoutClient';
 
 export default function WhyUs() {
-    const { isFullWidth } = useLayout();
 
     const features = [
         {
@@ -40,7 +39,7 @@ export default function WhyUs() {
             <div className="absolute inset-0 bg-black/60" />
 
             {/* Content */}
-            <div className={`relative z-10 mx-auto ${isFullWidth ? 'max-w-full' : 'max-w-7xl'} px-4 transition-all duration-300`}>
+            <ContentContainer className="relative z-10 w-full px-4 transition-all duration-300">
                 <h2 className="text-white text-3xl text-center font-bold mb-12">Why Book with Us?</h2>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-8">
@@ -59,7 +58,7 @@ export default function WhyUs() {
                         </div>
                     ))}
                 </div>
-            </div>
+            </ContentContainer>
         </div>
     );
 }

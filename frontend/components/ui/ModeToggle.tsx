@@ -1,47 +1,55 @@
 'use client';
 
 import * as React from 'react';
-import { Moon, Sun, Monitor } from 'lucide-react';
+import { Moon, Sun } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 
 export function ModeToggle() {
-    const { setTheme, theme } = useTheme();
+    const { setTheme, resolvedTheme } = useTheme();
+    const buttonRef = React.useRef<HTMLButtonElement>(null);
+
+    const toggleTheme = (event: React.MouseEvent<HTMLButtonElement>) => {
+        if (typeof document === 'undefined') return;
+
+        const isDark = resolvedTheme === 'dark';
+        const nextTheme = isDark ? 'light' : 'dark';
+
+        // So the circular reveal animation expands from the click point
+        document.documentElement.style.setProperty('--click-x', `${event.clientX}px`);
+        document.documentElement.style.setProperty('--click-y', `${event.clientY}px`);
+
+        const anyDocument = document as Document & { startViewTransition?: (cb: () => void | Promise<void>) => void };
+
+        if (typeof anyDocument.startViewTransition === 'function') {
+            anyDocument.startViewTransition(() => {
+                // Apply class immediately so the new theme is visible in this frame.
+                // Prevents blink: next-themes would update in the next tick, so the
+                // transition would capture the old theme then flash when class applied.
+                if (nextTheme === 'dark') {
+                    document.documentElement.classList.add('dark');
+                } else {
+                    document.documentElement.classList.remove('dark');
+                }
+                setTheme(nextTheme);
+            });
+        } else {
+            setTheme(nextTheme);
+        }
+    };
 
     return (
-        <DropdownMenu modal={false}>
-            <DropdownMenuTrigger asChild>
-
-
-                <Button variant="ghost" size="icon" className="ml-3 focus-visible:ring-0 focus-visible:ring-offset-0">
-                    <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-                    <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-                    <span className="sr-only">Toggle theme</span>
-                </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => setTheme('light')} className="cursor-pointer">
-                    <Sun className="mr-2 h-4 w-4" />
-                    <span>Light</span>
-                    {theme === 'light' && <span className="ml-auto">✓</span>}
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setTheme('dark')} className="cursor-pointer">
-                    <Moon className="mr-2 h-4 w-4" />
-                    <span>Dark</span>
-                    {theme === 'dark' && <span className="ml-auto">✓</span>}
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setTheme('system')} className="cursor-pointer">
-                    <Monitor className="mr-2 h-4 w-4" />
-                    <span>System</span>
-                    {theme === 'system' && <span className="ml-auto">✓</span>}
-                </DropdownMenuItem>
-            </DropdownMenuContent>
-        </DropdownMenu>
+        <Button
+            ref={buttonRef}
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={toggleTheme}
+            className="focus-visible:ring-0 focus-visible:ring-offset-0 relative overflow-hidden transition-colors duration-300"
+        >
+            <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all duration-300 dark:-rotate-90 dark:scale-0" />
+            <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all duration-300 dark:rotate-0 dark:scale-100" />
+            <span className="sr-only">Toggle theme</span>
+        </Button>
     );
 }

@@ -42,14 +42,15 @@ export const getTours = async ({
 
     try {
         const response = await api.get(url, { timeout: 15000 });
+        const data = extractResponseData(response);
 
-        if (!response.data) {
+        if (!data) {
             throw new Error('Invalid response format: No data received');
         }
 
-        // Handle nested data structure (data.data.data.tours)
-        if (response.data?.data?.data?.tours) {
-            const { tours: toursData, pagination } = response.data.data.data;
+        // Handle nested data structure (data.data.tours) - after extractResponseData
+        if ((data as any)?.data?.tours) {
+            const { tours: toursData, pagination } = (data as any).data;
             return {
                 items: toursData,
                 nextCursor: pagination.hasNextPage ? pagination.currentPage : undefined,
@@ -62,41 +63,25 @@ export const getTours = async ({
             };
         }
 
-        // Check if response has data.data.tours
-        if (response?.data?.data?.tours) {
-            const toursData = response.data.data.tours;
-            const { pagination } = response.data.data;
+        // Check if response has tours at root level
+        if ((data as any)?.tours) {
+            const toursData = (data as any).tours;
+            const pagination = (data as any).pagination;
             return {
                 items: toursData,
-                nextCursor: pagination.hasNextPage ? pagination.currentPage : undefined,
-                pagination,
-                currentPage: pagination.currentPage,
-                totalPages: pagination.totalPages,
-                totalTours: pagination.totalTours,
-                hasNextPage: pagination.hasNextPage,
-                hasPrevPage: pagination.hasPrevPage
-            };
-        }
-
-        // Check if response has data.tours
-        if (response?.data?.tours) {
-            const toursData = response.data.tours;
-            const { pagination } = response.data;
-            return {
-                items: toursData,
-                nextCursor: pagination.hasNextPage ? pagination.currentPage : undefined,
-                pagination,
-                currentPage: pagination.currentPage,
-                totalPages: pagination.totalPages,
-                totalTours: pagination.totalTours,
-                hasNextPage: pagination.hasNextPage,
-                hasPrevPage: pagination.hasPrevPage
+                nextCursor: pagination?.hasNextPage ? pagination.currentPage : undefined,
+                pagination: pagination || {},
+                currentPage: pagination?.currentPage || pageParam + 1,
+                totalPages: pagination?.totalPages || 1,
+                totalTours: pagination?.totalTours || toursData.length,
+                hasNextPage: pagination?.hasNextPage || false,
+                hasPrevPage: pagination?.hasPrevPage || false
             };
         }
 
         // Check if data array is directly available
-        if (response?.data?.success && Array.isArray(response?.data?.data)) {
-            const tours = response.data.data;
+        if (Array.isArray(data)) {
+            const tours = data;
             return {
                 items: tours,
                 nextCursor: pageParam + 1,
@@ -140,15 +125,17 @@ export const getMyTours = async ({
         const limitParam = limit >= 100 ? 'all' : limit;
         const url = `/tours/me?page=${pageParam + 1}&limit=${limitParam}`;
         const response = await api.get(url, { timeout: 30000 }); // Increased timeout for large datasets
+        const data = extractResponseData(response);
 
-        if (!response.data) {
+        if (!data) {
             throw new Error('Invalid response format: No data received');
         }
 
-        // Standard format from sendPaginatedResponse: { success: true, data: T[], pagination: {...} }
-        if (response.data?.success && Array.isArray(response.data?.data) && response.data?.pagination) {
-            const tours = response.data.data;
-            const pagination = response.data.pagination;
+        // Standard format from sendPaginatedResponse: { data: T[], pagination: {...} }
+        const responseData = data as { items?: unknown[]; data?: unknown[]; pagination?: any; tours?: unknown[] };
+        if (responseData.pagination) {
+            const tours = (responseData.items || responseData.data || responseData.tours || []) as unknown[];
+            const pagination = responseData.pagination;
             return {
                 items: tours,
                 nextCursor: pagination.currentPage < pagination.totalPages ? pagination.currentPage : undefined,
@@ -169,8 +156,8 @@ export const getMyTours = async ({
         }
 
         // Fallback: if data array is directly available without pagination
-        if (response.data?.success && Array.isArray(response.data?.data)) {
-            const tours = response.data.data;
+        if (Array.isArray(data)) {
+            const tours = data as unknown[];
             return {
                 items: tours,
                 nextCursor: undefined,
@@ -209,6 +196,20 @@ export const getUserToursTitle = async (userId: string) => {
 };
 
 /**
+ * Resolve tour titles by tour IDs (auth required)
+ * - Admin: resolves any provided IDs
+ * - Seller/User: resolves only titles for tours they own
+ */
+export const getTourTitlesByIds = async (ids: string[]) => {
+    try {
+        const response = await api.post('/tours/titles', { ids });
+        return extractResponseData(response);
+    } catch (error) {
+        throw handleApiError(error, 'fetching tour titles');
+    }
+};
+
+/**
  * Get latest tours
  */
 export const getLatestTours = async () => {
@@ -226,8 +227,9 @@ export const getLatestTours = async () => {
 export const getSingleTour = async (tourId: string) => {
     try {
         const response = await api.get(`/tours/${tourId}`);
-        const tourData = response.data.tour || response.data;
-        const breadcrumbs = response.data.breadcrumbs || [];
+        const data = extractResponseData(response);
+        const tourData = (data as any).tour || data;
+        const breadcrumbs = (data as any).breadcrumbs || [];
 
         return {
             ...tourData,
@@ -283,6 +285,9 @@ export const updateTour = async (tourId: string, data: FormData) => {
  * Delete a tour
  */
 export const deleteTour = async (tourId: string) => {
+    if (!tourId || tourId.trim() === '') {
+        throw new Error('Tour ID is required for deletion');
+    }
     try {
         const response = await api.delete(`/tours/${tourId}`);
         return extractResponseData(response);

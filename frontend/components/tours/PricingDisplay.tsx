@@ -1,6 +1,6 @@
 'use client';
 
-import { Tour } from '@/lib/types';
+import { Tour } from '@/types/types';
 import { BasePricing } from './BasePricing';
 import { PricingOptions } from './PricingOptions';
 

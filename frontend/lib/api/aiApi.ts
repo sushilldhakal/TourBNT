@@ -1,4 +1,4 @@
-import { api } from './apiClient';
+import { api, extractResponseData } from './apiClient';
 import { isAxiosError } from 'axios';
 
 /**
@@ -35,7 +35,7 @@ export const generateCompletion = async (
             throw new Error(`Error: ${response.statusText}`);
         }
 
-        return response.data;
+        return extractResponseData<GenerateCompletionResponse>(response);
     } catch (error) {
         if (isAxiosError(error)) {
             // Handle Axios errors (network errors, 4xx, 5xx responses)

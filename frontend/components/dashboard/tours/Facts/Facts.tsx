@@ -1,6 +1,6 @@
 "use client";
 
-import { useQueryClient } from "@tanstack/react-query";
+import { useCacheManager } from "@/lib/queries/cacheUtils";
 import { deleteFacts, deleteMultipleFacts } from "@/lib/api/factsApi";
 import { toast } from "@/components/ui/use-toast";
 import AddFact from "./AddFacts";
@@ -8,11 +8,12 @@ import SingleFact from "./SingleFacts";
 import FactTableRow from "./FactTableRow";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { FileText, Plus, Search, Trash2 } from "lucide-react";
+import { DashboardCardHeader } from "@/components/dashboard/layout/CardHeader";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useFacts } from "./useFacts";
+import { useFacts } from '@/lib/hooks/tours';
 import { ViewToggle } from "../ViewToggle";
 import { getViewPreference, setViewPreference } from "@/lib/utils/viewPreferences";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -27,7 +28,7 @@ import { useAuth } from "@/lib/hooks/useAuth";
 
 const TourFacts = () => {
     const { userId } = useAuth();
-    const queryClient = useQueryClient();
+    const { invalidateFacts } = useCacheManager();
     const [searchQuery, setSearchQuery] = useState("");
     const [isAddFactOpen, setIsAddFactOpen] = useState(false);
     const [view, setView] = useState<'grid' | 'list'>(() => getViewPreference('facts'));
@@ -49,9 +50,7 @@ const TourFacts = () => {
                 description: 'The fact has been removed.',
                 variant: 'default',
             });
-            queryClient.invalidateQueries({
-                queryKey: ['Facts', userId],
-            });
+            invalidateFacts(userId);
         } catch (error) {
             toast({
                 title: 'Failed to delete fact',
@@ -91,9 +90,7 @@ const TourFacts = () => {
             });
             setSelectedFacts(new Set());
             setBulkDeleteDialogOpen(false);
-            queryClient.invalidateQueries({
-                queryKey: ['Facts', userId],
-            });
+            invalidateFacts(userId);
         } catch (error) {
             toast({
                 title: 'Failed to delete facts',
@@ -112,45 +109,46 @@ const TourFacts = () => {
     );
 
     return (
-        <div className="container mx-auto px-4 py-6 max-w-7xl">
+        <div className="container mx-auto px-4 py-8 max-w-6xl">
             <div className="flex flex-col space-y-6">
-                {/* Header Section */}
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                    <div className="flex items-center gap-2">
-                        <FileText className="h-6 w-6 text-primary" />
-                        <h1 className="text-2xl font-bold tracking-tight">Tour Facts</h1>
-                    </div>
-                    <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-                        {/* Search Bar */}
-                        <div className="relative flex-1 sm:flex-initial">
-                            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                            <Input
-                                placeholder="Search facts..."
-                                className="pl-9 w-full sm:w-[300px]"
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                            />
-                        </div>
-                        <ViewToggle view={view} onViewChange={handleViewChange} />
-                        {selectedFacts.size > 0 && view === 'list' && (
+                <DashboardCardHeader
+                    variant="compact"
+                    icon={FileText}
+                    badge="Tours"
+                    title="Tour Facts"
+                    description="Manage important facts about your tours"
+                    actions={
+                        <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                            <div className="relative flex-1 sm:flex-initial">
+                                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                                <Input
+                                    placeholder="Search facts..."
+                                    className="pl-9 w-full sm:w-[300px]"
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                />
+                            </div>
+                            <ViewToggle view={view} onViewChange={handleViewChange} />
+                            {selectedFacts.size > 0 && view === 'list' && (
+                                <Button
+                                    variant="destructive"
+                                    onClick={() => setBulkDeleteDialogOpen(true)}
+                                    className="flex items-center gap-2"
+                                >
+                                    <Trash2 className="h-4 w-4" />
+                                    Delete ({selectedFacts.size})
+                                </Button>
+                            )}
                             <Button
-                                variant="destructive"
-                                onClick={() => setBulkDeleteDialogOpen(true)}
+                                onClick={() => setIsAddFactOpen(!isAddFactOpen)}
                                 className="flex items-center gap-2"
                             >
-                                <Trash2 className="h-4 w-4" />
-                                Delete ({selectedFacts.size})
+                                {isAddFactOpen ? "Close Form" : "Add New Fact"}
+                                <Plus className="h-4 w-4" />
                             </Button>
-                        )}
-                        <Button
-                            onClick={() => setIsAddFactOpen(!isAddFactOpen)}
-                            className="flex items-center gap-2"
-                        >
-                            {isAddFactOpen ? "Close Form" : "Add New Fact"}
-                            <Plus className="h-4 w-4" />
-                        </Button>
-                    </div>
-                </div>
+                        </div>
+                    }
+                />
 
                 {/* Add Fact Form */}
                 {isAddFactOpen && (
@@ -158,9 +156,7 @@ const TourFacts = () => {
                         <AddFact
                             onFactAdded={() => {
                                 if (userId) {
-                                    queryClient.invalidateQueries({
-                                        queryKey: ['Facts', userId]
-                                    });
+                                    invalidateFacts(userId);
                                     setIsAddFactOpen(false);
                                 }
                             }}

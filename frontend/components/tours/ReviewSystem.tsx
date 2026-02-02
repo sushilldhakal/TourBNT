@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useTourReviews } from '@/lib/queries';
 import { Star, ThumbsUp, Eye, MessageCircle, Send } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -18,7 +19,7 @@ import {
     incrementReviewView,
     incrementReplyView,
 } from '@/lib/api/reviews';
-import { Review, Reply } from '@/lib/types';
+import { Review, Reply } from '@/types/types';
 import { cn } from '@/lib/utils';
 
 interface ReviewSystemProps {
@@ -27,16 +28,12 @@ interface ReviewSystemProps {
 }
 
 export function ReviewSystem({ tourId, initialReviews }: ReviewSystemProps) {
-    // Fetch reviews with React Query and optimized caching
-    const { data: reviewsData, refetch } = useQuery({
-        queryKey: ['tourReviews', tourId],
-        queryFn: () => getTourReviews(tourId, 'approved'),
-        initialData: initialReviews ? { data: { reviews: initialReviews } } : undefined,
-        staleTime: 2 * 60 * 1000, // 2 minutes - reviews are dynamic
-        gcTime: 5 * 60 * 1000, // 5 minutes cache time
-    });
-
-    const reviews = reviewsData?.data?.reviews || [];
+    const { data: reviewsData, refetch } = useTourReviews(tourId, 'approved', !!tourId);
+    const reviews =
+        (reviewsData as { data?: { reviews?: Review[] }; reviews?: Review[] })?.data?.reviews ??
+        (reviewsData as { reviews?: Review[] })?.reviews ??
+        initialReviews ??
+        [];
 
     return (
         <section className="bg-card border rounded-lg p-4 sm:p-6 space-y-4 sm:space-y-6" aria-labelledby="reviews-heading">

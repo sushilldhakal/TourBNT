@@ -1,4 +1,4 @@
-import { api, handleApiError } from './apiClient';
+import { api, handleApiError, extractResponseData } from './apiClient';
 
 /**
  * Login user
@@ -8,7 +8,7 @@ export const login = async (data: { email: string; password: string; keepMeSigne
         const response = await api.post('/users/login', data, {
             timeout: 15000,
         });
-        return response.data;
+        return extractResponseData(response);
     } catch (error) {
         handleApiError(error, 'logging in');
     }
@@ -22,7 +22,7 @@ export const register = async (data: { name: string; email: string; password: st
         const response = await api.post('/users/register', data, {
             timeout: 15000,
         });
-        return response.data;
+        return extractResponseData(response);
     } catch (error) {
         handleApiError(error, 'registering');
     }
@@ -36,7 +36,7 @@ export const verifyEmail = async (data: { token: string }) => {
         const response = await api.post('/auth/verify-email', data, {
             timeout: 15000,
         });
-        return response.data;
+        return extractResponseData(response);
     } catch (error) {
         handleApiError(error, 'verifying email');
     }
@@ -50,7 +50,7 @@ export const forgotPassword = async (data: { email: string }) => {
         const response = await api.post('/auth/forgot-password', data, {
             timeout: 15000,
         });
-        return response.data;
+        return extractResponseData(response);
     } catch (error) {
         handleApiError(error, 'requesting password reset');
     }
@@ -64,7 +64,7 @@ export const resetPassword = async (data: { token: string; password: string }) =
         const response = await api.post('/auth/reset-password', data, {
             timeout: 15000,
         });
-        return response.data;
+        return extractResponseData(response);
     } catch (error) {
         handleApiError(error, 'resetting password');
     }

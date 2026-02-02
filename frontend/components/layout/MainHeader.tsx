@@ -2,13 +2,14 @@
 
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { LuMenu as Menu, LuX as X, LuBell as Bell, LuSearch as Search, LuUser as User, LuLoader as Loader2 } from 'react-icons/lu';
-import { useLayout } from '@/providers/LayoutProvider';
+import { Menu, X, Bell, Search, User, Loader2 } from 'lucide-react';
 import { ModeToggle } from '@/components/ui/ModeToggle';
 import Logo from '@/public/logo';
 import { useRole } from '@/lib/hooks/useRole';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { ContentContainer } from './PublicLayoutClient';
 
 const menuItems = [
     { id: 'home', title: 'Home', url: '/' },
@@ -29,10 +30,9 @@ export function MainHeader({ onSearchToggle }: MainHeaderProps) {
     const [showUserMenu, setShowUserMenu] = useState(false);
     const pathname = usePathname();
     const headerRef = useRef<HTMLDivElement>(null);
-    const { isFullWidth } = useLayout();
 
-    // Use centralized role hook
-    const { isAuthenticated, canAccessDashboard: userCanAccessDashboard } = useRole();
+    // Use centralized role hook; AuthBootstrap (in root layout) fetches /users/me on public routes so header shows correct state after 404 or full load
+    const { isAuthenticated, isHydrated, canAccessDashboard: userCanAccessDashboard } = useRole();
     const { logout } = useAuth();
 
     useEffect(() => {
@@ -48,6 +48,21 @@ export function MainHeader({ onSearchToggle }: MainHeaderProps) {
         return () => window.removeEventListener('scroll', handleScroll);
     }, []);
 
+    // Close mobile menu when clicking outside
+    useEffect(() => {
+        if (!isOpen) return;
+
+        const handleClickOutside = (event: MouseEvent) => {
+            const target = event.target as HTMLElement;
+            if (headerRef.current && !headerRef.current.contains(target)) {
+                setIsOpen(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [isOpen]);
+
     const handleLogout = async () => {
         await logout();
     };
@@ -61,9 +76,9 @@ export function MainHeader({ onSearchToggle }: MainHeaderProps) {
                 ref={headerRef}
                 id="main-header"
                 className={`${isHeaderFixed ? 'fixed top-0 h-[60px]' : 'relative h-[76px]'
-                    } z-50 bg-secondary w-full text-secondary-foreground border-t-2 border-primary px-5 transition-all duration-200`}
+                    } z-50 bg-secondary w-full px-5 text-secondary-foreground border-t-2 border-primary transition-all duration-200`}
             >
-                <div className={`mx-auto ${isFullWidth ? 'max-w-full' : 'max-w-7xl'} h-full transition-all duration-300`}>
+                <ContentContainer className="h-full">
                     <div className="relative flex items-center justify-between h-full">
                         {/* Mobile menu button */}
                         <div className="absolute inset-y-0 left-0 flex items-center md:hidden z-10">
@@ -126,7 +141,7 @@ export function MainHeader({ onSearchToggle }: MainHeaderProps) {
                             {/* Theme Toggle */}
                             <ModeToggle />
 
-                            {isAuthenticated ? (
+                            {isHydrated && isAuthenticated ? (
                                 <>
                                     {/* Notifications */}
                                     <button
@@ -149,7 +164,9 @@ export function MainHeader({ onSearchToggle }: MainHeaderProps) {
                                                     <Loader2 className="h-5 w-5 text-primary animate-spin" />
                                                 </div>
                                             ) : avatarUrl ? (
-                                                <img
+                                                <Image
+                                                    width={32}
+                                                    height={32}
                                                     alt="User avatar"
                                                     src={avatarUrl}
                                                     className="h-8 w-8 rounded-full object-cover"
@@ -206,7 +223,10 @@ export function MainHeader({ onSearchToggle }: MainHeaderProps) {
                                     </div>
                                 </>
                             ) : (
-                                <Link href="/auth/login" className="text-primary ml-3">
+                                <Link
+                                    href="/auth/login"
+                                    className="ml-3 inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                                >
                                     Login
                                 </Link>
                             )}
@@ -217,11 +237,11 @@ export function MainHeader({ onSearchToggle }: MainHeaderProps) {
                             </button>
                         </div>
                     </div>
-                </div>
+                </ContentContainer>
 
                 {/* Mobile menu */}
                 {isOpen && (
-                    <div className="md:hidden">
+                    <div className="md:hidden absolute top-full left-0 right-0 bg-secondary border-t border-border shadow-lg z-50">
                         <div className="space-y-1 px-2 pb-3 pt-2">
                             {menuItems.map((item) => (
                                 <Link
@@ -234,6 +254,44 @@ export function MainHeader({ onSearchToggle }: MainHeaderProps) {
                                     {item.title}
                                 </Link>
                             ))}
+                            {/* Add auth links for mobile */}
+                            {isHydrated && isAuthenticated ? (
+                                <>
+                                    {userCanAccessDashboard && (
+                                        <Link
+                                            href="/dashboard"
+                                            className="text-secondary-foreground hover:bg-accent hover:text-accent-foreground block rounded-md px-3 py-2 text-base font-medium"
+                                            onClick={() => setIsOpen(false)}
+                                        >
+                                            Dashboard
+                                        </Link>
+                                    )}
+                                    <Link
+                                        href="/profile"
+                                        className="text-secondary-foreground hover:bg-accent hover:text-accent-foreground block rounded-md px-3 py-2 text-base font-medium"
+                                        onClick={() => setIsOpen(false)}
+                                    >
+                                        Profile
+                                    </Link>
+                                    <button
+                                        onClick={() => {
+                                            setIsOpen(false);
+                                            handleLogout();
+                                        }}
+                                        className="w-full text-left text-secondary-foreground hover:bg-accent hover:text-accent-foreground block rounded-md px-3 py-2 text-base font-medium"
+                                    >
+                                        Sign out
+                                    </button>
+                                </>
+                            ) : (
+                                <Link
+                                    href="/auth/login"
+                                    className="text-secondary-foreground hover:bg-accent hover:text-accent-foreground block rounded-md px-3 py-2 text-base font-medium"
+                                    onClick={() => setIsOpen(false)}
+                                >
+                                    Login
+                                </Link>
+                            )}
                         </div>
                     </div>
                 )}

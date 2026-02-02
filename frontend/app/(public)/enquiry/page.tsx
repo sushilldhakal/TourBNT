@@ -1,16 +1,14 @@
 'use client';
 
-import { useLayout } from '@/providers/LayoutProvider';
 import Link from 'next/link';
 
 export default function EnquiriesPage() {
-    const { isFullWidth } = useLayout();
 
     // TODO: Fetch user enquiries from API
     const enquiries = [];
 
     return (
-        <div className={`${isFullWidth ? 'container-fluid' : 'container'} mx-auto px-4 py-16 transition-all duration-300`}>
+        <div className="w-full mx-auto px-4 py-16 transition-all duration-300">
             <div className="mb-8">
                 <h1 className="text-4xl font-bold mb-4">My Enquiries</h1>
                 <p className="text-xl text-muted-foreground">

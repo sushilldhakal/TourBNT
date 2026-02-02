@@ -1,245 +1,278 @@
 import { api, handleApiError, extractResponseData } from './apiClient';
 
 /**
- * Category API Methods
- * Migrated from dashboard/src/http/categoryApi.ts
- * Follows server API specifications from API_DOCUMENTATION.md
+ * Category API
+ * All category-related API calls. Single source of truth.
  */
 
-export interface CategoryData {
-    _id: string;
-    name: string;
-    description: string;
-    imageUrl?: string;
-    slug: string;
-    isActive: boolean;
-    isApproved: boolean;
-    approvalStatus: string;
-    usageCount: number;
-}
-
-/**
- * Get all categories for seller (admin view)
- */
-export const getSellerCategories = async () => {
-    try {
-        const response = await api.get('/global/categories/seller/visible');
-        return extractResponseData(response);
-    } catch (error) {
-        throw handleApiError(error, 'fetching seller categories');
-    }
+export const categoryApi = {
+    getApproved: (params?: { page?: number; limit?: number; search?: string }) =>
+        api.get('/global/categories', { params }),
+    getByType: (type: string, search?: string) =>
+        api.get(`/global/categories/type/${type}`, { params: { search } }),
+    search: (params: { query?: string; parentCategory?: string }) =>
+        api.get('/global/categories/search', { params }),
+    create: (data: FormData) =>
+        api.post('/global/categories', data, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        }),
+    update: (id: string, data: FormData) =>
+        api.patch(`/global/categories/${id}`, data, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        }),
+    getMyCreated: () =>
+        api.get('/global/categories/my-created'),
+    getMyCategories: (filters?: { isActive?: boolean; isFavorite?: boolean }) =>
+        api.get('/global/categories/my-categories', { params: filters }),
+    getMyActive: () =>
+        api.get('/global/categories/my-active'),
+    getMyFavorites: () =>
+        api.get('/global/categories/my-favorites'),
+    addToMyList: (id: string, options?: { isFavorite?: boolean; customName?: string }) =>
+        api.post(`/global/categories/${id}/add`, options),
+    removeFromMyList: (id: string) =>
+        api.delete(`/global/categories/${id}/remove`),
+    toggleActive: (id: string) =>
+        api.patch(`/global/categories/${id}/toggle-active`),
+    toggleFavorite: (id: string) =>
+        api.patch(`/global/categories/${id}/toggle-favorite`),
+    updateSettings: (id: string, settings: { isActive?: boolean; isFavorite?: boolean; customName?: string; sortOrder?: number }) =>
+        api.patch(`/global/categories/${id}/settings`, settings),
+    bulkUpdate: (updates: Array<{ categoryId: string; sortOrder?: number; isActive?: boolean; isFavorite?: boolean }>) =>
+        api.post('/global/categories/bulk-update', { updates }),
+    adminGetAll: (filters?: { approvalStatus?: string; parentCategory?: string }) =>
+        api.get('/global/categories/admin/all', { params: filters }),
+    adminGetPending: () =>
+        api.get('/global/categories/admin/pending'),
+    adminApprove: (id: string) =>
+        api.put(`/global/categories/admin/${id}/approve`),
+    adminReject: (id: string, reason: string) =>
+        api.put(`/global/categories/admin/${id}/reject`, { reason }),
+    adminDelete: (id: string) =>
+        api.delete(`/global/categories/admin/${id}`),
+    // Change requests (admin only)
+    adminGetChangeRequests: () =>
+        api.get('/global/categories/admin/change-requests'),
+    adminApproveChangeRequest: (changeRequestId: string) =>
+        api.put(`/global/categories/admin/change-requests/${changeRequestId}/approve`),
+    adminRejectChangeRequest: (changeRequestId: string, reason: string) =>
+        api.put(`/global/categories/admin/change-requests/${changeRequestId}/reject`, { reason }),
 };
 
-/**
- * Get user-specific categories
- */
 export const getUserCategories = async () => {
     try {
-        const response = await api.get('/global/categories/user-categories');
+        const response = await categoryApi.getMyCategories();
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching user categories');
     }
 };
 
-/**
- * Get all approved categories
- */
 export const getAllCategories = async () => {
     try {
-        const response = await api.get('/global/categories/approved');
+        const response = await categoryApi.getApproved();
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching categories');
     }
 };
 
-/**
- * Get single category by ID
- */
 export const getCategory = async (categoryId: string) => {
     try {
-        const response = await api.get(`/global/categories/${categoryId}`);
+        const response = await api.get(`/global/categories/public/${categoryId}`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching category');
     }
 };
 
-/**
- * Get single category by ID (alias for getCategory)
- */
-export const getCategoryById = async (categoryId: string) => {
-    return getCategory(categoryId);
-};
+export const getCategoryById = async (categoryId: string) => getCategory(categoryId);
 
-/**
- * Toggle category favorite status
- */
 export const toggleCategoryFavorite = async (categoryId: string) => {
     try {
-        const response = await api.put(`/global/categories/${categoryId}/favorite`);
+        const response = await categoryApi.toggleFavorite(categoryId);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'toggling category favorite');
     }
 };
 
-/**
- * Add existing category to seller list
- */
-export const addExistingCategoryToSeller = async (categoryId: string) => {
+export const toggleCategoryActiveStatus = async (categoryId: string) => {
     try {
-        const response = await api.post(`/global/categories/${categoryId}/add-to-list`);
+        const response = await categoryApi.toggleActive(categoryId);
+        return extractResponseData(response);
+    } catch (error) {
+        throw handleApiError(error, 'toggling category active');
+    }
+};
+
+export const addExistingCategoryToSeller = async (categoryId: string) => {
+    if (!categoryId || categoryId === 'undefined' || categoryId === 'null' || categoryId.trim() === '') {
+        throw new Error('Invalid category ID: categoryId is required and cannot be undefined, null, or empty');
+    }
+    try {
+        const response = await categoryApi.addToMyList(categoryId);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'adding category to list');
     }
 };
 
-/**
- * Remove category from seller list
- */
 export const removeExistingCategoryFromSeller = async (categoryId: string) => {
     try {
-        const response = await api.post(`/global/categories/${categoryId}/remove-from-list`);
+        const response = await categoryApi.removeFromMyList(categoryId);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'removing category from list');
     }
 };
 
-/**
- * Toggle category active status
- */
-export const toggleCategoryActiveStatus = async (categoryId: string) => {
-    try {
-        const response = await api.patch(`/global/categories/${categoryId}/toggle-active`);
-        return extractResponseData(response);
-    } catch (error) {
-        throw handleApiError(error, 'toggling category status');
-    }
-};
-
-/**
- * Add new category
- */
 export const addCategory = async (categoryData: FormData) => {
     try {
-        const response = await api.post('/global/categories/submit', categoryData, {
-            headers: {
-                'Content-Type': 'multipart/form-data',
-            },
-        });
+        const response = await categoryApi.create(categoryData);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'adding category');
     }
 };
 
-/**
- * Update category
- */
 export const updateCategory = async (categoryId: string, categoryData: FormData) => {
     try {
-        const response = await api.patch(`/global/categories/${categoryId}`, categoryData, {
-            headers: {
-                'Content-Type': 'multipart/form-data',
-            },
-        });
+        const response = await categoryApi.update(categoryId, categoryData);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'updating category');
     }
 };
 
-/**
- * Delete category (admin only)
- */
 export const deleteCategory = async (categoryId: string) => {
     try {
-        const response = await api.delete(`/global/categories/admin/${categoryId}`);
+        const response = await categoryApi.adminDelete(categoryId);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'deleting category');
     }
 };
 
-/**
- * Get pending categories (admin)
- */
 export const getPendingCategories = async () => {
     try {
-        const response = await api.get('/global/categories/admin/pending');
+        const response = await categoryApi.adminGetPending();
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching pending categories');
     }
 };
 
-/**
- * Approve category (admin)
- */
 export const approveCategory = async (categoryId: string) => {
     try {
-        const response = await api.put(`/global/categories/admin/${categoryId}/approve`);
+        const response = await categoryApi.adminApprove(categoryId);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'approving category');
     }
 };
 
-/**
- * Reject category (admin)
- */
 export const rejectCategory = async (categoryId: string, reason: string) => {
     try {
-        const response = await api.put(`/global/categories/admin/${categoryId}/reject`, { reason });
+        const response = await categoryApi.adminReject(categoryId, reason);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'rejecting category');
     }
 };
 
-/**
- * Search categories
- */
-export const searchCategories = async (searchParams: {
-    query?: string;
-    parentCategory?: string;
-}) => {
+// Change request functions (admin only)
+export const getChangeRequests = async () => {
     try {
-        const params = new URLSearchParams();
-        if (searchParams.query) params.append('query', searchParams.query);
-        if (searchParams.parentCategory) params.append('parentCategory', searchParams.parentCategory);
+        const response = await categoryApi.adminGetChangeRequests();
+        return extractResponseData(response);
+    } catch (error) {
+        throw handleApiError(error, 'fetching change requests');
+    }
+};
 
-        const response = await api.get(`/global/categories/seller/search?${params.toString()}`);
+export const approveChangeRequest = async (changeRequestId: string) => {
+    try {
+        const response = await categoryApi.adminApproveChangeRequest(changeRequestId);
+        return extractResponseData(response);
+    } catch (error) {
+        throw handleApiError(error, 'approving change request');
+    }
+};
+
+export const rejectChangeRequest = async (changeRequestId: string, reason: string) => {
+    try {
+        const response = await categoryApi.adminRejectChangeRequest(changeRequestId, reason);
+        return extractResponseData(response);
+    } catch (error) {
+        throw handleApiError(error, 'rejecting change request');
+    }
+};
+
+export const searchCategories = async (searchParams: { query?: string; parentCategory?: string }) => {
+    try {
+        const response = await categoryApi.search(searchParams);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'searching categories');
     }
 };
 
-/**
- * Get enabled categories for tour creation
- */
-export const getEnabledCategories = async () => {
+export const getMyActiveCategories = async () => {
     try {
-        const response = await api.get('/global/categories/user-categories');
+        const response = await categoryApi.getMyActive();
         return extractResponseData(response);
     } catch (error) {
-        throw handleApiError(error, 'fetching enabled categories');
+        throw handleApiError(error, 'fetching active categories');
     }
 };
 
-/**
- * Get favorite categories
- */
-export const getFavoriteCategories = async () => {
+export const getMyFavoriteCategories = async () => {
     try {
-        const response = await api.get('/global/categories/seller/favorites');
+        const response = await categoryApi.getMyFavorites();
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching favorite categories');
+    }
+};
+
+export const getMyCreatedCategories = async () => {
+    try {
+        const response = await categoryApi.getMyCreated();
+        return extractResponseData(response);
+    } catch (error) {
+        throw handleApiError(error, 'fetching created categories');
+    }
+};
+
+export const updateCategorySettings = async (
+    categoryId: string,
+    settings: { customName?: string; isFavorite?: boolean; isActive?: boolean }
+) => {
+    try {
+        const response = await categoryApi.updateSettings(categoryId, settings);
+        return extractResponseData(response);
+    } catch (error) {
+        throw handleApiError(error, 'updating category settings');
+    }
+};
+
+export const bulkUpdateCategories = async (
+    updates: Array<{ categoryId: string; isActive?: boolean; isFavorite?: boolean; customName?: string }>
+) => {
+    try {
+        const response = await categoryApi.bulkUpdate(updates);
+        return extractResponseData(response);
+    } catch (error) {
+        throw handleApiError(error, 'bulk updating categories');
+    }
+};
+
+export const getAllCategoriesAdmin = async () => {
+    try {
+        const response = await categoryApi.adminGetAll();
+        return extractResponseData(response);
+    } catch (error) {
+        throw handleApiError(error, 'fetching all categories (admin)');
     }
 };

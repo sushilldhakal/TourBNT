@@ -11,8 +11,9 @@ import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { getUserSetting, userSetting, getDecryptedApiKey } from '@/lib/api/users';
+import { useMutation } from '@tanstack/react-query';
+import { useCacheManager, useUserSettings } from '@/lib/queries';
+import { userSetting, getDecryptedApiKey } from '@/lib/api/users';
 import { getUserId } from '@/lib/utils/auth';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
@@ -41,6 +42,7 @@ import {
     Lock,
     Settings2,
 } from 'lucide-react';
+import { DashboardCardHeader } from '../layout/CardHeader';
 
 
 
@@ -71,11 +73,7 @@ export function SettingsPage() {
     const { toast } = useToast();
     const userId = getUserId();
 
-    const { data, isLoading, isError } = useQuery({
-        queryKey: ['userSettings'],
-        queryFn: () => getUserSetting(userId || '') as Promise<any>,
-        enabled: !!userId,
-    });
+    const { data, isLoading, isError } = useUserSettings(userId ?? undefined, !!userId);
 
     const form = useForm<FormValues>({
         resolver: zodResolver(formSchema),
@@ -106,14 +104,14 @@ export function SettingsPage() {
         }
     }, [data, form]);
 
-    const queryClient = useQueryClient();
+    const { invalidateUserSettings } = useCacheManager();
     const userSettingUpdate = useMutation({
         mutationFn: ({ userId, formData }: { userId: string; formData: FormData }) =>
             userSetting(userId, formData),
         onSuccess: () => {
             setDecryptedKeys({});
             setVisibleKeys({});
-            queryClient.invalidateQueries({ queryKey: ['userSettings'] });
+            invalidateUserSettings();
 
             toast({
                 title: 'Success!',
@@ -558,18 +556,13 @@ export function SettingsPage() {
 
     return (
         <div className="container mx-auto py-8 px-4 max-w-6xl">
-            <div className="mb-8">
-                <div className="flex items-center gap-2 mb-2">
-                    <Settings2 className="h-5 w-5 text-muted-foreground" />
-                    <Badge variant="outline" className="bg-card text-muted-foreground font-medium">
-                        Settings
-                    </Badge>
-                </div>
-                <h1 className="text-3xl font-bold text-foreground">API Integrations</h1>
-                <p className="text-muted-foreground mt-2 max-w-3xl">
-                    Configure your API keys for various services. These keys are securely encrypted and stored.
-                </p>
-            </div>
+            <DashboardCardHeader
+                variant="compact"
+                icon={Settings2}
+                badge="Settings"
+                title="API Integrations"
+                description="Configure your API keys..."
+            />
 
             <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)}>

@@ -1,35 +1,54 @@
 'use client';
 
 import { useEffect } from 'react';
+import useUserStore, { type User } from '@/lib/store/useUserStore';
 import { api, extractResponseData } from '@/lib/api/apiClient';
-import useUserStore, { User } from '@/lib/store/useUserStore';
 
 /**
- * AuthBootstrap Component
- * Fetches current user data on app initialization
- * Runs once when the app mounts
- * 
- * This component has no UI - it only initializes auth state
+ * AuthBootstrap – on public routes (non-dashboard), fetches /users/me once and
+ * populates the user store so the header shows correct auth state (e.g. after
+ * 404 or full page load). Dashboard uses useAuth, which fetches /users/me itself.
  */
 export default function AuthBootstrap() {
     const { setUser, clearUser, setHydrated } = useUserStore();
 
     useEffect(() => {
+        if (typeof window === 'undefined') return;
+
+        const path = window.location.pathname;
+        if (path.startsWith('/dashboard')) return;
+
+        let cancelled = false;
+
         const bootstrap = async () => {
             try {
-                const res = await api.get('/users/me');
-                const userData = extractResponseData<User>(res);
-                setUser(userData);
-            } catch {
-                clearUser();
+                const response = await api.get('/users/me');
+                const userData = extractResponseData<User>(response);
+
+                if (cancelled) return;
+
+                if (userData?.id) {
+                    const roles = Array.isArray(userData.roles)
+                        ? (userData.roles[0] ?? '')
+                        : (userData.roles ?? '');
+                    setUser({ ...userData, roles });
+                } else {
+                    clearUser();
+                }
+            } catch (e: unknown) {
+                if (cancelled) return;
+                const err = e as { response?: { status?: number } };
+                if (err?.response?.status === 401) {
+                    clearUser();
+                }
             } finally {
-                setHydrated();
+                if (!cancelled) setHydrated();
             }
         };
 
         bootstrap();
+        return () => { cancelled = true; };
     }, [setUser, clearUser, setHydrated]);
 
     return null;
 }
-

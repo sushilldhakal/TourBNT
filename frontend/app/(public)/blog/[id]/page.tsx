@@ -1,18 +1,16 @@
 'use client';
 
-import { useLayout } from '@/providers/LayoutProvider';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 
 export default function SingleBlogPage() {
-    const { isFullWidth } = useLayout();
     const params = useParams();
     const blogId = params.id;
 
     // TODO: Fetch blog post details from API
 
     return (
-        <div className={`${isFullWidth ? 'container-fluid' : 'container'} mx-auto px-4 py-16 transition-all duration-300`}>
+        <div className="w-full mx-auto px-4 py-16 transition-all duration-300">
             <div className="max-w-4xl mx-auto">
                 <Link href="/blog" className="text-primary hover:text-primary/80 mb-6 inline-block">
                     ← Back to Blog

@@ -1,6 +1,6 @@
 'use client';
 
-import { Tour } from '@/lib/types';
+import { Tour } from '@/types/types';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import RichTextRenderer from '@/components/RichTextRenderer';
 import { ItineraryAccordion } from './ItineraryAccordion';

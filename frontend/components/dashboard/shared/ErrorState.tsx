@@ -1,18 +1,13 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, RefreshCw } from "lucide-react";
-
-interface ErrorStateProps {
-    title?: string;
-    description?: string;
-    onRetry?: () => void;
-}
+import type { SharedErrorStateProps } from "@/types/dashboard";
 
 export function ErrorState({
     title = "Error Loading Data",
     description = "We encountered an error while fetching data. Please try again.",
     onRetry
-}: ErrorStateProps) {
+}: SharedErrorStateProps) {
     return (
         <Card className="border-destructive/50">
             <CardContent className="flex flex-col items-center justify-center py-12">

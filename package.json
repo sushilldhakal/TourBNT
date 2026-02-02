@@ -24,7 +24,7 @@
         "db:studio": "npm run db:studio --workspace=@tourbnt/db"
     },
     "engines": {
-        "node": ">=18.0.0",
+        "node": ">=22.22.0",
         "npm": ">=9.0.0"
     },
     "keywords": [

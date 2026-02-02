@@ -15,8 +15,8 @@ import {
 import AllIcons from "./AllIcons";
 import { Checkbox } from "@/components/ui/checkbox";
 import Icon from "@/components/Icon";
-import { FactData } from "./useFacts";
-import { useFactItem } from "./useFactItem";
+import type { FactData } from "@/types/facts";
+import { useFactItem } from '@/lib/hooks/tours';
 
 interface FactTableRowProps {
     fact?: FactData;

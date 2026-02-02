@@ -7,7 +7,7 @@
 
 'use client';
 
-import { MediaSkeletonProps } from './types';
+import { MediaSkeletonProps } from '@/types/gallery';
 import { cn } from '@/lib/utils';
 
 /**
@@ -53,7 +53,9 @@ export function MediaSkeleton({ count = 12 }: MediaSkeletonProps) {
     return (
         <>
             {Array.from({ length: count }).map((_, index) => (
-                <SkeletonCard key={`skeleton-${index}`} />
+                <div key={`skeleton-${index}`} className="w-full">
+                    <SkeletonCard />
+                </div>
             ))}
         </>
     );

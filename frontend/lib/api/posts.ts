@@ -1,3 +1,4 @@
+import { Post } from '../../types/types';
 import { api, serverApi, handleApiError, extractResponseData } from './apiClient';
 
 
@@ -5,13 +6,23 @@ import { api, serverApi, handleApiError, extractResponseData } from './apiClient
 /**
  * Get all posts public
  */
-export const getPosts = async () => {
+export const getPosts =  async ({
+    page = 1,
+    limit = 10
+}: {
+    page?: number;
+    limit?: number;
+} = {}) => {
     try {
         // Add timestamp to prevent caching
         const timestamp = new Date().getTime();
-        const response = await api.get(`/posts?_t=${timestamp}`);
 
-        console.log('post detail', response)
+        const response = await api.get(`/posts?_t=${timestamp}`, {
+            params: {
+                page,
+                limit
+            }
+        });
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching posts');
@@ -27,10 +38,22 @@ export const getPost = async (id: string) => {
 
 /**
  * Get all posts by current user dashboard
+ * Supports pagination with optional parameters
  */
-export const getAllUserPosts = async () => {
+export const getAllUserPosts = async ({
+    page = 1,
+    limit = 10
+}: {
+    page?: number;
+    limit?: number;
+} = {}) => {
     try {
-        const response = await api.get('/posts/user');
+        const response = await api.get('/posts/user', {
+            params: {
+                page,
+                limit
+            }
+        });
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching user posts');
@@ -46,14 +69,10 @@ export const getSinglePost = async (postId: string) => {
         const timestamp = new Date().getTime();
         const response = await api.get(`/posts/${postId}`, {
             params: { _t: timestamp },
-            headers: {
-                'Cache-Control': 'no-cache',
-                'Pragma': 'no-cache'
-            }
         });
         const data = extractResponseData(response);
         // Server returns { post, breadcrumbs }, extract just the post
-        return data.post || data;
+        return (data as { post: Post }).post || data;
     } catch (error) {
         throw handleApiError(error, 'fetching post');
     }

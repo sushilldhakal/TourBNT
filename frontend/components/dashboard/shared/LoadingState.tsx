@@ -1,11 +1,6 @@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-
-interface LoadingStateProps {
-    type: 'table' | 'cards' | 'form' | 'gallery';
-    rows?: number;
-    columns?: number;
-}
+import type { LoadingStateProps } from "@/types/dashboard";
 
 export function LoadingState({ type, rows = 5, columns = 4 }: LoadingStateProps) {
     if (type === 'table') {

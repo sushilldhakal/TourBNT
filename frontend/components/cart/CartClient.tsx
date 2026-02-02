@@ -8,8 +8,8 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { format } from 'date-fns';
 import { toast } from '@/components/ui/use-toast';
-import { BookingWizard } from '@/components/cart/BookingWizard';
-import { useValidatePromoCode } from '@/lib/hooks/useBooking';
+import { CheckoutSteps } from '@/components/cart/CheckoutSteps';
+import { useValidatePromoCode } from '@/lib/queries/useBooking';
 import { getCartBookings, removeFromCart, updateCartBooking, clearCart, CartBooking } from '@/lib/cartUtils';
 
 export default function CartClient() {
@@ -130,7 +130,7 @@ export default function CartClient() {
     return (
         <div className="min-h-screen bg-background">
             {/* Booking Wizard Header */}
-            <BookingWizard currentStep={0} itemCount={cartBookings.length} />
+            <CheckoutSteps currentStep={0} itemCount={cartBookings.length} />
 
             {/* Main Cart Content */}
             <div className="container mx-auto px-4 py-8">

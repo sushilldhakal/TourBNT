@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
+import { Calendar } from "@/components/ui/calendar-lazy";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
@@ -9,7 +9,7 @@ import { DualRangeSlider } from "@/components/ui/dual-range-slider";
 import { format } from "date-fns";
 import { CalendarIcon, Search as SearchIcon } from "lucide-react";
 import { useState } from "react";
-import { DateRange } from "react-day-picker";
+import type { DateRange } from "@/components/ui/calendar-lazy";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ui/use-toast";
 

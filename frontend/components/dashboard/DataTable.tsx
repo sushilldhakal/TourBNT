@@ -1,9 +1,12 @@
 "use client"
 
-import * as React from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import {
+    ColumnDef,
     ColumnFiltersState,
+    PaginationState,
     SortingState,
+    Updater,
     VisibilityState,
     flexRender,
     getCoreRowModel,
@@ -45,65 +48,50 @@ import {
 } from "@/components/ui/table"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { useEffect } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-
-
-interface DataTableProps<TData = unknown> {
-    data: TData[]
-    columns: any[] // Keep as any since it's from @tanstack/react-table ColumnDef
-    place?: string
-    colum?: string
-    initialColumnVisibility?: Record<string, boolean>
-    // Server-side pagination props (optional)
-    serverSidePagination?: {
-        totalCount: number // Total number of items on server
-        pageIndex: number // Current page (0-indexed)
-        pageSize: number // Items per page
-        onPageChange: (pageIndex: number) => void // Callback when page changes
-        onPageSizeChange: (pageSize: number) => void // Callback when page size changes
-    }
-}
+import type { DataTableProps } from "@/types/dashboard"
 
 export function DataTable<TData = unknown>({
     data,
     columns,
     place = "Filter...",
-    colum = "title",
+    column = "title",
     initialColumnVisibility = {},
     serverSidePagination
 }: DataTableProps<TData>) {
-    const [sorting, setSorting] = React.useState<SortingState>([])
-    const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
-    const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>(initialColumnVisibility)
-    const [rowSelection, setRowSelection] = React.useState({})
+    const [sorting, setSorting] = useState<SortingState>([])
+    const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
+    const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(initialColumnVisibility)
+    const [rowSelection, setRowSelection] = useState({})
+    const [pagination, setPagination] = useState<PaginationState>({
+        pageIndex: serverSidePagination?.pageIndex ?? 0,
+        pageSize: serverSidePagination?.pageSize ?? 10,
+    })
+
+    // Memoize pagination callbacks to prevent recreation on every render
+    const handlePaginationChange = useCallback((updater: Updater<PaginationState>) => {
+        const newState = typeof updater === 'function' ? updater(pagination) : updater;
+        setPagination(newState);
+
+        if (serverSidePagination) {
+            if (newState.pageIndex !== serverSidePagination.pageIndex) {
+                serverSidePagination.onPageChange(newState.pageIndex);
+            }
+            if (newState.pageSize !== serverSidePagination.pageSize) {
+                serverSidePagination.onPageSizeChange(newState.pageSize);
+            }
+        }
+    }, [pagination, serverSidePagination]);
 
     // Use manual pagination for server-side, automatic for client-side
-    const paginationConfig = serverSidePagination
+    const paginationConfig = useMemo(() => serverSidePagination
         ? {
             manualPagination: true,
             pageCount: Math.ceil(serverSidePagination.totalCount / serverSidePagination.pageSize),
-            state: {
-                pagination: {
-                    pageIndex: serverSidePagination.pageIndex,
-                    pageSize: serverSidePagination.pageSize,
-                },
-            },
-            onPaginationChange: (updater: any) => {
-                const newState = typeof updater === 'function'
-                    ? updater({ pageIndex: serverSidePagination.pageIndex, pageSize: serverSidePagination.pageSize })
-                    : updater;
-                if (newState.pageIndex !== undefined && newState.pageIndex !== serverSidePagination.pageIndex) {
-                    serverSidePagination.onPageChange(newState.pageIndex);
-                }
-                if (newState.pageSize !== undefined && newState.pageSize !== serverSidePagination.pageSize) {
-                    serverSidePagination.onPageSizeChange(newState.pageSize);
-                }
-            },
         }
         : {
             getPaginationRowModel: getPaginationRowModel(),
-        };
+        }, [serverSidePagination]);
 
     const table = useReactTable({
         data,
@@ -116,17 +104,15 @@ export function DataTable<TData = unknown>({
         getFilteredRowModel: getFilteredRowModel(),
         onColumnVisibilityChange: setColumnVisibility,
         onRowSelectionChange: setRowSelection,
+        onPaginationChange: handlePaginationChange,
         state: {
             sorting,
             columnFilters,
             columnVisibility,
             rowSelection,
-            ...(serverSidePagination ? {
-                pagination: {
-                    pageIndex: serverSidePagination.pageIndex,
-                    pageSize: serverSidePagination.pageSize,
-                },
-            } : {}),
+            pagination: serverSidePagination
+                ? { pageIndex: serverSidePagination.pageIndex, pageSize: serverSidePagination.pageSize }
+                : pagination,
         },
     })
 
@@ -134,21 +120,25 @@ export function DataTable<TData = unknown>({
         ? 'all'
         : table.getState().pagination.pageSize.toString();
 
-    useEffect(() => {
-        table.setSorting((sortingState) => {
-            return [
-                ...sortingState,
-                {
-                    id: "createdAt",
-                    desc: true,
-                },
-            ];
+    const hasCreatedAtColumn = useMemo(() => {
+        return columns.some((colDef) => {
+            // ColumnDef is a union; we only care about common runtime keys
+            const anyCol = colDef as unknown as { id?: string; accessorKey?: string };
+            return anyCol.id === "createdAt" || anyCol.accessorKey === "createdAt";
         });
-    }, [table]);
+    }, [columns]);
+
+    // Set initial sorting only once on mount
+    useEffect(() => {
+        // Only apply default sorting if this table *actually defines* createdAt.
+        if (!hasCreatedAtColumn) return;
+        setSorting([{ id: "createdAt", desc: true }]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []); // run once; we don't want to re-apply sorting on every render
 
 
     return (
-        <Card className="w-full dark:bg-transparent light:bg-transparent">
+        <Card className="w-full min-w-0 max-w-full dark:bg-transparent light:bg-transparent">
             <CardHeader className="pb-4 dark:bg-transparent light:bg-transparent">
                 <div className="flex items-center justify-between gap-4">
                     <div className="flex items-center gap-4 flex-1">
@@ -156,11 +146,11 @@ export function DataTable<TData = unknown>({
                             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
                             <Input
                                 placeholder={place}
-                                value={(table.getColumn(colum)?.getFilterValue() as string) ?? ""}
+                                value={(table.getColumn(column)?.getFilterValue() as string) ?? ""}
                                 onChange={(event) =>
-                                    table.getColumn(colum)?.setFilterValue(event.target.value)
+                                    table.getColumn(column)?.setFilterValue(event.target.value)
                                 }
-                                className="[&&]:pl-[28px]"
+                                className="pl-10"
                             />
                         </div>
                         <Badge variant="secondary" className="flex items-center gap-1">
@@ -210,9 +200,9 @@ export function DataTable<TData = unknown>({
                     </div>
                 </div>
             </CardHeader>
-            <CardContent className="p-0">
-                <div className="rounded-lg border border-border/50 overflow-hidden">
-                    <Table>
+            <CardContent className="p-0 min-w-0">
+                <div className="rounded-lg border border-border/50 overflow-x-auto w-full min-w-0 max-w-full" style={{ WebkitOverflowScrolling: 'touch' }}>
+                    <Table className="min-w-full w-max">
                         <TableHeader className="bg-muted/30">
                             {table.getHeaderGroups().map((headerGroup) => (
                                 <TableRow key={headerGroup.id} className="hover:bg-muted/50">
@@ -311,20 +301,10 @@ export function DataTable<TData = unknown>({
                                 value={currentPageSize === '100' || currentPageSize === 'all' ? 'all' : currentPageSize}
                                 onValueChange={value => {
                                     if (value === 'all') {
-                                        // For server-side: send "all" as string, for client-side: use large number
-                                        if (serverSidePagination) {
-                                            // Pass a special marker that we'll convert to "all" in the API call
-                                            serverSidePagination.onPageSizeChange(100);
-                                        } else {
-                                            table.setPageSize(100);
-                                        }
+                                        table.setPageSize(100);
                                     } else {
                                         const newPageSize = Number(value);
-                                        if (serverSidePagination) {
-                                            serverSidePagination.onPageSizeChange(newPageSize);
-                                        } else {
-                                            table.setPageSize(newPageSize);
-                                        }
+                                        table.setPageSize(newPageSize);
                                     }
                                 }}
                             >
@@ -355,14 +335,8 @@ export function DataTable<TData = unknown>({
                                 <Button
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => {
-                                        if (serverSidePagination) {
-                                            serverSidePagination.onPageChange(0);
-                                        } else {
-                                            table.firstPage();
-                                        }
-                                    }}
-                                    disabled={serverSidePagination ? serverSidePagination.pageIndex === 0 : !table.getCanPreviousPage()}
+                                    onClick={() => table.firstPage()}
+                                    disabled={!table.getCanPreviousPage()}
                                     className="h-8 w-8 p-0"
                                 >
                                     <ChevronsLeft className="h-4 w-4" />
@@ -370,14 +344,8 @@ export function DataTable<TData = unknown>({
                                 <Button
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => {
-                                        if (serverSidePagination) {
-                                            serverSidePagination.onPageChange(serverSidePagination.pageIndex - 1);
-                                        } else {
-                                            table.previousPage();
-                                        }
-                                    }}
-                                    disabled={serverSidePagination ? serverSidePagination.pageIndex === 0 : !table.getCanPreviousPage()}
+                                    onClick={() => table.previousPage()}
+                                    disabled={!table.getCanPreviousPage()}
                                     className="h-8 w-8 p-0"
                                 >
                                     <ChevronLeft className="h-4 w-4" />
@@ -385,15 +353,8 @@ export function DataTable<TData = unknown>({
                                 <Button
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => {
-                                        if (serverSidePagination) {
-                                            const maxPage = Math.ceil(serverSidePagination.totalCount / serverSidePagination.pageSize) - 1;
-                                            serverSidePagination.onPageChange(Math.min(serverSidePagination.pageIndex + 1, maxPage));
-                                        } else {
-                                            table.nextPage();
-                                        }
-                                    }}
-                                    disabled={serverSidePagination ? serverSidePagination.pageIndex >= Math.ceil(serverSidePagination.totalCount / serverSidePagination.pageSize) - 1 : !table.getCanNextPage()}
+                                    onClick={() => table.nextPage()}
+                                    disabled={!table.getCanNextPage()}
                                     className="h-8 w-8 p-0"
                                 >
                                     <ChevronRight className="h-4 w-4" />
@@ -401,15 +362,8 @@ export function DataTable<TData = unknown>({
                                 <Button
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => {
-                                        if (serverSidePagination) {
-                                            const maxPage = Math.ceil(serverSidePagination.totalCount / serverSidePagination.pageSize) - 1;
-                                            serverSidePagination.onPageChange(maxPage);
-                                        } else {
-                                            table.lastPage();
-                                        }
-                                    }}
-                                    disabled={serverSidePagination ? serverSidePagination.pageIndex >= Math.ceil(serverSidePagination.totalCount / serverSidePagination.pageSize) - 1 : !table.getCanNextPage()}
+                                    onClick={() => table.lastPage()}
+                                    disabled={!table.getCanNextPage()}
                                     className="h-8 w-8 p-0"
                                 >
                                     <ChevronsRight className="h-4 w-4" />

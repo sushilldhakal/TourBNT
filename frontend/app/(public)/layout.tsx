@@ -1,20 +1,14 @@
-import { Navigation } from "@/components/layout/Navigation";
-import { Footer } from "@/components/layout/Footer";
+import { PublicLayoutClient } from "@/components/layout/PublicLayoutClient";
 
 /**
  * Public Pages Layout
- * Includes Navigation and Footer for all public-facing pages
+ * Full-width/boxed is controlled here via PublicLayoutClient so child components
+ * don't need useLayout() for container width.
  */
 export default function PublicLayout({
     children,
 }: {
     children: React.ReactNode;
 }) {
-    return (
-        <>
-            <Navigation />
-            <main>{children}</main>
-            <Footer />
-        </>
-    );
+    return <PublicLayoutClient>{children}</PublicLayoutClient>;
 }

@@ -1,53 +1,28 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useLatestTours } from "@/lib/queries";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Calendar, ChevronLeft, ChevronRight, ThumbsUp } from "lucide-react";
 import {
     Carousel,
+    CarouselApi,
     CarouselContent,
     CarouselItem,
-} from "@/components/ui/carousel";
+} from "@/components/ui/carousel-lazy";
 import { useEffect, useState } from "react";
 import { getLatestTours } from "@/lib/api/tours";
-import { useLayout } from "@/providers/LayoutProvider";
-
-interface Tour {
-    _id: string;
-    title: string;
-    coverImage: string;
-    duration: string;
-    outline: string;
-    price: number;
-    createdAt: string;
-    saleEnabled?: boolean;
-    salePrice?: number;
-    pricingOptions?: Array<{
-        price: number;
-        discount?: {
-            discountEnabled: boolean;
-            discountDateRange?: { from: string; to: string };
-            percentageOrPrice?: boolean;
-            discountPercentage?: number;
-            discountPrice?: number;
-        };
-    }>;
-}
+import Image from 'next/image';
+import type { Tour } from "@/types/types";
 
 const LatestTour = () => {
-    const [api, setApi] = useState<any>();
-    const { isFullWidth } = useLayout();
+    const [api, setApi] = useState<CarouselApi | null>(null);
     useEffect(() => {
         if (!api) return;
         api.on("select", () => { });
     }, [api]);
 
-    const { data } = useQuery({
-        queryKey: ['latestTours'],
-        queryFn: getLatestTours,
-        staleTime: 5 * 60 * 1000,
-    });
+    const { data } = useLatestTours();
 
     const getTourPricing = (tour: Tour) => {
         let originalPrice = tour.price || 0;
@@ -88,14 +63,16 @@ const LatestTour = () => {
         return { originalPrice, displayPrice, hasDiscount, discountPercentage };
     };
 
-    const sortedTours = data?.data?.tours
-        ? data.data.tours
+    // API returns array directly, or { data: { tours } } depending on backend
+    const toursList = Array.isArray(data) ? data : [];
+    const sortedTours = toursList.length
+        ? [...toursList]
             .sort((a: Tour, b: Tour) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
             .slice(0, 10)
         : [];
 
     return (
-        <div className="relative">
+        <div className="relative w-full">
             <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center">
                     <ThumbsUp className="text-primary" />
@@ -133,13 +110,16 @@ const LatestTour = () => {
             >
                 <CarouselContent className="-ml-4">
                     {sortedTours?.map((tour: Tour, index: number) => (
-                        <CarouselItem key={index} className={`pl-4 ${isFullWidth ? 'md:basis-1/2 lg:basis-1/2 xl:basis-1/3' : 'md:basis-1/2 lg:basis-1/2'}`}>
+                        <CarouselItem key={index} className="pl-4 md:basis-1/2 lg:basis-1/3">
                             <div className="bg-secondary rounded-md overflow-hidden shadow-xs border" >
                                 <Link href={`/tours/${tour._id}`}>
                                     <div className="relative h-[420px] overflow-hidden">
-                                        <img
-                                            src={tour.coverImage}
+                                        <Image
+                                            width={60}
+                                            height={60}
+                                            src={tour.coverImage ?? ''}
                                             alt={tour.title}
+                                            loading="lazy"
                                             className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
                                         />
                                     </div>
@@ -152,7 +132,7 @@ const LatestTour = () => {
                                             <span>{tour.duration}</span>
                                         </div>
 
-                                        <p className="text-muted-foreground mb-4 line-clamp-2">{tour.outline}</p>
+                                        <p className="text-muted-foreground mb-4 line-clamp-2">{tour.excerpt}</p>
 
                                         <div className="flex items-center mb-4">
                                             {[1, 2, 3, 4, 5].map((star) => (

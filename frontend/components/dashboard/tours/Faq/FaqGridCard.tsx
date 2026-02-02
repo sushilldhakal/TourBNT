@@ -14,8 +14,8 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
-import { FaqData } from "./useFaq";
-import { useFaqItem } from "./useFaqItem";
+import type { FaqData } from "@/types/faq";
+import { useFaqItem } from '@/lib/hooks/tours';
 
 interface FaqGridCardProps {
     faq?: FaqData;

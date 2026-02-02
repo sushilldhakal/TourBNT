@@ -7,7 +7,7 @@
 
 'use client';
 
-import { ErrorStateProps } from './types';
+import { ErrorStateProps } from '@/types/gallery';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import Icon from '@/components/Icon';

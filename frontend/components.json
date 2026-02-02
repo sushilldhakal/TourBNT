@@ -18,5 +18,7 @@
     "lib": "@/lib",
     "hooks": "@/hooks"
   },
-  "registries": {}
+  "registries": {
+    "@shadix-ui": "https://shadix-ui.vercel.app/r/{name}.json"
+  }
 }

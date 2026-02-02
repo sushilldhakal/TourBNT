@@ -1,0 +1,658 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ======================================================
+   THEME CONFIG — SEMANTIC TOKENS
+   ====================================================== */
+html {
+  @apply overflow-x-hidden;
+  /* Short transition so theme change feels instant; long duration caused visible blink */
+  transition: background-color 0.2s ease-out, color 0.2s ease-out;
+}
+
+body {
+  @apply !min-w-full;
+  transition: background-color 0.2s ease-out, color 0.2s ease-out;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  /* ShadCN semantic colors */
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* Dashboard specific colors */
+  --color-dashboard-bg: var(--dashboard-bg);
+  --color-dashboard-card: var(--dashboard-card);
+  --color-dashboard-accent: var(--dashboard-accent);
+  --color-dashboard-sidebar: var(--dashboard-sidebar);
+  --color-dashboard-sidebar-foreground: var(--dashboard-sidebar-foreground);
+  
+  /* Frontend specific colors */
+  --color-frontend-bg: var(--frontend-bg);
+  --color-frontend-card: var(--frontend-card);
+  --color-frontend-accent: var(--frontend-accent);
+  --color-frontend-hero: var(--frontend-hero);
+
+  /* Extended status colors */
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+
+  /* Sidebar */
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Charts */
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  /* Radiuses */
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/* ======================================================
+   LIGHT MODE — MULTI-COMPANY TRAVEL THEME
+   ====================================================== */
+:root {
+  --radius: 0.625rem;
+
+  /* Core - Clean White Base */
+  --background: oklch(0.99 0.01 227);
+  --foreground: oklch(0.18 0.02 227);
+
+  --card: oklch(0.99 0.01 227);
+  --card-foreground: oklch(0.18 0.02 227);
+
+  --popover: oklch(0.99 0.01 227);
+  --popover-foreground: oklch(0.18 0.02 227);
+
+  /* Primary = Sky Blue (for CTAs, bookings, primary actions) */
+  --primary: oklch(0.68 0.1477 239.1);
+  --primary-foreground: oklch(0.98 0 0);
+
+  /* Secondary = Soft Blue Gray (for secondary actions) */
+  --secondary: oklch(0.95 0.02 227);
+  --secondary-foreground: oklch(0.25 0.03 227);
+
+  --muted: oklch(0.95 0.02 227);
+  --muted-foreground: oklch(0.50 0.08 227);
+
+  /* Accent = Warm Coral/Orange (for highlights, featured tours) */
+  --accent: oklch(0.68 0.1129 44.93);
+  --accent-foreground: oklch(0.98 0 0);
+
+  /* Success = Green (for approved, confirmed bookings) */
+  --success: oklch(0.65 0.18 145);
+  --success-foreground: oklch(0.98 0 0);
+
+  /* Warning = Amber (for pending, requires attention) */
+  --warning: oklch(0.75 0.15 85);
+  --warning-foreground: oklch(0.15 0.02 85);
+
+  /* Destructive = Red (for cancellations, rejections) */
+  --destructive: oklch(0.60 0.25 27);
+  --destructive-foreground: oklch(0.98 0 0);
+
+  /* Info = Light Blue (for informational messages) */
+  --info: oklch(0.70 0.12 220);
+  --info-foreground: oklch(0.98 0 0);
+
+  /* DASHBOARD COLORS - Professional, Business-focused */
+  --dashboard-bg: oklch(0.97 0.01 227);
+  --dashboard-card: oklch(0.99 0.01 227);
+  --dashboard-accent: oklch(0.55 0.12 250); /* Deeper professional blue */
+  --dashboard-sidebar: oklch(0.22 0.03 227); /* Dark sidebar for contrast */
+  --dashboard-sidebar-foreground: oklch(0.98 0.01 227);
+
+  /* FRONTEND COLORS - Inviting, Travel-themed */
+  --frontend-bg: oklch(0.98 0.01 227);
+  --frontend-card: oklch(0.99 0.01 227);
+  --frontend-accent: oklch(0.75 0.15 45); /* Warm coral for adventure */
+  --frontend-hero: oklch(0.45 0.12 227); /* Deep blue for hero sections */
+
+  /* Borders / Input / Ring */
+  --border: oklch(0.88 0.03 227);
+  --input: oklch(0.88 0.03 227);
+  --ring: oklch(0.75 0.11 227);
+
+  /* Sidebar - Dashboard focused */
+  --sidebar: oklch(0.97 0.02 227);
+  --sidebar-foreground: oklch(0.25 0.03 227);
+  --sidebar-primary: oklch(0.75 0.11 227);
+  --sidebar-primary-foreground: oklch(0.98 0 0);
+  --sidebar-accent: oklch(0.92 0.04 227);
+  --sidebar-accent-foreground: oklch(0.25 0.03 227);
+  --sidebar-border: oklch(0.88 0.03 227);
+  --sidebar-ring: oklch(0.75 0.11 227);
+
+  /* Charts - Data visualization */
+  --chart-1: oklch(0.65 0.22 41); /* Coral */
+  --chart-2: oklch(0.60 0.12 185); /* Teal */
+  --chart-3: oklch(0.55 0.15 250); /* Deep Blue */
+  --chart-4: oklch(0.70 0.18 145); /* Green */
+  --chart-5: oklch(0.75 0.15 85); /* Amber */
+
+  /* Novel Editor Highlights */
+  --novel-highlight-default: #ffffff;
+  --novel-highlight-purple: #dbeafe;
+  --novel-highlight-red: #fee2e2;
+  --novel-highlight-yellow: #fef9c3;
+  --novel-highlight-blue: #dbeafe;
+  --novel-highlight-green: #dcfce7;
+  --novel-highlight-orange: #ffedd5;
+  --novel-highlight-pink: #fce7f3;
+  --novel-highlight-gray: #e5e7eb;
+
+  /* Novel Editor Variables */
+  --novel-stone-50: oklch(0.98 0.01 227);
+  --novel-stone-100: oklch(0.95 0.02 227);
+  --novel-stone-200: oklch(0.88 0.03 227);
+  --novel-stone-300: oklch(0.78 0.04 227);
+  --novel-stone-400: oklch(0.65 0.05 227);
+  --novel-stone-500: oklch(0.50 0.06 227);
+  --novel-stone-600: oklch(0.40 0.05 227);
+  --novel-stone-700: oklch(0.30 0.04 227);
+  --novel-stone-800: oklch(0.22 0.03 227);
+  --novel-stone-900: oklch(0.18 0.02 227);
+}
+
+/* ======================================================
+   DARK MODE — MULTI-COMPANY TRAVEL THEME
+   ====================================================== */
+.dark {
+  /* Core - Dark Blue Base */
+  --background: oklch(0.20 0.03 227);
+  --foreground: oklch(0.98 0.01 227);
+
+  --card: oklch(0.25 0.03 227);
+  --card-foreground: oklch(0.98 0.01 227);
+
+  --popover: oklch(0.25 0.03 227);
+  --popover-foreground: oklch(0.98 0.01 227);
+
+  /* Primary = Bright Sky Blue */
+  --primary: oklch(0.75 0.11 227);
+  --primary-foreground: oklch(0.20 0.03 227);
+
+  /* Secondary = Slate Blue */
+  --secondary: oklch(0.30 0.05 230);
+  --secondary-foreground: oklch(0.98 0.01 227);
+
+  /* Accent = Warm Sunset Orange */
+  --accent: oklch(0.55 0.0892 51.5);
+  --accent-foreground: oklch(0.08 0.02 227);
+
+  /* Success = Emerald Green */
+  --success: oklch(0.60 0.18 145);
+  --success-foreground: oklch(0.98 0.01 227);
+
+  /* Warning = Warm Amber */
+  --warning: oklch(0.75 0.15 85);
+  --warning-foreground: oklch(0.15 0.02 85);
+
+  /* Danger / Destructive = Vibrant Red */
+  --destructive: oklch(0.65 0.22 27);
+  --destructive-foreground: oklch(0.98 0.01 227);
+
+  /* Info = Cyan Blue */
+  --info: oklch(0.60 0.12 210);
+  --info-foreground: oklch(0.98 0.01 227);
+
+  /* Muted / Disabled */
+  --muted: oklch(0.30 0.03 227);
+  --muted-foreground: oklch(0.70 0.08 227);
+
+  /* DASHBOARD COLORS - Dark Professional */
+  --dashboard-bg: oklch(0.18 0.03 227);
+  --dashboard-card: oklch(0.25 0.03 227);
+  --dashboard-accent: oklch(0.65 0.12 250);
+  --dashboard-sidebar: oklch(0.15 0.03 227);
+  --dashboard-sidebar-foreground: oklch(0.95 0.01 227);
+
+  /* FRONTEND COLORS - Dark Inviting */
+  --frontend-bg: oklch(0.20 0.03 227);
+  --frontend-card: oklch(0.25 0.03 227);
+  --frontend-accent: oklch(0.72 0.15 50);
+  --frontend-hero: oklch(0.30 0.08 227);
+
+  /* Borders / Input / Ring */
+  --border: oklch(0.35 0.05 227);
+  --input: oklch(0.35 0.05 227);
+  --ring: oklch(0.75 0.11 227);
+
+  /* Sidebar - Dashboard Dark */
+  --sidebar: oklch(0.25 0.03 227);
+  --sidebar-foreground: oklch(0.98 0.01 227);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-border: oklch(0.35 0.05 227);
+  --sidebar-ring: oklch(0.75 0.11 227);
+
+  /* Novel Editor Highlights (Dark) */
+  --novel-highlight-default: #000000;
+  --novel-highlight-purple: #1e1b4b;
+  --novel-highlight-red: #7f1d1d;
+  --novel-highlight-yellow: #713f12;
+  --novel-highlight-blue: #1e3a8a;
+  --novel-highlight-green: #14532d;
+  --novel-highlight-orange: #c2410c;
+  --novel-highlight-pink: #831843;
+  --novel-highlight-gray: #374151;
+
+  /* Novel Editor Variables (Dark Mode) */
+  --novel-stone-50: oklch(0.22 0.03 227);
+  --novel-stone-100: oklch(0.25 0.03 227);
+  --novel-stone-200: oklch(0.30 0.04 227);
+  --novel-stone-300: oklch(0.35 0.05 227);
+  --novel-stone-400: oklch(0.45 0.06 227);
+  --novel-stone-500: oklch(0.55 0.07 227);
+  --novel-stone-600: oklch(0.65 0.08 227);
+  --novel-stone-700: oklch(0.75 0.09 227);
+  --novel-stone-800: oklch(0.85 0.08 227);
+  --novel-stone-900: oklch(0.92 0.06 227);
+}
+
+/* ======================================================
+   BASE ELEMENTS
+   ====================================================== */
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  /* Smooth transitions for theme color changes */
+  html,
+  body,
+  [class*="bg-"],
+  [class*="text-"],
+  [class*="border-"] {
+    transition-property: background-color, border-color, color, fill, stroke;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 0.6s;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  /* Travel-editorial headings (display serif) */
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display), var(--font-geist-sans), ui-serif, Georgia, serif;
+    letter-spacing: -0.01em;
+  }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-fade-in {
+    animation: fade-in 0.6s ease-out;
+  }
+
+  @keyframes accordion-down {
+    from { height: 0; }
+    to { height: var(--radix-accordion-content-height); }
+  }
+
+  @keyframes accordion-up {
+    from { height: var(--radix-accordion-content-height); }
+    to { height: 0; }
+  }
+
+  .animate-accordion-down {
+    animation: accordion-down 0.2s ease-out;
+  }
+
+  .animate-accordion-up {
+    animation: accordion-up 0.2s ease-out;
+  }
+
+  @keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+
+  .animate-shimmer {
+    animation: shimmer 2s infinite;
+  }
+
+  /* Global cursor pointer for interactive elements */
+  button, a, [role="button"], input[type="submit"], input[type="button"], select {
+    @apply cursor-pointer;
+  }
+
+  button:disabled, a:disabled, [role="button"]:disabled {
+    @apply cursor-not-allowed;
+  }
+  
+  /* View Transition API - Circular theme switching from click (fast to avoid blink) */
+  ::view-transition-group(root) {
+    animation-duration: 0.28s;
+  }
+
+  ::view-transition-new(root),
+  ::view-transition-old(root) {
+    mix-blend-mode: normal;
+  }
+
+  ::view-transition-new(root) {
+    animation-name: reveal-light-circle;
+  }
+
+  ::view-transition-old(root),
+  .dark::view-transition-old(root) {
+    animation: none;
+  }
+
+  .dark::view-transition-new(root) {
+    animation-name: reveal-dark-circle;
+  }
+
+  @keyframes reveal-dark-circle {
+    from {
+      clip-path: circle(0% at var(--click-x, 50%) var(--click-y, 50%));
+    }
+    to {
+      clip-path: circle(150% at var(--click-x, 50%) var(--click-y, 50%));
+    }
+  }
+
+  @keyframes reveal-light-circle {
+    from {
+      clip-path: circle(0% at var(--click-x, 50%) var(--click-y, 50%));
+    }
+    to {
+      clip-path: circle(150% at var(--click-x, 50%) var(--click-y, 50%));
+    }
+  }
+}
+
+/* ======================================================
+   TRAVEL APP COMPONENT STYLES (public only; dashboard in dashboard.css)
+   ====================================================== */
+@layer components {
+  /* FRONTEND SPECIFIC STYLES */
+  .frontend-layout {
+    background-color: var(--frontend-bg);
+  }
+
+  .frontend-card {
+    background-color: var(--frontend-card);
+    @apply border-border rounded-lg shadow-sm overflow-hidden;
+  }
+
+  .frontend-hero {
+    background: linear-gradient(to bottom right, var(--frontend-hero), var(--primary));
+    @apply text-white;
+  }
+
+  .tour-card {
+    @apply bg-card border border-border rounded-lg overflow-hidden transition-all hover:shadow-lg hover:-translate-y-1;
+  }
+
+  .tour-card-image {
+    @apply w-full h-48 object-cover;
+  }
+
+  .tour-card-content {
+    @apply p-4;
+  }
+
+  .tour-card-title {
+    @apply text-xl font-bold text-foreground mb-2;
+  }
+
+  .tour-card-price {
+    @apply text-2xl font-bold text-primary;
+  }
+
+  /* STATUS PILLS - Tour/Booking Status */
+  .status-pill {
+    @apply inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-all;
+  }
+
+  .status-pill--approved,
+  .status-pill--confirmed {
+    border-color: color-mix(in oklch, var(--success) 30%, transparent) !important;
+    background-color: color-mix(in oklch, var(--success) 10%, transparent) !important;
+    color: var(--success) !important;
+  }
+
+  .status-pill--pending {
+    border-color: color-mix(in oklch, var(--warning) 30%, transparent) !important;
+    background-color: color-mix(in oklch, var(--warning) 10%, transparent) !important;
+    color: var(--warning) !important;
+  }
+
+  .status-pill--rejected,
+  .status-pill--cancelled {
+    border-color: color-mix(in oklch, var(--destructive) 30%, transparent) !important;
+    background-color: color-mix(in oklch, var(--destructive) 10%, transparent) !important;
+    color: var(--destructive) !important;
+  }
+
+  .status-pill--active {
+    border-color: color-mix(in oklch, var(--info) 30%, transparent) !important;
+    background-color: color-mix(in oklch, var(--info) 10%, transparent) !important;
+    color: var(--info);
+  }
+
+  .status-pill--featured {
+    border-color: color-mix(in oklch, var(--accent) 30%, transparent) !important;
+    background-color: color-mix(in oklch, var(--accent) 10%, transparent) !important;
+    color: var(--accent) !important;
+  }
+
+  /* BUTTONS - Context specific */
+  .btn-primary {
+    @apply bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 rounded-md font-medium transition-colors;
+  }
+
+  .btn-book {
+    background-color: var(--accent);
+    color: var(--accent-foreground);
+    @apply hover:bg-accent/90 px-6 py-3 rounded-lg font-semibold transition-all hover:shadow-lg;
+  }
+
+  /* COMPANY BADGES - Multi-company identification */
+  .company-badge {
+    @apply inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium;
+  }
+
+  .company-badge--primary {
+    background-color: color-mix(in oklch, var(--primary) 10%, transparent);
+    color: var(--primary);
+    border: 1px solid color-mix(in oklch, var(--primary) 20%, transparent);
+  }
+
+  .company-badge--secondary {
+    @apply bg-secondary text-secondary-foreground border border-border;
+  }
+
+  /* CATEGORY TAGS - Tour categories */
+  .category-tag {
+    @apply inline-block px-3 py-1 rounded-full text-xs font-medium bg-muted text-muted-foreground hover:bg-muted/80 transition-colors;
+  }
+
+  .category-tag--adventure {
+    background-color: color-mix(in oklch, var(--accent) 10%, transparent);
+    color: var(--accent);
+    border: 1px solid color-mix(in oklch, var(--accent) 20%, transparent);
+  }
+
+  .category-tag--luxury {
+    background-color: color-mix(in oklch, var(--primary) 10%, transparent);
+    color: var(--primary);
+    border: 1px solid color-mix(in oklch, var(--primary) 20%, transparent);
+  }
+
+  .category-tag--cultural {
+    background-color: color-mix(in oklch, var(--info) 10%, transparent);
+    color: var(--info);
+    border: 1px solid color-mix(in oklch, var(--info) 20%, transparent);
+  }
+
+  .category-tag--nature {
+    background-color: color-mix(in oklch, var(--success) 10%, transparent);
+    color: var(--success);
+    border: 1px solid color-mix(in oklch, var(--success) 20%, transparent);
+  }
+
+  /* SECTION HEADERS */
+  .section-kicker {
+    @apply text-xs font-semibold tracking-widest uppercase text-muted-foreground;
+  }
+
+  .section-title {
+    @apply text-3xl md:text-4xl font-bold text-foreground mb-2;
+  }
+
+  .section-subtitle {
+    @apply text-lg text-muted-foreground;
+  }
+
+  /* PRICE DISPLAY */
+  .price-display {
+    @apply text-2xl font-bold text-primary;
+  }
+
+  .price-label {
+    @apply text-sm text-muted-foreground;
+  }
+
+  /* RATING DISPLAY */
+  .rating-stars {
+    @apply flex items-center gap-1;
+    color: var(--warning);
+  }
+
+  .rating-count {
+    @apply text-sm text-muted-foreground ml-2;
+  }
+}
+
+/* ======================================================
+   ACCESSIBILITY
+   ====================================================== */
+.sr-only {
+  @apply absolute w-px h-px p-0 -m-px overflow-hidden whitespace-nowrap border-0;
+  clip: rect(0, 0, 0, 0);
+}
+
+[role="dialog"]:focus-visible,
+[role="alertdialog"]:focus-visible {
+  @apply outline-none;
+}
+
+/* ======================================================
+   LOADING ANIMATIONS
+   ====================================================== */
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.animate-shimmer {
+  animation: shimmer 2s infinite;
+}
+
+/* ======================================================
+   PUBLIC 404 PAGE — SVG ANIMATIONS (avoids styled-jsx hydration mismatch)
+   ====================================================== */
+.not-found-page #handboy {
+  animation: not-found-swing ease-in-out 1.3s infinite alternate;
+  transform-origin: 98% 98%;
+  transform-box: fill-box;
+}
+
+.not-found-page #girllight {
+  animation: not-found-swing ease-in-out 1.3s infinite alternate;
+  transform-origin: 0% 97%;
+  transform-box: fill-box;
+}
+
+.not-found-page #hairgirl {
+  animation: not-found-swinghair ease-in-out 1.3s infinite alternate;
+  transform-origin: 60% 0%;
+  transform-box: fill-box;
+}
+
+.not-found-page #zero {
+  transform-origin: bottom center;
+  transform-box: fill-box;
+  animation: not-found-zero 3s ease-in-out infinite;
+}
+
+.not-found-page .animate-fade-in svg {
+  animation: not-found-svgFloat 2s ease-in-out infinite alternate;
+}
+
+@keyframes not-found-swing {
+  0% { transform: rotate(10deg); }
+  100% { transform: rotate(-10deg); }
+}
+
+@keyframes not-found-swinghair {
+  0% { transform: rotate(6deg); }
+  100% { transform: rotate(-6deg); }
+}
+
+@keyframes not-found-svgFloat {
+  0% { transform: translateY(0px); }
+  100% { transform: translateY(10px); }
+}
+
+@keyframes not-found-zero {
+  0% { transform: translateX(0px) scale(1) rotateY(0deg); }
+  25% { transform: translateX(10px) scale(1.4) rotateY(0deg); }
+  50% { transform: translateX(10px) scale(1) rotateY(180deg); }
+  75% { transform: translateX(0px) scale(1) rotateY(180deg); }
+  100% { transform: translateX(0px) scale(1) rotateY(360deg); }
+}

@@ -11,8 +11,8 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
-import { FaqData } from "./useFaq";
-import { useFaqItem } from "./useFaqItem";
+import type { FaqData } from "@/types/faq";
+import { useFaqItem } from '@/lib/hooks/tours';
 
 interface FaqTableRowProps {
     faq?: FaqData;

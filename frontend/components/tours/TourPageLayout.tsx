@@ -1,22 +1,19 @@
 'use client';
 
-import { useLayout } from '@/providers/LayoutProvider';
 import { ReactNode } from 'react';
+import { ContentContainer } from '@/components/layout/PublicLayoutClient';
 
 interface TourPageLayoutProps {
     children: ReactNode;
 }
 
 /**
- * Client component wrapper to handle layout toggle
- * This allows the parent server component to respect the layout setting
+ * Wrapper for tour pages. Row is full width; content inside is constrained by ContentContainer.
  */
 export function TourPageLayout({ children }: TourPageLayoutProps) {
-    const { isFullWidth } = useLayout();
-
     return (
-        <div className={`${isFullWidth ? 'w-full px-4' : 'mx-auto max-w-7xl px-4'} py-4 sm:py-6 lg:py-8 transition-all duration-300`}>
+        <ContentContainer className="px-4 py-4 sm:py-6 lg:py-8 transition-all duration-300">
             {children}
-        </div>
+        </ContentContainer>
     );
 }

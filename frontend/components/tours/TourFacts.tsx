@@ -1,7 +1,7 @@
 'use client';
 
 import { Info } from 'lucide-react';
-import { FactData } from '@/lib/types';
+import type { FactData } from '@/types/facts';
 import { renderFactValue } from '@/lib/tourUtils';
 import Icon from '@/components/Icon';
 

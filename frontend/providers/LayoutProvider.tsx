@@ -10,13 +10,15 @@ interface LayoutContextType {
 const LayoutContext = createContext<LayoutContextType | undefined>(undefined);
 
 export function LayoutProvider({ children }: { children: React.ReactNode }) {
+    // Always start with false so server and first client paint match (avoids hydration mismatch).
+    // Apply saved preference after mount so we never read localStorage during initial render.
     const [isFullWidth, setIsFullWidth] = useState(false);
 
-    // Load from localStorage on mount
     useEffect(() => {
         const saved = localStorage.getItem('layout-full-width');
-        if (saved !== null) {
-            setIsFullWidth(saved === 'true');
+        if (saved === 'true') {
+            const id = setTimeout(() => setIsFullWidth(true), 0);
+            return () => clearTimeout(id);
         }
     }, []);
 

@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Phone } from 'lucide-react';
-import { Tour } from '@/lib/types';
+import { Tour } from '@/types/types';
 import { FrontBooking } from './FrontBooking';
 import { cn } from '@/lib/utils';
 

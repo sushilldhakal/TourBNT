@@ -1,17 +1,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-
-interface EmptyStateProps {
-    icon: React.ReactNode;
-    title: string;
-    description: string;
-    action?: {
-        label: string;
-        href: string;
-        icon?: React.ReactNode;
-    };
-}
+import type { EmptyStateProps } from "@/types/dashboard";
 
 export function EmptyState({ icon, title, description, action }: EmptyStateProps) {
     return (

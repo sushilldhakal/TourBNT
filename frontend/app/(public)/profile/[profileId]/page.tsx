@@ -1,11 +1,9 @@
 'use client';
 
-import { useLayout } from '@/providers/LayoutProvider';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
 
 export default function ProfilePage() {
-    const { isFullWidth } = useLayout();
     const params = useParams();
     const profileId = params.profileId;
 
@@ -36,7 +34,7 @@ export default function ProfilePage() {
     };
 
     return (
-        <div className={`${isFullWidth ? 'container-fluid' : 'container'} mx-auto px-4 py-16 transition-all duration-300`}>
+        <div className="w-full mx-auto px-4 py-16 transition-all duration-300">
             <div className="max-w-4xl mx-auto">
                 <div className="mb-8 flex justify-between items-center">
                     <div>

@@ -2,27 +2,7 @@
  * Company API endpoints
  */
 
-// Define the CompanyInfo interface
-export interface CompanyInfo {
-    companyName: string;
-    description: string;
-    contactPhone: string;
-    contactEmail: string;
-    address: string;
-    resources: {
-        title: string;
-        link: string;
-    }[];
-    quickLinks: {
-        title: string;
-        link: string;
-    }[];
-    socialMedia: {
-        platform: string;
-        link: string;
-        icon: string;
-    }[];
-}
+import type { CompanyInfo } from '@/types/company';
 
 // For demo purposes - this will be replaced with an actual API call once backend is ready
 const mockCompanyInfo: CompanyInfo = {

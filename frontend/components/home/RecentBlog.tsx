@@ -2,38 +2,32 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useQuery } from "@tanstack/react-query";
-import { getPosts } from "@/lib/api";
+import { usePublicPosts } from "@/lib/queries";
 import { format } from "date-fns";
 import { Heart, Eye, MessageSquare, BookOpen, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-    Carousel,
+    CarouselWithPlugins,
     CarouselContent,
     CarouselItem,
     CarouselNext,
     CarouselPrevious,
     type CarouselApi,
-} from "@/components/ui/carousel";
-import Autoplay from "embla-carousel-autoplay";
-import { useLayout } from '@/providers/LayoutProvider';
-import { Post } from '@/lib/types';
+} from "@/components/ui/carousel-with-plugins-lazy";
+import { Post } from '@/types/types';
+import { ContentContainer } from '@/components/layout/PublicLayoutClient';
+import Image from 'next/image';
 
 export default function RecentBlog() {
-    const { isFullWidth } = useLayout();
     const [posts, setPosts] = useState<Post[]>([]);
     const [api, setApi] = useState<CarouselApi | null>(null);
 
-    const { data: response, isLoading, error } = useQuery<{ posts: Post[] }>({
-        queryKey: ['posts'],
-        queryFn: getPosts as () => Promise<{ posts: Post[] }>,
-    });
-
+    const { data: response, isLoading, error } = usePublicPosts();
     useEffect(() => {
-        if (response?.posts) {
-            const updatedPosts = response.posts.map((post: Post) => ({
+        if (response?.items) {
+            const updatedPosts = response.items.map((post: Post) => ({
                 ...post,
                 liked: false,
                 likes: post.likes || 0,
@@ -69,7 +63,7 @@ export default function RecentBlog() {
     if (isLoading) {
         return (
             <div className="py-16">
-                <div className={`mx-auto ${isFullWidth ? 'max-w-full' : 'max-w-7xl'} px-4 transition-all duration-300`}>
+                <ContentContainer className="px-4 transition-all duration-300">
                     <div className="flex items-center justify-between mb-6">
                         <h2 className="text-2xl font-bold">Recent Blogs</h2>
                     </div>
@@ -78,17 +72,19 @@ export default function RecentBlog() {
                             <div key={i} className="bg-muted rounded-lg h-64"></div>
                         ))}
                     </div>
-                </div>
+                </ContentContainer>
             </div>
         );
     }
 
     if (error) {
         return (
-            <div className={`mx-auto ${isFullWidth ? 'max-w-full' : 'max-w-7xl'} py-8 px-4 transition-all duration-300`}>
-                <div className="text-center text-destructive">
-                    Error loading posts. Please try again later.
-                </div>
+            <div className="w-full py-8">
+                <ContentContainer className="px-4 transition-all duration-300">
+                    <div className="text-center text-destructive">
+                        Error loading posts. Please try again later.
+                    </div>
+                </ContentContainer>
             </div>
         );
     }
@@ -99,21 +95,23 @@ export default function RecentBlog() {
 
     if (publishedPosts.length === 0) {
         return (
-            <div className={`mx-auto ${isFullWidth ? 'max-w-full' : 'max-w-7xl'} py-8 px-4 transition-all duration-300`}>
-                <div className="flex justify-between items-center mb-8">
-                    <h2 className="text-3xl font-bold">Recent Blogs</h2>
-                </div>
-                <div className="text-center text-muted-foreground py-12">
-                    <p>No blog posts available yet.</p>
-                    <p className="text-sm mt-2">Check back soon for exciting travel stories!</p>
-                </div>
+            <div className="w-full py-8">
+                <ContentContainer className="px-4 transition-all duration-300">
+                    <div className="flex justify-between items-center mb-8">
+                        <h2 className="text-3xl font-bold">Recent Blogs</h2>
+                    </div>
+                    <div className="text-center text-muted-foreground py-12">
+                        <p>No blog posts available yet.</p>
+                        <p className="text-sm mt-2">Check back soon for exciting travel stories!</p>
+                    </div>
+                </ContentContainer>
             </div>
         );
     }
 
     return (
-        <div className="py-16 bg-secondary/10">
-            <div className={`mx-auto ${isFullWidth ? 'max-w-full' : 'max-w-7xl'} px-4 transition-all duration-300`}>
+        <div className="py-16 bg-secondary/10 w-full">
+            <ContentContainer className="px-4 transition-all duration-300">
                 <div className="flex items-center justify-between mb-8">
                     <div className="flex items-center gap-2">
                         <BookOpen className="text-primary h-6 w-6" />
@@ -146,28 +144,26 @@ export default function RecentBlog() {
                     </div>
                 </div>
 
-                <Carousel
+                <CarouselWithPlugins
                     setApi={setApi}
                     className="w-full"
                     opts={{
                         align: "start",
                         loop: true,
                     }}
-                    plugins={[
-                        Autoplay({
-                            delay: 5000,
-                        }),
-                    ]}
+                    autoplayConfig={{ delay: 5000 }}
                 >
                     <CarouselContent className="-ml-2 md:-ml-4">
                         {publishedPosts.map((post) => {
                             const contentText = extractContentText(post.content);
 
                             return (
-                                <CarouselItem key={post._id} className={`pl-2 md:pl-4 ${isFullWidth ? ' md:basis-1/2 lg:basis-1/3  xl:basis-1/4' : ' md:basis-1/2 lg:basis-1/3 '}`}>
+                                <CarouselItem key={post.id} className="pl-2 md:pl-4 md:basis-1/2 lg:basis-1/3">
                                     <Card className="overflow-hidden pt-0 h-full border shadow-xs hover:shadow-md transition-all duration-300">
                                         <div className="relative h-48 overflow-hidden">
-                                            <img
+                                            <Image
+                                                width={100}
+                                                height={100}
                                                 src={post.image}
                                                 alt={post.title}
                                                 className="h-full w-full object-cover transition-all hover:scale-105 duration-300"
@@ -193,7 +189,7 @@ export default function RecentBlog() {
                                                     <span>{format(new Date(post.createdAt), 'MMM d, yyyy')}</span>
                                                 </div>
                                                 <div className="flex flex-wrap gap-2 mt-2">
-                                                    {post.tags.slice(0, 2).map((tag, index) => (
+                                                    {(post.tags ?? []).slice(0, 2).map((tag, index) => (
                                                         <Badge
                                                             key={index}
                                                             variant="secondary"
@@ -202,9 +198,9 @@ export default function RecentBlog() {
                                                             {tag}
                                                         </Badge>
                                                     ))}
-                                                    {post.tags.length > 2 && (
+                                                    {(post.tags ?? []).length > 2 && (
                                                         <Badge variant="outline" className="text-xs">
-                                                            +{post.tags.length - 2}
+                                                            +{(post.tags ?? []).length - 2}
                                                         </Badge>
                                                     )}
                                                 </div>
@@ -236,8 +232,8 @@ export default function RecentBlog() {
                             );
                         })}
                     </CarouselContent>
-                </Carousel>
-            </div>
+                </CarouselWithPlugins>
+            </ContentContainer>
         </div>
     );
 }

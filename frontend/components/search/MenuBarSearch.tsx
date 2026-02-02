@@ -13,20 +13,9 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useLayout } from '@/providers/LayoutProvider';
+import { ContentContainer } from '@/components/layout/PublicLayoutClient';
 import './MenuBarSearch.css';
-
-interface Tour {
-    _id: string;
-    title: string;
-    coverImage: string;
-    updatedAt: string;
-}
-
-interface Category {
-    _id: string;
-    name: string;
-}
+import type { Tour, Category } from '@/types/types';
 
 interface MenuBarSearchProps {
     headerSearch: boolean;
@@ -51,7 +40,6 @@ export function MenuBarSearch({ handleSearch, headerSearch }: MenuBarSearchProps
     const [searchResults, setSearchResults] = useState<Tour[]>([]);
     const [categories] = useState<Category[]>([]); // TODO: Fetch from API
     const [latestTours] = useState<Tour[]>([]); // TODO: Fetch from API
-    const { isFullWidth } = useLayout();
 
     useEffect(() => {
         const checkHeaderFixed = () => {
@@ -106,76 +94,78 @@ export function MenuBarSearch({ handleSearch, headerSearch }: MenuBarSearchProps
                     : 'visibilty-hidden opacity-0 h-0 z-0 top-[-400px]'
                 }`}
         >
-            <form onSubmit={handleSubmit} className={`bg-secondary h-full mx-auto ${isFullWidth ? 'max-w-full' : 'max-w-7xl'} relative transition-all duration-300`}>
-                <Input
-                    className="pr-60 text-foreground h-full w-full text-xl bg-transparent leading-10 focus-visible:ring-offset-0 focus-visible:ring-0 focus-visible:outline-none border-0 placeholder:text-muted-foreground"
-                    type="search"
-                    value={title}
-                    onChange={handleTitleChange}
-                    placeholder="Search tours by name"
-                />
-                <div className="md:hidden cd-select flex z-10 absolute max-md:right-3 max-md:top-[50%] max-md:bottom-auto max-md:translate-y-[-50%]">
-                    <button
-                        type="submit"
-                        className="cd-search-trigger cd-text-replace ml-3 bg-primary text-secondary h-10 w-10 rounded-full flex items-center justify-center"
-                    >
-                        <Search />
-                    </button>
-                    <button
-                        type="button"
-                        className="cd-search-trigger cd-text-replace ml-3"
-                        onClick={() => {
-                            clearSearch();
-                            handleSearch();
-                        }}
-                    >
-                        <X />
-                    </button>
-                </div>
-                <div className="cd-select flex z-10 absolute md:right-3 md:top-[50%] md:bottom-auto md:translate-y-[-50%] max-md:pl-[70px]">
-                    <span className="mt-2 mr-3">in</span>
-                    <Select onValueChange={handleCategorySelect}>
-                        <SelectTrigger className="w-[180px]">
-                            <SelectValue placeholder="All Categories" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectGroup>
-                                <SelectItem value="all">Select all Category</SelectItem>
-                                {categories.length > 0 ? (
-                                    categories.map((category) => (
-                                        <SelectItem key={category._id} value={category._id}>
-                                            {category.name}
+            <ContentContainer className="h-full">
+                <form onSubmit={handleSubmit} className="bg-secondary h-full w-full relative transition-all duration-300">
+                    <Input
+                        className="pr-60 text-foreground h-full w-full text-xl bg-transparent leading-10 focus-visible:ring-offset-0 focus-visible:ring-0 focus-visible:outline-none border-0 placeholder:text-muted-foreground"
+                        type="search"
+                        value={title}
+                        onChange={handleTitleChange}
+                        placeholder="Search tours by name"
+                    />
+                    <div className="md:hidden cd-select flex z-10 absolute max-md:right-3 max-md:top-[50%] max-md:bottom-auto max-md:translate-y-[-50%]">
+                        <button
+                            type="submit"
+                            className="cd-search-trigger cd-text-replace ml-3 bg-primary text-secondary h-10 w-10 rounded-full flex items-center justify-center"
+                        >
+                            <Search />
+                        </button>
+                        <button
+                            type="button"
+                            className="cd-search-trigger cd-text-replace ml-3"
+                            onClick={() => {
+                                clearSearch();
+                                handleSearch();
+                            }}
+                        >
+                            <X />
+                        </button>
+                    </div>
+                    <div className="cd-select flex z-10 absolute md:right-3 md:top-[50%] md:bottom-auto md:translate-y-[-50%] max-md:pl-[70px]">
+                        <span className="mt-2 mr-3">in</span>
+                        <Select onValueChange={handleCategorySelect}>
+                            <SelectTrigger className="w-[180px]">
+                                <SelectValue placeholder="All Categories" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectGroup>
+                                    <SelectItem value="all">Select all Category</SelectItem>
+                                    {categories.length > 0 ? (
+                                        categories.map((category) => (
+                                            <SelectItem key={category._id} value={category._id}>
+                                                {category.name}
+                                            </SelectItem>
+                                        ))
+                                    ) : (
+                                        <SelectItem value="loading" disabled>
+                                            No categories available
                                         </SelectItem>
-                                    ))
-                                ) : (
-                                    <SelectItem value="loading" disabled>
-                                        No categories available
-                                    </SelectItem>
-                                )}
-                            </SelectGroup>
-                        </SelectContent>
-                    </Select>
-                    <button
-                        type="submit"
-                        className="cd-search-trigger hidden md:flex cd-text-replace ml-3 bg-primary text-secondary h-10 w-10 rounded-full items-center justify-center"
-                    >
-                        <Search />
-                    </button>
-                    <button
-                        type="button"
-                        className="cd-search-trigger hidden md:flex justify-center items-center cd-text-replace ml-3"
-                        onClick={() => {
-                            clearSearch();
-                            handleSearch();
-                        }}
-                    >
-                        <X />
-                    </button>
-                </div>
-            </form>
+                                    )}
+                                </SelectGroup>
+                            </SelectContent>
+                        </Select>
+                        <button
+                            type="submit"
+                            className="cd-search-trigger hidden md:flex cd-text-replace ml-3 bg-primary text-secondary h-10 w-10 rounded-full items-center justify-center"
+                        >
+                            <Search />
+                        </button>
+                        <button
+                            type="button"
+                            className="cd-search-trigger hidden md:flex justify-center items-center cd-text-replace ml-3"
+                            onClick={() => {
+                                clearSearch();
+                                handleSearch();
+                            }}
+                        >
+                            <X />
+                        </button>
+                    </div>
+                </form>
+            </ContentContainer>
 
             {headerSearch && (
-                <div className={`cd-search-suggestions grid grid-flow-col transition-all duration-500 ease-in-out grid-cols-12 px-5 py-2 relative mx-auto ${isFullWidth ? 'max-w-full' : 'max-w-7xl'} bg-secondary`}>
+                <ContentContainer className="cd-search-suggestions grid grid-flow-col transition-all duration-500 ease-in-out grid-cols-12 px-5 py-2 relative w-full bg-secondary">
                     <div className="news col-span-9">
                         <h3 className="mb-5">Tours</h3>
                         {isSearching && (
@@ -237,7 +227,7 @@ export function MenuBarSearch({ handleSearch, headerSearch }: MenuBarSearchProps
                             </li>
                         </ul>
                     </div>
-                </div>
+                </ContentContainer>
             )}
         </div>
     );

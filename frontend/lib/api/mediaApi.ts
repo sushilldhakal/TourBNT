@@ -19,7 +19,7 @@ import type {
     MediaItem,
     MediaType,
     ResourceType,
-} from '@/components/dashboard/gallery/types';
+} from '@/types/gallery';
 
 /**
  * Transform backend media item to frontend MediaItem format
@@ -45,7 +45,7 @@ function transformMediaItem(item: any, mediaType: MediaTab): MediaItem {
         id: item._id || item.asset_id || item.public_id,
         publicId: item.public_id || '',
         url: item.url || '',
-        secureUrl: item.secure_url || item.url || '',
+        secureUrl: item.url || '', // Use url since secure_url might not be present
         mediaType: type,
         format: item.format || '',
         width: item.width,
@@ -87,45 +87,39 @@ export async function getAllMedia(
             },
         });
 
-        // Extract data from response
-        const data = extractResponseData<any>(response);
-
-        console.log('📦 API Response:', { mediaType, data });
-
-        // Transform response to match MediaQueryResponse interface
-        // Backend returns data with key matching mediaType (images, pdfs, videos)
-        const rawResources = data[mediaType] || [];
-
+        // Get the full response data directly - don't use extractResponseData for this endpoint
+        // since we need both items and pagination info
+        const fullResponse = response.data;
+        const rawResources = fullResponse.items || [];
         // Transform each item to match frontend MediaItem interface
         const resources = rawResources.map((item: any) => transformMediaItem(item, mediaType));
 
-        // Calculate total count based on mediaType
-        let totalCount = 0;
-        if (mediaType === 'images') {
-            totalCount = data.totalImages || data.total || 0;
-        } else if (mediaType === 'pdfs') {
-            totalCount = data.totalPDFs || data.total || 0;
-        } else if (mediaType === 'videos') {
-            totalCount = data.totalVideos || data.total || 0;
-        }
 
-        // Extract pagination info
-        const currentPage = data.page || pageParam;
-        const totalPages = data.totalPages || 1;
+        // Extract pagination info from server response
+        const pagination = fullResponse.pagination || {};
+        const currentPage = pagination.page || pageParam;
+        const totalPages = pagination.totalPages || 1;
+        const totalItems = pagination.totalItems || 0;
         const hasMore = currentPage < totalPages;
 
-        console.log('✅ Transformed resources:', resources.length, 'items', { currentPage, totalPages, hasMore });
 
         return {
-            resources,
-            nextCursor: hasMore ? (currentPage + 1) : null, // Use next page number as cursor
-            totalCount,
-            // Include pagination info for debugging
+            success: fullResponse.success !== false,
+            items: resources,
+            message: fullResponse.message || '',
             pagination: {
                 page: currentPage,
+                limit: pagination.limit || 20,
+                totalItems,
                 totalPages,
-                hasMore,
             },
+            totalImages: fullResponse.totalImages || 0,
+            totalVideos: fullResponse.totalVideos || 0,
+            totalPDFs: fullResponse.totalPDFs || 0,
+            // Legacy format support for backward compatibility
+            resources,
+            nextCursor: hasMore ? (currentPage + 1) : null,
+            totalCount: totalItems,
         };
     } catch (error) {
         throw handleApiError(error, 'fetching media');
@@ -157,14 +151,67 @@ export async function uploadMedia(
             },
         });
 
-        const data = extractResponseData<any>(response);
+        // Get the full response first, then extract data appropriately
+        const fullResponse = response.data; // This is the full server response
+        const data = extractResponseData<any>(response); // This extracts the nested data
 
-        // Transform response to match UploadResponse interface
+        // Debug: Log both structures
+        console.log('📤 Upload - Full response:', fullResponse);
+        console.log('📤 Upload - Extracted data:', data);
+
+        // Handle the actual server response structure
+        // Server returns: { success: true, message: "...", data: { gallery: { images: [...], videos: [...], PDF: [...] } } }
+        // extractResponseData returns just the gallery object from response.data.data
+        let resources: any[] = [];
+        let urls: string[] = [];
+
+        // The extracted data IS the gallery object, but it might be nested
+        if (data && data.gallery && (data.gallery.images || data.gallery.videos || data.gallery.PDF)) {
+            // Handle nested gallery structure: data = { gallery: { images: [...], videos: [...], PDF: [...] } }
+            const gallery = data.gallery;
+            const allItems = [
+                ...(gallery.images || []),
+                ...(gallery.videos || []),
+                ...(gallery.PDF || [])
+            ];
+
+            resources = allItems;
+            urls = allItems.map((item: any) => item.url || item.secure_url).filter(Boolean);
+            console.log('📤 Upload - Found items in nested gallery:', allItems.length);
+        } else if (data && (data.images || data.videos || data.PDF)) {
+            // Handle direct gallery structure: data = { images: [...], videos: [...], PDF: [...] }
+            const allItems = [
+                ...(data.images || []),
+                ...(data.videos || []),
+                ...(data.PDF || [])
+            ];
+
+            resources = allItems;
+            urls = allItems.map((item: any) => item.url || item.secure_url).filter(Boolean);
+            console.log('📤 Upload - Found items in direct gallery arrays:', allItems.length);
+        } else {
+            // Fallback for other response structures
+            resources = data.resources || data.items || [];
+            urls = data.urls || data.secureUrls || [];
+
+            // If we have resources but no URLs, extract URLs from resources
+            if (urls.length === 0 && resources.length > 0) {
+                urls = resources.map((r: any) => r.secureUrl || r.url).filter(Boolean);
+            }
+            console.log('📤 Upload - Using fallback structure:', resources.length);
+        }
+
+        console.log('📤 Upload - Final result:', {
+            urls: urls.length,
+            resources: resources.length,
+            success: fullResponse.success
+        });
+
         return {
-            success: data.success !== false,
-            urls: data.urls || [],
-            resources: data.resources || [],
-            message: data.message,
+            success: fullResponse.success !== false,
+            urls: urls,
+            resources: resources,
+            message: fullResponse.message,
         };
     } catch (error: any) {
         // Handle specific error cases with detailed messages

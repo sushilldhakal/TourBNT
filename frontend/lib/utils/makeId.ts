@@ -3,15 +3,16 @@
  * @param length - Length of the random part (default: 6)
  * @returns A unique ID string in format: BNT-XXXXXX-YYYY
  */
-export default function makeId(length: number = 6): string {
-    const prefix = 'BNT';
-    let result = '';
-    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    const charactersLength = characters.length;
-    let counter = 0;
-    while (counter < length) {
-        result += characters.charAt(Math.floor(Math.random() * charactersLength));
-        counter += 1;
+export default function makeId(length: number = 4): string {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    const timestamp = Date.now().toString(36).toUpperCase(); // Add timestamp
+    let result = 'BNT-';
+    
+    for (let i = 0; i < length; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
     }
-    return `${prefix}-${result}-${Date.now().toString(36).slice(-4)}`;
+    
+    // Add last 4 chars of timestamp for uniqueness
+    result += '-' + timestamp.slice(-4);
+    return result;
 }

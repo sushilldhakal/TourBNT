@@ -18,12 +18,7 @@ import {
 import Link from 'next/link';
 import Image from 'next/image';
 import { format } from 'date-fns';
-
-interface BookingConfirmationPageProps {
-    params: {
-        id: string;
-    };
-}
+import type { BookingConfirmationPageProps } from '@/types/app';
 
 // This would normally fetch from API
 async function getBooking(id: string) {
@@ -207,7 +202,7 @@ export default async function BookingConfirmationPage({
                             Download Voucher
                         </Button>
                         <Button size="lg" variant="outline" className="w-full" asChild>
-                            <Link href="/profile/bookings">
+                            <Link href="/dashboard/bookings">
                                 View My Bookings
                                 <ArrowRight className="h-4 w-4 ml-2" />
                             </Link>

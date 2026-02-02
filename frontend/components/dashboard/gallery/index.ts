@@ -1,29 +1,22 @@
 /**
  * Gallery Components Index
  * 
- * Central export file for all gallery-related components.
- * Provides convenient imports for gallery functionality.
+ * Simplified export file for streamlined gallery components.
+ * Reduced from 23+ components to 5 core components + utilities.
  */
 
-// Core components
+// Core components (5 components as per requirements)
+export { Gallery } from './Gallery';
 export { MediaGrid } from './MediaGrid';
 export { MediaCard } from './MediaCard';
+export { MediaUpload, MediaUploadButton } from './MediaUpload';
+export { MediaPanel, MobileMediaPanel } from './MediaPanel';
+
+// Utility components
 export { MediaSkeleton } from './MediaSkeleton';
 export { ErrorState } from './ErrorState';
 
-// Upload components
-export { UploadDropzone } from './UploadDropzone';
-export { UploadSheet } from './UploadSheet';
-
-// Panel components
-export { MediaDetailPanel } from './MediaDetailPanel';
-export { BulkActionsPanel } from './BulkActionsPanel';
-export { GallerySidePanel, MobileGallerySidePanel } from './GallerySidePanel';
-
-// Example components
-// export { GalleryUploadExample } from './GalleryUploadExample'; // Temporarily disabled
-
-// Types
+// Types – re-export from central types
 export type {
     MediaType,
     MediaTab,
@@ -34,18 +27,5 @@ export type {
     UploadResponse,
     MediaQueryResponse,
     MediaQueryParams,
-    GalleryPageProps,
     GalleryState,
-    MediaGridProps,
-    MediaCardProps,
-    UploadSheetProps,
-    MediaDetailPanelProps,
-    BulkActionsPanelProps,
-    GalleryHeaderProps,
-    MediaTabsProps,
-    UploadDropzoneProps,
-    MediaSkeletonProps,
-    ErrorStateProps,
-    DeleteMediaParams,
-    UploadMediaParams,
-} from './types';
+} from '@/types/gallery';

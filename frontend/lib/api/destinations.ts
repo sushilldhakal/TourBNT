@@ -1,134 +1,141 @@
 import { api, handleApiError, extractResponseData } from './apiClient';
 
 /**
- * Destination API Methods
- * Migrated from dashboard/src/http/destinationApi.ts
- * Follows server API specifications from API_DOCUMENTATION.md
+ * Destination API
+ * All destination-related API calls. Single source of truth.
  */
 
-export interface DestinationData {
-    _id: string;
-    name: string;
-    description: string;
-    image?: string;
-    isActive: boolean;
-    isApproved: boolean;
-    approvalStatus: string;
-    usageCount: number;
-}
-
-/**
- * Get all destinations for seller
- */
-export const getSellerDestinations = async () => {
-    try {
-        const response = await api.get('/global/destinations/seller/visible');
-        return extractResponseData(response);
-    } catch (error) {
-        throw handleApiError(error, 'fetching seller destinations');
-    }
+export const destinationApi = {
+    getApproved: (params?: { page?: number; limit?: number; country?: string; region?: string; search?: string }) =>
+        api.get('/global/destinations', { params }),
+    getByCountry: (country: string) =>
+        api.get(`/global/destinations/country/${country}`),
+    search: (params: { query?: string; country?: string; region?: string; city?: string }) =>
+        api.get('/global/destinations/search', { params }),
+    create: (data: {
+        name: string;
+        description: string;
+        country: string;
+        region?: string;
+        city?: string;
+        coverImage?: string;
+        coordinates?: { latitude: number; longitude: number };
+        metadata?: Record<string, unknown>;
+    }) =>
+        api.post('/global/destinations', data),
+    update: (id: string, data: unknown) =>
+        api.patch(`/global/destinations/${id}`, data),
+    getMyCreated: () =>
+        api.get('/global/destinations/my-created'),
+    getMyDestinations: (filters?: { isActive?: boolean; isFavorite?: boolean }) =>
+        api.get('/global/destinations/my-destinations', { params: filters }),
+    getMyActive: () =>
+        api.get('/global/destinations/my-active'),
+    getMyFavorites: () =>
+        api.get('/global/destinations/my-favorites'),
+    addToMyList: (id: string, options?: { isFavorite?: boolean; customName?: string }) =>
+        api.post(`/global/destinations/${id}/add`, options),
+    removeFromMyList: (id: string) =>
+        api.delete(`/global/destinations/${id}/remove`),
+    toggleActive: (id: string) =>
+        api.patch(`/global/destinations/${id}/toggle-active`),
+    toggleFavorite: (id: string) =>
+        api.patch(`/global/destinations/${id}/toggle-favorite`),
+    updateSettings: (id: string, settings: { isActive?: boolean; isFavorite?: boolean; customName?: string; sortOrder?: number }) =>
+        api.patch(`/global/destinations/${id}/settings`, settings),
+    bulkUpdate: (updates: Array<{ destinationId: string; sortOrder?: number; isActive?: boolean; isFavorite?: boolean }>) =>
+        api.post('/global/destinations/bulk-update', { updates }),
+    adminGetAll: (filters?: { approvalStatus?: string; country?: string }) =>
+        api.get('/global/destinations/admin/all', { params: filters }),
+    adminGetPending: () =>
+        api.get('/global/destinations/admin/pending'),
+    adminApprove: (id: string) =>
+        api.put(`/global/destinations/admin/${id}/approve`),
+    adminReject: (id: string, reason: string) =>
+        api.put(`/global/destinations/admin/${id}/reject`, { reason }),
+    adminDelete: (id: string) =>
+        api.delete(`/global/destinations/admin/${id}`),
+    // Change requests (admin only)
+    adminGetChangeRequests: () =>
+        api.get('/global/destinations/admin/change-requests'),
+    adminApproveChangeRequest: (changeRequestId: string) =>
+        api.put(`/global/destinations/admin/change-requests/${changeRequestId}/approve`),
+    adminRejectChangeRequest: (changeRequestId: string, reason: string) =>
+        api.put(`/global/destinations/admin/change-requests/${changeRequestId}/reject`, { reason }),
 };
 
-/**
- * Get user-specific destinations
- */
 export const getUserDestinations = async () => {
     try {
-        const response = await api.get('/global/destinations/user-destinations');
+        const response = await destinationApi.getMyDestinations();
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching user destinations');
     }
 };
 
-/**
- * Get all approved destinations
- */
 export const getAllDestinations = async () => {
     try {
-        const response = await api.get('/global/destinations/approved');
+        const response = await destinationApi.getApproved();
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching destinations');
     }
 };
 
-/**
- * Get single destination by ID
- */
 export const getDestination = async (destinationId: string) => {
     try {
-        const response = await api.get(`/global/destinations/${destinationId}`);
+        const response = await api.get(`/global/destinations/public/${destinationId}`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching destination');
     }
 };
 
-/**
- * Get single destination by ID (alias for getDestination)
- */
-export const getDestinationById = async (destinationId: string) => {
-    return getDestination(destinationId);
-};
+export const getDestinationById = async (destinationId: string) => getDestination(destinationId);
 
-/**
- * Toggle destination favorite status
- */
 export const toggleDestinationFavorite = async (destinationId: string) => {
     try {
-        const response = await api.patch(`/global/destinations/${destinationId}/favorite`);
+        const response = await destinationApi.toggleFavorite(destinationId);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'toggling destination favorite');
     }
 };
 
-/**
- * Toggle destination active status
- */
 export const toggleDestinationActiveStatus = async (destinationId: string) => {
     try {
-        const response = await api.patch(`/global/destinations/${destinationId}/toggle-active`);
+        const response = await destinationApi.toggleActive(destinationId);
         return extractResponseData(response);
     } catch (error) {
-        throw handleApiError(error, 'toggling destination status');
+        throw handleApiError(error, 'toggling destination active');
     }
 };
 
-/**
- * Add existing destination to seller list
- */
 export const addExistingDestinationToSeller = async (destinationId: string) => {
+    if (!destinationId || destinationId === 'undefined' || destinationId === 'null' || destinationId.trim() === '') {
+        throw new Error('Invalid destination ID: destinationId is required and cannot be undefined, null, or empty');
+    }
     try {
-        const response = await api.post(`/global/destinations/${destinationId}/add-to-list`);
+        const response = await destinationApi.addToMyList(destinationId);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'adding destination to list');
     }
 };
 
-/**
- * Remove destination from seller list
- */
 export const removeExistingDestinationFromSeller = async (destinationId: string) => {
     try {
-        const response = await api.post(`/global/destinations/${destinationId}/remove-from-list`);
+        const response = await destinationApi.removeFromMyList(destinationId);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'removing destination from list');
     }
 };
 
-/**
- * Add new destination
- */
 export const addDestination = async (destinationData: FormData) => {
     try {
-        const response = await api.post('/global/destinations/submit', destinationData, {
-            headers: {
-                'Content-Type': 'multipart/form-data',
-            },
+        const response = await api.post('/global/destinations', destinationData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
         });
         return extractResponseData(response);
     } catch (error) {
@@ -136,15 +143,10 @@ export const addDestination = async (destinationData: FormData) => {
     }
 };
 
-/**
- * Update destination
- */
 export const updateDestination = async (destinationId: string, destinationData: FormData) => {
     try {
         const response = await api.patch(`/global/destinations/${destinationId}`, destinationData, {
-            headers: {
-                'Content-Type': 'multipart/form-data',
-            },
+            headers: { 'Content-Type': 'multipart/form-data' },
         });
         return extractResponseData(response);
     } catch (error) {
@@ -152,83 +154,141 @@ export const updateDestination = async (destinationId: string, destinationData: 
     }
 };
 
-/**
- * Delete destination (admin only)
- */
 export const deleteDestination = async (destinationId: string) => {
     try {
-        const response = await api.delete(`/global/destinations/admin/${destinationId}`);
+        const response = await destinationApi.adminDelete(destinationId);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'deleting destination');
     }
 };
 
-/**
- * Get pending destinations (admin)
- */
 export const getPendingDestinations = async () => {
     try {
-        const response = await api.get('/global/destinations/admin/pending');
+        const response = await destinationApi.adminGetPending();
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching pending destinations');
     }
 };
 
-/**
- * Approve destination (admin)
- */
 export const approveDestination = async (destinationId: string) => {
     try {
-        const response = await api.put(`/global/destinations/admin/${destinationId}/approve`);
+        const response = await destinationApi.adminApprove(destinationId);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'approving destination');
     }
 };
 
-/**
- * Reject destination (admin)
- */
 export const rejectDestination = async (destinationId: string, reason: string) => {
     try {
-        const response = await api.put(`/global/destinations/admin/${destinationId}/reject`, { reason });
+        const response = await destinationApi.adminReject(destinationId, reason);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'rejecting destination');
     }
 };
 
-/**
- * Search destinations
- */
-export const searchDestinations = async (searchParams: {
-    query?: string;
-    country?: string;
-    region?: string;
-    city?: string;
-}) => {
+// Change request functions (admin only)
+export const getChangeRequests = async () => {
     try {
-        const params = new URLSearchParams();
-        if (searchParams.query) params.append('query', searchParams.query);
-        if (searchParams.country) params.append('country', searchParams.country);
-        if (searchParams.region) params.append('region', searchParams.region);
-        if (searchParams.city) params.append('city', searchParams.city);
+        const response = await destinationApi.adminGetChangeRequests();
+        return extractResponseData(response);
+    } catch (error) {
+        throw handleApiError(error, 'fetching change requests');
+    }
+};
 
-        const response = await api.get(`/global/destinations/seller/search?${params.toString()}`);
+export const approveChangeRequest = async (changeRequestId: string) => {
+    try {
+        const response = await destinationApi.adminApproveChangeRequest(changeRequestId);
+        return extractResponseData(response);
+    } catch (error) {
+        throw handleApiError(error, 'approving change request');
+    }
+};
+
+export const rejectChangeRequest = async (changeRequestId: string, reason: string) => {
+    try {
+        const response = await destinationApi.adminRejectChangeRequest(changeRequestId, reason);
+        return extractResponseData(response);
+    } catch (error) {
+        throw handleApiError(error, 'rejecting change request');
+    }
+};
+
+export const searchDestinations = async (searchParams: { query?: string; country?: string; region?: string; city?: string }) => {
+    try {
+        const response = await destinationApi.search(searchParams);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'searching destinations');
     }
 };
 
-/**
- * Get user's tour titles (for featured tours selection)
- */
+export const getMyActiveDestinations = async () => {
+    try {
+        const response = await destinationApi.getMyActive();
+        return extractResponseData(response);
+    } catch (error) {
+        throw handleApiError(error, 'fetching active destinations');
+    }
+};
+
+export const getMyFavoriteDestinations = async () => {
+    try {
+        const response = await destinationApi.getMyFavorites();
+        return extractResponseData(response);
+    } catch (error) {
+        throw handleApiError(error, 'fetching favorite destinations');
+    }
+};
+
+export const getMyCreatedDestinations = async () => {
+    try {
+        const response = await destinationApi.getMyCreated();
+        return extractResponseData(response);
+    } catch (error) {
+        throw handleApiError(error, 'fetching created destinations');
+    }
+};
+
+export const updateDestinationSettings = async (
+    destinationId: string,
+    settings: { customName?: string; isFavorite?: boolean; isActive?: boolean }
+) => {
+    try {
+        const response = await destinationApi.updateSettings(destinationId, settings);
+        return extractResponseData(response);
+    } catch (error) {
+        throw handleApiError(error, 'updating destination settings');
+    }
+};
+
+export const bulkUpdateDestinations = async (
+    updates: Array<{ destinationId: string; isActive?: boolean; isFavorite?: boolean; customName?: string }>
+) => {
+    try {
+        const response = await destinationApi.bulkUpdate(updates);
+        return extractResponseData(response);
+    } catch (error) {
+        throw handleApiError(error, 'bulk updating destinations');
+    }
+};
+
+export const getAllDestinationsAdmin = async () => {
+    try {
+        const response = await destinationApi.adminGetAll();
+        return extractResponseData(response);
+    } catch (error) {
+        throw handleApiError(error, 'fetching all destinations (admin)');
+    }
+};
+
 export const getUserToursTitle = async (userId: string) => {
     try {
-        const response = await api.get(`/users/${userId}/tours/titles`);
+        const response = await api.get(`/tours/user/${userId}/titles`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching tour titles');

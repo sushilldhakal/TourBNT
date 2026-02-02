@@ -18,25 +18,6 @@ export const loadAIExtensions = async (): Promise<AnyExtension[]> => {
 };
 
 /**
- * Lazy load Math extensions
- * Only loaded when math features are needed
- */
-export const loadMathExtensions = async (): Promise<AnyExtension[]> => {
-    const { Mathematics } = await import('novel');
-
-    return [
-        Mathematics.configure({
-            HTMLAttributes: {
-                class: 'text-foreground rounded p-1 hover:bg-accent cursor-pointer',
-            },
-            katexOptions: {
-                throwOnError: false, // Don't throw errors for invalid LaTeX
-            },
-        }),
-    ];
-};
-
-/**
  * Lazy load embedded media extensions
  * Only loaded when media features are needed
  */
@@ -78,9 +59,6 @@ export const getLazyExtensions = async (options: {
         promises.push(loadAIExtensions());
     }
 
-    if (options.enableMath) {
-        promises.push(loadMathExtensions());
-    }
 
     if (options.enableMedia) {
         promises.push(loadMediaExtensions());

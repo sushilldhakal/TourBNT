@@ -1,8 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
-import { useFormContext } from 'react-hook-form';
-import { useQuery } from '@tanstack/react-query';
+import React, { useState, useRef } from 'react';
+import { useUserCategories } from '@/lib/queries';
 import { Paperclip, Trash2, Eye, HelpCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -10,12 +9,14 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
+import { Controller } from 'react-hook-form';
 import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import {
     Dialog,
     DialogContent,
@@ -24,17 +25,24 @@ import {
     DialogTitle,
     DialogTrigger,
 } from '@/components/ui/dialog';
-import MultipleSelector, { Option } from '@/components/ui/multiple-selector';
-import NovelEditor from '@/components/dashboard/editor/NovelEditor';
-import { GalleryPage } from '@/components/dashboard/gallery/GalleryPage';
+import { MultiSelect } from '@/components/ui/MultiSelect';
+
+import { Gallery } from '@/components/dashboard/gallery/Gallery';
 import { useTourContext } from '@/providers/TourProvider';
-import { getSellerCategories } from '@/lib/api/categories';
-import { getSellerDestinations } from '@/lib/api/destinations';
+import Image from 'next/image';
 import type { JSONContent } from 'novel';
 import dynamic from 'next/dynamic';
 import 'react-pdf/dist/Page/TextLayer.css';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
-import { getUserById } from '@/lib/api';
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
+
+// Dynamically import NovelEditor at module level to keep a stable component identity
+const NovelEditor = dynamic(() => import('@/components/dashboard/editor/NovelEditor'), {
+    ssr: false,
+    loading: () => <p>Loading Editor...</p>, // Optional loading state
+});
+
+
 
 // Dynamically import PDF components to avoid SSR issues
 const PDFDocument = dynamic(
@@ -51,6 +59,12 @@ const PDFPage = dynamic(
     { ssr: false }
 );
 
+// Type for PDF document proxy from react-pdf
+// Using a simple type that matches the onLoadSuccess callback parameter
+type PDFDocumentProxy = {
+    numPages: number;
+};
+
 /**
  * TourBasicInfo Component
  * Handles basic tour information including title, code, category, description, and media
@@ -58,22 +72,36 @@ const PDFPage = dynamic(
  */
 
 export function TourBasicInfo() {
-    const { register, setValue, watch, formState: { errors } } = useFormContext();
-    const { editorContent, setEditorContent, isEditing, handleGenerateCode } = useTourContext();
+    const { form, editorContent, isEditing, handleGenerateCode } = useTourContext();
+    const { register, setValue, watch, control, formState: { errors } } = form;
+
+    // Get current form value to use as fallback if memoized content is null
+    const currentDescription = watch('description');
+    // Cache initial description value so the editor is not re-initialized on every render
+    const initialDescriptionRef = useRef<JSONContent | null>(null);
+
+    if (initialDescriptionRef.current === null) {
+        if (editorContent && typeof editorContent === 'object' && 'type' in editorContent) {
+            initialDescriptionRef.current = editorContent as JSONContent;
+        } else if (currentDescription && typeof currentDescription === 'object' && 'type' in currentDescription) {
+            initialDescriptionRef.current = currentDescription as JSONContent;
+        }
+    }
+
+    const descriptionInitialValue = initialDescriptionRef.current;
+
+
     const [imageDialogOpen, setImageDialogOpen] = useState(false);
     const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
     const [numPages, setNumPages] = useState<number>(1);
     const [pageNumber, setPageNumber] = useState<number>(1);
 
-    // Watch form values
-    const tourStatus = watch('tourStatus') || 'Draft';
-    const enquiry = watch('enquiry');
     const selectedCategories = watch('category') || [];
     const coverImage = watch('coverImage');
-    const destination = watch('destination');
     const file = watch('file');
+
     // PDF document load handler
-    const onDocumentLoadSuccess = (pdf: any): void => {
+    const onDocumentLoadSuccess = (pdf: PDFDocumentProxy): void => {
         setNumPages(pdf.numPages);
         setPageNumber(1);
     };
@@ -91,46 +119,72 @@ export function TourBasicInfo() {
         changePage(-1);
     };
 
-    // Fetch categories - use seller categories to get all (active and inactive)
-    const { data: categoriesData, isLoading: categoriesLoading } = useQuery({
-        queryKey: ['categories', 'seller'],
-        queryFn: getSellerCategories,
-    });
+    const { data: categoriesData, isLoading: categoriesLoading } = useUserCategories();
 
     // Transform categories to options
     const categoryOptions: Option[] = React.useMemo(() => {
-        console.log('categoriesData:', categoriesData);
+        type AnyRecord = Record<string, unknown>;
+        type CategoryResponse =
+            | AnyRecord[]
+            | { categories: AnyRecord[]; count?: number }
+            | { data: AnyRecord[] };
 
-        // Handle different response structures
-        let categories = null;
-        const data = categoriesData as any;
+        const data = categoriesData as CategoryResponse | undefined;
+        const rawList: AnyRecord[] = (() => {
+            if (!data) return [];
+            if (Array.isArray(data)) return data;
+            if (typeof data !== 'object') return [];
 
-        if (Array.isArray(categoriesData)) {
-            // Direct array response
-            categories = categoriesData;
-        } else if (data?.data) {
-            // Nested in data property
-            categories = data.data;
-        }
+            const rec = data as Record<string, unknown>;
+            const fromCategories = rec.categories;
+            if (Array.isArray(fromCategories)) return fromCategories as AnyRecord[];
 
-        console.log('categories array:', categories);
+            const fromData = rec.data;
+            if (Array.isArray(fromData)) return fromData as AnyRecord[];
 
-        if (!categories || !Array.isArray(categories)) return [];
+            return [];
+        })();
 
-        const options = categories.map((cat: any) => ({
-            label: cat.name,
-            value: cat._id,
-            disable: !cat.isActive, // Disable inactive categories
-        }));
-        console.log('categoryOptions:', options);
-        return options;
+        // Seller endpoint `/global/categories/my-categories` returns relationship objects:
+        // { isActive, customName?, category/globalCategory: { _id, name, isActive, ... } }
+        return rawList
+            .map((item) => {
+                const itemRec = item as AnyRecord;
+                const catRec = (itemRec['category'] ?? itemRec['globalCategory'] ?? itemRec) as AnyRecord;
+
+                const id = String(
+                    (catRec['_id'] ??
+                        catRec['id'] ??
+                        itemRec['_id'] ??
+                        itemRec['id'] ??
+                        '') as string
+                );
+                const label = String(
+                    (itemRec['customName'] ??
+                        catRec['customName'] ??
+                        catRec['name'] ??
+                        itemRec['name'] ??
+                        '') as string
+                ).trim();
+                if (!id || !label) return null;
+
+                const isActive =
+                    typeof itemRec['isActive'] === 'boolean'
+                        ? (itemRec['isActive'] as boolean)
+                        : typeof catRec['isActive'] === 'boolean'
+                            ? (catRec['isActive'] as boolean)
+                            : true;
+
+                return { label, value: id, disable: !isActive } satisfies unknown as [];
+            })
+            .filter(Boolean) as [];
     }, [categoriesData]);
 
 
 
 
     // Handle category change
-    const handleCategoryChange = (options: Option[]) => {
+    const handleCategoryChange = (options: []) => {
         setValue('category', options, { shouldValidate: true });
     };
 
@@ -224,22 +278,16 @@ export function TourBasicInfo() {
                 <div className="space-y-2">
                     <Label>Category</Label>
                     {(() => {
-                        console.log('Rendering categories - categoryOptions:', categoryOptions, 'length:', categoryOptions?.length, 'loading:', categoriesLoading);
                         return null;
                     })()}
                     {categoriesLoading ? (
                         <p className="text-sm text-muted-foreground">Loading categories...</p>
                     ) : categoryOptions && categoryOptions.length > 0 ? (
-                        <MultipleSelector
-                            value={selectedCategories}
-                            onChange={handleCategoryChange}
-                            options={categoryOptions}
+                        <MultiSelect
+                            value={selectedCategories as unknown as string[]}
+                            onValueChange={handleCategoryChange}
+                            options={categoryOptions as unknown as []}
                             placeholder="Select categories..."
-                            emptyIndicator={
-                                <p className="text-center text-sm text-muted-foreground">
-                                    No categories found
-                                </p>
-                            }
                         />
                     ) : (
                         <p className="text-sm text-muted-foreground">No categories available</p>
@@ -251,26 +299,28 @@ export function TourBasicInfo() {
 
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-1">
                     {/* Tour Status */}
+                    {/* Tour Status */}
                     <div className="space-y-2">
-                        <Label>Tour Status</Label>
-                        <DropdownMenu modal={false}>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="outline" className="w-full justify-between">
-                                    {tourStatus}
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent className="w-[var(--radix-dropdown-menu-trigger-width)] z-50" align="start">
-                                <DropdownMenuItem onClick={() => setValue('tourStatus', 'Published')}>
-                                    Published
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => setValue('tourStatus', 'Draft')}>
-                                    Draft
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => setValue('tourStatus', 'Expired')}>
-                                    Expired
-                                </DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
+                        <Label htmlFor="tour-status">Tour Status</Label>
+                        <Controller
+                            name="tourStatus"
+                            control={control}
+                            render={({ field }) => (
+                                <Select
+                                    value={field.value || 'Draft'}
+                                    onValueChange={field.onChange}
+                                >
+                                    <SelectTrigger className="w-full" id="tour-status">
+                                        <SelectValue placeholder="Select tour status" />
+                                    </SelectTrigger>
+                                    <SelectContent className="z-[9999]">
+                                        <SelectItem value="Published">Published</SelectItem>
+                                        <SelectItem value="Draft">Draft</SelectItem>
+                                        <SelectItem value="Archived">Archived</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            )}
+                        />
                     </div>
 
                 </div>
@@ -296,14 +346,13 @@ export function TourBasicInfo() {
                 <div className="space-y-2">
                     <Label>Description</Label>
                     <NovelEditor
-                        initialValue={editorContent}
+                        initialValue={descriptionInitialValue}
                         onContentChange={(content: JSONContent) => {
-                            setEditorContent(content);
-                            setValue('description', JSON.stringify(content));
+                            setValue('description', content, { shouldDirty: true });
                         }}
                         placeholder="Describe the tour details..."
                         minHeight="300px"
-                        enableAI={false}
+                        enableAI={true}
                         enableGallery={true}
                     />
                 </div>
@@ -317,10 +366,12 @@ export function TourBasicInfo() {
                             {coverImage && coverImage.trim() !== '' ? (
                                 <div className="mt-2 relative">
                                     <div className="relative aspect-4/3 rounded-md overflow-hidden border border-border bg-primary/5">
-                                        <img
+                                        <Image
                                             src={coverImage}
                                             alt="Selected cover"
-                                            className="object-cover w-full h-full"
+                                            fill
+                                            className="object-cover"
+                                            sizes="(max-width: 768px) 100vw, 50vw"
                                         />
                                     </div>
                                     <button
@@ -340,21 +391,23 @@ export function TourBasicInfo() {
                                             Choose Image
                                         </Button>
                                     </DialogTrigger>
-                                    <DialogContent className="max-w-[95vw] max-h-[95vh] w-full h-full p-0 overflow-hidden">
-                                        <DialogHeader className="px-6 pt-6 pb-4 border-b">
-                                            <DialogTitle className="text-left">
-                                                Choose Image From Gallery
-                                            </DialogTitle>
-                                            <DialogDescription>
-                                                Select an image for your tour cover
-                                            </DialogDescription>
-                                        </DialogHeader>
+                                    <DialogContent className="!w-[80vw] !max-w-[80vw] sm:!max-w-[80vw] left-1/2 -translate-x-1/2 max-h-[90vh] p-0">
+                                        <VisuallyHidden>
+
+                                            <DialogHeader className="px-6 pt-6 pb-4 border-b hidden">
+                                                <DialogTitle className="text-left">
+                                                    Choose Image From Gallery
+                                                </DialogTitle>
+                                                <DialogDescription>
+                                                    Select an image for your tour cover
+                                                </DialogDescription>
+                                            </DialogHeader>
+                                        </VisuallyHidden>
                                         <div className="overflow-auto h-[calc(95vh-120px)]">
-                                            <GalleryPage
+                                            <Gallery
                                                 mode="picker"
                                                 onMediaSelect={handleImageSelect}
                                                 allowMultiple={false}
-                                                mediaType="images"
                                                 initialTab="images"
                                             />
                                         </div>
@@ -436,21 +489,23 @@ export function TourBasicInfo() {
                                             Choose PDF
                                         </Button>
                                     </DialogTrigger>
-                                    <DialogContent className="max-w-[95vw] max-h-[95vh] w-full h-full p-0 overflow-hidden">
-                                        <DialogHeader className="px-6 pt-6 pb-4 border-b">
-                                            <DialogTitle className="text-left">
-                                                Choose PDF From Gallery
-                                            </DialogTitle>
-                                            <DialogDescription>
-                                                Select a PDF file for your tour
-                                            </DialogDescription>
-                                        </DialogHeader>
+                                    <DialogContent className="!w-[80vw] !max-w-[80vw] sm:!max-w-[80vw] left-1/2 -translate-x-1/2 max-h-[90vh] p-0">
+                                        <VisuallyHidden>
+
+                                            <DialogHeader className="px-6 pt-6 pb-4 border-b hidden">
+                                                <DialogTitle className="text-left">
+                                                    Choose PDF From Gallery
+                                                </DialogTitle>
+                                                <DialogDescription>
+                                                    Select a PDF file for your tour
+                                                </DialogDescription>
+                                            </DialogHeader>
+                                        </VisuallyHidden>
                                         <div className="overflow-auto h-[calc(95vh-120px)]">
-                                            <GalleryPage
+                                            <Gallery
                                                 mode="picker"
                                                 onMediaSelect={handlePdfSelect}
                                                 allowMultiple={false}
-                                                mediaType="pdfs"
                                                 initialTab="pdfs"
                                             />
                                         </div>
@@ -469,19 +524,32 @@ export function TourBasicInfo() {
                     </div>
 
                     <div className="flex flex-row items-center justify-between rounded-lg border p-4">
-                        <div className="space-y-0.5">
-                            <Label className="text-base">Enable Enquiries</Label>
+                        <div className="space-y-0.5 flex-1">
+                            <Label htmlFor="enquiry-switch" className="text-base cursor-pointer">
+                                Enable Enquiries
+                            </Label>
                             <p className="text-sm text-muted-foreground">
                                 Allow users to send inquiries about this tour
                             </p>
                         </div>
-                        <Switch
-                            checked={Boolean(enquiry)}
-                            onCheckedChange={(v) => setValue('enquiry', v)}
-                        />
+                        {/* Enquiry Switch */}
+                        <div className="flex flex-row items-center justify-between rounded-lg border p-4">
+
+                            <Controller
+                                name="enquiry"
+                                control={control}
+                                render={({ field }) => (
+                                    <Switch
+                                        id="enquiry-switch"
+                                        checked={field.value ?? true}
+                                        onCheckedChange={field.onChange}
+                                    />
+                                )}
+                            />
+                        </div>
                     </div>
                 </div>
             </CardContent>
-        </Card>
+        </Card >
     );
 }

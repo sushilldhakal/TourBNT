@@ -6,7 +6,7 @@ import { Calendar, Clock, Star } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import RichTextRenderer from '@/components/RichTextRenderer';
-import { Tour, Category, TourPricing } from '@/lib/types';
+import { Tour, Category, TourPricing } from '@/types/types';
 
 interface TourCardProps {
     tour: Tour;

@@ -1,18 +1,16 @@
 'use client';
 
-import { useLayout } from '@/providers/LayoutProvider';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 
 export default function SingleEnquiryPage() {
-    const { isFullWidth } = useLayout();
     const params = useParams();
     const enquiryId = params.enquiryId;
 
     // TODO: Fetch enquiry details from API
 
     return (
-        <div className={`${isFullWidth ? 'container-fluid' : 'container'} mx-auto px-4 py-16 transition-all duration-300`}>
+        <div className="w-full mx-auto px-4 py-16 transition-all duration-300">
             <Link href="/enquiry" className="text-primary hover:text-primary/80 mb-6 inline-block">
                 ← Back to Enquiries
             </Link>

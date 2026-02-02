@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ChevronRight, Home } from 'lucide-react';
 import { useBreadcrumbs } from '@/providers/BreadcrumbsProvider';
+import { useEffect, useRef } from 'react';
 
 /**
  * Breadcrumbs Component
@@ -13,7 +14,16 @@ import { useBreadcrumbs } from '@/providers/BreadcrumbsProvider';
 
 export function Breadcrumbs() {
     const pathname = usePathname();
-    const { breadcrumbs } = useBreadcrumbs();
+    const { breadcrumbs, clearBreadcrumbs } = useBreadcrumbs();
+    const prevPathnameRef = useRef<string>(pathname);
+
+    // Clear breadcrumbs when pathname changes (navigation to different page)
+    useEffect(() => {
+        if (prevPathnameRef.current !== pathname) {
+            clearBreadcrumbs();
+            prevPathnameRef.current = pathname;
+        }
+    }, [pathname, clearBreadcrumbs]);
 
     // Generate breadcrumbs from pathname if not set manually
     const pathSegments = pathname.split('/').filter(Boolean);

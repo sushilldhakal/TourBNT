@@ -1,16 +1,28 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Facebook, Instagram, Linkedin, Twitter, Youtube, PhoneCall, Clock, Maximize2, Minimize2 } from 'lucide-react';
 import { useLayout } from '@/providers/LayoutProvider';
 import { Button } from '@/components/ui/button';
+import { ContentContainer } from './PublicLayoutClient';
 
 export function TopHeader() {
     const { isFullWidth, toggleLayout } = useLayout();
+    const [isWideScreen, setIsWideScreen] = useState(false);
+
+    // Only show layout toggle and apply full/boxed when screen is wider than 1600px
+    useEffect(() => {
+        const mq = window.matchMedia('(min-width: 1601px)');
+        const update = () => setIsWideScreen(mq.matches);
+        update();
+        mq.addEventListener('change', update);
+        return () => mq.removeEventListener('change', update);
+    }, []);
 
     return (
         <nav className="h-10 bg-secondary z-10 relative px-5">
-            <div className={`mx-auto ${isFullWidth ? 'max-w-full' : 'max-w-7xl'} w-full h-full transition-all duration-300`}>
+            <ContentContainer className="w-full h-full transition-all duration-300">
                 <div className="relative flex items-center justify-between h-full">
                     {/* Left Section - Layout Toggle & Phone Number & Opening Times */}
                     <div className="hidden md:flex items-center text-secondary-foreground text-xs space-x-4">
@@ -72,22 +84,24 @@ export function TopHeader() {
                         >
                             <Linkedin size={18} />
                         </Link>
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={toggleLayout}
-                            className="h-7 w-7 hover:bg-secondary-foreground/10"
-                            title={isFullWidth ? 'Switch to Boxed Layout' : 'Switch to Full Width Layout'}
-                        >
-                            {isFullWidth ? (
-                                <Minimize2 size={16} className="text-secondary-foreground" />
-                            ) : (
-                                <Maximize2 size={16} className="text-secondary-foreground" />
-                            )}
-                        </Button>
+                        {isWideScreen && (
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={toggleLayout}
+                                className="h-7 w-7 hover:bg-secondary-foreground/10"
+                                title={isFullWidth ? 'Switch to Boxed Layout' : 'Switch to Full Width Layout'}
+                            >
+                                {isFullWidth ? (
+                                    <Minimize2 size={16} className="text-secondary-foreground" />
+                                ) : (
+                                    <Maximize2 size={16} className="text-secondary-foreground" />
+                                )}
+                            </Button>
+                        )}
                     </div>
                 </div>
-            </div>
+            </ContentContainer>
         </nav>
     );
 }

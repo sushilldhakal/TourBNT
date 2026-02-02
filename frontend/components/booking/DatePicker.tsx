@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Calendar } from '@/components/ui/calendar';
+import { Calendar } from '@/components/ui/calendar-lazy';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
@@ -10,14 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Calendar as CalendarIcon, Users, DollarSign, AlertCircle } from 'lucide-react';
 import { format } from 'date-fns';
-
-interface PricingOption {
-    id: string;
-    name: string;
-    price: number;
-    description: string;
-    maxTravelers: number;
-}
+import type { PricingOption } from '@/types/types';
 
 interface DatePickerProps {
     tourId: string;
@@ -56,6 +49,9 @@ export function DatePicker({ tourId, availableDates, onDateSelect }: DatePickerP
                     price: 299,
                     description: 'Includes basic amenities and guided tour',
                     maxTravelers: 10,
+                    paxRange: { min: 1, max: 10 },
+                    isActive: true,
+                    category: 'adult',
                 },
                 {
                     id: '2',
@@ -63,6 +59,9 @@ export function DatePicker({ tourId, availableDates, onDateSelect }: DatePickerP
                     price: 499,
                     description: 'Includes all amenities, meals, and private guide',
                     maxTravelers: 6,
+                    paxRange: { min: 1, max: 6 },
+                    isActive: true,
+                    category: 'adult',
                 },
                 {
                     id: '3',
@@ -70,6 +69,9 @@ export function DatePicker({ tourId, availableDates, onDateSelect }: DatePickerP
                     price: 799,
                     description: 'All-inclusive with premium accommodations',
                     maxTravelers: 4,
+                    paxRange: { min: 1, max: 4 },
+                    isActive: true,
+                    category: 'adult',
                 },
             ];
             setPricingOptions(mockPricing);

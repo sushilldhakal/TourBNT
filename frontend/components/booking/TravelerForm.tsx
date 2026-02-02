@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Plus, Trash2, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import type { TravelerInfo } from '@/types/app';
 
 const travelerSchema = z.object({
     firstName: z.string().min(2, 'First name must be at least 2 characters'),
@@ -24,7 +25,6 @@ const formSchema = z.object({
     travelers: z.array(travelerSchema).min(1, 'At least one traveler is required'),
 });
 
-export type TravelerInfo = z.infer<typeof travelerSchema>;
 type FormData = z.infer<typeof formSchema>;
 
 interface TravelerFormProps {

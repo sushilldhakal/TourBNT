@@ -10,22 +10,16 @@ import {
     CarouselNext,
     CarouselPrevious,
     type CarouselApi,
-} from '@/components/ui/carousel';
+} from '@/components/ui/carousel-lazy';
 import { cn } from '@/lib/utils';
 import { isVideo } from '@/lib/tourUtils';
-import { GalleryItem } from '@/lib/types';
+import { GalleryItem, TourGalleryItem } from '@/types/types';
 import { generateBlurDataURL, getImageSizes } from '@/lib/imageUtils';
 
 interface TourGalleryProps {
     coverImage: string;
     gallery?: GalleryItem[];
     title: string;
-}
-
-interface MediaItem {
-    image: string;
-    alt: string;
-    type: 'image' | 'video';
 }
 
 function VideoPlayer({ src, title }: { src: string; title?: string }) {
@@ -52,13 +46,13 @@ export function TourGallery({ coverImage, gallery = [], title }: TourGalleryProp
     const [api, setApi] = useState<CarouselApi>();
 
     // Combine cover image with gallery items
-    const allMedia: MediaItem[] = [
+    const allMedia: TourGalleryItem[] = [
         {
             image: coverImage,
             alt: title,
             type: isVideo(coverImage) ? 'video' as const : 'image' as const,
         },
-        ...gallery.map((item): MediaItem => {
+        ...gallery.map((item): TourGalleryItem => {
             const imageUrl = item.image || item.url || item.secure_url || '';
             return {
                 image: imageUrl,

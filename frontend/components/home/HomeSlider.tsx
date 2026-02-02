@@ -1,30 +1,22 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useLatestTours } from "@/lib/queries";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import RichTextRenderer from "@/components/RichTextRenderer";
-import { getLatestTours } from "@/lib/api/tours";
-
-// Define the tour item interface
-interface TourItem {
-    _id: string;
-    title: string;
-    coverImage: string;
-    description?: string;
-    createdAt: string;
-    [key: string]: any;
-}
+import { ContentContainer } from "@/components/layout/PublicLayoutClient";
+import type { Tour } from "@/types/types";
 
 const HomeSlider = () => {
-    const { data } = useQuery({
-        queryKey: ['latestTours'],
-        queryFn: getLatestTours,
-        staleTime: 5 * 60 * 1000,
-    });
+    const { data } = useLatestTours();
+
+    // Backend returns { success, message, data: tours[] } → extractResponseData gives the array
+    const toursList = Array.isArray(data)
+        ? data
+        : (data as any)?.data?.tours ?? (data as any)?.tours ?? [];
 
     const [current, setCurrent] = useState(0);
     const [progress, setProgress] = useState(0);
@@ -34,13 +26,13 @@ const HomeSlider = () => {
     const slideInterval = 8000;
 
     const sortedTours = useMemo(() => {
-        if (!data?.data?.tours) return [];
+        if (!toursList?.length) return [];
 
-        return [...data.data.tours]
-            .sort((a: TourItem, b: TourItem) =>
+        return [...toursList]
+            .sort((a: Tour, b: Tour) =>
                 new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
             .slice(0, 5);
-    }, [data?.data?.tours]);
+    }, [toursList]);
 
     useEffect(() => {
         if (!autoplayEnabled || sortedTours.length === 0) return;
@@ -158,7 +150,7 @@ const HomeSlider = () => {
             style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
         >
             <div className="relative max-h-[90vh] w-full aspect-video">
-                {sortedTours.map((tour: TourItem, index: number) => {
+                {sortedTours.map((tour: Tour, index: number) => {
                     const description = tour.description || "No description available.";
                     let truncatedDescription = description;
 
@@ -170,7 +162,7 @@ const HomeSlider = () => {
                         <div
                             key={tour._id || index}
                             className={cn(
-                                "absolute inset-0 w-full h-full transition-opacity duration-1000 ease-in-out",
+                                "absolute inset-0 h-full transition-opacity duration-1000 ease-in-out",
                                 current === index ? "opacity-100 z-10" : "opacity-0 z-0",
                             )}
                         >
@@ -189,7 +181,7 @@ const HomeSlider = () => {
                                         backgroundSize: '20px 20px',
                                     }}
                                 ></div>
-                                <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 relative flex items-center h-full">
+                                <ContentContainer className="px-4 sm:px-6 lg:px-8 relative flex items-center h-full">
                                     <div className="relative z-10 p-5 text-white w-full md:w-1/2 text-center md:text-left">
                                         <h2 className="text-2xl md:text-3xl capitalize [text-shadow:3px_3px_3px_rgb(0_0_0/100%)]">{tour.title}</h2>
                                         <div className="text-base md:text-lg mt-4 mb-4 [text-shadow:1px_1px_2px_rgb(0_0_0/100%)] tracking-wide">
@@ -207,7 +199,7 @@ const HomeSlider = () => {
                                             </Link>
                                         </div>
                                     </div>
-                                </div>
+                                </ContentContainer>
                             </div>
                         </div>
                     );
@@ -216,7 +208,7 @@ const HomeSlider = () => {
 
             {/* Vertical dot indicators */}
             <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col gap-3 z-20">
-                {sortedTours.map((tour: TourItem, index: number) => (
+                {sortedTours.map((tour: Tour, index: number) => (
                     <button
                         key={tour._id || index}
                         className={cn(

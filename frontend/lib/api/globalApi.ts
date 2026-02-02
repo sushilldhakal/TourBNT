@@ -1,4 +1,4 @@
-import { api, serverApi, handleApiError } from './apiClient';
+import { api, serverApi, handleApiError, extractResponseData } from './apiClient';
 
 /**
  * Fetch approved destinations
@@ -12,7 +12,7 @@ export const getApprovedDestinations = async () => {
         const response = await apiClient.get('/global/destinations/approved', {
             timeout: 15000,
         });
-        return response.data;
+        return extractResponseData(response);
     } catch (error) {
         handleApiError(error, 'fetching destinations');
     }
@@ -30,7 +30,7 @@ export const getApprovedCategories = async () => {
         const response = await apiClient.get('/global/categories/approved', {
             timeout: 15000,
         });
-        return response.data;
+        return extractResponseData(response);
     } catch (error) {
         handleApiError(error, 'fetching categories');
     }

@@ -11,25 +11,17 @@ import { HelpCircle, MessageCircle, Plus } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useAuth } from "@/lib/hooks/useAuth";
+import { faqSchema } from "@/lib/schemas/tourEditor";
 
-const formSchema = z.object({
-    question: z.string().min(5, "Question must be at least 5 characters"),
-    answer: z.string().min(10, "Answer must be at least 10 characters"),
-    userId: z.string().optional(),
-});
-
-type FaqFormData = z.infer<typeof formSchema>;
+type FaqFormData = z.infer<typeof faqSchema>;
 
 const AddFaq = ({ onFaqAdded }: { onFaqAdded: () => void }) => {
-    const { userId } = useAuth();
 
     const form = useForm<FaqFormData>({
-        resolver: zodResolver(formSchema),
+        resolver: zodResolver(faqSchema),
         defaultValues: {
             question: '',
             answer: '',
-            userId: userId || '',
         },
     });
 
@@ -57,7 +49,6 @@ const AddFaq = ({ onFaqAdded }: { onFaqAdded: () => void }) => {
         const formData = new FormData();
         formData.append('question', values.question);
         formData.append('answer', values.answer);
-        formData.append('userId', values.userId || '');
 
         try {
             await faqsMutation.mutateAsync(formData);
@@ -72,12 +63,19 @@ const AddFaq = ({ onFaqAdded }: { onFaqAdded: () => void }) => {
 
     return (
         <Form {...form}>
-            <form onSubmit={(e) => {
-                e.preventDefault();
-                form.handleSubmit(handleCreateFaq)();
-            }}>
-                <Card className="shadow-xs border-primary/20">
-                    <CardHeader className="bg-primary/5 border-b pb-4">
+            <form
+                onSubmit={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    form.handleSubmit(handleCreateFaq)();
+                }}
+                onClick={(e) => {
+                    // Stop any click events from bubbling to parent form
+                    e.stopPropagation();
+                }}
+            >
+                <Card className="shadow-xs border-primary/20 py-0">
+                    <CardHeader className="bg-primary/5 border-b pb-4 pt-4 rounded-t-sm">
                         <div className="flex items-center gap-2">
                             <Plus className="h-4 w-4 text-primary" />
                             <CardTitle className="text-lg">Create New FAQ</CardTitle>
@@ -143,6 +141,10 @@ const AddFaq = ({ onFaqAdded }: { onFaqAdded: () => void }) => {
                             type="submit"
                             disabled={faqsMutation.isPending}
                             className="gap-1.5"
+                            onClick={(e) => {
+                                // Stop click event from bubbling to parent form
+                                e.stopPropagation();
+                            }}
                         >
                             <Plus className="h-3.5 w-3.5" />
                             Create FAQ

@@ -32,9 +32,30 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
+!.env.*.example
+
+# Markdown / internal docs
+*.md
+!README.md
+docs/
+lib/**/README.md
+
+# Secrets & credentials
+secrets.json
+credentials.json
+**/secrets*.json
+**/*credentials*.json
+*.local
+config.local.*
 
 # vercel
 .vercel
+.next/
+.agents
+.cursor
+.kiro
+.windsurf
 
 # typescript
 *.tsbuildinfo

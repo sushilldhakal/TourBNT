@@ -14,16 +14,12 @@ export interface Subscriber {
 }
 
 export interface SubscribersResponse {
-    items?: Subscriber[];
-    data?: Subscriber[];
-    pagination?: {
-        currentPage?: number;
-        page?: number;
+    items: Subscriber[];
+    pagination: {
+        page: number;
+        limit: number;
+        totalItems: number;
         totalPages: number;
-        totalItems?: number;
-        total?: number;
-        limit?: number;
-        itemsPerPage?: number;
     };
 }
 
@@ -34,8 +30,8 @@ export interface SubscribersResponse {
 export const subscribeEmail = async (emailInput: string) => {
     try {
         const response = await api.post('/subscribers', { email: emailInput });
-        const data = extractResponseData<{ 
-            message: string; 
+        const data = extractResponseData<{
+            message: string;
             subscriber?: Subscriber;
             subscribers?: Subscriber[];
             results?: {
@@ -46,7 +42,7 @@ export const subscribeEmail = async (emailInput: string) => {
                 failedCount: number;
             };
         }>(response);
-        
+
         // Handle both single and bulk responses
         if (data.results) {
             return data.results;
@@ -67,7 +63,7 @@ export const subscribeEmail = async (emailInput: string) => {
                 failedCount: 0
             };
         }
-        
+
         throw new Error('Invalid response format');
     } catch (error: any) {
         // If error has results in details, return them
@@ -95,10 +91,10 @@ export const subscribeBulk = async (emails: string[]) => {
     const results = await Promise.allSettled(
         emails.map(email => subscribeEmail(email))
     );
-    
+
     const successful: Subscriber[] = [];
     const failed: { email: string; error: string }[] = [];
-    
+
     results.forEach((result, index) => {
         if (result.status === 'fulfilled') {
             successful.push(...result.value.successful as Subscriber[]);
@@ -109,7 +105,7 @@ export const subscribeBulk = async (emails: string[]) => {
             });
         }
     });
-    
+
     return {
         successful,
         failed,
@@ -143,10 +139,15 @@ export const getSubscribers = async (params?: { page?: number; limit?: number })
         if (params?.limit) {
             queryParams.append('limit', params.limit.toString());
         }
-        
+
         const url = `/subscribers${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
         const response = await api.get(url);
-        return extractResponseData<SubscribersResponse>(response);
+
+        // Return the full response data structure that matches backend format
+        return {
+            items: response.data.items,
+            pagination: response.data.pagination
+        };
     } catch (error) {
         throw handleApiError(error, 'fetching subscribers');
     }

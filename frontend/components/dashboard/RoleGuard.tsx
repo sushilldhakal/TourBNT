@@ -4,19 +4,13 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 
+import type { RoleGuardProps } from '@/types/dashboard';
+
 /**
  * RoleGuard Component
  * Protects components/pages based on user roles
  * Client component for role-based access control
  */
-
-interface RoleGuardProps {
-    children: React.ReactNode;
-    allowedRoles: string[];
-    fallback?: React.ReactNode;
-    redirectTo?: string;
-}
-
 export function RoleGuard({
     children,
     allowedRoles,
@@ -38,14 +32,18 @@ export function RoleGuard({
             if (redirectTo) {
                 router.push(redirectTo);
             }
-            setHasAccess(false);
+            setTimeout(() => {
+                setHasAccess(false);
+            }, 0);
             return;
         }
 
         // Check role - user.roles is a string, allowedRoles is string[]
         const userRole = user.roles;
         const userHasRole = allowedRoles.includes(userRole);
-        setHasAccess(userHasRole);
+        setTimeout(() => {
+            setHasAccess(userHasRole);
+        }, 0);
 
         // Redirect if no access and redirectTo is specified
         if (!userHasRole && redirectTo) {
@@ -75,7 +73,7 @@ export function RoleGuard({
                         Access Denied
                     </h2>
                     <p className="text-gray-600 dark:text-gray-400 mb-4">
-                        You don't have permission to access this page.
+                        You don&apos;t have permission to access this page.
                     </p>
                     <p className="text-sm text-gray-500 dark:text-gray-500">
                         Required role(s): {allowedRoles.join(', ')}

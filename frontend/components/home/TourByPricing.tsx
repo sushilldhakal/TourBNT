@@ -1,37 +1,23 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useLatestTours } from "@/lib/queries";
 import Link from "next/link";
-import { Card } from "@/components/ui/card";
+import Image from "next/image";
 import { useEffect, useState } from "react";
-import Autoplay from "embla-carousel-autoplay";
-import AutoScroll from 'embla-carousel-auto-scroll';
 import {
-    Carousel,
+    CarouselWithPlugins,
+    CarouselApi,
     CarouselContent,
     CarouselItem,
-} from "@/components/ui/carousel";
-import { ThumbsUp } from "lucide-react";
+} from "@/components/ui/carousel-with-plugins-lazy";
 import { getLatestTours } from "@/lib/api/tours";
-
-interface TourItem {
-    _id: string;
-    title: string;
-    coverImage: string;
-    price: number;
-    author: Array<{ _id: string; name: string; roles: string }>;
-    createdAt: string;
-}
+import type { Tour } from "@/types/types";
 
 const TourByPricing = () => {
     const [progress, setProgress] = useState(0);
-    const [api, setApi] = useState<any>();
+    const [api, setApi] = useState<CarouselApi | null>(null);
 
-    const { data } = useQuery({
-        queryKey: ['latestTours'],
-        queryFn: getLatestTours,
-        staleTime: 5 * 60 * 1000,
-    });
+    const { data } = useLatestTours();
 
     useEffect(() => {
         if (!api) return;
@@ -48,10 +34,9 @@ const TourByPricing = () => {
         };
     }, [api]);
 
-    const sortedTours = data?.data?.tours
-        ? data.data.tours
-            .sort((a: TourItem, b: TourItem) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-            .slice(0, 10)
+    const toursList = Array.isArray(data) ? data : (data as { data?: { tours?: Tour[] }; tours?: Tour[] })?.data?.tours ?? (data as { tours?: Tour[] })?.tours ?? [];
+    const sortedTours = toursList.length
+        ? [...toursList].sort((a: Tour, b: Tour) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 10)
         : [];
 
     return (
@@ -61,36 +46,33 @@ const TourByPricing = () => {
             </div>
             <div className="flex flex-row relative">
                 <div className="flex-1 pr-3">
-                    <Carousel
+                    <CarouselWithPlugins
                         setApi={setApi}
                         opts={{
                             align: "start",
                             loop: true,
                         }}
-                        plugins={[
-                            Autoplay({
-                                playOnInit: true,
-                                delay: 2000,
-                            }),
-                            AutoScroll({
-                                playOnInit: true,
-                                stopOnInteraction: false,
-                                stopOnMouseEnter: false,
-                                speed: 0.5
-                            }),
-                        ]}
+                        autoplayConfig={{ playOnInit: true, delay: 2000 }}
+                        autoScrollConfig={{
+                            playOnInit: true,
+                            stopOnInteraction: false,
+                            stopOnMouseEnter: false,
+                            speed: 0.5,
+                        }}
                         orientation="vertical"
                         className="w-full"
                     >
                         <CarouselContent className="-mt-1 h-[600px]">
-                            {sortedTours?.map((tour: TourItem, index: number) => (
+                            {sortedTours?.map((tour: Tour, index: number) => (
                                 <CarouselItem key={index} className="pt-1 basis-auto">
                                     <Link href={`/tours/${tour._id}`}>
                                         <div className="flex items-center gap-3 p-3 hover:bg-muted/50 transition rounded-md">
                                             <div className="relative flex-shrink-0">
-                                                <img
-                                                    src={tour.coverImage}
+                                                <Image
+                                                    src={tour.coverImage ?? ''}
                                                     alt={tour.title}
+                                                    width={60}
+                                                    height={60}
                                                     className="object-cover w-[60px] h-[60px] rounded"
                                                 />
                                             </div>
@@ -105,7 +87,11 @@ const TourByPricing = () => {
                                                 </div>
                                                 <div className="flex flex-col items-end justify-between">
                                                     <p className="text-xs text-muted-foreground">
-                                                        {tour.author[0]?.name}
+                                                        {Array.isArray(tour.author) && typeof tour.author[0] === 'object' && tour.author[0] && 'name' in tour.author[0]
+                                                            ? (tour.author[0] as { name?: string }).name
+                                                            : typeof tour.author === 'object' && tour.author && 'name' in tour.author
+                                                                ? (tour.author as { name?: string }).name
+                                                                : ''}
                                                     </p>
                                                     <p className="text-sm font-bold">
                                                         ${tour.price}
@@ -117,7 +103,7 @@ const TourByPricing = () => {
                                 </CarouselItem>
                             ))}
                         </CarouselContent>
-                    </Carousel>
+                    </CarouselWithPlugins>
                 </div>
                 <div className="w-1 bg-muted rounded-full overflow-hidden">
                     <div

@@ -7,6 +7,7 @@ import React from 'react';
 import { useFormContext, Controller } from 'react-hook-form';
 import MultipleSelector, { Option } from '@/components/ui/multiple-selector';
 import { FormField } from './FormField';
+import { MultiSelect } from '@/components/ui/MultiSelect';
 
 interface FormMultiSelectProps {
     name: string;
@@ -49,18 +50,13 @@ export function FormMultiSelect({
                 name={name}
                 control={control}
                 render={({ field }) => (
-                    <MultipleSelector
-                        value={field.value || []}
-                        onChange={field.onChange}
+                    <MultiSelect
                         options={options}
+                        value={field.value || []}
+                        onValueChange={field.onChange}
                         placeholder={placeholder}
                         disabled={disabled}
-                        maxSelected={maxSelected}
-                        emptyIndicator={
-                            <p className="text-center text-sm text-muted-foreground">
-                                No options available
-                            </p>
-                        }
+                        maxCount={maxSelected}
                     />
                 )}
             />

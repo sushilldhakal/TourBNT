@@ -1,54 +1,76 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { MessageCircle, ThumbsUp, Share2, Trash2, Eye } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { getCommentsByPost, likeComment, viewComment, addReply, deleteComment } from '@/lib/api/comments';
+import { useMutation } from '@tanstack/react-query';
+import { useCommentsByPost, useCacheManager } from '@/lib/queries';
+import { queryKeys } from '@/lib/queries/queryKeys';
+import { likeComment, addReply, deleteComment } from '@/lib/api/comments';
 import { timeAgo } from '@/lib/utils/timeAgo';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import type { PostComment } from '@/types/post';
 
-interface Comment {
-    id?: string;
-    _id?: string; // Support both id and _id for compatibility
-    post: string;
-    user: {
-        id?: string;
-        _id?: string; // Support both id and _id
-        name: string;
-        email: string;
-        avatar?: string;
-    } | null;
-    text: string;
-    approve: boolean;
-    likes?: number;
-    views?: number;
-    timestamp?: string;
-    replies?: Comment[];
-    created_at: string;
-    isLiked?: boolean;
-}
-
-// Helper function to convert any ID value to string (handles ObjectId objects)
+// Helper function to convert any ID value to string (handles ObjectId objects and buffers)
 const idToString = (id: any): string => {
     if (!id) return '';
     if (typeof id === 'string') return id;
-    if (typeof id === 'object' && id.toString) return id.toString();
+
+    // Handle MongoDB ObjectId buffer objects
+    if (typeof id === 'object') {
+        // Check if it's a buffer object with numeric keys
+        if (id.buffer || (id['0'] !== undefined && typeof id['0'] === 'number')) {
+            // This is a buffer object - try to extract hex string
+            const buffer = id.buffer || id;
+            if (buffer && typeof buffer === 'object') {
+                const bytes = Object.values(buffer).filter((v): v is number => typeof v === 'number');
+                if (bytes.length === 12) {
+                    // Convert bytes to hex string (MongoDB ObjectId is 12 bytes = 24 hex chars)
+                    return bytes.map(b => b.toString(16).padStart(2, '0')).join('');
+                }
+            }
+        }
+
+        // Try toString() method
+        if (id.toString && typeof id.toString === 'function') {
+            const stringValue = id.toString();
+            // Avoid returning "[object Object]"
+            if (stringValue !== '[object Object]') {
+                return stringValue;
+            }
+        }
+
+        // Try _id property (nested ObjectId)
+        if (id._id) {
+            return idToString(id._id);
+        }
+    }
+
     return String(id);
 };
 
 // Helper function to get comment ID (handles both id and _id, ensures string)
-const getCommentId = (comment: Comment): string => {
+const getCommentId = (comment: PostComment): string => {
     const id = comment.id || comment._id;
     return idToString(id);
 };
 
 // Helper function to normalize comment data (convert _id to id, ensure strings)
-const normalizeComment = (comment: Partial<Comment> & { _id?: any; id?: any }): Comment => {
+const normalizeComment = (comment: Partial<PostComment> & { _id?: any; id?: any }): PostComment => {
     const commentId = idToString(comment.id || comment._id);
     const userId = comment.user ? idToString(comment.user.id || (comment.user as any)._id) : '';
     const user_id = comment.user ? idToString((comment.user as any)._id || comment.user.id) : '';
@@ -70,28 +92,44 @@ const normalizeComment = (comment: Partial<Comment> & { _id?: any; id?: any }): 
         approve: comment.approve ?? false,
         likes: comment.likes ?? 0,
         views: comment.views ?? 0,
-        created_at: comment.created_at || new Date().toISOString(),
+        createdAt: comment.createdAt || new Date().toISOString(),
         replies: comment.replies?.map((reply) => normalizeComment(reply as any)) || [],
     };
 };
 
 interface CommentComponentProps {
-    comment: Comment;
+    comment: PostComment;
     depth?: number;
-    onRemove: (id: string) => void;
+    onRemove: (id: string, comment?: PostComment) => void;
+    onRefresh?: () => void;
     isAdmin?: boolean;
     postId: string;
 }
 
-const CommentComponent = ({ comment: initialComment, depth = 0, onRemove, isAdmin = false, postId }: CommentComponentProps) => {
+const CommentComponent = ({ comment: initialComment, depth = 0, onRemove, onRefresh, isAdmin = false, postId }: CommentComponentProps) => {
     // Normalize comment data to ensure id and _id are both available
     const normalizedComment = normalizeComment(initialComment);
     const [comment, setComment] = useState(normalizedComment);
     const [isReplying, setIsReplying] = useState(false);
     const [replyContent, setReplyContent] = useState('');
     const [isLiked, setIsLiked] = useState(normalizedComment.isLiked || false);
-    const queryClient = useQueryClient();
+    const { invalidateComments } = useCacheManager();
     const { userId } = useAuth();
+    const replyInputRef = useRef<HTMLInputElement>(null);
+
+    // ✅ Update local state when parent refetches and passes new data
+    useEffect(() => {
+        const newNormalized = normalizeComment(initialComment);
+        setComment(newNormalized);
+        setIsLiked(newNormalized.isLiked || false);
+    }, [initialComment]);
+
+    // Auto-focus reply input when it appears
+    useEffect(() => {
+        if (isReplying && replyInputRef.current) {
+            replyInputRef.current.focus();
+        }
+    }, [isReplying]);
 
     // Get commentId from normalized comment - ensure it's always available
     // Try multiple sources: comment state, normalizedComment, or initialComment
@@ -106,20 +144,6 @@ const CommentComponent = ({ comment: initialComment, depth = 0, onRemove, isAdmi
 
         const finalId = idFromComment || idFromNormalized || idFromInitial || directId;
 
-        // Debug logging for nested comments
-        if (process.env.NODE_ENV === 'development') {
-            if (!finalId) {
-                console.warn('Comment ID not found:', {
-                    depth,
-                    comment: { id: comment.id, _id: comment._id },
-                    normalizedComment: { id: normalizedComment.id, _id: normalizedComment._id },
-                    initialComment: { id: (initialComment as any).id, _id: (initialComment as any)._id },
-                    directId
-                });
-            } else if (depth > 0) {
-                console.log('Nested comment ID found:', { depth, commentId: finalId, source: 'nested' });
-            }
-        }
 
         return idToString(finalId);
     }, [comment, normalizedComment, initialComment, depth]);
@@ -129,7 +153,7 @@ const CommentComponent = ({ comment: initialComment, depth = 0, onRemove, isAdmi
     const displayComment = useMemo(() => {
         if (comment.replies && Array.isArray(comment.replies) && comment.replies.length > 0) {
             // Check if replies are already objects (populated) or just IDs
-            const normalizedReplies: Comment[] = comment.replies
+            const normalizedReplies: PostComment[] = comment.replies
                 .filter((reply: any) => {
                     // Filter out ID strings, keep only objects
                     if (!reply) return false;
@@ -138,7 +162,7 @@ const CommentComponent = ({ comment: initialComment, depth = 0, onRemove, isAdmi
                 })
                 .map((reply: unknown) => {
                     // Normalize each reply, ensuring ID is extracted
-                    const normalized = normalizeComment(reply as Partial<Comment> & { _id?: string; id?: string });
+                    const normalized = normalizeComment(reply as Partial<PostComment> & { _id?: string; id?: string });
                     // Double-check that ID was extracted
                     if (!normalized.id && !normalized._id) {
                         console.warn('Reply missing ID after normalization:', reply);
@@ -156,15 +180,6 @@ const CommentComponent = ({ comment: initialComment, depth = 0, onRemove, isAdmi
         return comment;
     }, [comment]);
 
-    // Track view when comment is rendered
-    useEffect(() => {
-        // Only track view if this is a top-level comment (to avoid counting views for replies)
-        if (depth === 0 && commentId) {
-            viewComment(commentId).catch(error => {
-                console.error('Error tracking comment view:', error);
-            });
-        }
-    }, [commentId, depth]);
 
     // Like mutation
     const likeMutation = useMutation({
@@ -210,28 +225,54 @@ const CommentComponent = ({ comment: initialComment, depth = 0, onRemove, isAdmi
                 post: postId
             }, commentId);
         },
-        onSuccess: (data) => {
-            // Normalize and add the new reply to the comment
-            const normalizedReply = normalizeComment(data as Partial<Comment> & { _id?: string; id?: string });
-            setComment(prevComment => ({
-                ...prevComment,
-                replies: [...(prevComment.replies || []), normalizedReply]
-            }));
+        onSuccess: async (data) => {
+            // ✅ Check if reply was converted to sibling (due to depth limit)
+            const metadata = (data as any)._metadata;
+            const wasConvertedToSibling = metadata?.wasConvertedToSibling;
 
-            // Reset reply form
+            // Reset reply form first
             setIsReplying(false);
             setReplyContent('');
 
-            // Show success message
-            toast({
-                title: 'Reply added',
-                description: 'Your reply has been added successfully',
-                duration: 2000,
-            });
+            if (wasConvertedToSibling) {
+                // Reply was reparented - don't update local state, trigger parent refresh
+                console.log('📝 Reply converted to sibling:', metadata);
+                console.log('📝 Triggering parent refresh...');
 
-            // Invalidate queries to refresh data
-            queryClient.invalidateQueries({ queryKey: ['comment-replies', commentId] });
-            queryClient.invalidateQueries({ queryKey: ['comments', postId] });
+                toast({
+                    title: 'Reply added as continuation',
+                    description: 'Your reply was added to continue the conversation',
+                    duration: 3000,
+                });
+
+                // Call parent refresh callback if provided
+                if (onRefresh) {
+                    setTimeout(() => {
+                        console.log('📝 Calling onRefresh...');
+                        onRefresh();
+                    }, 200);
+                } else {
+                    // Fallback to query invalidation
+                    console.log('📝 No onRefresh callback, using invalidation...');
+                    invalidateComments({ postId });
+                }
+            } else {
+                // Normal reply - add to local state immediately for instant feedback
+                const normalizedReply = normalizeComment(data as Partial<PostComment> & { _id?: string; id?: string });
+                setComment(prevComment => ({
+                    ...prevComment,
+                    replies: [...(prevComment.replies || []), normalizedReply]
+                }));
+
+                toast({
+                    title: 'Reply added',
+                    description: 'Your reply has been added successfully',
+                    duration: 2000,
+                });
+
+                // Regular invalidation for normal replies
+                invalidateComments({ postId, commentId });
+            }
         },
         onError: (error) => {
             toast({
@@ -305,7 +346,6 @@ const CommentComponent = ({ comment: initialComment, depth = 0, onRemove, isAdmi
 
     const handleRemove = (event: React.MouseEvent) => {
         event.preventDefault();
-        console.log('commentId', commentId);
         // Ensure commentId is a valid string before removing
         const validId = idToString(commentId);
         if (!validId) {
@@ -316,7 +356,7 @@ const CommentComponent = ({ comment: initialComment, depth = 0, onRemove, isAdmi
             });
             return;
         }
-        onRemove(validId);
+        onRemove(validId, displayComment); // ✅ Pass the comment object with replies info
     };
 
     const handleSubmitReply = (event: React.FormEvent) => {
@@ -357,7 +397,7 @@ const CommentComponent = ({ comment: initialComment, depth = 0, onRemove, isAdmi
                 </Avatar>
                 <div>
                     <h3 className="font-semibold">{displayComment.user?.name || 'Anonymous'}</h3>
-                    <p className="text-sm text-muted-foreground">{timeAgo(new Date(displayComment.created_at))}</p>
+                    <p className="text-sm text-muted-foreground">{timeAgo(new Date(displayComment.createdAt.toString()))}</p>
                 </div>
             </CardHeader>
             <CardContent>
@@ -374,10 +414,13 @@ const CommentComponent = ({ comment: initialComment, depth = 0, onRemove, isAdmi
                         <ThumbsUp className={`mr-2 h-4 w-4 ${isLiked ? 'fill-current' : ''}`} />
                         {displayComment.likes ?? 0}
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={handleReply}>
-                        <MessageCircle className="mr-2 h-4 w-4" />
-                        Reply
-                    </Button>
+                    {/* Only show Reply button if canReply is not explicitly false */}
+                    {displayComment.canReply !== false && (
+                        <Button variant="ghost" size="sm" onClick={handleReply}>
+                            <MessageCircle className="mr-2 h-4 w-4" />
+                            Reply
+                        </Button>
+                    )}
                     <Button variant="ghost" size="sm" onClick={handleShare}>
                         <Share2 className="mr-2 h-4 w-4" />
                         Share
@@ -398,10 +441,12 @@ const CommentComponent = ({ comment: initialComment, depth = 0, onRemove, isAdmi
                 <CardFooter>
                     <form onSubmit={handleSubmitReply} className="flex w-full items-center space-x-2">
                         <Input
+                            ref={replyInputRef}
                             placeholder="Write a reply..."
                             value={replyContent}
                             onChange={(e) => setReplyContent(e.target.value)}
                             disabled={replyMutation.isPending}
+                            autoFocus
                         />
                         <Button type="submit" disabled={replyMutation.isPending}>
                             {replyMutation.isPending ? 'Sending...' : 'Send'}
@@ -432,6 +477,7 @@ const CommentComponent = ({ comment: initialComment, depth = 0, onRemove, isAdmi
                                 comment={normalizedReply}
                                 depth={depth + 1}
                                 onRemove={onRemove}
+                                onRefresh={onRefresh}
                                 isAdmin={isAdmin}
                                 postId={postId}
                             />
@@ -448,24 +494,35 @@ interface CommentsSectionProps {
 }
 
 export function CommentsSection({ postId }: CommentsSectionProps) {
-    const queryClient = useQueryClient(); // Move this BEFORE the mutation
+    const { invalidateComments, queryClient } = useCacheManager();
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+    const [commentToDelete, setCommentToDelete] = useState<{ id: string; hasReplies: boolean } | null>(null);
 
-    const { data: commentsData, isLoading } = useQuery({
-        queryKey: ['comments', postId],
-        queryFn: () => getCommentsByPost(postId),
-        enabled: !!postId,
-    });
+    const { data: commentsData, isLoading, refetch } = useCommentsByPost(postId, !!postId);
 
     const deleteCommentMutation = useMutation({
         mutationFn: (commentId: string) => deleteComment(commentId),
-        onSuccess: () => {
+        onSuccess: async () => {
+            console.log('🗑️ Comment deleted successfully, invalidating cache...');
+
+            invalidateComments({ postId });
+            await queryClient.refetchQueries({
+                queryKey: queryKeys.comments.list(postId),
+                exact: true
+            });
+
+            console.log('✅ Cache invalidated and refetched');
+
             toast({
                 title: 'Comment removed',
-                description: 'The comment has been removed',
+                description: 'The comment and all its replies have been removed',
             });
-            queryClient.invalidateQueries({ queryKey: ['comments', postId] });
+
+            setDeleteDialogOpen(false);
+            setCommentToDelete(null);
         },
         onError: (error) => {
+            console.error('❌ Delete error:', error);
             toast({
                 title: 'Error',
                 description: error instanceof Error ? error.message : 'Failed to delete comment',
@@ -474,9 +531,8 @@ export function CommentsSection({ postId }: CommentsSectionProps) {
         },
     });
 
-    const handleRemoveComment = (commentId: string) => {
 
-        console.log('commentId', commentId);
+    const handleRemoveComment = (commentId: string, comment?: PostComment) => {
         // Validate commentId before proceeding
         const validId = idToString(commentId);
         if (!validId) {
@@ -488,8 +544,16 @@ export function CommentsSection({ postId }: CommentsSectionProps) {
             return;
         }
 
-        if (confirm('Are you sure you want to delete this comment?')) {
-            deleteCommentMutation.mutate(validId);
+        // Check if comment has replies
+        const hasReplies = comment?.replies && Array.isArray(comment.replies) && comment.replies.length > 0;
+
+        setCommentToDelete({ id: validId, hasReplies: !!hasReplies });
+        setDeleteDialogOpen(true);
+    };
+
+    const confirmDelete = () => {
+        if (commentToDelete) {
+            deleteCommentMutation.mutate(commentToDelete.id);
         }
     };
 
@@ -499,38 +563,72 @@ export function CommentsSection({ postId }: CommentsSectionProps) {
 
     // Handle the response structure
     // extractResponseData returns { items: [...], pagination: {...} } from sendPaginatedResponse
-    const comments: Comment[] = Array.isArray(commentsData)
+    const comments: PostComment[] = Array.isArray(commentsData)
         ? commentsData
-        : (commentsData as { items?: Comment[]; comments?: Comment[] })?.items
-        || (commentsData as { items?: Comment[]; comments?: Comment[] })?.comments
+        : (commentsData as { items?: PostComment[]; comments?: PostComment[] })?.items
+        || (commentsData as { items?: PostComment[]; comments?: PostComment[] })?.comments
         || [];
 
-    // Debug log to help troubleshoot
-    if (process.env.NODE_ENV === 'development') {
-        console.log('Comments data:', { commentsData, comments, commentsLength: comments.length });
-    }
 
     if (!comments || comments.length === 0) {
         return <div className="text-center py-8">No comments yet. Be the first to comment!</div>;
     }
 
     return (
-        <div className="space-y-6 mt-6">
-            <h2 className="text-2xl font-bold">Comments ({comments.length})</h2>
-            {comments.map((comment: Comment) => {
-                const normalizedComment = normalizeComment(comment);
-                const commentId = getCommentId(normalizedComment);
-                return (
-                    <CommentComponent
-                        key={commentId}
-                        comment={normalizedComment}
-                        onRemove={handleRemoveComment}
-                        isAdmin={true}
-                        postId={postId}
-                    />
-                );
-            })}
-        </div>
+        <>
+            <div className="space-y-6 mt-6">
+                <h2 className="text-2xl font-bold">Comments ({comments.length})</h2>
+                {comments.map((comment: PostComment) => {
+                    const normalizedComment = normalizeComment(comment);
+                    const commentId = getCommentId(normalizedComment);
+                    return (
+                        <CommentComponent
+                            key={commentId}
+                            comment={normalizedComment}
+                            onRemove={handleRemoveComment}
+                            onRefresh={() => {
+                                console.log('🔄 Parent refetch triggered');
+                                refetch();
+                            }}
+                            isAdmin={true}
+                            postId={postId}
+                        />
+                    );
+                })}
+            </div>
+
+            {/* Delete Confirmation Dialog */}
+            <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete Comment?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            {commentToDelete?.hasReplies ? (
+                                <>
+                                    <span className="font-semibold text-destructive">Warning:</span> This comment has replies.
+                                    Deleting this comment will also permanently delete all of its replies.
+                                    <br /><br />
+                                    This action cannot be undone.
+                                </>
+                            ) : (
+                                <>
+                                    Are you sure you want to delete this comment? This action cannot be undone.
+                                </>
+                            )}
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={confirmDelete}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                            {commentToDelete?.hasReplies ? 'Delete Comment & Replies' : 'Delete Comment'}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+        </>
     );
 }
 

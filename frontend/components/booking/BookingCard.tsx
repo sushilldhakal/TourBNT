@@ -27,25 +27,10 @@ import { format } from 'date-fns';
 import Image from 'next/image';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
-
-interface Booking {
-    id: string;
-    referenceNumber: string;
-    tour: {
-        id: string;
-        title: string;
-        coverImage: string;
-        destination: string;
-    };
-    date: Date;
-    status: 'upcoming' | 'past' | 'cancelled';
-    travelers: number;
-    totalPrice: number;
-    createdAt: Date;
-}
+import type { MyBooking } from '@/types/app';
 
 interface BookingCardProps {
-    booking: Booking;
+    booking: MyBooking;
     onCancel?: (bookingId: string) => void;
     onDownloadVoucher?: (bookingId: string) => void;
 }
@@ -166,7 +151,7 @@ export function BookingCard({ booking, onCancel, onDownloadVoucher }: BookingCar
                         className="flex-1"
                         asChild
                     >
-                        <Link href={`/profile/bookings/${booking.id}`}>
+                        <Link href={`/dashboard/bookings/${booking.id}`}>
                             <Eye className="h-4 w-4 mr-2" />
                             View Details
                         </Link>

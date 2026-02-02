@@ -28,14 +28,7 @@ import Icon from "@/components/Icon";
 import { Badge } from "@/components/ui/badge";
 import { FolderPlus, Save, X } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
-
-interface FactFormData {
-    name: string;
-    field_type: string;
-    value: string[];
-    icon: string;
-    userId: string | null;
-}
+import type { FactFormData } from "@/types/facts";
 
 const AddFact = ({ onFactAdded }: { onFactAdded: () => void }) => {
     const { userId } = useAuth();
@@ -109,10 +102,17 @@ const AddFact = ({ onFactAdded }: { onFactAdded: () => void }) => {
 
     return (
         <Form {...form}>
-            <form onSubmit={(e) => {
-                e.preventDefault();
-                form.handleSubmit(handleCreateFact)();
-            }}>
+            <form
+                onSubmit={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation(); // Prevent bubbling to parent form
+                    form.handleSubmit(handleCreateFact)();
+                }}
+                onClick={(e) => {
+                    // Stop any click events from bubbling to parent form
+                    e.stopPropagation();
+                }}
+            >
                 <Card className="shadow-xs border-primary/30 bg-primary/5">
                     <CardHeader className="pb-3">
                         <div className="flex items-center gap-2 mb-2">
@@ -238,7 +238,14 @@ const AddFact = ({ onFactAdded }: { onFactAdded: () => void }) => {
                         }}>
                             <X className="h-4 w-4" /> Cancel
                         </Button>
-                        <Button type="submit" className="flex gap-2 bg-green-700 text-white">
+                        <Button
+                            type="submit"
+                            className="flex gap-2 bg-green-700 text-white"
+                            onClick={(e) => {
+                                // Stop click event from bubbling to parent form
+                                e.stopPropagation();
+                            }}
+                        >
                             <Save className="h-4 w-4" />
                             Create Facts
                         </Button>

@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
-import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation } from '@tanstack/react-query';
+import { useCacheManager } from '@/lib/queries/cacheUtils';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,7 +29,7 @@ export function SubscriberList() {
     const [searchTerm, setSearchTerm] = useState('');
     const [deleteEmail, setDeleteEmail] = useState<string | null>(null);
     const observerRef = useRef<HTMLDivElement>(null);
-    const queryClient = useQueryClient();
+    const { invalidateSubscribers } = useCacheManager();
 
     // Infinite query for subscribers
     const {
@@ -47,8 +48,7 @@ export function SubscriberList() {
         initialPageParam: 1,
         getNextPageParam: (lastPage: SubscribersResponse) => {
             if (lastPage.pagination) {
-                // API returns pagination.page (not currentPage)
-                const currentPage = lastPage.pagination.page || lastPage.pagination.currentPage || 1;
+                const currentPage = lastPage.pagination.page;
                 if (currentPage < lastPage.pagination.totalPages) {
                     return currentPage + 1;
                 }
@@ -72,12 +72,7 @@ export function SubscriberList() {
     const allSubscribers: Subscriber[] = useMemo(() => {
         if (!infiniteData) return [];
         return infiniteData.pages.flatMap((page: SubscribersResponse) => {
-            // API returns { data: Subscriber[], pagination: {...} }
-            // Check data array first (primary format)
-            if (page.data && Array.isArray(page.data)) {
-                return page.data;
-            }
-            // Fallback: check for items array (alternative format)
+            // API returns { items: Subscriber[], pagination: {...} }
             if (page.items && Array.isArray(page.items)) {
                 return page.items;
             }
@@ -106,7 +101,7 @@ export function SubscriberList() {
         let maxTotal = 0;
         for (const page of infiniteData.pages) {
             if (page.pagination) {
-                const total = page.pagination.total || page.pagination.totalItems || 0;
+                const total = page.pagination.totalItems;
                 if (total > maxTotal) maxTotal = total;
             }
         }
@@ -120,7 +115,7 @@ export function SubscriberList() {
         onSuccess: () => {
             toast.success('Subscriber removed successfully');
             setDeleteEmail(null);
-            queryClient.invalidateQueries({ queryKey: ['subscribers'] });
+            invalidateSubscribers();
         },
         onError: (error: any) => {
             const message = error?.response?.data?.error?.message || error?.message || 'Failed to remove subscriber';
@@ -234,7 +229,7 @@ export function SubscriberList() {
 
     return (
         <>
-            <Card>
+            <Card className="min-w-0 max-w-full">
                 <CardHeader>
                     <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
                         <div>
@@ -259,7 +254,7 @@ export function SubscriberList() {
                         </div>
                     </div>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="min-w-0">
                     {hasMoreSubscribers && (
                         <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 mb-4">
                             <p className="text-sm text-yellow-800 dark:text-yellow-200">
@@ -292,7 +287,7 @@ export function SubscriberList() {
                                 data={filteredSubscribers}
                                 columns={columns}
                                 place="Search subscribers by email..."
-                                colum="email"
+                                column="email"
                             />
                             {/* Infinite scroll trigger */}
                             {hasNextPage && (

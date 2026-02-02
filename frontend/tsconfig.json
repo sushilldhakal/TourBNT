@@ -19,7 +19,33 @@
       }
     ],
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "@/components/*": ["./components/*"],
+      "@/lib/*": ["./lib/*"],
+      "@/types/*": ["./types/*"],
+      "@/app/*": ["./app/*"],
+      "@/providers/*": ["./providers/*"],
+      "@/public/*": ["./public/*"],
+      "@/hooks": ["./lib/hooks"],
+      "@/hooks/*": ["./lib/hooks/*"],
+      "@/queries": ["./lib/queries"],
+      "@/queries/*": ["./lib/queries/*"],
+      "@/config": ["./lib/config"],
+      "@/config/*": ["./lib/config/*"],
+      "@/store": ["./lib/store"],
+      "@/store/*": ["./lib/store/*"],
+      "@/api": ["./lib/api"],
+      "@/api/*": ["./lib/api/*"],
+      "@/utils": ["./lib/utils/index"],
+      "@/utils/*": ["./lib/utils/*"],
+      "@/middleware": ["./lib/middleware"],
+      "@/middleware/*": ["./lib/middleware/*"],
+      "@/schemas": ["./lib/schemas"],
+      "@/schemas/*": ["./lib/schemas/*"],
+      "@/ui": ["./components/ui"],
+      "@/ui/*": ["./components/ui/*"],
+      "@/dashboard": ["./components/dashboard"],
+      "@/dashboard/*": ["./components/dashboard/*"]
     }
   },
   "include": [

@@ -1,5 +1,10 @@
 'use client';
 
+/**
+ * Full 4-step tour booking wizard (Date & Pricing → Travelers → Payment → Review).
+ * Reserved for future tour booking flow; not currently used. Cart/checkout uses CheckoutSteps instead.
+ */
+
 import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
