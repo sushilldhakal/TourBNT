@@ -7,9 +7,11 @@ import tourRouterV2 from "./api/tours/tourRouterV2";
 import tourSearchRouter from "./api/tours/tourSearchRouter";
 import galleryRoutes from "./api/gallery/galleryRoutes";
 import generateRouter from "./api/generate/generateRoute";
-// subscribers, facts, faqs, posts and comments moved to the Next.js app
-// (frontend/app/api/v1/...) — they're owned end-to-end there, backed by
-// Postgres, and no longer served by Express.
+import subscriberRouter from "./api/subscriber/subscriberRouter";
+import factsRouter from "./api/user/facts/factsRoutes";
+import faqsRouter from "./api/user/faq/faqRouter";
+import postRouter from "./api/post/postRoute";
+import commentRouter from "./api/comment/commentRouter";
 import reviewRoutes from "./api/review/reviewRoutes";
 import globalRoutes from "./api/global";
 import bookingRouter from "./api/bookings/bookingRoutes";
@@ -91,10 +93,13 @@ app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/users', userRouter);
 app.use('/api/v1/tours', tourRouter);
 app.use('/api/v1/tour-search', tourSearchRouter);
-// '/api/v1/subscribers', '/api/v1/facts', '/api/v1/faqs', '/api/v1/posts' and
-// '/api/v1/comments' moved to the Next.js app — see note above.
+app.use('/api/v1/subscribers', subscriberRouter);
 app.use('/api/v1/gallery', galleryRoutes);
 app.use('/api/v1/generate', generateRouter);
+app.use('/api/v1/posts', postRouter);
+app.use('/api/v1/comments', commentRouter);
+app.use('/api/v1/facts', factsRouter);
+app.use('/api/v1/faqs', faqsRouter);
 app.use('/api/v1/reviews', reviewRoutes);
 app.use('/api/v1/global', globalRoutes);
 app.use('/api/v1/bookings', bookingRouter);

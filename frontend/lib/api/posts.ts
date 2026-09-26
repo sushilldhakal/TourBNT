@@ -1,11 +1,6 @@
-import { localApi, handleApiError, extractResponseData, formDataToObject } from './apiClient';
+import { api, serverApi, handleApiError, extractResponseData } from './apiClient';
 
-/**
- * Posts are owned end-to-end by the Next.js app (see frontend/app/api/v1/posts),
- * backed by Postgres — not proxied to Express. This is also what makes
- * comments (which reference posts.id directly) work as a self-contained
- * Postgres resource.
- */
+
 
 /**
  * Get all posts public
@@ -14,7 +9,9 @@ export const getPosts = async () => {
     try {
         // Add timestamp to prevent caching
         const timestamp = new Date().getTime();
-        const response = await localApi.get(`/posts?_t=${timestamp}`);
+        const response = await api.get(`/posts?_t=${timestamp}`);
+
+        console.log('post detail', response)
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching posts');
@@ -33,7 +30,7 @@ export const getPost = async (id: string) => {
  */
 export const getAllUserPosts = async () => {
     try {
-        const response = await localApi.get('/posts/user');
+        const response = await api.get('/posts/user');
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching user posts');
@@ -47,7 +44,7 @@ export const getSinglePost = async (postId: string) => {
     try {
         // Add timestamp to prevent caching issues
         const timestamp = new Date().getTime();
-        const response = await localApi.get(`/posts/${postId}`, {
+        const response = await api.get(`/posts/${postId}`, {
             params: { _t: timestamp },
             headers: {
                 'Cache-Control': 'no-cache',
@@ -56,7 +53,7 @@ export const getSinglePost = async (postId: string) => {
         });
         const data = extractResponseData(response);
         // Server returns { post, breadcrumbs }, extract just the post
-        return (data as any).post || data;
+        return data.post || data;
     } catch (error) {
         throw handleApiError(error, 'fetching post');
     }
@@ -64,10 +61,15 @@ export const getSinglePost = async (postId: string) => {
 
 /**
  * Create a new post
+ * Uses multipart/form-data for file uploads
  */
 export const addPost = async (postData: FormData) => {
     try {
-        const response = await localApi.post('/posts', formDataToObject(postData));
+        const response = await api.post('/posts', postData, {
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            },
+        });
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'creating post');
@@ -76,10 +78,15 @@ export const addPost = async (postData: FormData) => {
 
 /**
  * Update an existing post
+ * Uses multipart/form-data for file uploads
  */
 export const updatePost = async (postData: FormData, postId: string) => {
     try {
-        const response = await localApi.patch(`/posts/${postId}`, formDataToObject(postData));
+        const response = await api.patch(`/posts/${postId}`, postData, {
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            },
+        });
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'updating post');
@@ -91,7 +98,7 @@ export const updatePost = async (postData: FormData, postId: string) => {
  */
 export const deletePost = async (postId: string) => {
     try {
-        const response = await localApi.delete(`/posts/${postId}`);
+        const response = await api.delete(`/posts/${postId}`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'deleting post');
@@ -103,7 +110,7 @@ export const deletePost = async (postId: string) => {
  */
 export const getPostsServer = async () => {
     try {
-        const response = await localApi.get('/posts');
+        const response = await serverApi.get('/posts');
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching posts (server)');
@@ -112,7 +119,7 @@ export const getPostsServer = async () => {
 
 export const getSinglePostServer = async (postId: string) => {
     try {
-        const response = await localApi.get(`/posts/${postId}`);
+        const response = await serverApi.get(`/posts/${postId}`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching post (server)');

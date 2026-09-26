@@ -23,28 +23,6 @@ export const api = axios.create({
     },
 });
 
-/**
- * Local API client — targets this Next.js app's own route handlers
- * (frontend/app/api/v1/...) instead of the Express backend.
- * Used for resources where Next.js is the single source of truth
- * (e.g. subscribers, facts, faqs, posts, comments) rather than a proxy to Express.
- *
- * A relative baseURL only resolves in the browser. Server-side callers (SSR,
- * server components) need an absolute URL to reach this same Next.js server.
- */
-const localApiBaseURL = typeof window === 'undefined'
-    ? (process.env.NEXT_INTERNAL_URL || process.env.NEXT_PUBLIC_SITE_URL || `http://localhost:${process.env.PORT || 3000}`) + '/api/v1'
-    : '/api/v1';
-
-export const localApi = axios.create({
-    baseURL: localApiBaseURL,
-    timeout: getApiTimeout('default'),
-    withCredentials: true,
-    headers: {
-        'Content-Type': 'application/json',
-    },
-});
-
 // Server-side API client (for SSR and public endpoints)
 export const serverApi = axios.create({
     baseURL: (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000') + '/api/v1',
@@ -194,25 +172,6 @@ export const handleApiError = (error: unknown, context: string): never => {
         throw new ApiError(500, `${context}: ${String(error)}`);
     }
 };
-
-/**
- * Converts a FormData instance to a plain object, grouping repeated keys
- * into arrays. Used when a call site still builds a FormData payload (e.g.
- * from a shared form component) but the target endpoint is a Next.js route
- * handler expecting JSON rather than multipart/form-data.
- */
-export function formDataToObject(formData: FormData): Record<string, unknown> {
-    const obj: Record<string, unknown> = {};
-    formData.forEach((value, key) => {
-        if (key in obj) {
-            const existing = obj[key];
-            obj[key] = Array.isArray(existing) ? [...existing, value] : [existing, value];
-        } else {
-            obj[key] = value;
-        }
-    });
-    return obj;
-}
 
 /**
  * Helper to create multipart form data for file uploads

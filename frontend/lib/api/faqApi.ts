@@ -1,10 +1,5 @@
 import { FaqData } from "../types";
-import { localApi, extractResponseData, handleApiError, formDataToObject } from "./apiClient";
-
-/**
- * FAQs are owned end-to-end by the Next.js app (see
- * frontend/app/api/v1/faqs), backed by Postgres — not proxied to Express.
- */
+import { api, extractResponseData, handleApiError } from "./apiClient";
 
 /**
  * Get all FAQs (PUBLIC)
@@ -13,7 +8,7 @@ import { localApi, extractResponseData, handleApiError, formDataToObject } from 
  */
 export const getAllFaqs = async (page: number = 1, limit: number = 10) => {
     try {
-        const response = await localApi.get('/faqs', {
+        const response = await api.get('/faqs', {
             params: { page, limit }
         });
         return extractResponseData(response);
@@ -28,7 +23,7 @@ export const getAllFaqs = async (page: number = 1, limit: number = 10) => {
  */
 export const getUserFaq = async (userId: string): Promise<FaqData[]> => {
     try {
-        const response = await localApi.get(`/faqs/user/${userId}`);
+        const response = await api.get(`/faqs/user/${userId}`);
         return extractResponseData(response) as FaqData[];
     } catch (error) {
         throw handleApiError(error, 'fetching user FAQs');
@@ -42,7 +37,7 @@ export const getUserFaq = async (userId: string): Promise<FaqData[]> => {
  */
 export const getSingleFaq = async (faqId: string) => {
     try {
-        const response = await localApi.get(`/faqs/${faqId}`);
+        const response = await api.get(`/faqs/${faqId}`);
         const data = extractResponseData(response);
         // Server returns { faq: ... }, extract just the faq
         return (data as any)?.faq || data;
@@ -57,7 +52,7 @@ export const getSingleFaq = async (faqId: string) => {
  */
 export const addFaq = async (faqData: FormData) => {
     try {
-        const response = await localApi.post('/faqs', formDataToObject(faqData));
+        const response = await api.post('/faqs', faqData);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'creating FAQ');
@@ -71,7 +66,11 @@ export const addFaq = async (faqData: FormData) => {
  */
 export const updateFaq = async (faqData: { question: string; answer: string }, faqId: string) => {
     try {
-        const response = await localApi.patch(`/faqs/${faqId}`, faqData);
+        const response = await api.patch(`/faqs/${faqId}`, faqData, {
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        });
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'updating FAQ');
@@ -84,7 +83,7 @@ export const updateFaq = async (faqData: { question: string; answer: string }, f
  */
 export const deleteFaq = async (faqId: string) => {
     try {
-        const response = await localApi.delete(`/faqs/${faqId}`);
+        const response = await api.delete(`/faqs/${faqId}`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'deleting FAQ');
@@ -97,7 +96,7 @@ export const deleteFaq = async (faqId: string) => {
  */
 export const deleteMultipleFaqs = async (faqIds: string[]) => {
     try {
-        const response = await localApi.delete('/faqs', { data: { ids: faqIds } });
+        const response = await api.delete('/faqs', { data: { ids: faqIds } });
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'deleting multiple FAQs');
