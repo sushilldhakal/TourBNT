@@ -122,6 +122,20 @@ export function TourProvider({ children, defaultValues, isEditing = false }: Tou
                 pricePerPerson: true,
                 minSize: 1,
                 maxSize: 10,
+                pricingOptionsEnabled: false,
+                pricingOptions: [],
+                discount: {
+                    discountEnabled: false,
+                    percentageOrPrice: false,
+                    discountPercentage: 0,
+                    discountPrice: 0,
+                },
+                paymentOptions: {
+                    fullPaymentEnabled: true,
+                    depositEnabled: false,
+                    depositPercentage: 20,
+                    payOnArrivalEnabled: false,
+                },
             },
             pricingOptions: [],
             facts: [],
@@ -338,6 +352,46 @@ export function TourProvider({ children, defaultValues, isEditing = false }: Tou
         return pricingOptions;
     };
 
+    // Process pricing from API format (flat DB columns: price, pricePerPerson,
+    // minSize, maxSize, discount, pricingOptions, paymentOptions, ...) into the
+    // nested `pricing.*` shape the pricing tab's form fields actually read/write.
+    // Without this, editing an existing tour resets every pricing field
+    // (base price, discount, pricing options, payment options) to blank/default
+    // even though the data is saved correctly in the database.
+    const processPricingForForm = (tourData: Record<string, any>) => {
+        const discount = tourData.discount || {};
+        return {
+            price: tourData.price ?? 0,
+            originalPrice: tourData.originalPrice ?? 0,
+            basePrice: tourData.basePrice ?? 0,
+            pricePerPerson: tourData.pricePerPerson ?? true,
+            minSize: tourData.minSize ?? 1,
+            maxSize: tourData.maxSize ?? 10,
+            groupSize: tourData.groupSize ?? 1,
+            pricingOptionsEnabled: tourData.pricingOptionsEnabled ?? false,
+            pricingOptions: processPricingOptions(tourData.pricingOptions) || [],
+            discount: {
+                discountEnabled: discount.discountEnabled ?? false,
+                percentageOrPrice: discount.percentageOrPrice ?? false,
+                discountPercentage: discount.discountPercentage ?? 0,
+                discountPrice: discount.discountPrice ?? 0,
+                discountCode: discount.discountCode ?? '',
+                description: discount.description ?? '',
+                dateRange: discount.discountDateRange ? {
+                    from: new Date(discount.discountDateRange.from),
+                    to: new Date(discount.discountDateRange.to),
+                } : undefined,
+            },
+            priceLockedUntil: tourData.priceLockDate || undefined,
+            paymentOptions: tourData.paymentOptions || {
+                fullPaymentEnabled: true,
+                depositEnabled: false,
+                depositPercentage: 20,
+                payOnArrivalEnabled: false,
+            },
+        };
+    };
+
     // Process tour dates from API format to form format
     const processTourDates = (tourDates: any) => {
         if (!tourDates) return undefined;
@@ -405,8 +459,9 @@ export function TourProvider({ children, defaultValues, isEditing = false }: Tou
                 category: processCategories(tourData.category),
                 // Process itinerary using processItinerary
                 itinerary: processItinerary(tourData.itinerary),
-                // Process pricing options using processPricingOptions
-                pricingOptions: processPricingOptions(tourData.pricingOptions),
+                // Nest the flat DB pricing columns into `pricing.*` — this is what
+                // the pricing tab's form fields actually read (see TourPricingDates).
+                pricing: processPricingForForm(tourData),
                 // Process tour dates using processTourDates
                 dates: processTourDates(tourData.dates),
                 // Process facts preserving factId
@@ -693,21 +748,10 @@ export function TourProvider({ children, defaultValues, isEditing = false }: Tou
             formData.append("faqs", JSON.stringify(values.faqs));
         }
 
-        // Handle discount fields separately
-        const discountData = values.pricing?.discount || values.discount;
-        if (discountData) {
-            changedFieldCount++;
-
-            if (discountData.discountEnabled !== undefined) {
-                formData.append("discountEnabled", String(discountData.discountEnabled));
-            }
-            if (discountData.discountPrice !== undefined) {
-                formData.append("discountPrice", String(discountData.discountPrice));
-            }
-            if (discountData.dateRange) {
-                formData.append("discountDateRange", JSON.stringify(discountData.dateRange));
-            }
-        }
+        // Note: discount fields (discountEnabled/discountPrice/discountPercentage/
+        // discountDateRange) are appended once, below, as part of the main pricing
+        // block — appending them here too would create duplicate FormData keys,
+        // which multer/Express turn into arrays and silently break parsing.
 
         // Process dates with departures and calculate days/nights from date ranges
         if (shouldIncludeField('dates', values.dates, isCreating)) {
@@ -795,68 +839,89 @@ export function TourProvider({ children, defaultValues, isEditing = false }: Tou
             formData.append("dates", JSON.stringify(formattedDates));
         }
 
-        // Process pricing data
-        if (shouldIncludeField('price', values.price, isCreating) ||
+        // Process pricing data. The pricing tab (TourPricingDates) only ever
+        // writes to the nested `pricing.*` path via setValue — there is no
+        // top-level `values.price`/`values.minSize` field in this form — so
+        // every numeric field here must read from `values.pricing` first,
+        // falling back to a legacy top-level value for back-compat.
+        const pricingValues = values.pricing || {};
+        if (shouldIncludeField('pricing.price', pricingValues.price, isCreating) ||
             shouldIncludeField('minSize', values.minSize, isCreating) ||
             shouldIncludeField('maxSize', values.maxSize, isCreating) ||
-            shouldIncludeField('discountEnabled', values.discountEnabled, isCreating) ||
-            shouldIncludeField('priceLockedUntil', values.pricing?.priceLockedUntil, isCreating)) {
+            shouldIncludeField('pricing.discount', pricingValues.discount, isCreating) ||
+            shouldIncludeField('pricing.pricingOptionsEnabled', pricingValues.pricingOptionsEnabled, isCreating) ||
+            shouldIncludeField('pricing.paymentOptions', pricingValues.paymentOptions, isCreating) ||
+            shouldIncludeField('priceLockedUntil', pricingValues.priceLockedUntil, isCreating)) {
             changedFieldCount++;
+
+            const priceValue = pricingValues.price !== undefined && pricingValues.price !== null
+                ? Number(pricingValues.price)
+                : Number(values.price) || 0;
 
             let minSizeValue = 1;
             let maxSizeValue = 10;
 
             if (values.minSize !== undefined && values.minSize !== null) {
                 minSizeValue = Number(values.minSize);
-            } else if (values.pricing?.minSize !== undefined && values.pricing.minSize !== null) {
-                minSizeValue = Number(values.pricing.minSize);
+            } else if (pricingValues.minSize !== undefined && pricingValues.minSize !== null) {
+                minSizeValue = Number(pricingValues.minSize);
             }
 
             if (values.maxSize !== undefined && values.maxSize !== null) {
                 maxSizeValue = Number(values.maxSize);
-            } else if (values.pricing?.maxSize !== undefined && values.pricing.maxSize !== null) {
-                maxSizeValue = Number(values.pricing.maxSize);
+            } else if (pricingValues.maxSize !== undefined && pricingValues.maxSize !== null) {
+                maxSizeValue = Number(pricingValues.maxSize);
             }
 
+            // The server (extractTourFields) reads discount fields from a nested
+            // `pricing.discount.*` object, not flat siblings — nest them here to
+            // match, otherwise discountPercentage/percentageOrPrice/dateRange are
+            // silently unreachable regardless of what the seller configured.
+            const discountValues = pricingValues.discount || {};
             const pricingObject: any = {
-                price: Number(values.price) || 0,
-                originalPrice: Number(values.originalPrice) || 0,
-                basePrice: Number(values.basePrice) || 0,
+                price: priceValue,
+                originalPrice: Number(pricingValues.originalPrice) || 0,
+                basePrice: Number(pricingValues.basePrice) || 0,
                 minSize: minSizeValue,
                 maxSize: maxSizeValue,
-                discountEnabled: Boolean(values.pricing?.discount?.discountEnabled || values.discountEnabled),
-                discountPrice: Number(values.pricing?.discount?.discountPrice || values.discountPrice || 0),
-                pricePerPerson: values.pricing?.pricePerPerson !== undefined ? Boolean(values.pricing.pricePerPerson) : true
+                pricingOptionsEnabled: Boolean(pricingValues.pricingOptionsEnabled),
+                pricePerPerson: pricingValues.pricePerPerson !== undefined ? Boolean(pricingValues.pricePerPerson) : true,
+                paymentOptions: pricingValues.paymentOptions || undefined,
+                discount: {
+                    discountEnabled: Boolean(discountValues.discountEnabled ?? values.discountEnabled),
+                    percentageOrPrice: Boolean(discountValues.percentageOrPrice),
+                    discountPercentage: Number(discountValues.discountPercentage) || 0,
+                    discountPrice: Number(discountValues.discountPrice ?? values.discountPrice) || 0,
+                },
             };
 
-            if (values.pricing?.priceLockedUntil) {
-                pricingObject.priceLockDate = new Date(values.pricing.priceLockedUntil);
+            if (pricingValues.priceLockedUntil) {
+                pricingObject.priceLockDate = new Date(pricingValues.priceLockedUntil);
             }
 
-            const discountForDates = values.pricing?.discount;
-            if (discountForDates?.dateRange) {
-                const fromDate = discountForDates.dateRange.from ? new Date(discountForDates.dateRange.from) : new Date();
-                const toDate = discountForDates.dateRange.to ? new Date(discountForDates.dateRange.to) : new Date();
+            if (discountValues.dateRange) {
+                const fromDate = discountValues.dateRange.from ? new Date(discountValues.dateRange.from) : new Date();
+                const toDate = discountValues.dateRange.to ? new Date(discountValues.dateRange.to) : new Date();
 
-                pricingObject.discountDateRange = {
+                pricingObject.discount.dateRange = {
                     from: !isNaN(fromDate.getTime()) ? fromDate : new Date(),
                     to: !isNaN(toDate.getTime()) ? toDate : new Date()
                 };
             }
 
             formData.append("pricing", JSON.stringify(pricingObject));
-            formData.append("price", String(Number(values.price) || 0));
+            formData.append("price", String(priceValue));
             formData.append("minSize", String(minSizeValue));
             formData.append("maxSize", String(maxSizeValue));
             formData.append("pricePerPerson", String(Boolean(pricingObject.pricePerPerson)));
-            if (values.discountEnabled !== undefined) {
-                formData.append("discountEnabled", String(Boolean(values.discountEnabled)));
-            }
         }
 
-        // Format pricing options with discounts
-        if (values.pricingOptions && Array.isArray(values.pricingOptions) && values.pricingOptions.length > 0) {
-            const flatPricingOptions = values.pricingOptions.map((option: any, index: number) => {
+        // Format pricing options with discounts. These live at `pricing.pricingOptions`
+        // (a field array registered under that path in TourPricingDates), not the
+        // top-level `values.pricingOptions`.
+        const pricingOptionsValues = pricingValues.pricingOptions;
+        if (pricingOptionsValues && Array.isArray(pricingOptionsValues) && pricingOptionsValues.length > 0) {
+            const flatPricingOptions = pricingOptionsValues.map((option: any, index: number) => {
                 const optionId = option.id || `option_${Date.now()}_${index}`;
                 const optionDiscount = option.discount;
                 const hasOptionDiscount = optionDiscount && optionDiscount.discountEnabled;
@@ -908,7 +973,6 @@ export function TourProvider({ children, defaultValues, isEditing = false }: Tou
             });
 
             formData.append("pricingOptions", JSON.stringify(flatPricingOptions));
-            formData.append("pricingOptionsEnabled", String(true));
         }
 
         // Handle boolean fields

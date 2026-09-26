@@ -16,6 +16,7 @@ import type {
     TourDates,
     Pricing,
     Discount,
+    PaymentOptions,
 } from '@/lib/schemas/tourEditor';
 
 // ============================================================================
@@ -82,6 +83,17 @@ export const getDefaultPricingOption = (option?: Partial<PricingOption>): Pricin
 });
 
 /**
+ * Default payment-options configuration — full payment only, until the
+ * seller opts in to offering deposits or pay-on-arrival.
+ */
+export const getDefaultPaymentOptions = (paymentOptions?: Partial<PaymentOptions>): PaymentOptions => ({
+    fullPaymentEnabled: paymentOptions?.fullPaymentEnabled ?? true,
+    depositEnabled: paymentOptions?.depositEnabled ?? false,
+    depositPercentage: paymentOptions?.depositPercentage ?? 20,
+    payOnArrivalEnabled: paymentOptions?.payOnArrivalEnabled ?? false,
+});
+
+/**
  * Default pricing configuration
  */
 export const getDefaultPricing = (pricing?: Partial<Pricing>): Pricing => ({
@@ -99,6 +111,7 @@ export const getDefaultPricing = (pricing?: Partial<Pricing>): Pricing => ({
     pricingOptions: Array.isArray(pricing?.pricingOptions)
         ? pricing.pricingOptions.map(opt => getDefaultPricingOption(opt))
         : [],
+    paymentOptions: getDefaultPaymentOptions(pricing?.paymentOptions),
 });
 
 /**

@@ -71,14 +71,14 @@ function PricingOptionCard({ option, currency }: PricingOptionCardProps) {
                 // Percentage discount
                 const discountAmount =
                     (option.price * (option.discount.discountPercentage || 0)) / 100;
-                displayPrice = option.price - discountAmount;
+                displayPrice = Math.max(0, option.price - discountAmount);
                 discountPercentage = option.discount.discountPercentage || 0;
             } else {
-                // Fixed price discount
-                displayPrice = option.price - (option.discount.discountPrice || 0);
-                discountPercentage = Math.round(
+                // Fixed amount discount
+                displayPrice = Math.max(0, option.price - (option.discount.discountPrice || 0));
+                discountPercentage = option.price > 0 ? Math.round(
                     ((option.price - displayPrice) / option.price) * 100
-                );
+                ) : 0;
             }
         }
     }

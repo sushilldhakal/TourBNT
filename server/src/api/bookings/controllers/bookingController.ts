@@ -9,10 +9,11 @@ import createHttpError from 'http-errors';
 export const createBooking = async (req: Request
 , res: Response, next: NextFunction) => {
     try {
-        const { tourId, tourTitle, tourCode, departureDate, participants, pricing, contactInfo, specialRequests } = req.body;
+        const { tourId, tourTitle, tourCode, departureDate, participants, contactInfo, specialRequests, paymentType, pricingOptionId } = req.body;
 
-        // Validate required fields
-        if (!tourId || !departureDate || !participants || !pricing || !contactInfo) {
+        // Validate required fields. Pricing is computed server-side from the
+        // tour's own stored configuration — the client never supplies it.
+        if (!tourId || !departureDate || !participants || !contactInfo) {
             throw createHttpError(400, 'Missing required booking information');
         }
 
@@ -25,7 +26,8 @@ export const createBooking = async (req: Request
             tourCode,
             departureDate,
             participants,
-            pricing,
+            paymentType,
+            pricingOptionId,
             contactName: contactInfo.fullName,
             contactEmail: contactInfo.email,
             contactPhone: contactInfo.phone,

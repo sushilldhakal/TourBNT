@@ -64,6 +64,11 @@ export const tourStatusEnum = pgEnum('tour_status', ['Draft', 'Published', 'Arch
 export const postStatusEnum = pgEnum('post_status', ['Draft', 'Published', 'Archived']);
 export const bookingStatusEnum = pgEnum('booking_status', ['pending', 'confirmed', 'cancelled', 'completed']);
 export const paymentStatusEnum = pgEnum('payment_status', ['unpaid', 'partial', 'paid', 'refunded']);
+// Which payment policy the traveler chose at booking time — full payment now,
+// a percentage deposit now with the rest due later, or nothing now (pay in
+// person on arrival). Which of these a tour allows is configured on
+// `tours.paymentOptions`.
+export const paymentTypeEnum = pgEnum('payment_type', ['full_payment', 'deposit_percentage', 'pay_on_arrival']);
 export const reviewStatusEnum = pgEnum('review_status', ['pending', 'approved', 'rejected']);
 export const notificationTypeEnum = pgEnum('notification_type', [
   'destination_rejected',
@@ -326,6 +331,17 @@ export const tours = pgTable('tours', {
   fixedDeparture: boolean('fixed_departure').notNull().default(false),
   multipleDates: boolean('multiple_dates').notNull().default(false),
 
+  // Which payment policies a traveler can choose from when booking this tour.
+  // At least one should be enabled; `depositPercentage` only applies when
+  // depositEnabled is true. Legacy tours with this unset are treated as
+  // full-payment-only (see calculateBookingPricing's DEFAULT_PAYMENT_OPTIONS).
+  paymentOptions: jsonb('payment_options').$type<{
+    fullPaymentEnabled: boolean;
+    depositEnabled: boolean;
+    depositPercentage: number;
+    payOnArrivalEnabled: boolean;
+  } | null>(),
+
   ...timestamps,
 }, (table) => ({
   codeIdx: uniqueIndex('tours_code_idx').on(table.code),
@@ -377,7 +393,15 @@ export const bookings = pgTable('bookings', {
     infantPrice: number;
     totalPrice: number;
     currency: string;
+    // Which slice of totalPrice is owed now vs. later, per the chosen
+    // paymentType. depositPercentage is only present for 'deposit_percentage'.
+    amountDueNow: number;
+    amountDueLater: number;
+    depositPercentage?: number;
   }>().notNull(),
+  // The payment policy the traveler chose (full payment / deposit / pay on
+  // arrival) — must be one of the tour's enabled paymentOptions.
+  paymentType: paymentTypeEnum('payment_type').notNull().default('full_payment'),
   contactName: text('contact_name').notNull(),
   contactEmail: text('contact_email').notNull(),
   contactPhone: text('contact_phone').notNull(),

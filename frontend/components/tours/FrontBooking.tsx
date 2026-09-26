@@ -3,8 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { createBooking } from '@/lib/api/bookings';
-import { CartBooking } from '@/lib/cartUtils';
+import { createBooking, BookingData } from '@/lib/api/bookings';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -14,7 +13,14 @@ import { CalendarIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Tour, PricingOption } from '@/lib/types';
-import { generateDepartureInstances, calculateDeparturePrice } from '@/lib/tourUtils';
+import {
+    generateDepartureInstances,
+    calculateDeparturePrice,
+    calculateBookingPricingPreview,
+    BookingPaymentType,
+} from '@/lib/tourUtils';
+import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
 interface FrontBookingProps {
     tourData: Tour;
@@ -59,6 +65,35 @@ export function FrontBooking({ tourData, prefilledDate }: FrontBookingProps) {
 
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(prefilledDate);
     const [dateRange, setDateRange] = useState<{ from: Date; to: Date } | undefined>();
+
+    // Which payment policies this tour actually offers. Legacy tours with no
+    // paymentOptions configured default to full-payment-only (matches the
+    // server's DEFAULT_PAYMENT_OPTIONS fallback).
+    const paymentOptions = tourData.paymentOptions || {
+        fullPaymentEnabled: true,
+        depositEnabled: false,
+        depositPercentage: 20,
+        payOnArrivalEnabled: false,
+    };
+
+    const availablePaymentTypes = useMemo(() => {
+        const types: { value: BookingPaymentType; label: string }[] = [];
+        if (paymentOptions.fullPaymentEnabled) types.push({ value: 'full_payment', label: 'Pay in full now' });
+        if (paymentOptions.depositEnabled) types.push({ value: 'deposit_percentage', label: `Pay ${paymentOptions.depositPercentage}% deposit now` });
+        if (paymentOptions.payOnArrivalEnabled) types.push({ value: 'pay_on_arrival', label: 'Pay on arrival' });
+        return types.length > 0 ? types : [{ value: 'full_payment' as BookingPaymentType, label: 'Pay in full now' }];
+    }, [paymentOptions.fullPaymentEnabled, paymentOptions.depositEnabled, paymentOptions.depositPercentage, paymentOptions.payOnArrivalEnabled]);
+
+    const [paymentType, setPaymentType] = useState<BookingPaymentType>(availablePaymentTypes[0].value);
+
+    // If the available options change (tour data loads/changes) and the
+    // currently selected type is no longer offered, fall back to the first one.
+    useEffect(() => {
+        if (!availablePaymentTypes.some(opt => opt.value === paymentType)) {
+            setPaymentType(availablePaymentTypes[0].value);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [availablePaymentTypes]);
 
     // Generate available dates and price map
     const { availableDates, datePriceMap } = useMemo(() => {
@@ -117,42 +152,31 @@ export function FrontBooking({ tourData, prefilledDate }: FrontBookingProps) {
         }
     }, [prefilledDate, tourData.tourDates?.days]);
 
-    // Calculate pricing
-    const calculatePricing = () => {
-        let basePrice = tourData.price || 0;
-        let originalPrice = basePrice;
+    // Calculate pricing — mirrors the server's authoritative calculation
+    // (server/src/api/bookings/utils/pricingCalculator.ts) so what the
+    // traveler sees here matches what they're actually charged. Uses each
+    // pricing-option category's own price/discount instead of a hardcoded
+    // child discount, and respects flat/group pricing (pricePerPerson=false).
+    const pricing = useMemo(() => {
+        const preview = calculateBookingPricingPreview(
+            // Tour.discount's declared type is a generic {type,value} shape that
+            // doesn't reflect the actual discountEnabled/discountPrice/... object
+            // the API returns (see server schema) — cast to the real runtime shape.
+            tourData as unknown as Parameters<typeof calculateBookingPricingPreview>[0],
+            { adults: bookingForm.adults, children: bookingForm.children, infants: 0 },
+            paymentType
+        );
 
-        // Check if sale price is enabled
-        if (tourData.saleEnabled && tourData.salePrice) {
-            originalPrice = tourData.price || 0;
-            basePrice = tourData.salePrice;
-        }
-        // If a date is selected, use the price from datePriceMap
-        else if (selectedDate) {
+        // originalPrice (pre-discount) is still useful for the "was $X" strike-through display.
+        let originalPrice = tourData.price || 0;
+        if (selectedDate) {
             const dateKey = format(selectedDate, 'yyyy-MM-dd');
             const priceInfo = datePriceMap.get(dateKey);
-
-            if (priceInfo) {
-                originalPrice = priceInfo.price;
-                basePrice = priceInfo.discountedPrice || priceInfo.price;
-            }
+            if (priceInfo) originalPrice = priceInfo.price;
         }
 
-        const adultPrice = basePrice * bookingForm.adults;
-        const childPrice = basePrice * bookingForm.children * 0.7; // 30% discount for children
-        const totalPrice = adultPrice + childPrice;
-
-        return {
-            basePrice,
-            originalPrice,
-            adultPrice,
-            childPrice,
-            totalPrice,
-            currency: 'USD'
-        };
-    };
-
-    const pricing = calculatePricing();
+        return { ...preview, originalPrice };
+    }, [tourData, bookingForm.adults, bookingForm.children, paymentType, selectedDate, datePriceMap]);
 
     // Format price
     const formatPrice = (price: number): string => {
@@ -161,8 +185,8 @@ export function FrontBooking({ tourData, prefilledDate }: FrontBookingProps) {
 
     // Booking mutation
     const bookingMutation = useMutation({
-        mutationFn: (bookingData: Omit<CartBooking, 'bookingReference'>) => createBooking(bookingData),
-        onSuccess: (response) => {
+        mutationFn: (bookingData: BookingData) => createBooking(bookingData),
+        onSuccess: (response: any) => {
             const bookingData = response.data;
             toast({
                 title: "Booking Successful!",
@@ -244,25 +268,27 @@ export function FrontBooking({ tourData, prefilledDate }: FrontBookingProps) {
             return;
         }
 
-        // Prepare booking data
-        const bookingData: Omit<CartBooking, 'bookingReference'> = {
-            _id: tourData._id,
+        // Prepare booking data. `tourId`/`contactInfo` must match exactly what
+        // the server's createBooking controller reads from req.body — pricing
+        // is intentionally NOT sent, since the server always recomputes it
+        // authoritatively from the tour's own configuration.
+        const bookingData: BookingData = {
+            tourId: tourData._id,
             tourTitle: tourData.title,
             tourCode: tourData.code || `TOUR-${tourData._id.slice(-8).toUpperCase()}`,
-            tourImage: tourData.coverImage || '',
             departureDate: bookingForm.departureDate,
             participants: {
                 adults: bookingForm.adults,
-                children: bookingForm.children
+                children: bookingForm.children,
+                infants: 0,
             },
-            contactName: bookingForm.fullName,
-            contactEmail: bookingForm.email,
-            contactPhone: bookingForm.phone,
+            paymentType,
+            contactInfo: {
+                fullName: bookingForm.fullName,
+                email: bookingForm.email,
+                phone: bookingForm.phone,
+            },
             specialRequests: bookingForm.specialRequests,
-            pricing: {
-                totalPrice: pricing.totalPrice,
-                currency: pricing.currency
-            }
         };
 
         bookingMutation.mutate(bookingData);
@@ -460,6 +486,26 @@ export function FrontBooking({ tourData, prefilledDate }: FrontBookingProps) {
                         />
                     </div>
 
+                    {availablePaymentTypes.length > 1 && (
+                        <div>
+                            <label className="block text-sm font-medium mb-2">Payment Option</label>
+                            <RadioGroup
+                                value={paymentType}
+                                onValueChange={(value) => setPaymentType(value as BookingPaymentType)}
+                                className="space-y-2"
+                            >
+                                {availablePaymentTypes.map((opt) => (
+                                    <div key={opt.value} className="flex items-center space-x-2">
+                                        <RadioGroupItem value={opt.value} id={`payment-${opt.value}`} />
+                                        <Label htmlFor={`payment-${opt.value}`} className="font-normal cursor-pointer">
+                                            {opt.label}
+                                        </Label>
+                                    </div>
+                                ))}
+                            </RadioGroup>
+                        </div>
+                    )}
+
                     <div className="pt-4 border-t border-border">
                         <div className="flex justify-between mb-2">
                             <span>Price per person:</span>
@@ -502,6 +548,18 @@ export function FrontBooking({ tourData, prefilledDate }: FrontBookingProps) {
                             <span>Total:</span>
                             <span className="text-primary">${formatPrice(pricing.totalPrice)}</span>
                         </div>
+                        {paymentType !== 'full_payment' && (
+                            <div className="mt-2 pt-2 border-t border-dashed border-border space-y-1">
+                                <div className="flex justify-between text-sm">
+                                    <span>Due now{pricing.depositPercentage ? ` (${pricing.depositPercentage}%)` : ''}:</span>
+                                    <span className="font-semibold">${formatPrice(pricing.amountDueNow)}</span>
+                                </div>
+                                <div className="flex justify-between text-sm text-muted-foreground">
+                                    <span>Due later:</span>
+                                    <span>${formatPrice(pricing.amountDueLater)}</span>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     <Button

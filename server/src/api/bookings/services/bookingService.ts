@@ -1,6 +1,7 @@
 import { db, bookings, tours, users } from '@tourbnt/db';
 import { eq, and, gte, lt, inArray, desc, asc, count, sql } from 'drizzle-orm';
 import createHttpError from 'http-errors';
+import { calculateBookingPricing, type PaymentType } from '../utils/pricingCalculator';
 
 type BookingRow = typeof bookings.$inferSelect;
 
@@ -54,12 +55,15 @@ function sortColumn(sortBy?: string) {
 }
 
 export class BookingService {
-    static async checkAvailability(tourId: string, departureDate: Date): Promise<{ available: boolean; remainingCapacity: number }> {
-        const [tour] = await db.select({ maxSize: tours.maxSize }).from(tours).where(eq(tours.id, tourId)).limit(1);
+    private static async getTourForBooking(tourId: string) {
+        const [tour] = await db.select().from(tours).where(eq(tours.id, tourId)).limit(1);
         if (!tour) {
             throw createHttpError(404, 'Tour not found');
         }
+        return tour;
+    }
 
+    private static async checkAvailabilityForTour(tour: typeof tours.$inferSelect, departureDate: Date): Promise<{ available: boolean; remainingCapacity: number }> {
         const dayStart = new Date(departureDate);
         dayStart.setHours(0, 0, 0, 0);
         const dayEnd = new Date(departureDate);
@@ -70,7 +74,7 @@ export class BookingService {
             .from(bookings)
             .where(
                 and(
-                    eq(bookings.tourId, tourId),
+                    eq(bookings.tourId, tour.id),
                     gte(bookings.departureDate, dayStart),
                     lt(bookings.departureDate, dayEnd),
                     inArray(bookings.status, ['pending', 'confirmed'])
@@ -88,18 +92,34 @@ export class BookingService {
         };
     }
 
+    static async checkAvailability(tourId: string, departureDate: Date): Promise<{ available: boolean; remainingCapacity: number }> {
+        const tour = await BookingService.getTourForBooking(tourId);
+        return BookingService.checkAvailabilityForTour(tour, departureDate);
+    }
+
     static async createBooking(bookingData: any): Promise<BookingRow> {
-        if (!bookingData.tour || !bookingData.departureDate) {
-            throw createHttpError(400, 'Tour and departure date are required');
+        if (!bookingData.tour || !bookingData.departureDate || !bookingData.participants) {
+            throw createHttpError(400, 'Tour, departure date, and participants are required');
         }
 
+        const tour = await BookingService.getTourForBooking(bookingData.tour);
         const departureDate = new Date(bookingData.departureDate);
-        const totalParticipants = (bookingData.participants?.adults || 0) + (bookingData.participants?.children || 0);
-        const availability = await BookingService.checkAvailability(bookingData.tour, departureDate);
+        const participants = {
+            adults: bookingData.participants?.adults || 0,
+            children: bookingData.participants?.children || 0,
+            infants: bookingData.participants?.infants || 0,
+        };
+        const totalParticipants = participants.adults + participants.children;
 
+        const availability = await BookingService.checkAvailabilityForTour(tour, departureDate);
         if (!availability.available || availability.remainingCapacity < totalParticipants) {
             throw createHttpError(400, `Insufficient capacity. Only ${availability.remainingCapacity} spots remaining.`);
         }
+
+        // Pricing is always computed server-side from the tour's own stored
+        // configuration — a client-submitted price/total is never trusted.
+        const paymentType: PaymentType = bookingData.paymentType || 'full_payment';
+        const pricing = calculateBookingPricing(tour, participants, paymentType, bookingData.pricingOptionId ?? null);
 
         const [booking] = await db
             .insert(bookings)
@@ -111,10 +131,11 @@ export class BookingService {
                 isGuestBooking: !!bookingData.isGuestBooking,
                 guestInfo: bookingData.guestInfo ?? null,
                 departureDate,
-                participants: bookingData.participants,
+                participants,
                 travelers: bookingData.travelers ?? [],
                 pricingOptionId: bookingData.pricingOptionId ?? null,
-                pricing: bookingData.pricing,
+                pricing,
+                paymentType,
                 contactName: bookingData.contactName,
                 contactEmail: bookingData.contactEmail,
                 contactPhone: bookingData.contactPhone,

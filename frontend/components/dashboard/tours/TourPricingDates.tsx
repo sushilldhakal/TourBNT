@@ -54,6 +54,8 @@ export function TourPricingDates() {
     const maxSize = pricing.maxSize || 10;
     const pricingOptionsEnabled = pricing.pricingOptionsEnabled || false;
     const discountEnabled = pricing.discount?.discountEnabled || false;
+    const paymentOptions = pricing.paymentOptions || { fullPaymentEnabled: true, depositEnabled: false, depositPercentage: 20, payOnArrivalEnabled: false };
+    const noPaymentOptionEnabled = !paymentOptions.fullPaymentEnabled && !paymentOptions.depositEnabled && !paymentOptions.payOnArrivalEnabled;
 
     // Watch dates values
     const dates = watch('dates') || {};
@@ -314,6 +316,72 @@ export function TourPricingDates() {
                         </Button>
                     </CardContent>
                 )}
+            </Card>
+
+            {/* Payment Options */}
+            <Card>
+                <CardHeader>
+                    <CardTitle>Payment Options</CardTitle>
+                    <CardDescription>
+                        Choose which payment policies travelers can pick from when booking this tour
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                    <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                            <Label>Full Payment</Label>
+                            <p className="text-sm text-muted-foreground">Traveler pays the full amount at booking</p>
+                        </div>
+                        <Switch
+                            checked={paymentOptions.fullPaymentEnabled}
+                            onCheckedChange={(checked) => setValue('pricing.paymentOptions.fullPaymentEnabled', checked)}
+                        />
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                            <Label>Deposit</Label>
+                            <p className="text-sm text-muted-foreground">Traveler pays a percentage now, the rest later</p>
+                        </div>
+                        <Switch
+                            checked={paymentOptions.depositEnabled}
+                            onCheckedChange={(checked) => setValue('pricing.paymentOptions.depositEnabled', checked)}
+                        />
+                    </div>
+                    {paymentOptions.depositEnabled && (
+                        <div className="space-y-2 pl-4 border-l-2 border-border">
+                            <Label htmlFor="pricing.paymentOptions.depositPercentage">Deposit Percentage</Label>
+                            <div className="relative max-w-[160px]">
+                                <Percent className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <Input
+                                    id="pricing.paymentOptions.depositPercentage"
+                                    type="number"
+                                    min="1"
+                                    max="99"
+                                    step="1"
+                                    className="pl-10"
+                                    value={paymentOptions.depositPercentage}
+                                    onChange={(e) => setValue('pricing.paymentOptions.depositPercentage', Math.min(99, Math.max(1, parseInt(e.target.value) || 1)))}
+                                />
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                            <Label>Pay on Arrival</Label>
+                            <p className="text-sm text-muted-foreground">Traveler pays nothing now — full amount due in person</p>
+                        </div>
+                        <Switch
+                            checked={paymentOptions.payOnArrivalEnabled}
+                            onCheckedChange={(checked) => setValue('pricing.paymentOptions.payOnArrivalEnabled', checked)}
+                        />
+                    </div>
+
+                    {noPaymentOptionEnabled && (
+                        <p className="text-sm text-destructive">At least one payment option must be enabled, or this tour can&apos;t be booked.</p>
+                    )}
+                </CardContent>
             </Card>
 
             {/* Schedule Type */}

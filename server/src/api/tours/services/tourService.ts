@@ -179,6 +179,7 @@ function splitTourData(tourData: Partial<Tour> & Record<string, unknown>) {
     'enquiry', 'isSpecialOffer', 'views', 'bookingCount', 'price', 'pricePerPerson', 'minSize',
     'maxSize', 'groupSize', 'saleEnabled', 'salePrice', 'priceLockDate', 'pricingOptionsEnabled',
     'fixedDeparture', 'multipleDates', 'averageRating', 'approvedReviewCount', 'reviewCount',
+    'paymentOptions',
   ]);
 
   for (const [key, value] of Object.entries(rest)) {

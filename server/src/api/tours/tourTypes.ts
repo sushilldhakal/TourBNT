@@ -170,6 +170,13 @@ export interface Tour {
   };
   minSize: number;
   maxSize: number;
+  // Which payment policies a traveler can choose from at booking time.
+  paymentOptions?: {
+    fullPaymentEnabled: boolean;
+    depositEnabled: boolean;
+    depositPercentage: number;
+    payOnArrivalEnabled: boolean;
+  };
   pricingOptionsEnabled?: boolean;
   pricingGroups?: PricingGroup[];
   pricingOptions?: Array<{

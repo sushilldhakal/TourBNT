@@ -318,6 +318,12 @@ export interface Tour {
     pricingOptionsEnabled?: boolean;
     pricingGroups?: PricingGroup[];
     pricingOptions?: PricingOption[];
+    paymentOptions?: {
+        fullPaymentEnabled: boolean;
+        depositEnabled: boolean;
+        depositPercentage: number;
+        payOnArrivalEnabled: boolean;
+    };
 
     // Content
     include?: string; // Rich text

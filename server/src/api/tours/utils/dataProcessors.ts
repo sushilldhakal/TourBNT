@@ -136,6 +136,39 @@ export const processPricingOptions = (pricingOptionsData: any): PricingOption[] 
 };
 
 /**
+ * Process payment options data — which policies (full payment / deposit /
+ * pay on arrival) a traveler can choose from when booking this tour.
+ * Always normalizes to a complete, valid object: if nothing ends up enabled
+ * (bad input, or the seller unchecked everything), falls back to
+ * full-payment-only so a tour is never left unbookable.
+ */
+export const processPaymentOptions = (paymentOptions: any) => {
+  try {
+    const parsed = parseJsonField(paymentOptions);
+    if (!parsed || typeof parsed !== 'object') {
+      return { fullPaymentEnabled: true, depositEnabled: false, depositPercentage: 20, payOnArrivalEnabled: false };
+    }
+
+    const fullPaymentEnabled = convertToBoolean(parsed.fullPaymentEnabled);
+    const depositEnabled = convertToBoolean(parsed.depositEnabled);
+    const payOnArrivalEnabled = convertToBoolean(parsed.payOnArrivalEnabled);
+    const depositPercentage = Math.min(99, Math.max(1, safeToNumber(parsed.depositPercentage, 20)));
+
+    const anyEnabled = fullPaymentEnabled || depositEnabled || payOnArrivalEnabled;
+
+    return {
+      fullPaymentEnabled: anyEnabled ? fullPaymentEnabled : true,
+      depositEnabled,
+      depositPercentage,
+      payOnArrivalEnabled,
+    };
+  } catch (error) {
+    console.error("Error processing payment options:", error);
+    return { fullPaymentEnabled: true, depositEnabled: false, depositPercentage: 20, payOnArrivalEnabled: false };
+  }
+};
+
+/**
  * Process date ranges data
  */
 export const processDateRanges = (dateRangesData: any): DateRange[] => {
@@ -480,6 +513,8 @@ export const extractTourFields = (req: any) => {
   // Prioritize nested pricing discount over top-level fields
   const finalDiscountEnabled = nestedPricing.discount?.discountEnabled !== undefined ? nestedPricing.discount.discountEnabled : discountEnabled;
   const finalDiscountPrice = nestedPricing.discount?.discountPrice !== undefined ? nestedPricing.discount.discountPrice : discountPrice;
+  const finalDiscountPercentage = nestedPricing.discount?.discountPercentage;
+  const finalPercentageOrPrice = nestedPricing.discount?.percentageOrPrice;
 
   // Extract priceLockDate from nested pricing object or top-level
   const finalPriceLockDate = nestedPricing.priceLockDate || priceLockDate;
@@ -487,6 +522,8 @@ export const extractTourFields = (req: any) => {
   const finalDiscountDateRange = nestedPricing.discount?.dateRange || discountDateRange;
 
   const finalPricingOptionsEnabled = pricingOptionsEnabled !== undefined ? pricingOptionsEnabled : nestedPricing.pricingOptionsEnabled;
+
+  const finalPaymentOptions = req.body.paymentOptions !== undefined ? req.body.paymentOptions : nestedPricing.paymentOptions;
 
   const result = {
     // Basic fields
@@ -500,11 +537,13 @@ export const extractTourFields = (req: any) => {
     minSize: safeToNumber(minSize),
     maxSize: safeToNumber(maxSize),
     pricingOptionsEnabled: finalPricingOptionsEnabled,
+    paymentOptions: processPaymentOptions(finalPaymentOptions),
 
     // Discount data (flat structure)
     discount: {
       discountEnabled: convertToBoolean(finalDiscountEnabled),
       discountPrice: safeToNumber(finalDiscountPrice),
+      discountPercentage: safeToNumber(finalDiscountPercentage),
       discountDateRange: finalDiscountDateRange ? (() => {
         try {
           // Handle both string and object formats
@@ -532,7 +571,7 @@ export const extractTourFields = (req: any) => {
           return undefined;
         }
       })() : undefined,
-      percentageOrPrice: false
+      percentageOrPrice: convertToBoolean(finalPercentageOrPrice)
     },
 
     // Tour dates data - map to correct field name for database schema
