@@ -2,8 +2,12 @@ import { config as conf } from "dotenv";
 conf();
 
 // Required environment variables
+// DATABASE_URL (Postgres) is now the primary, single-source-of-truth database
+// for the whole platform. MONGO_CONNECTION_STRING is kept optional during the
+// migration: controllers that haven't been ported from Mongoose to the shared
+// Drizzle/Postgres schema (@tourbnt/db) yet still rely on it.
 const requiredEnvVars = [
-  'MONGO_CONNECTION_STRING',
+  'DATABASE_URL',
   'JWT_SECRET'
 ];
 
@@ -20,7 +24,10 @@ if (missingVars.length > 0) {
 
 const _config = {
   port: Number(process.env.PORT) || 4000,
-  databaseUrl: process.env.MONGO_CONNECTION_STRING!,
+  // Postgres — single source of truth (see packages/db for the shared Drizzle schema).
+  postgresUrl: process.env.DATABASE_URL!,
+  // Legacy MongoDB connection, still used by controllers not yet migrated to Postgres.
+  databaseUrl: process.env.MONGO_CONNECTION_STRING,
   env: process.env.NODE_ENV || 'development',
   jwtSecret: process.env.JWT_SECRET || 'secret',
 

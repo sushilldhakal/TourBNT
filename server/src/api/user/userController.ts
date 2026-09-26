@@ -12,37 +12,36 @@ import { hybridPagination } from "../../utils/paginationUtils";
 import { HTTP_STATUS } from "../../utils/apiResponse";
 import { getAuthCookieOptions, getClearCookieOptions, COOKIE_NAMES, COOKIE_DURATIONS } from "../../utils/cookieUtils";
 import { sendSuccess, sendPaginatedResponse } from "../../utils/apiResponse";
+import * as pgUsers from "./userRepo.pg";
 
 // create user
+// Postgres (via @tourbnt/db) is the single source of truth for identity.
+// The new account is also mirrored into the legacy MongoDB collection
+// (best-effort, non-fatal) so endpoints not yet migrated off Mongoose
+// (profile, avatar, seller workflows, admin user list) keep working.
 export const createUser = async (req: Request, res: Response, next: NextFunction) => {
   const { name, email, password, phone } = req.body;
-  console.log(req.body)
   if (!name || !email || !password) {
     const error = createHttpError(400, "All fields are required");
     return next(error);
   }
-  // Database call.
-  try {
 
-    const user = await userModel.findOne({ email });
-    if (user) {
-      const error = createHttpError(
-        400,
-        "User already exists with this email."
-      );
-      return next(error);
+  try {
+    const existing = await pgUsers.findUserByEmail(email);
+    if (existing) {
+      return next(createHttpError(400, "User already exists with this email."));
     }
   } catch (err) {
     return next(createHttpError(500, "Error while getting user"));
   }
 
-  // Hash password.
   const hashedPassword = await bcrypt.hash(password, 10);
   try {
-    // Auto-verify users in development mode
     const isDevMode = config.env === 'development';
+    const sharedId = pgUsers.generateSharedUserId();
 
-    const newUser = await userModel.create({
+    const newUser = await pgUsers.createUser({
+      id: sharedId,
       name,
       email,
       phone,
@@ -50,15 +49,16 @@ export const createUser = async (req: Request, res: Response, next: NextFunction
       verified: isDevMode, // Auto-verify in development
     });
 
-    // Skip email sending in development mode
+    await pgUsers.dualWriteToMongo(newUser);
+
     if (isDevMode) {
-      const userResponse = { id: newUser._id, name: newUser.name, email: newUser.email };
+      const userResponse = { id: newUser.id, name: newUser.name, email: newUser.email };
       return sendSuccess(res, userResponse, 'User created successfully (auto-verified in development mode)', HTTP_STATUS.CREATED);
     }
 
     // Send verification email in production
     try {
-      const verificationToken = jwt.sign({ sub: newUser._id }, config.jwtSecret, {
+      const verificationToken = jwt.sign({ sub: newUser.id }, config.jwtSecret, {
         expiresIn: '1h', // 1 hour
         algorithm: 'HS256',
       });
@@ -67,16 +67,17 @@ export const createUser = async (req: Request, res: Response, next: NextFunction
     } catch (emailError) {
       console.error("Email sending failed:", emailError);
       // Still create the user but notify about email failure
-      const userResponse = { id: newUser._id, name: newUser.name, email: newUser.email };
+      const userResponse = { id: newUser.id, name: newUser.name, email: newUser.email };
       return sendSuccess(res, userResponse, 'User created successfully but verification email could not be sent. Please contact support.', HTTP_STATUS.CREATED);
     }
 
   } catch (err) {
+    console.error('Error while creating user:', err);
     return next(createHttpError(500, "Error while creating user"));
   }
 };
 
-// Login a user
+// Login a user — verifies against Postgres (source of truth for identity).
 export const loginUser = async (req: Request, res: Response, next: NextFunction) => {
   const { email, password, keepMeSignedIn = false } = req.body;
   if (!email || !password) {
@@ -84,7 +85,7 @@ export const loginUser = async (req: Request, res: Response, next: NextFunction)
   }
 
   try {
-    const user = await userModel.findOne({ email });
+    const user = await pgUsers.findUserByEmail(email);
     if (!user) {
       return next(createHttpError(404, "User not found."));
     }
@@ -99,8 +100,8 @@ export const loginUser = async (req: Request, res: Response, next: NextFunction)
     // Create JWT token with user ID, roles, and keepMeSignedIn flag
     const token = sign(
       {
-        sub: user._id.toString(),
-        roles: user.roles || [], // Ensure roles is an array
+        sub: user.id,
+        roles: user.role,
         keepMeSignedIn: keepMeSignedIn, // Store in JWT to preserve during sliding session
       },
       config.jwtSecret,
@@ -113,10 +114,9 @@ export const loginUser = async (req: Request, res: Response, next: NextFunction)
 
     res.cookie(COOKIE_NAMES.AUTH_TOKEN, token, cookieOptions);
 
-    // Return only user info, not token
     const userResponse = {
-      id: user._id.toString(), // Convert MongoDB ObjectId to string
-      roles: user.roles,
+      id: user.id,
+      roles: user.role,
       email: user.email,
       name: user.name,
       phone: user.phone,
@@ -140,7 +140,7 @@ export const logoutUser = (req: Request, res: Response) => {
   res.json({ message: 'Logged out successfully' });
 };
 
-// Get current authenticated user
+// Get current authenticated user — reads from Postgres (source of truth for identity).
 export const getCurrentUser = async (req: Request
   , res: Response, next: NextFunction) => {
   try {
@@ -148,7 +148,7 @@ export const getCurrentUser = async (req: Request
       return next(createHttpError(HTTP_STATUS.UNAUTHORIZED, "Not authenticated"));
     }
 
-    const user = await userModel.findById(req.user.id).select('-password');
+    const user = await pgUsers.findUserById(req.user.id);
 
     if (!user) {
       return next(createHttpError(HTTP_STATUS.NOT_FOUND, "User not found"));
@@ -164,8 +164,8 @@ export const getCurrentUser = async (req: Request
     // Create a new token with extended expiration (preserving keepMeSignedIn preference)
     const newToken = sign(
       {
-        sub: user._id.toString(),
-        roles: user.roles || [],
+        sub: user.id,
+        roles: user.role,
         keepMeSignedIn: keepMeSignedIn, // Preserve the original preference
       },
       config.jwtSecret,
@@ -176,23 +176,13 @@ export const getCurrentUser = async (req: Request
     const cookieOptions = getAuthCookieOptions(maxAge);
     res.cookie(COOKIE_NAMES.AUTH_TOKEN, newToken, cookieOptions);
 
-    // Compute seller status from sellerInfo
-    let sellerStatus = 'none';
-    if (user.sellerInfo) {
-      if (user.sellerInfo.isApproved) {
-        sellerStatus = 'approved';
-      } else if (user.sellerInfo.rejectionReason) {
-        sellerStatus = 'rejected';
-      } else {
-        sellerStatus = 'pending';
-      }
-    }
+    const sellerStatus = pgUsers.computeSellerStatus(user.sellerInfo as Record<string, unknown> | null);
 
     const userResponse = {
-      id: user._id.toString(), // Convert MongoDB ObjectId to string
+      id: user.id,
       name: user.name,
       email: user.email,
-      roles: user.roles,
+      roles: user.role,
       phone: user.phone,
       verified: user.verified,
       avatar: user.avatar,

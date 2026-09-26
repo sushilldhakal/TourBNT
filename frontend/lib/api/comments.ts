@@ -1,9 +1,9 @@
-import { api, handleApiError, extractResponseData } from './apiClient';
+import { localApi, handleApiError, extractResponseData, formDataToObject } from './apiClient';
 
 /**
- * Comment API Methods
- * Migrated from dashboard/src/http/commentApi.ts
- * Follows server API specifications from API_DOCUMENTATION.md
+ * Comments are owned end-to-end by the Next.js app (see
+ * frontend/app/api/v1/comments and .../posts/[postId]/comments), backed by
+ * Postgres — not proxied to Express.
  */
 
 /**
@@ -11,11 +11,7 @@ import { api, handleApiError, extractResponseData } from './apiClient';
  */
 export const addComment = async (commentData: FormData, postId: string) => {
     try {
-        const response = await api.post(`/posts/comment/${postId}`, commentData, {
-            headers: {
-                'Content-Type': 'multipart/form-data',
-            },
-        });
+        const response = await localApi.post(`/posts/${postId}/comments`, formDataToObject(commentData));
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'adding comment');
@@ -27,7 +23,7 @@ export const addComment = async (commentData: FormData, postId: string) => {
  */
 export const getAllComments = async () => {
     try {
-        const response = await api.get('/comments');
+        const response = await localApi.get('/comments');
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching comments');
@@ -35,15 +31,11 @@ export const getAllComments = async () => {
 };
 
 /**
- * Edit an existing comment
+ * Edit an existing comment (approve/unapprove)
  */
 export const editComment = async (commentData: FormData, commentId: string) => {
     try {
-        const response = await api.patch(`/posts/comment/${commentId}`, commentData, {
-            headers: {
-                'Content-Type': 'multipart/form-data',
-            },
-        });
+        const response = await localApi.patch(`/comments/${commentId}`, formDataToObject(commentData));
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'editing comment');
@@ -55,7 +47,7 @@ export const editComment = async (commentData: FormData, commentId: string) => {
  */
 export const getCommentsByPost = async (postId: string) => {
     try {
-        const response = await api.get(`/posts/comment/post/${postId}`);
+        const response = await localApi.get(`/posts/${postId}/comments`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching post comments');
@@ -70,7 +62,7 @@ export const deleteComment = async (commentId: string) => {
         throw new Error('Comment ID is required to delete a comment');
     }
     try {
-        const response = await api.delete(`/posts/comment/${commentId}`);
+        const response = await localApi.delete(`/comments/${commentId}`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'deleting comment');
@@ -82,7 +74,7 @@ export const deleteComment = async (commentId: string) => {
  */
 export const getUnapprovedCommentsCount = async () => {
     try {
-        const response = await api.get('/posts/comment/unapproved/count');
+        const response = await localApi.get('/comments/unapproved/count');
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching unapproved comments count');
@@ -97,7 +89,7 @@ export const addReply = async (
     commentId: string
 ) => {
     try {
-        const response = await api.post(`/posts/comment/reply/${commentId}`, data);
+        const response = await localApi.post(`/comments/${commentId}/replies`, data);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'adding reply');
@@ -109,7 +101,7 @@ export const addReply = async (
  */
 export const likeComment = async (commentId: string, userId: string) => {
     try {
-        const response = await api.patch(`/posts/comment/like/${commentId}`, { userId });
+        const response = await localApi.post(`/comments/${commentId}/likes`, { userId });
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'liking comment');
@@ -121,7 +113,7 @@ export const likeComment = async (commentId: string, userId: string) => {
  */
 export const viewComment = async (commentId: string) => {
     try {
-        const response = await api.patch(`/posts/comment/view/${commentId}`);
+        const response = await localApi.patch(`/comments/${commentId}/view`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'tracking comment view');
@@ -133,7 +125,7 @@ export const viewComment = async (commentId: string) => {
  */
 export const getCommentWithReplies = async (commentId: string) => {
     try {
-        const response = await api.get(`/posts/comment/${commentId}/replies`);
+        const response = await localApi.get(`/comments/${commentId}`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching comment with replies');

@@ -5,7 +5,8 @@
     "private": true,
     "workspaces": [
         "frontend",
-        "server"
+        "server",
+        "packages/db"
     ],
     "scripts": {
         "build:server": "npm run build --prefix server",
@@ -16,7 +17,11 @@
         "start": "npm run start:server",
         "dev:server": "npm run dev --prefix server",
         "dev:frontend": "npm run dev --prefix frontend",
-        "dev": "concurrently \"npm run dev:server\" \"npm run dev:frontend\""
+        "dev": "concurrently \"npm run dev:server\" \"npm run dev:frontend\"",
+        "db:generate": "npm run db:generate --workspace=@tourbnt/db",
+        "db:migrate": "npm run db:migrate --workspace=@tourbnt/db",
+        "db:push": "npm run db:push --workspace=@tourbnt/db",
+        "db:studio": "npm run db:studio --workspace=@tourbnt/db"
     },
     "engines": {
         "node": ">=18.0.0",
@@ -28,11 +33,13 @@
         "travel",
         "nextjs",
         "express",
-        "mongodb"
+        "postgres",
+        "drizzle"
     ],
     "author": "TourBNT Team",
     "license": "MIT",
     "devDependencies": {
-        "concurrently": "^8.2.2"
+        "concurrently": "^8.2.2",
+        "drizzle-orm": "^0.45.3"
     }
 }

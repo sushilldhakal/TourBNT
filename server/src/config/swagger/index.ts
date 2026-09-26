@@ -441,17 +441,14 @@ const options: swaggerJsdoc.Options = {
     apis: [
         './src/api/auth/*.ts',
         './src/api/user/*.ts',
-        './src/api/user/facts/*.ts',
-        './src/api/user/faq/*.ts',
         './src/api/tours/*.ts',
         './src/api/bookings/*.ts',
         './src/api/gallery/*.ts',
-        './src/api/post/*.ts',
         './src/api/review/*.ts',
-        './src/api/subscriber/*.ts',
+        // subscribers, facts, faqs, posts and comments moved to the Next.js app
+        // (frontend/app/api/v1/...)
         './src/api/global/**/*.ts',
         './src/api/generate/*.ts',
-        './src/api/comment/*.ts',
         './src/config/swagger/schemas.ts',
     ],
 };

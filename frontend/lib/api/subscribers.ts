@@ -1,4 +1,10 @@
-import { api, handleApiError, extractResponseData } from './apiClient';
+import { localApi, handleApiError, extractResponseData } from './apiClient';
+
+/**
+ * Subscribers are owned end-to-end by the Next.js app (see
+ * frontend/app/api/v1/subscribers) backed by Postgres — not proxied to the
+ * Express API. `localApi` targets this app's own route handlers.
+ */
 
 /**
  * Subscriber API Methods
@@ -33,7 +39,7 @@ export interface SubscribersResponse {
  */
 export const subscribeEmail = async (emailInput: string) => {
     try {
-        const response = await api.post('/subscribers', { email: emailInput });
+        const response = await localApi.post('/subscribers', { email: emailInput });
         const data = extractResponseData<{ 
             message: string; 
             subscriber?: Subscriber;
@@ -124,7 +130,7 @@ export const subscribeBulk = async (emails: string[]) => {
  */
 export const unsubscribeEmail = async (email: string) => {
     try {
-        const response = await api.delete(`/subscribers/${encodeURIComponent(email)}`);
+        const response = await localApi.delete(`/subscribers/${encodeURIComponent(email)}`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'unsubscribing email');
@@ -145,7 +151,7 @@ export const getSubscribers = async (params?: { page?: number; limit?: number })
         }
         
         const url = `/subscribers${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
-        const response = await api.get(url);
+        const response = await localApi.get(url);
         return extractResponseData<SubscribersResponse>(response);
     } catch (error) {
         throw handleApiError(error, 'fetching subscribers');

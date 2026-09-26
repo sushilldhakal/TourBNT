@@ -1,4 +1,9 @@
-import { api, extractResponseData, handleApiError } from "./apiClient";
+import { localApi, extractResponseData, handleApiError, formDataToObject } from "./apiClient";
+
+/**
+ * Facts are owned end-to-end by the Next.js app (see
+ * frontend/app/api/v1/facts), backed by Postgres — not proxied to Express.
+ */
 
 /**
  * Get all facts (Admin or Seller only)
@@ -7,7 +12,7 @@ import { api, extractResponseData, handleApiError } from "./apiClient";
  */
 export const getAllFacts = async (page: number = 1, limit: number = 10) => {
     try {
-        const response = await api.get('/facts', {
+        const response = await localApi.get('/facts', {
             params: { page, limit }
         });
         return extractResponseData(response);
@@ -22,7 +27,7 @@ export const getAllFacts = async (page: number = 1, limit: number = 10) => {
  */
 export const getUserFacts = async (userId: string) => {
     try {
-        const response = await api.get(`/facts/user/${userId}`);
+        const response = await localApi.get(`/facts/user/${userId}`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching user facts');
@@ -35,7 +40,7 @@ export const getUserFacts = async (userId: string) => {
  */
 export const getSingleFacts = async (factId: string) => {
     try {
-        const response = await api.get(`/facts/${factId}`);
+        const response = await localApi.get(`/facts/${factId}`);
         const data = extractResponseData(response);
         // Server returns { facts: ... }, extract just the facts
         return (data as any)?.facts || data;
@@ -50,7 +55,7 @@ export const getSingleFacts = async (factId: string) => {
  */
 export const addFacts = async (factData: FormData) => {
     try {
-        const response = await api.post('/facts', factData);
+        const response = await localApi.post('/facts', formDataToObject(factData));
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'creating fact');
@@ -64,7 +69,7 @@ export const addFacts = async (factData: FormData) => {
  */
 export const updateFacts = async (factData: FormData, factId: string) => {
     try {
-        const response = await api.patch(`/facts/${factId}`, factData);
+        const response = await localApi.patch(`/facts/${factId}`, formDataToObject(factData));
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'updating fact');
@@ -78,7 +83,7 @@ export const updateFacts = async (factData: FormData, factId: string) => {
  */
 export const deleteFacts = async (factId: string) => {
     try {
-        const response = await api.delete('/facts', { 
+        const response = await localApi.delete('/facts', { 
             data: { ids: [factId] } 
         });
         return extractResponseData(response);
@@ -93,7 +98,7 @@ export const deleteFacts = async (factId: string) => {
  */
 export const deleteMultipleFacts = async (factIds: string[]) => {
     try {
-        const response = await api.delete('/facts', { 
+        const response = await localApi.delete('/facts', { 
             data: { ids: factIds } 
         });
         return extractResponseData(response);

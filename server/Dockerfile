@@ -1,12 +1,23 @@
 # Server Dockerfile with PM2
+#
+# NOTE: build this with the *repository root* as context, not server/, e.g.
+#   docker build -f server/Dockerfile -t tourbnt-server .
+# because @tourbnt/db (packages/db) is a "file:../packages/db" dependency
+# shared with the frontend — it must sit next to server/ in the build context.
 FROM node:20-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps
 WORKDIR /app
 
+# Shared Postgres/Drizzle schema (single source of truth for both apps)
+COPY packages/db ./packages/db
+RUN npm install --prefix packages/db --legacy-peer-deps && npm run build --prefix packages/db
+
+WORKDIR /app/server
+
 # Copy package files
-COPY package.json ./
+COPY server/package.json ./
 
 # Install dependencies
 RUN npm install --omit=dev --legacy-peer-deps
@@ -15,14 +26,18 @@ RUN npm install --omit=dev --legacy-peer-deps
 FROM base AS builder
 WORKDIR /app
 
+COPY --from=deps /app/packages/db ./packages/db
+
+WORKDIR /app/server
+
 # Copy package files
-COPY package.json ./
+COPY server/package.json ./
 
 # Install all dependencies (including dev dependencies)
 RUN npm install --legacy-peer-deps
 
 # Copy source code
-COPY . .
+COPY server/ .
 
 # Build TypeScript
 RUN npm run build
@@ -41,18 +56,20 @@ RUN npm install -g pm2
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 expressjs
 
+# Shared Postgres/Drizzle package — server/node_modules/@tourbnt/db resolves
+# via "file:../packages/db", so it must exist at this relative path too.
+COPY --from=deps --chown=expressjs:nodejs /app/packages/db ../packages/db
+
 # Copy built application
-COPY --from=builder --chown=expressjs:nodejs /app/dist ./dist
-COPY --from=deps --chown=expressjs:nodejs /app/node_modules ./node_modules
-COPY --from=builder --chown=expressjs:nodejs /app/package*.json ./
+COPY --from=builder --chown=expressjs:nodejs /app/server/dist ./dist
+COPY --from=deps --chown=expressjs:nodejs /app/server/node_modules ./node_modules
+COPY --from=builder --chown=expressjs:nodejs /app/server/package*.json ./
 
 # Copy source files for Swagger JSDoc comments (needed for API documentation)
-COPY --from=builder --chown=expressjs:nodejs /app/src ./src
-# Copy source files for Swagger JSDoc comments (needed for API documentation)
-COPY --from=builder --chown=expressjs:nodejs /app/src ./src
+COPY --from=builder --chown=expressjs:nodejs /app/server/src ./src
 
 # Copy PM2 ecosystem file
-COPY --chown=expressjs:nodejs ecosystem.config.js ./
+COPY --chown=expressjs:nodejs server/ecosystem.config.js ./
 
 # Create logs directory for PM2
 RUN mkdir -p logs && chown -R expressjs:nodejs logs

@@ -4,13 +4,21 @@
 # Stage 1: Build Frontend
 FROM node:18-alpine AS frontend-builder
 
+WORKDIR /app
+
+# @tourbnt/db (packages/db) is the shared Postgres/Drizzle schema used by
+# both apps via a "file:../packages/db" dependency — it must sit next to
+# frontend/ in the build context for that reference to resolve.
+COPY packages/db ./packages/db
+RUN npm install --prefix packages/db && npm run build --prefix packages/db
+
 WORKDIR /app/frontend
 
 # Copy frontend package files
 COPY frontend/package*.json ./
 
-# Install frontend dependencies
-RUN npm ci --only=production
+# Install frontend dependencies (needs devDependencies for the build step)
+RUN npm install
 
 # Copy frontend source
 COPY frontend/ ./
@@ -21,6 +29,11 @@ RUN npm run build
 # Stage 2: Build Backend
 FROM node:18-alpine AS backend-builder
 
+WORKDIR /app
+
+COPY packages/db ./packages/db
+RUN npm install --prefix packages/db && npm run build --prefix packages/db
+
 WORKDIR /app/server
 
 # Copy server package files
@@ -28,7 +41,7 @@ COPY server/package*.json ./
 COPY server/tsconfig.json ./
 
 # Install server dependencies
-RUN npm ci --only=production
+RUN npm install
 
 # Copy server source
 COPY server/ ./
@@ -43,6 +56,11 @@ WORKDIR /app
 
 # Install production dependencies only
 RUN apk add --no-cache tini
+
+# Shared Postgres/Drizzle package (@tourbnt/db) — both frontend/node_modules
+# and server/node_modules reference it via "file:../packages/db", so it must
+# exist at this same relative path in the runtime image too.
+COPY --from=backend-builder /app/packages/db ./packages/db
 
 # Copy built frontend
 COPY --from=frontend-builder /app/frontend/.next ./frontend/.next
