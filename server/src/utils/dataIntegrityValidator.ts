@@ -1,5 +1,3 @@
-import { Types } from 'mongoose';
-
 /**
  * Data integrity validation utilities for normalization
  */
@@ -63,9 +61,7 @@ export const validateDataIntegrity = (original: any, normalized: any): {
             issues.push('_id field was not transformed to id field');
             idTransformed = false;
         } else {
-            const expectedId = original._id instanceof Types.ObjectId
-                ? original._id.toString()
-                : String(original._id);
+            const expectedId = String(original._id);
             if (normalized.id !== expectedId) {
                 issues.push(`ID transformation incorrect: expected '${expectedId}', got '${normalized.id}'`);
                 idTransformed = false;

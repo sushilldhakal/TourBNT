@@ -62,6 +62,7 @@ export const getAllBookings = async (req: Request
     try {
         // Get pagination params from middleware
         const { page, limit } = req.pagination || { page: 1, limit: 10 };
+        const pageLimit = typeof limit === 'number' ? limit : 10;
 
         // Get filters from middleware
         const filters: any = req.filters || {};
@@ -72,7 +73,7 @@ export const getAllBookings = async (req: Request
 
         const result = await BookingService.getAllBookings(filters, {
             page,
-            limit,
+            limit: pageLimit,
             sortBy,
             sortOrder
         });
@@ -286,7 +287,7 @@ export const downloadVoucher = async (req: Request
         const booking = await BookingService.getBookingById(bookingId);
 
         // Verify user has access to this booking
-        if (req.user && booking.user && booking.user.toString() !== req.user.id) {
+        if (req.user && booking.userId && booking.userId !== req.user.id) {
             throw createHttpError(403, 'You do not have access to this booking');
         }
 

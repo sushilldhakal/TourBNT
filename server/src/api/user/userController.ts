@@ -1,29 +1,25 @@
 import { NextFunction, Request, Response } from "express";
 import createHttpError from "http-errors";
 import bcrypt from "bcrypt";
-import userModel from "./userModel";
-import jwt from "jsonwebtoken";
-import { sign } from "jsonwebtoken";
+import jwt, { sign } from "jsonwebtoken";
 import { validationResult } from "express-validator";
+import { db, users } from "@tourbnt/db";
+import { eq, desc, asc, count, sql, type SQL } from "drizzle-orm";
 import { config } from "../../config/config";
 import { sendResetPasswordEmail as sendResetPasswordEmailMaileroo, sendVerificationEmail as sendVerificationEmailMaileroo } from "../../controller/maileroo";
 import { uploadSellerDocuments } from "../../services/sellerDocumentService";
-import { hybridPagination } from "../../utils/paginationUtils";
-import { HTTP_STATUS } from "../../utils/apiResponse";
+import { HTTP_STATUS, sendSuccess, sendPaginatedResponse } from "../../utils/apiResponse";
 import { getAuthCookieOptions, getClearCookieOptions, COOKIE_NAMES, COOKIE_DURATIONS } from "../../utils/cookieUtils";
-import { sendSuccess, sendPaginatedResponse } from "../../utils/apiResponse";
 import * as pgUsers from "./userRepo.pg";
+import type { SellerInfo } from "./userTypes";
+
+const SORTABLE = new Set(['createdAt', 'name', 'email']);
 
 // create user
-// Postgres (via @tourbnt/db) is the single source of truth for identity.
-// The new account is also mirrored into the legacy MongoDB collection
-// (best-effort, non-fatal) so endpoints not yet migrated off Mongoose
-// (profile, avatar, seller workflows, admin user list) keep working.
 export const createUser = async (req: Request, res: Response, next: NextFunction) => {
   const { name, email, password, phone } = req.body;
   if (!name || !email || !password) {
-    const error = createHttpError(400, "All fields are required");
-    return next(error);
+    return next(createHttpError(400, "All fields are required"));
   }
 
   try {
@@ -38,18 +34,14 @@ export const createUser = async (req: Request, res: Response, next: NextFunction
   const hashedPassword = await bcrypt.hash(password, 10);
   try {
     const isDevMode = config.env === 'development';
-    const sharedId = pgUsers.generateSharedUserId();
 
     const newUser = await pgUsers.createUser({
-      id: sharedId,
       name,
       email,
       phone,
       password: hashedPassword,
       verified: isDevMode, // Auto-verify in development
     });
-
-    await pgUsers.dualWriteToMongo(newUser);
 
     if (isDevMode) {
       const userResponse = { id: newUser.id, name: newUser.name, email: newUser.email };
@@ -59,25 +51,23 @@ export const createUser = async (req: Request, res: Response, next: NextFunction
     // Send verification email in production
     try {
       const verificationToken = jwt.sign({ sub: newUser.id }, config.jwtSecret, {
-        expiresIn: '1h', // 1 hour
+        expiresIn: '1h',
         algorithm: 'HS256',
       });
       await sendVerificationEmailMaileroo(email, name, verificationToken);
       return sendSuccess(res, null, 'Verification email sent. Please check your inbox.', HTTP_STATUS.CREATED);
     } catch (emailError) {
       console.error("Email sending failed:", emailError);
-      // Still create the user but notify about email failure
       const userResponse = { id: newUser.id, name: newUser.name, email: newUser.email };
       return sendSuccess(res, userResponse, 'User created successfully but verification email could not be sent. Please contact support.', HTTP_STATUS.CREATED);
     }
-
   } catch (err) {
     console.error('Error while creating user:', err);
     return next(createHttpError(500, "Error while creating user"));
   }
 };
 
-// Login a user — verifies against Postgres (source of truth for identity).
+// Login a user
 export const loginUser = async (req: Request, res: Response, next: NextFunction) => {
   const { email, password, keepMeSignedIn = false } = req.body;
   if (!email || !password) {
@@ -97,21 +87,14 @@ export const loginUser = async (req: Request, res: Response, next: NextFunction)
 
     const expiresIn = keepMeSignedIn ? '30d' : '2h';
 
-    // Create JWT token with user ID, roles, and keepMeSignedIn flag
     const token = sign(
-      {
-        sub: user.id,
-        roles: user.role,
-        keepMeSignedIn: keepMeSignedIn, // Store in JWT to preserve during sliding session
-      },
+      { sub: user.id, roles: user.role, keepMeSignedIn },
       config.jwtSecret,
       { expiresIn }
     );
 
-    // Set token as HTTP-only cookie with proper configuration for dev/prod
     const maxAge = keepMeSignedIn ? COOKIE_DURATIONS.LONG_SESSION : COOKIE_DURATIONS.SHORT_SESSION;
     const cookieOptions = getAuthCookieOptions(maxAge);
-
     res.cookie(COOKIE_NAMES.AUTH_TOKEN, token, cookieOptions);
 
     const userResponse = {
@@ -125,7 +108,6 @@ export const loginUser = async (req: Request, res: Response, next: NextFunction)
     };
 
     return sendSuccess(res, { user: userResponse }, 'Login successful');
-
   } catch (err) {
     console.error('Error while logging in user:', err);
     next(createHttpError(500, "Error while logging in user"));
@@ -134,49 +116,37 @@ export const loginUser = async (req: Request, res: Response, next: NextFunction)
 
 export const logoutUser = (req: Request, res: Response) => {
   const cookieOptions = getClearCookieOptions();
-
   res.clearCookie(COOKIE_NAMES.AUTH_TOKEN, cookieOptions);
   res.clearCookie(COOKIE_NAMES.REFRESH_TOKEN, cookieOptions);
   res.json({ message: 'Logged out successfully' });
 };
 
-// Get current authenticated user — reads from Postgres (source of truth for identity).
-export const getCurrentUser = async (req: Request
-  , res: Response, next: NextFunction) => {
+// Get current authenticated user
+export const getCurrentUser = async (req: Request, res: Response, next: NextFunction) => {
   try {
     if (!req.user) {
       return next(createHttpError(HTTP_STATUS.UNAUTHORIZED, "Not authenticated"));
     }
 
     const user = await pgUsers.findUserById(req.user.id);
-
     if (!user) {
       return next(createHttpError(HTTP_STATUS.NOT_FOUND, "User not found"));
     }
 
-    // Extend session cookie on successful authentication check (sliding session)
-    // This keeps users logged in as long as they're active
-    // Preserve the original "keep me signed in" preference from JWT
     const keepMeSignedIn = req.user?.keepMeSignedIn === true;
     const expiresIn = keepMeSignedIn ? '30d' : '2h';
     const maxAge = keepMeSignedIn ? COOKIE_DURATIONS.LONG_SESSION : COOKIE_DURATIONS.SHORT_SESSION;
 
-    // Create a new token with extended expiration (preserving keepMeSignedIn preference)
     const newToken = sign(
-      {
-        sub: user.id,
-        roles: user.role,
-        keepMeSignedIn: keepMeSignedIn, // Preserve the original preference
-      },
+      { sub: user.id, roles: user.role, keepMeSignedIn },
       config.jwtSecret,
       { expiresIn }
     );
 
-    // Set the new token with extended expiration (respecting original preference)
     const cookieOptions = getAuthCookieOptions(maxAge);
     res.cookie(COOKIE_NAMES.AUTH_TOKEN, newToken, cookieOptions);
 
-    const sellerStatus = pgUsers.computeSellerStatus(user.sellerInfo as Record<string, unknown> | null);
+    const sellerStatus = pgUsers.computeSellerStatus(user.sellerInfo as SellerInfo | null);
 
     const userResponse = {
       id: user.id,
@@ -195,85 +165,66 @@ export const getCurrentUser = async (req: Request
   }
 };
 
-// Get all users
+// Get all users (admin only)
 export const getAllUsers = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    // Build query based on filters from middleware (AND logic - all filters must match)
-    const query: any = {};
-    if (req.filters) {
-      if (req.filters.roles) query.roles = req.filters.roles;
-      if (req.filters.sellerStatus) {
-        // Filter by seller application status
-        if (req.filters.sellerStatus === 'pending') {
-          query['sellerInfo'] = { $exists: true };
-          query['sellerInfo.isApproved'] = false;
-          query['sellerInfo.rejectionReason'] = { $exists: false };
-        } else if (req.filters.sellerStatus === 'approved') {
-          query['sellerInfo.isApproved'] = true;
-        } else if (req.filters.sellerStatus === 'rejected') {
-          query['sellerInfo.rejectionReason'] = { $exists: true };
-        }
-      }
+    const conditions: SQL[] = [];
+    if (req.filters?.roles) conditions.push(eq(users.role, req.filters.roles));
+    if (req.filters?.sellerStatus === 'pending') {
+      conditions.push(sql`${users.sellerInfo} IS NOT NULL AND (${users.sellerInfo}->>'isApproved')::boolean IS NOT TRUE AND (${users.sellerInfo}->>'rejectionReason') IS NULL`);
+    } else if (req.filters?.sellerStatus === 'approved') {
+      conditions.push(sql`(${users.sellerInfo}->>'isApproved')::boolean IS TRUE`);
+    } else if (req.filters?.sellerStatus === 'rejected') {
+      conditions.push(sql`(${users.sellerInfo}->>'rejectionReason') IS NOT NULL`);
     }
+    const where = conditions.length ? sql.join(conditions, sql` AND `) : undefined;
 
-    // Build sort object from middleware
-    const sort: any = {};
-    if (req.sort) {
-      sort[req.sort.field] = req.sort.order === 'desc' ? -1 : 1;
-    } else {
-      sort.createdAt = -1; // Default sort by newest first
-    }
+    const sortField = req.sort?.field && SORTABLE.has(req.sort.field) ? req.sort.field : 'createdAt';
+    const sortOrder = req.sort?.order === 'asc' ? asc : desc;
+    const orderColumn = users[sortField as 'createdAt' | 'name' | 'email'];
 
-    console.log("Final query:", JSON.stringify(query, null, 2));
-    console.log("Sort:", sort);
+    const { page, limit, skip } = req.pagination || { page: 1, limit: 10, skip: 0 };
+    const pageLimit = typeof limit === 'number' ? limit : 10;
 
-    // Use hybrid pagination utility
-    // Note: We'll use select in the query builder, but hybridPagination uses lean() which doesn't support select
-    // So we'll filter password in the fieldFilter
-    return hybridPagination(
-      userModel,
-      query,
-      req,
-      res,
-      {
-        fieldFilter: (user: any) => {
-          // Exclude password field
-          const { password, ...userWithoutPassword } = user;
-          return userWithoutPassword;
-        },
-        sort,
-        memoryThreshold: 100,
-        message: 'Users retrieved successfully'
-      }
-    );
+    const [rows, [{ value: totalItems }]] = await Promise.all([
+      db.select().from(users).where(where).orderBy(sortOrder(orderColumn)).limit(pageLimit).offset(skip),
+      db.select({ value: count() }).from(users).where(where),
+    ]);
+
+    const items = rows.map((u) => pgUsers.withoutPassword(u));
+
+    sendPaginatedResponse(res, items, {
+      page,
+      limit: pageLimit,
+      totalItems,
+      totalPages: Math.ceil(totalItems / pageLimit),
+    }, 'Users retrieved successfully');
   } catch (err) {
     console.error("Error in getAllUsers:", err);
     return next(createHttpError(500, "Error while getting users"));
   }
 };
 
-
 // Get a single user by ID (admin only)
-export const getUserById = async (req: Request
-  , res: Response, next: NextFunction) => {
+export const getUserById = async (req: Request, res: Response, next: NextFunction) => {
   const { userId } = req.params;
   if (!userId) {
     return next(createHttpError(400, "User ID is required"));
   }
 
   try {
-    const user = await userModel.findById(userId);
+    const user = await pgUsers.findUserById(userId);
     if (!user) {
       return next(createHttpError(404, "User not found"));
     }
 
-    return sendSuccess(res, user, 'User retrieved successfully');
+    return sendSuccess(res, pgUsers.withoutPassword(user), 'User retrieved successfully');
   } catch (err) {
     return next(createHttpError(500, "Error while getting user"));
   }
 };
 
-// Update a user by ID
+// Update a user by ID (self or admin)
 export const updateUser = async (req: Request, res: Response, next: NextFunction) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -284,53 +235,37 @@ export const updateUser = async (req: Request, res: Response, next: NextFunction
   if (!userId) {
     return next(createHttpError(401, 'Not authenticated'));
   }
-  try {
-    const user = await userModel.findOne({ _id: userId });
 
+  try {
+    const user = await pgUsers.findUserById(userId);
     if (!user) {
       return next(createHttpError(404, "User not found"));
     }
 
-    const _req = req;
-    // Check if the current user is authorized to update the user
-    const isAdmin = _req.user?.roles.includes('admin') || false;
-    if (!(userId === _req.user?.id || isAdmin)) {
+    const isAdmin = req.user?.roles.includes('admin') || false;
+    if (!(userId === req.user?.id || isAdmin)) {
       return next(createHttpError(403, "You cannot update other users."));
     }
 
-    // Check if this is a seller application
     const isSellerApplication = req.body.companyName && req.body.companyRegistrationNumber && req.body.sellerType;
-    console.log('🏢 Is seller application:', isSellerApplication);
 
     if (isSellerApplication) {
-      console.log('🏢 Processing seller application...');
-
-      // Check if user has existing seller info and handle reapplication
-      const existingUser = await userModel.findById(userId);
-      if (existingUser?.sellerInfo) {
-        if (existingUser.sellerInfo.isApproved) {
-          return next(createHttpError(400, "You already have an approved seller account."));
-        }
-        // If rejected or pending, allow reapplication
-        console.log('🔄 User reapplying after previous application status:',
-          existingUser.sellerInfo.rejectionReason ? 'rejected' : 'pending');
+      const existingSellerInfo = user.sellerInfo as SellerInfo | null;
+      if (existingSellerInfo?.isApproved) {
+        return next(createHttpError(400, "You already have an approved seller account."));
       }
 
-      // Handle file uploads to Cloudinary if files are present
       let uploadedDocuments = {};
       if (req.files && Object.keys(req.files).length > 0) {
-        console.log('📁 Files detected, uploading to Cloudinary...');
         try {
           uploadedDocuments = await uploadSellerDocuments(req.files as { [fieldname: string]: Express.Multer.File[] });
-          console.log('✅ Documents uploaded successfully:', Object.keys(uploadedDocuments));
         } catch (uploadError) {
-          console.error('❌ Failed to upload documents to Cloudinary:', uploadError);
+          console.error('Failed to upload documents to Cloudinary:', uploadError);
           return next(createHttpError(500, "Failed to upload documents. Please try again."));
         }
       }
 
-      // Construct the seller info object from the request body
-      const sellerInfo = {
+      const sellerInfo: SellerInfo = {
         companyName: req.body.companyName,
         companyRegistrationNumber: req.body.companyRegistrationNumber,
         companyType: req.body.companyType,
@@ -355,54 +290,36 @@ export const updateUser = async (req: Request, res: Response, next: NextFunction
         },
         businessDescription: req.body.businessDescription,
         sellerType: req.body.sellerType,
-        documents: uploadedDocuments, // Store Cloudinary URLs
-        isApproved: false, // Reset to not approved for new/reapplication
-        appliedAt: new Date(), // Update application date
-        rejectionReason: undefined, // Clear any previous rejection reason
-        reapplicationCount: existingUser?.sellerInfo?.reapplicationCount ?
-          existingUser.sellerInfo.reapplicationCount + 1 : 1, // Track reapplication attempts
+        documents: uploadedDocuments,
+        isApproved: false,
+        appliedAt: new Date(),
+        rejectionReason: undefined,
+        reapplicationCount: existingSellerInfo?.reapplicationCount ? existingSellerInfo.reapplicationCount + 1 : 1,
       };
 
-      console.log('💾 Saving seller info to database...');
-
-      // Update user with seller info and keep existing role as 'user' until approved
-      const updatedUser = await userModel.findOneAndUpdate(
-        { _id: userId },
-        {
-          sellerInfo: sellerInfo
-          // Don't change the role to 'seller' yet - this will happen when admin approves
-        },
-        { new: true }
-      );
-
-      console.log('✅ Seller application saved successfully for user:', userId);
+      const [updatedUser] = await db.update(users).set({ sellerInfo, updatedAt: new Date() }).where(eq(users.id, userId)).returning();
 
       return sendSuccess(res, {
-        user: updatedUser,
+        user: pgUsers.withoutPassword(updatedUser),
         documentsUploaded: Object.keys(uploadedDocuments)
       }, "Seller application submitted successfully. It will be reviewed by our team.");
     } else {
-      // Regular user update
       const { name, email, roles, password, phone } = req.body;
 
-      const updateData: any = {
+      const updateData: Partial<typeof users.$inferInsert> = {
         name: name || user.name,
         email: email || user.email,
-        roles: roles || user.roles,
-        phone: phone || user.phone
+        role: roles || user.role,
+        phone: phone || user.phone,
+        updatedAt: new Date(),
       };
 
       if (password) {
-        const salt = await bcrypt.genSalt(10);
-        updateData.password = await bcrypt.hash(password, salt);
+        updateData.password = await bcrypt.hash(password, 10);
       }
 
-      const updatedUser = await userModel.findOneAndUpdate(
-        { _id: userId },
-        updateData,
-        { new: true }
-      );
-      return sendSuccess(res, updatedUser, 'User updated successfully');
+      const [updatedUser] = await db.update(users).set(updateData).where(eq(users.id, userId)).returning();
+      return sendSuccess(res, pgUsers.withoutPassword(updatedUser), 'User updated successfully');
     }
   } catch (err) {
     console.error('Error while updating user:', err);
@@ -410,86 +327,57 @@ export const updateUser = async (req: Request, res: Response, next: NextFunction
   }
 };
 
-// Approve a seller application (admin only)
 // Get all seller applications (admin only)
 export const getSellerApplications = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    console.log('🔍 getSellerApplications called');
-    const _req = req;
-    console.log('👤 User roles:', _req.user?.roles);
-    console.log('👤 User ID:', _req.user?.id);
-
-    // Only admin can view seller applications
-    const isAdmin = _req.user?.roles.includes('admin') || false;
+    const isAdmin = req.user?.roles.includes('admin') || false;
     if (!isAdmin) {
-      console.log('❌ Access denied - user is not admin');
       return next(createHttpError(403, "Only admin can view seller applications"));
     }
 
-    console.log('✅ Admin access confirmed, fetching seller applications...');
-    // Find all users who have submitted seller applications
-    const users = await userModel.find({
-      sellerInfo: { $exists: true }
-    }).select('-password').sort({ createdAt: -1 });
+    const rows = await db
+      .select()
+      .from(users)
+      .where(sql`${users.sellerInfo} IS NOT NULL`)
+      .orderBy(desc(users.createdAt));
 
-    console.log('📊 Found users with seller applications:', users.length);
-    console.log('📋 Users with sellerInfo:', users.map(u => ({
-      id: u._id,
-      name: u.name,
-      email: u.email,
-      companyName: u.sellerInfo?.companyName,
-      sellerType: u.sellerInfo?.sellerType,
-      isApproved: u.sellerInfo?.isApproved
-    })));
-
-    // Transform the data to match frontend expectations
-    const applications = users.map(user => ({
-      _id: user._id.toString(), // Convert MongoDB ObjectId to string
-      name: user.name,
-      email: user.email,
-      phone: user.phone,
-      roles: user.roles,
-      sellerApplicationStatus: user.sellerInfo?.rejectionReason ? 'rejected' : (user.sellerInfo?.isApproved ? 'approved' : 'pending'),
-      rejectionReason: user.sellerInfo?.rejectionReason,
-      sellerInfo: {
-        companyName: user.sellerInfo?.companyName,
-        companyRegistrationNumber: user.sellerInfo?.companyRegistrationNumber,
-        companyType: user.sellerInfo?.companyType,
-        registrationDate: user.sellerInfo?.registrationDate,
-        taxId: user.sellerInfo?.taxId,
-        website: user.sellerInfo?.website,
-        businessAddress: {
-          address: user.sellerInfo?.businessAddress?.address,
-          city: user.sellerInfo?.businessAddress?.city,
-          state: user.sellerInfo?.businessAddress?.state,
-          postalCode: user.sellerInfo?.businessAddress?.postalCode,
-          country: user.sellerInfo?.businessAddress?.country,
-        },
-        bankDetails: {
-          bankName: user.sellerInfo?.bankDetails?.bankName,
-          accountNumber: user.sellerInfo?.bankDetails?.accountNumber,
-          accountHolderName: user.sellerInfo?.bankDetails?.accountHolderName,
-          branchCode: user.sellerInfo?.bankDetails?.branchCode,
-        },
-        businessDescription: user.sellerInfo?.businessDescription,
-        sellerType: user.sellerInfo?.sellerType,
-        isApproved: user.sellerInfo?.isApproved || false,
-        appliedAt: user.sellerInfo?.appliedAt || user.createdAt,
-        approvedAt: user.sellerInfo?.approvedAt,
-        documents: user.sellerInfo?.documents,
-        contactPerson: user.sellerInfo?.contactPerson,
-        phone: user.sellerInfo?.phone,
-        alternatePhone: user.sellerInfo?.alternatePhone,
-        reapplicationCount: user.sellerInfo?.reapplicationCount,
-      },
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt,
-    }));
-
-    res.json({
-      success: true,
-      data: applications
+    const applications = rows.map((user) => {
+      const sellerInfo = user.sellerInfo as SellerInfo | null;
+      return {
+        _id: user.id,
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        roles: user.role,
+        sellerApplicationStatus: sellerInfo?.rejectionReason ? 'rejected' : (sellerInfo?.isApproved ? 'approved' : 'pending'),
+        rejectionReason: sellerInfo?.rejectionReason,
+        sellerInfo: sellerInfo ? {
+          companyName: sellerInfo.companyName,
+          companyRegistrationNumber: sellerInfo.companyRegistrationNumber,
+          companyType: sellerInfo.companyType,
+          registrationDate: sellerInfo.registrationDate,
+          taxId: sellerInfo.taxId,
+          website: sellerInfo.website,
+          businessAddress: sellerInfo.businessAddress,
+          bankDetails: sellerInfo.bankDetails,
+          businessDescription: sellerInfo.businessDescription,
+          sellerType: sellerInfo.sellerType,
+          isApproved: sellerInfo.isApproved || false,
+          appliedAt: sellerInfo.appliedAt || user.createdAt,
+          approvedAt: sellerInfo.approvedAt,
+          documents: sellerInfo.documents,
+          contactPerson: sellerInfo.contactPerson,
+          phone: sellerInfo.phone,
+          alternatePhone: sellerInfo.alternatePhone,
+          reapplicationCount: sellerInfo.reapplicationCount,
+        } : undefined,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+      };
     });
+
+    res.json({ success: true, data: applications });
   } catch (err) {
     console.error('Error while fetching seller applications:', err);
     next(createHttpError(500, "Error while fetching seller applications"));
@@ -497,226 +385,181 @@ export const getSellerApplications = async (req: Request, res: Response, next: N
 };
 
 export const approveSellerApplication = async (req: Request, res: Response, next: NextFunction) => {
-  const userId = req.user?.id;
+  const { userId } = req.params;
   if (!userId) {
-    return next(createHttpError(401, 'Not authenticated'));
+    return next(createHttpError(400, 'User ID is required'));
   }
 
   try {
-    const user = await userModel.findOne({ _id: userId });
-
-    if (!user) {
-      return next(createHttpError(404, "User not found"));
-    }
-
-    const _req = req;
-    // Only admin can approve seller applications
-    const isAdmin = _req.user?.roles.includes('admin') || false;
+    const isAdmin = req.user?.roles.includes('admin') || false;
     if (!isAdmin) {
       return next(createHttpError(403, "Only admin can approve seller applications"));
     }
 
-    // Check if user has a seller application
-    if (!user.sellerInfo) {
-      return next(createHttpError(400, "User has not submitted a seller application"));
+    const user = await pgUsers.findUserById(userId);
+    if (!user) {
+      return next(createHttpError(404, "User not found"));
     }
 
-    // Check if already approved
-    if (user.sellerInfo.isApproved) {
+    const sellerInfo = user.sellerInfo as SellerInfo | null;
+    if (!sellerInfo) {
+      return next(createHttpError(400, "User has not submitted a seller application"));
+    }
+    if (sellerInfo.isApproved) {
       return next(createHttpError(400, "Seller application already approved"));
     }
 
-    // Update the user to be a seller and mark application as approved
-    const updatedUser = await userModel.findOneAndUpdate(
-      { _id: userId },
-      {
-        roles: 'seller',
-        'sellerInfo.isApproved': true,
-        'sellerInfo.approvedAt': new Date()
-      },
-      { new: true }
-    );
+    const updatedSellerInfo: SellerInfo = { ...sellerInfo, isApproved: true, approvedAt: new Date(), rejectionReason: undefined, rejectedAt: undefined };
 
-    res.json({
-      user: updatedUser,
-      message: "Seller application approved successfully"
-    });
+    const [updatedUser] = await db
+      .update(users)
+      .set({ role: 'seller', sellerInfo: updatedSellerInfo, updatedAt: new Date() })
+      .where(eq(users.id, userId))
+      .returning();
+
+    res.json({ user: pgUsers.withoutPassword(updatedUser), message: "Seller application approved successfully" });
   } catch (err) {
     console.error('Error while approving seller application:', err);
     next(createHttpError(500, "Error while approving seller application"));
   }
 };
 
-// Reject seller application (admin only)
 export const rejectSellerApplication = async (req: Request, res: Response, next: NextFunction) => {
-  const userId = req.user?.id;
-  if (!userId) {
-    return next(createHttpError(401, 'Not authenticated'));
-  }
+  const { userId } = req.params;
   const { reason } = req.body;
+  if (!userId) {
+    return next(createHttpError(400, 'User ID is required'));
+  }
 
   try {
-    const user = await userModel.findOne({ _id: userId });
-
-    if (!user) {
-      return next(createHttpError(404, "User not found"));
-    }
-
-    const _req = req;
-    // Only admin can reject seller applications
-    const isAdmin = _req.user?.roles.includes('admin') || false;
+    const isAdmin = req.user?.roles.includes('admin') || false;
     if (!isAdmin) {
       return next(createHttpError(403, "Only admin can reject seller applications"));
     }
 
-    // Check if user has a seller application
-    if (!user.sellerInfo) {
+    const user = await pgUsers.findUserById(userId);
+    if (!user) {
+      return next(createHttpError(404, "User not found"));
+    }
+
+    const sellerInfo = user.sellerInfo as SellerInfo | null;
+    if (!sellerInfo) {
       return next(createHttpError(400, "User has not submitted a seller application"));
     }
 
-    // Update the seller application with rejection
-    const updatedUser = await userModel.findOneAndUpdate(
-      { _id: userId },
-      {
-        'sellerInfo.isApproved': false,
-        'sellerInfo.rejectionReason': reason,
-        'sellerInfo.rejectedAt': new Date()
-      },
-      { new: true }
-    );
+    const updatedSellerInfo: SellerInfo = { ...sellerInfo, isApproved: false, rejectionReason: reason, rejectedAt: new Date() };
 
-    res.json({
-      user: updatedUser,
-      message: "Seller application rejected"
-    });
+    const [updatedUser] = await db
+      .update(users)
+      .set({ sellerInfo: updatedSellerInfo, updatedAt: new Date() })
+      .where(eq(users.id, userId))
+      .returning();
+
+    res.json({ user: pgUsers.withoutPassword(updatedUser), message: "Seller application rejected" });
   } catch (err) {
     console.error('Error while rejecting seller application:', err);
     next(createHttpError(500, "Error while rejecting seller application"));
   }
 };
 
-// Delete a user by ID
+// Delete a user by ID (self)
 export const deleteUser = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
       return next(createHttpError(401, 'Not authenticated'));
     }
-    const user = await userModel.findById(userId);
-    if (user) {
-      await user.deleteOne();
-      // Return 204 No Content for successful deletion
-      res.status(HTTP_STATUS.NO_CONTENT).send();
-    } else {
+
+    const [deleted] = await db.delete(users).where(eq(users.id, userId)).returning();
+    if (!deleted) {
       return next(createHttpError(404, 'User not found'));
     }
+    res.status(HTTP_STATUS.NO_CONTENT).send();
   } catch (err) {
     return next(createHttpError(500, "Error while deleting user"));
   }
 };
 
-// Change user roles (only admin can change roles)
+// Change user roles (admin only)
 export const changeUserRole = async (req: Request, res: Response, next: NextFunction) => {
   const { adminUserId, targetUserId, newRoles } = req.body;
 
   try {
-    const adminUser = await userModel.findById(adminUserId);
-
-    if (!adminUser || !adminUser.roles.includes('admin')) {
+    const adminUser = await pgUsers.findUserById(adminUserId);
+    if (!adminUser || adminUser.role !== 'admin') {
       return res.status(HTTP_STATUS.FORBIDDEN).json({ message: 'Only an admin can change user roles' });
     }
 
-    const targetUser = await userModel.findById(targetUserId);
-
+    const targetUser = await pgUsers.findUserById(targetUserId);
     if (!targetUser) {
       return res.status(HTTP_STATUS.NOT_FOUND).json({ message: 'Target user not found' });
     }
 
-    targetUser.roles = newRoles;
-    const updatedUser = await targetUser.save();
-    res.json(updatedUser);
+    const [updatedUser] = await db.update(users).set({ role: newRoles, updatedAt: new Date() }).where(eq(users.id, targetUserId)).returning();
+    res.json(pgUsers.withoutPassword(updatedUser));
   } catch (err) {
     return next(createHttpError(500, "Error while changing user role"));
   }
 };
 
-
 export const verifyUser = async (req: Request, res: Response, next: NextFunction) => {
   const { token } = req.body;
-
   if (!token) {
     return next(createHttpError(400, "Token is required"));
   }
 
   try {
     const decoded = jwt.verify(token as string, config.jwtSecret) as { sub: string };
-    const user = await userModel.findById(decoded.sub);
-
+    const user = await pgUsers.findUserById(decoded.sub);
     if (!user) {
       return next(createHttpError(400, "Invalid token"));
     }
 
-    user.verified = true;
-    await user.save();
-
+    await db.update(users).set({ verified: true, updatedAt: new Date() }).where(eq(users.id, user.id));
     res.status(HTTP_STATUS.OK).json({ message: 'Email verified successfully' });
   } catch (err) {
     return next(createHttpError(400, "Invalid or expired token"));
   }
 };
 
-
 export const forgotPassword = async (req: Request, res: Response, next: NextFunction) => {
   const { email } = req.body;
-
   if (!email) {
-    const error = createHttpError(400, 'Email is required');
-    return next(error);
+    return next(createHttpError(400, 'Email is required'));
   }
 
   try {
-    const user = await userModel.findOne({ email });
+    const user = await pgUsers.findUserByEmail(email);
     if (!user) {
-      const error = createHttpError(404, 'User not found');
-      return next(error);
+      return next(createHttpError(404, 'User not found'));
     }
-
-    console.log('User found for password reset:', user.email);
 
     if (!config.jwtSecret) {
       throw new Error('JWT Secret is not defined');
     }
 
-    const resetToken = jwt.sign({ sub: user._id }, config.jwtSecret, {
-      expiresIn: '1h', // Reset token expires in 1 hour
+    const resetToken = jwt.sign({ sub: user.id }, config.jwtSecret, {
+      expiresIn: '1h',
       algorithm: 'HS256',
     });
 
-    // Skip email sending in development mode
     const isDevMode = config.env === 'development';
 
     if (isDevMode) {
-      // In development, return the reset token directly for testing
-      console.log('🔧 Development mode: Reset token:', resetToken);
-      console.log('🔧 Reset URL:', `${config.frontendDomain}/auth/login?forgottoken=${resetToken}`);
-
       return res.status(HTTP_STATUS.OK).json({
         message: 'Development mode: Password reset token generated (check server logs)',
-        resetToken, // Only in development!
+        resetToken,
         resetUrl: `${config.frontendDomain}/auth/login?forgottoken=${resetToken}`
       });
     }
 
-    // Send email in production
     try {
       await sendResetPasswordEmailMaileroo(email, user.name, resetToken);
       res.status(HTTP_STATUS.OK).json({ message: 'Password reset email sent. Please check your inbox.' });
     } catch (emailError) {
       console.error('Email sending failed:', emailError);
-      // Still allow password reset but notify about email failure
       res.status(HTTP_STATUS.OK).json({
         message: 'Password reset initiated but email could not be sent. Please contact support.',
-        resetToken: isDevMode ? resetToken : undefined // Only expose in dev
       });
     }
   } catch (err) {
@@ -727,21 +570,19 @@ export const forgotPassword = async (req: Request, res: Response, next: NextFunc
 
 export const resetPassword = async (req: Request, res: Response, next: NextFunction) => {
   const { token, password } = req.body;
-
   if (!token || !password) {
     return next(createHttpError(400, 'Token and new password are required'));
   }
 
   try {
     const decoded = jwt.verify(token, config.jwtSecret) as { sub: string };
-    const user = await userModel.findById(decoded.sub);
-
+    const user = await pgUsers.findUserById(decoded.sub);
     if (!user) {
       return next(createHttpError(404, 'User not found'));
     }
+
     const hashedPassword = await bcrypt.hash(password, 10);
-    user.password = hashedPassword; // Assuming you are hashing passwords before saving
-    await user.save();
+    await db.update(users).set({ password: hashedPassword, updatedAt: new Date() }).where(eq(users.id, user.id));
 
     res.status(HTTP_STATUS.OK).json({ message: 'Password reset successful' });
   } catch (err) {
@@ -752,32 +593,24 @@ export const resetPassword = async (req: Request, res: Response, next: NextFunct
 export const deleteSellerApplication = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { userId } = req.params;
-
     if (!userId) {
       return next(createHttpError(400, "User ID is required"));
     }
 
-    const _req = req;
-    // Only admin can delete seller applications
-    const isAdmin = _req.user?.roles.includes('admin') || false;
+    const isAdmin = req.user?.roles.includes('admin') || false;
     if (!isAdmin) {
       return next(createHttpError(403, "Only admin can delete seller applications"));
     }
 
-    const user = await userModel.findById(userId);
+    const user = await pgUsers.findUserById(userId);
     if (!user) {
       return next(createHttpError(404, "User not found"));
     }
-
     if (!user.sellerInfo) {
       return next(createHttpError(400, "User is not a seller applicant"));
     }
 
-    // Remove seller info and reset role to 'user'
-    await userModel.findByIdAndUpdate(userId, {
-      $unset: { sellerInfo: 1 },
-      $set: { roles: 'user' }
-    });
+    await db.update(users).set({ sellerInfo: null, role: 'user', updatedAt: new Date() }).where(eq(users.id, userId));
 
     res.status(HTTP_STATUS.OK).json({
       message: "Seller application deleted successfully. User converted to normal user."
@@ -786,7 +619,6 @@ export const deleteSellerApplication = async (req: Request, res: Response, next:
     return next(createHttpError(500, "Error deleting seller application"));
   }
 };
-// Add these new controller functions for /me routes
 
 // Update current user's profile
 export const updateMyProfile = async (req: Request, res: Response, next: NextFunction) => {
@@ -801,51 +633,36 @@ export const updateMyProfile = async (req: Request, res: Response, next: NextFun
   }
 
   try {
-    const user = await userModel.findOne({ _id: userId });
+    const user = await pgUsers.findUserById(userId);
     if (!user) {
       return next(createHttpError(404, "User not found"));
     }
 
-    // Check if this is a seller application
-    const isSellerApplication = req.body.companyName && req.body.companyRegistrationNumber && req.body.sellerType;
+    const { name, email, phone, bankName, accountNumber, accountHolderName, branchCode } = req.body;
 
-    if (isSellerApplication) {
-      // ... existing seller application logic ...
-    } else {
-      // Regular profile update
-      const { name, email, phone, bankName, accountNumber, accountHolderName, branchCode } = req.body;
+    const updateData: Partial<typeof users.$inferInsert> = {
+      name: name || user.name,
+      email: email || user.email,
+      phone: phone || user.phone,
+      updatedAt: new Date(),
+    };
 
-      const updateData: any = {
-        name: name || user.name,
-        email: email || user.email,
-        phone: phone || user.phone
+    if (bankName || accountNumber || accountHolderName || branchCode) {
+      const existingSellerInfo = (user.sellerInfo as SellerInfo | null) || ({} as SellerInfo);
+      updateData.sellerInfo = {
+        ...existingSellerInfo,
+        bankDetails: {
+          ...existingSellerInfo.bankDetails,
+          ...(bankName !== undefined && { bankName }),
+          ...(accountNumber !== undefined && { accountNumber }),
+          ...(accountHolderName !== undefined && { accountHolderName }),
+          ...(branchCode !== undefined && { branchCode }),
+        },
       };
-
-      // Handle banking details if provided
-      if (bankName || accountNumber || accountHolderName || branchCode) {
-        // Use MongoDB dot notation to update nested fields directly
-        // This avoids TypeScript issues and is more efficient
-        if (bankName !== undefined) {
-          updateData['sellerInfo.bankDetails.bankName'] = bankName;
-        }
-        if (accountNumber !== undefined) {
-          updateData['sellerInfo.bankDetails.accountNumber'] = accountNumber;
-        }
-        if (accountHolderName !== undefined) {
-          updateData['sellerInfo.bankDetails.accountHolderName'] = accountHolderName;
-        }
-        if (branchCode !== undefined) {
-          updateData['sellerInfo.bankDetails.branchCode'] = branchCode;
-        }
-      }
-
-      const updatedUser = await userModel.findOneAndUpdate(
-        { _id: userId },
-        { $set: updateData },
-        { new: true }
-      );
-      res.json(updatedUser);
     }
+
+    const [updatedUser] = await db.update(users).set(updateData).where(eq(users.id, userId)).returning();
+    res.json(pgUsers.withoutPassword(updatedUser));
   } catch (err) {
     console.error('Error while updating profile:', err);
     next(createHttpError(500, "Error while updating profile"));
@@ -853,10 +670,8 @@ export const updateMyProfile = async (req: Request, res: Response, next: NextFun
 };
 
 // Change current user's password
-export const changeMyPassword = async (req: Request
-  , res: Response, next: NextFunction) => {
+export const changeMyPassword = async (req: Request, res: Response, next: NextFunction) => {
   const { currentPassword, newPassword } = req.body;
-
   if (!currentPassword || !newPassword) {
     return next(createHttpError(400, "Current password and new password are required"));
   }
@@ -867,23 +682,18 @@ export const changeMyPassword = async (req: Request
   }
 
   try {
-    const user = await userModel.findById(userId);
+    const user = await pgUsers.findUserById(userId);
     if (!user) {
       return next(createHttpError(404, "User not found"));
     }
 
-    // Verify current password
     const isMatch = await bcrypt.compare(currentPassword, user.password);
     if (!isMatch) {
       return next(createHttpError(400, "Current password is incorrect"));
     }
 
-    // Hash new password
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(newPassword, salt);
-
-    // Update password
-    await userModel.findByIdAndUpdate(userId, { password: hashedPassword });
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await db.update(users).set({ password: hashedPassword, updatedAt: new Date() }).where(eq(users.id, userId));
 
     res.json({ message: "Password changed successfully" });
   } catch (err) {
@@ -893,8 +703,7 @@ export const changeMyPassword = async (req: Request
 };
 
 // Update user by ID (admin only)
-export const updateUserById = async (req: Request
-  , res: Response, next: NextFunction) => {
+export const updateUserById = async (req: Request, res: Response, next: NextFunction) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(HTTP_STATUS.BAD_REQUEST).json({ errors: errors.array() });
@@ -906,32 +715,27 @@ export const updateUserById = async (req: Request
   }
 
   try {
-    const user = await userModel.findById(userId);
+    const user = await pgUsers.findUserById(userId);
     if (!user) {
       return next(createHttpError(404, "User not found"));
     }
 
-    // Regular user update (admin can update name, email, phone, roles, password)
     const { name, email, roles, password, phone } = req.body;
 
-    const updateData: any = {
+    const updateData: Partial<typeof users.$inferInsert> = {
       name: name || user.name,
       email: email || user.email,
-      roles: roles || user.roles,
-      phone: phone || user.phone
+      role: roles || user.role,
+      phone: phone || user.phone,
+      updatedAt: new Date(),
     };
 
     if (password) {
-      const salt = await bcrypt.genSalt(10);
-      updateData.password = await bcrypt.hash(password, salt);
+      updateData.password = await bcrypt.hash(password, 10);
     }
 
-    const updatedUser = await userModel.findOneAndUpdate(
-      { _id: userId },
-      updateData,
-      { new: true }
-    );
-    res.json(updatedUser);
+    const [updatedUser] = await db.update(users).set(updateData).where(eq(users.id, userId)).returning();
+    res.json(pgUsers.withoutPassword(updatedUser));
   } catch (err) {
     console.error('Error while updating user:', err);
     next(createHttpError(500, "Error while updating user"));

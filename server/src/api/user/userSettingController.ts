@@ -1,49 +1,50 @@
 import { Request, Response, NextFunction } from 'express';
-import UserSettings from './userSettingModel';
+import { db, userSettings } from '@tourbnt/db';
+import { eq } from 'drizzle-orm';
 import { encrypt, decrypt } from '../../utils/encryption';
 import createHttpError from 'http-errors';
 import { HTTP_STATUS, sendAuthError, sendError, sendNotFoundError, sendSuccess, sendValidationError } from '../../utils/apiResponse';
 
-export const addOrUpdateSettings = async (req: Request
-, res: Response, next: NextFunction) => {
+export const addOrUpdateSettings = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    console.log('Request body:', req.body);
-
     const userId = req.user?.id;
     if (!userId) {
-      throw new Error('User ID is required');
-       return next(createHttpError(401, 'Not authenticated'));
+      return next(createHttpError(401, 'Not authenticated'));
     }
     const { CLOUDINARY_CLOUD, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET, OPENAI_API_KEY, GOOGLE_API_KEY } = req.body;
 
-    let settings = await UserSettings.findOne({ user: userId });
+    const [existing] = await db.select().from(userSettings).where(eq(userSettings.userId, userId)).limit(1);
 
-    if (!settings) {
-      settings = await UserSettings.create({
-        user: userId,
-        cloudinaryCloud: CLOUDINARY_CLOUD || '',
-        cloudinaryApiKey: CLOUDINARY_API_KEY ? encrypt(CLOUDINARY_API_KEY) : '',
-        cloudinaryApiSecret: CLOUDINARY_API_SECRET ? encrypt(CLOUDINARY_API_SECRET) : '',
-        openaiApiKey: OPENAI_API_KEY ? encrypt(OPENAI_API_KEY) : '',
-        googleApiKey: GOOGLE_API_KEY ? encrypt(GOOGLE_API_KEY) : '',
-      });
+    let settings;
+    if (!existing) {
+      [settings] = await db
+        .insert(userSettings)
+        .values({
+          userId,
+          cloudinaryCloud: CLOUDINARY_CLOUD || '',
+          cloudinaryApiKey: CLOUDINARY_API_KEY ? encrypt(CLOUDINARY_API_KEY) : '',
+          cloudinaryApiSecret: CLOUDINARY_API_SECRET ? encrypt(CLOUDINARY_API_SECRET) : '',
+          openaiApiKey: OPENAI_API_KEY ? encrypt(OPENAI_API_KEY) : '',
+          googleApiKey: GOOGLE_API_KEY ? encrypt(GOOGLE_API_KEY) : '',
+        })
+        .returning();
     } else {
-      if (CLOUDINARY_CLOUD !== undefined) settings.cloudinaryCloud = CLOUDINARY_CLOUD;
-      if (CLOUDINARY_API_KEY !== undefined) settings.cloudinaryApiKey = encrypt(CLOUDINARY_API_KEY);
-      if (CLOUDINARY_API_SECRET !== undefined) settings.cloudinaryApiSecret = encrypt(CLOUDINARY_API_SECRET);
-      if (OPENAI_API_KEY !== undefined) settings.openaiApiKey = encrypt(OPENAI_API_KEY);
-      if (GOOGLE_API_KEY !== undefined) settings.googleApiKey = encrypt(GOOGLE_API_KEY);
+      const updates: Partial<typeof userSettings.$inferInsert> = { updatedAt: new Date() };
+      if (CLOUDINARY_CLOUD !== undefined) updates.cloudinaryCloud = CLOUDINARY_CLOUD;
+      if (CLOUDINARY_API_KEY !== undefined) updates.cloudinaryApiKey = encrypt(CLOUDINARY_API_KEY);
+      if (CLOUDINARY_API_SECRET !== undefined) updates.cloudinaryApiSecret = encrypt(CLOUDINARY_API_SECRET);
+      if (OPENAI_API_KEY !== undefined) updates.openaiApiKey = encrypt(OPENAI_API_KEY);
+      if (GOOGLE_API_KEY !== undefined) updates.googleApiKey = encrypt(GOOGLE_API_KEY);
+
+      [settings] = await db.update(userSettings).set(updates).where(eq(userSettings.userId, userId)).returning();
     }
 
-    await settings.save();
-
-    // Return settings with decrypted values for immediate use
     const responseSettings = {
-      ...settings.toObject(),
+      ...settings,
       cloudinaryApiKey: CLOUDINARY_API_KEY || (settings.cloudinaryApiKey ? '••••••••' : ''),
       cloudinaryApiSecret: CLOUDINARY_API_SECRET || (settings.cloudinaryApiSecret ? '••••••••' : ''),
       openaiApiKey: OPENAI_API_KEY || (settings.openaiApiKey ? '••••••••' : ''),
-      googleApiKey: GOOGLE_API_KEY || (settings.googleApiKey ? '••••••••' : '')
+      googleApiKey: GOOGLE_API_KEY || (settings.googleApiKey ? '••••••••' : ''),
     };
 
     sendSuccess(res, responseSettings, 'Settings saved successfully');
@@ -52,7 +53,6 @@ export const addOrUpdateSettings = async (req: Request
   }
 };
 
-
 export const getUserSettings = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
@@ -60,27 +60,21 @@ export const getUserSettings = async (req: Request, res: Response) => {
       return sendAuthError(res, 'User ID is required');
     }
 
-    let settings = await UserSettings.findOne({ user: userId });
+    let [settings] = await db.select().from(userSettings).where(eq(userSettings.userId, userId)).limit(1);
 
-    // If settings don't exist, create empty settings for the user
     if (!settings) {
-      settings = await UserSettings.create({
-        user: userId,
-        cloudinaryCloud: '',
-        cloudinaryApiKey: '',
-        cloudinaryApiSecret: '',
-        openaiApiKey: '',
-        googleApiKey: '',
-      });
+      [settings] = await db
+        .insert(userSettings)
+        .values({ userId, cloudinaryCloud: '', cloudinaryApiKey: '', cloudinaryApiSecret: '', openaiApiKey: '', googleApiKey: '' })
+        .returning();
     }
 
-    // Mask sensitive data in the response
     const responseSettings = {
-      ...settings.toObject(),
+      ...settings,
       cloudinaryApiKey: settings.cloudinaryApiKey ? '••••••••' : '',
       cloudinaryApiSecret: settings.cloudinaryApiSecret ? '••••••••' : '',
       openaiApiKey: settings.openaiApiKey ? '••••••••' : '',
-      googleApiKey: settings.googleApiKey ? '••••••••' : ''
+      googleApiKey: settings.googleApiKey ? '••••••••' : '',
     };
 
     sendSuccess(res, responseSettings, 'Settings retrieved successfully');
@@ -89,27 +83,23 @@ export const getUserSettings = async (req: Request, res: Response) => {
   }
 };
 
-// New method to get decrypted API keys when needed
-export const getDecryptedApiKey = async (req: Request
-, res: Response) => {
+// Get decrypted API keys when needed
+export const getDecryptedApiKey = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
-    if (!userId) {
+    if (!userId || !req.user) {
       return sendAuthError(res, 'User ID is required');
     }
     const { keyType } = req.query;
-    // Ensure the requesting user has permission (either admin or the user themselves)
-    if (!req.user) {
-      return sendAuthError(res, 'Not authenticated');
-    }
 
-    const settings = await UserSettings.findOne({ user: userId });
+    const [settings] = await db.select().from(userSettings).where(eq(userSettings.userId, userId)).limit(1);
     if (!settings) {
       return sendNotFoundError(res, 'Settings not found');
     }
 
     let decryptedKey = '';
     let fallbackKey = '';
+    let updates: Partial<typeof userSettings.$inferInsert> | undefined;
 
     switch (keyType) {
       case 'cloudinary_api_key':
@@ -132,30 +122,29 @@ export const getDecryptedApiKey = async (req: Request
         return sendValidationError(res, 'Invalid key type requested');
     }
 
-    // If decryption failed or returned an empty string, use the fallback from environment variables
     if (!decryptedKey && fallbackKey) {
       decryptedKey = fallbackKey;
 
-      // Optionally, re-encrypt and save the environment variable to fix the database
-      if (fallbackKey && settings) {
-        switch (keyType) {
-          case 'cloudinary_api_key':
-            settings.cloudinaryApiKey = encrypt(fallbackKey);
-            break;
-          case 'cloudinary_api_secret':
-            settings.cloudinaryApiSecret = encrypt(fallbackKey);
-            break;
-          case 'openai_api_key':
-            settings.openaiApiKey = encrypt(fallbackKey);
-            break;
-          case 'google_api_key':
-            settings.googleApiKey = encrypt(fallbackKey);
-            break;
-        }
+      switch (keyType) {
+        case 'cloudinary_api_key':
+          updates = { cloudinaryApiKey: encrypt(fallbackKey) };
+          break;
+        case 'cloudinary_api_secret':
+          updates = { cloudinaryApiSecret: encrypt(fallbackKey) };
+          break;
+        case 'openai_api_key':
+          updates = { openaiApiKey: encrypt(fallbackKey) };
+          break;
+        case 'google_api_key':
+          updates = { googleApiKey: encrypt(fallbackKey) };
+          break;
+      }
 
-        await settings.save();
+      if (updates) {
+        await db.update(userSettings).set({ ...updates, updatedAt: new Date() }).where(eq(userSettings.userId, userId));
       }
     }
+
     sendSuccess(res, { key: decryptedKey }, 'Decrypted API key retrieved successfully');
   } catch (error) {
     return sendError(res, 'Error retrieving decrypted API key', HTTP_STATUS.INTERNAL_SERVER_ERROR, 'SERVER_ERROR', error);

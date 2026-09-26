@@ -1,5 +1,4 @@
-import mongoose from 'mongoose';
-import { PricingOption, DateRange, FactValue } from '../tourTypes';
+import { PricingOption, DateRange } from '../tourTypes';
 
 /**
  * Data Processing Utilities
@@ -43,20 +42,16 @@ export const safeToNumber = (value: any, defaultValue: number = 0): number => {
 
 /**
  * Process category data from form submission
- * Returns array of ObjectIds for the category field
+ * Returns array of category ID strings for the category field
  */
-export const processCategoryData = (category: any): Array<mongoose.Types.ObjectId> => {
+export const processCategoryData = (category: any): Array<string> => {
   try {
-
     // Handle category data as JSON string
     if (typeof category === 'string') {
       try {
         const parsedCategories = JSON.parse(category);
         if (Array.isArray(parsedCategories)) {
-          return parsedCategories.map((cat: any) => {
-            const catId = cat.categoryId || cat.id || cat.value;
-            return new mongoose.Types.ObjectId(catId);
-          });
+          return parsedCategories.map((cat: any) => String(cat.categoryId || cat.id || cat.value));
         }
       } catch (parseError) {
         console.error('Error parsing category JSON string:', parseError);
@@ -66,25 +61,17 @@ export const processCategoryData = (category: any): Array<mongoose.Types.ObjectI
     // Handle special case with mixed object structure
     if (category && typeof category === 'object' && !Array.isArray(category) && category[''] && typeof category[''] === 'string') {
       const parsedCategories = JSON.parse(category['']);
-      return parsedCategories.map((cat: any) => {
-        const catId = cat.id || cat.value || cat.categoryId;
-        return new mongoose.Types.ObjectId(catId);
-      });
+      return parsedCategories.map((cat: any) => String(cat.id || cat.value || cat.categoryId));
     }
 
     // Handle array of categories
     if (Array.isArray(category)) {
-      return category.map((cat: any) => {
-        const catId = cat.id || cat.value || cat.categoryId;
-        return new mongoose.Types.ObjectId(catId);
-      });
+      return category.map((cat: any) => String(cat.id || cat.value || cat.categoryId));
     }
 
     // Handle single category object
     if (category && typeof category === 'object') {
-      const catId = category.id || category.value || category.categoryId;
-
-      return [new mongoose.Types.ObjectId(catId)];
+      return [String(category.id || category.value || category.categoryId)];
     }
 
     return [];

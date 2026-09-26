@@ -1,7 +1,6 @@
 import { Response, Request, NextFunction } from 'express';
-import { db, faqs } from '@tourbnt/db';
-import { eq, desc, inArray, count } from 'drizzle-orm';
-import TourModel from '../../tours/tourModel';
+import { db, faqs, tours } from '@tourbnt/db';
+import { eq, desc, inArray, count, sql } from 'drizzle-orm';
 import { sendSuccess, sendPaginatedResponse, HTTP_STATUS, handleUnauthorized, handleForbidden, handleResourceNotFound, sendValidationError } from '../../../utils/apiResponse';
 
 export const getUserFaqs = async (req: Request, res: Response, next: NextFunction) => {
@@ -112,22 +111,22 @@ export const updateFaqs = async (req: Request, res: Response, next: NextFunction
       .where(eq(faqs.id, faqId))
       .returning();
 
-    // Cascade update to all tours that use this FAQ (still Mongoose-backed).
-    const updateResult = await TourModel.updateMany(
-      { 'faqs.faqId': faqId },
-      {
-        $set: {
-          'faqs.$[elem].question': updatedFaq.question,
-          'faqs.$[elem].answer': updatedFaq.answer,
-          updatedAt: new Date(),
-        },
-      },
-      { arrayFilters: [{ 'elem.faqId': faqId }] }
-    );
+    // Cascade update to all tours that embed a snapshot of this FAQ.
+    const affectedTours = await db
+      .select({ id: tours.id, faqs: tours.faqs })
+      .from(tours)
+      .where(sql`EXISTS (SELECT 1 FROM jsonb_array_elements(${tours.faqs}) elem WHERE elem->>'faqId' = ${faqId})`);
+
+    for (const tour of affectedTours) {
+      const updatedTourFaqs = (tour.faqs as any[]).map((f) =>
+        f.faqId === faqId ? { ...f, question: updatedFaq.question, answer: updatedFaq.answer } : f
+      );
+      await db.update(tours).set({ faqs: updatedTourFaqs, updatedAt: new Date() }).where(eq(tours.id, tour.id));
+    }
 
     sendSuccess(res, {
       faqs: updatedFaq,
-      toursUpdated: updateResult.modifiedCount,
+      toursUpdated: affectedTours.length,
     }, 'FAQ updated successfully');
   } catch (error) {
     next(error);

@@ -277,32 +277,25 @@ export const errorHandler = (
         method: req.method,
         path: req.path,
         clientIp: getClientIp(req),
-        userId: (req as any).user?.id || (req as any).user?._id?.toString(),
+        userId: (req as any).user?.id,
         errorName: err.name,
         ...(config.env === 'development' && { stack: err.stack })
     });
 
-    // Handle Mongoose ValidationError
-    if (err.name === 'ValidationError') {
-        const validationErrors = (err as any).errors ? Object.keys((err as any).errors).map(key => ({
-            field: key,
-            message: (err as any).errors[key].message
-        })) : [];
-        return sendValidationError(res, 'Validation failed', validationErrors);
-    }
-
-    // Handle Mongoose CastError (invalid ObjectId)
-    if (err.name === 'CastError') {
-        return sendValidationError(res, 'Invalid ID format', [{
-            field: (err as any).path || 'id',
-            message: `Invalid ${(err as any).path || 'ID'} format`
-        }]);
-    }
-
-    // Handle MongoDB duplicate key error (code 11000)
-    if ((err as any).code === 11000) {
-        const field = Object.keys((err as any).keyValue || {})[0] || 'unknown';
+    // Handle Postgres unique constraint violation (SQL state 23505)
+    if ((err as any).code === '23505') {
+        const detail: string = (err as any).detail || '';
+        const match = detail.match(/^Key \(([^)]+)\)=/);
+        const field = match?.[1] || (err as any).constraint_name || 'unknown';
         return sendConflictError(res, `${field} already exists`);
+    }
+
+    // Handle Postgres foreign key violation (SQL state 23503)
+    if ((err as any).code === '23503') {
+        return sendValidationError(res, 'Referenced resource does not exist', [{
+            field: (err as any).constraint_name || 'unknown',
+            message: (err as any).detail || 'Foreign key constraint violation'
+        }]);
     }
 
     // Handle JWT errors

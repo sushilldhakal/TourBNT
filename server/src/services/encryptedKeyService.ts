@@ -1,5 +1,11 @@
-import UserSettings from '../api/user/userSettingModel';
+import { db, userSettings } from '@tourbnt/db';
+import { eq } from 'drizzle-orm';
 import { decrypt } from '../utils/encryption';
+
+async function findSettings(userId: string) {
+  const [settings] = await db.select().from(userSettings).where(eq(userSettings.userId, userId)).limit(1);
+  return settings ?? null;
+}
 
 export interface DecryptedCredentials {
   cloudinaryCloud?: string;
@@ -28,7 +34,7 @@ export class EncryptedKeyService {
    */
   static async getDecryptedKey(userId: string, keyType: string): Promise<string> {
     try {
-      const settings = await UserSettings.findOne({ user: userId });
+      const settings = await findSettings(userId);
       if (!settings) {
         console.log(`⚠️ No settings found for user: ${userId}`);
         return '';
@@ -82,7 +88,7 @@ export class EncryptedKeyService {
    */
   static async getAllDecryptedCredentials(userId: string): Promise<DecryptedCredentials> {
     try {
-      const settings = await UserSettings.findOne({ user: userId });
+      const settings = await findSettings(userId);
       if (!settings) {
         console.log(`⚠️ No settings found for user: ${userId}`);
         return {};
@@ -110,7 +116,7 @@ export class EncryptedKeyService {
     try {
       console.log(`🔧 Getting Cloudinary credentials for user: ${userId}`);
 
-      const settings = await UserSettings.findOne({ user: userId });
+      const settings = await findSettings(userId);
       console.log('🔧 Raw settings from DB:', {
         found: !!settings,
         cloudinaryCloud: settings?.cloudinaryCloud,

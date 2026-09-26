@@ -2,7 +2,8 @@ import { Request, Response } from "express";
 import rateLimit from 'express-rate-limit';
 import { config } from "../../config/config";
 import OpenAI from "openai";
-import UserSettings from "../user/userSettingModel";
+import { db, userSettings } from "@tourbnt/db";
+import { eq } from "drizzle-orm";
 import { decrypt } from "../../utils/encryption";
 import { sendValidationError, sendError } from "../../utils/apiResponse";
 
@@ -21,8 +22,7 @@ export const generateCompletion = async (req: Request
 , res: Response) => {
   try {
     const { prompt, option, command } = req.body;
-    const userId = req.user;
-
+    const userId = req.user?.id;
 
     if (!userId) {
       return sendValidationError(res, 'User ID is required', [{
@@ -32,7 +32,7 @@ export const generateCompletion = async (req: Request
     }
 
     // Fetch user settings from the database
-    const settings = await UserSettings.findOne({ user: userId });
+    const [settings] = await db.select().from(userSettings).where(eq(userSettings.userId, userId)).limit(1);
     if (!settings || !settings.openaiApiKey) {
       return sendError(res, 'Missing OpenAI API key', 410);
     }

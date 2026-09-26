@@ -3,7 +3,8 @@ import { authenticate, authorizeRoles } from '../../middlewares/authenticate';
 import { paginationMiddleware } from '../../middlewares/pagination';
 import { filterSortMiddleware } from '../../middlewares/filterSort';
 import { simpleViewTracking } from '../../middlewares/viewTracking';
-import Tour from '../tours/tourModel';
+import { db, reviews } from '@tourbnt/db';
+import { eq, sql } from 'drizzle-orm';
 import {
     getAllApprovedReviews,
     getPendingReviews,
@@ -135,10 +136,7 @@ router.get('/pending', authenticate, authorizeRoles('admin', 'seller'), getPendi
 router.get('/:reviewId',
     simpleViewTracking('review', 'reviewId', async (reviewId) => {
         // Auto-increment view count for the review
-        await Tour.updateOne(
-            { "reviews._id": reviewId },
-            { $inc: { "reviews.$.views": 1 } }
-        );
+        await db.update(reviews).set({ views: sql`${reviews.views} + 1` }).where(eq(reviews.id, reviewId));
     }),
     getReviewById
 );

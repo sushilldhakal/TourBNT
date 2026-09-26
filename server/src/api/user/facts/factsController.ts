@@ -1,7 +1,6 @@
 import { Response, Request, NextFunction } from 'express';
-import { db, facts } from '@tourbnt/db';
-import { eq, desc, inArray, count } from 'drizzle-orm';
-import TourModel from '../../tours/tourModel';
+import { db, facts, tours } from '@tourbnt/db';
+import { eq, desc, inArray, count, sql } from 'drizzle-orm';
 import {
   sendSuccess,
   sendPaginatedResponse,
@@ -136,23 +135,22 @@ export const updateFacts = async (req: Request, res: Response, next: NextFunctio
       .where(eq(facts.id, factId))
       .returning();
 
-    // Cascade update to all tours that use this fact (still Mongoose-backed).
-    const updateResult = await TourModel.updateMany(
-      { 'facts.factId': factId },
-      {
-        $set: {
-          'facts.$[elem].title': updatedFact.name,
-          'facts.$[elem].icon': updatedFact.icon,
-          'facts.$[elem].field_type': updatedFact.fieldType,
-          updatedAt: new Date(),
-        },
-      },
-      { arrayFilters: [{ 'elem.factId': factId }] }
-    );
+    // Cascade update to all tours that embed a snapshot of this fact.
+    const affectedTours = await db
+      .select({ id: tours.id, facts: tours.facts })
+      .from(tours)
+      .where(sql`EXISTS (SELECT 1 FROM jsonb_array_elements(${tours.facts}) elem WHERE elem->>'factId' = ${factId})`);
+
+    for (const tour of affectedTours) {
+      const updatedTourFacts = (tour.facts as any[]).map((f) =>
+        f.factId === factId ? { ...f, title: updatedFact.name, icon: updatedFact.icon, field_type: updatedFact.fieldType } : f
+      );
+      await db.update(tours).set({ facts: updatedTourFacts, updatedAt: new Date() }).where(eq(tours.id, tour.id));
+    }
 
     sendSuccess(res, {
       facts: updatedFact,
-      toursUpdated: updateResult.modifiedCount,
+      toursUpdated: affectedTours.length,
     }, 'Fact updated successfully');
   } catch (error) {
     console.error('Error updating fact:', error);

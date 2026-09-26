@@ -1,450 +1,299 @@
-import mongoose from 'mongoose';
-import TourModel from '../tourModel';
-import { Tour, PricingOption, DateRange } from '../tourTypes';
-import { PaginationParams, paginate } from '../../../utils/pagination';
-import { normalizeDoc } from '../../../utils/normalizeDoc';
+import { db, tours, tourCategories, tourAuthors, globalCategories, users, facts as factsTable } from '@tourbnt/db';
+import { eq, and, or, ilike, gte, lte, gt, desc, asc, sql, inArray, count, type SQL } from 'drizzle-orm';
 import createHttpError from 'http-errors';
-import { BaseService } from '../../../services/BaseService';
-import FactsModel from '../../user/facts/factsModel';
+import { Tour } from '../tourTypes';
 
-/**
- * Tour Service Layer
- * Contains all business logic for tour operations
- * Extends BaseService for common CRUD operations
- */
-export class TourService extends BaseService<Tour> {
+type TourRow = typeof tours.$inferSelect;
 
-  constructor() {
-    super(TourModel);
+/** Simple numeric pagination params — tours never use the "all"/hybrid mode. */
+interface TourPaginationParams {
+  page: number;
+  limit: number;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+}
+
+const AUTHOR_COLUMNS = { id: users.id, name: users.name, email: users.email, roles: users.role } as const;
+const CATEGORY_COLUMNS = { id: globalCategories.id, name: globalCategories.name, description: globalCategories.description } as const;
+
+/** Batches author/category lookups for a set of tours and merges them in. */
+async function attachRelations(rows: TourRow[]): Promise<any[]> {
+  if (rows.length === 0) return [];
+  const tourIds = rows.map((t) => t.id);
+
+  const [authorRows, categoryRows] = await Promise.all([
+    db.select({ tourId: tourAuthors.tourId, author: AUTHOR_COLUMNS }).from(tourAuthors).innerJoin(users, eq(tourAuthors.userId, users.id)).where(inArray(tourAuthors.tourId, tourIds)),
+    db.select({ tourId: tourCategories.tourId, category: CATEGORY_COLUMNS }).from(tourCategories).innerJoin(globalCategories, eq(tourCategories.categoryId, globalCategories.id)).where(inArray(tourCategories.tourId, tourIds)),
+  ]);
+
+  const authorsByTour = new Map<string, unknown[]>();
+  for (const { tourId, author } of authorRows) {
+    const list = authorsByTour.get(tourId) || [];
+    list.push(author);
+    authorsByTour.set(tourId, list);
   }
 
-  /**
-   * Build search query for tours
-   */
-  protected buildSearchQuery(searchParams: any) {
-    const query: any = { tourStatus: 'Published' };
-
-    // Keyword search across multiple fields
-    if (searchParams.keyword) {
-      query.$or = [
-        { title: { $regex: searchParams.keyword, $options: 'i' } },
-        { description: { $regex: searchParams.keyword, $options: 'i' } },
-        { outline: { $regex: searchParams.keyword, $options: 'i' } }
-      ];
-    }
-
-    // Filter by destination
-    if (searchParams.destination) {
-      query.destination = searchParams.destination;
-    }
-
-    // Price range filtering
-    if (searchParams.minPrice || searchParams.maxPrice) {
-      query.price = {};
-      if (searchParams.minPrice) query.price.$gte = searchParams.minPrice;
-      if (searchParams.maxPrice) query.price.$lte = searchParams.maxPrice;
-    }
-
-    // Rating filter
-    if (searchParams.rating) {
-      query.averageRating = { $gte: searchParams.rating };
-    }
-
-    // Category filter
-    if (searchParams.category) {
-      query['category.categoryName'] = { $regex: searchParams.category, $options: 'i' };
-    }
-
-    return query;
+  const categoriesByTour = new Map<string, unknown[]>();
+  for (const { tourId, category } of categoryRows) {
+    const list = categoriesByTour.get(tourId) || [];
+    list.push(category);
+    categoriesByTour.set(tourId, list);
   }
 
-  /**
-   * Get all tours with filtering and pagination
-   */
-  static async getAllTours(filters: any = {}, paginationParams: PaginationParams, sortOptions?: any, includeUnpublished: boolean = false) {
-    const now = new Date();
-    const baseQuery: any = {
-      // Filter out tours that are price locked (past their price lock date)
-      $or: [
-        { priceLockDate: { $exists: false } }, // Tours without price lock
-        { priceLockDate: null }, // Tours with null price lock
-        { priceLockDate: { $gt: now } } // Tours with future price lock date
-      ],
-      ...filters
-    };
+  return rows.map((tour) => ({
+    ...tour,
+    author: authorsByTour.get(tour.id) || [],
+    category: categoriesByTour.get(tour.id) || [],
+  }));
+}
 
-    // Only filter by tourStatus if we want published tours only (for public/seller views)
-    // Admins can see all tours regardless of status
-    if (!includeUnpublished) {
-      baseQuery.tourStatus = 'Published';
+async function syncTourCategories(tourId: string, categoryIds: string[] | undefined) {
+  if (categoryIds === undefined) return;
+  await db.delete(tourCategories).where(eq(tourCategories.tourId, tourId));
+  if (categoryIds.length > 0) {
+    await db.insert(tourCategories).values(categoryIds.map((categoryId) => ({ tourId, categoryId })));
+  }
+}
+
+async function syncTourAuthors(tourId: string, authorIds: string[] | undefined) {
+  if (authorIds === undefined) return;
+  await db.delete(tourAuthors).where(eq(tourAuthors.tourId, tourId));
+  if (authorIds.length > 0) {
+    await db.insert(tourAuthors).values(authorIds.map((userId) => ({ tourId, userId })));
+  }
+}
+
+/** Splits raw tour input into columns that live on `tours` vs. the join tables. */
+function splitTourData(tourData: Partial<Tour> & Record<string, unknown>) {
+  const { category, author, ...rest } = tourData as Record<string, unknown>;
+
+  const categoryIds = category === undefined ? undefined : (Array.isArray(category) ? category.map(String) : [String(category)]);
+  const authorIds = author === undefined ? undefined : (Array.isArray(author) ? author.map(String) : [String(author)]);
+
+  // Only keep known scalar/jsonb columns — extractTourFields may include
+  // fields (like `dates`, `pricing`) that were only used to derive other
+  // columns and don't map onto the tours table directly.
+  const columnData: Partial<typeof tours.$inferInsert> = {};
+  const allowedKeys = new Set([
+    'title', 'code', 'excerpt', 'description', 'coverImage', 'file', 'tourStatus', 'outline',
+    'destination', 'destinationId', 'itinerary', 'include', 'exclude', 'facts', 'faqs', 'gallery',
+    'location', 'fixedDepartures', 'discount', 'pricingOptions', 'pricingGroups', 'tourDates',
+    'enquiry', 'isSpecialOffer', 'views', 'bookingCount', 'price', 'pricePerPerson', 'minSize',
+    'maxSize', 'groupSize', 'saleEnabled', 'salePrice', 'priceLockDate', 'pricingOptionsEnabled',
+    'fixedDeparture', 'multipleDates', 'averageRating', 'approvedReviewCount', 'reviewCount',
+  ]);
+
+  for (const [key, value] of Object.entries(rest)) {
+    if (!allowedKeys.has(key) || value === undefined) continue;
+    if (key === 'destination') {
+      (columnData as any).destinationId = value || null;
+    } else {
+      (columnData as any)[key] = value;
     }
-
-    // Merge sort options into pagination params
-    const paginationWithSort = { ...paginationParams };
-    if (sortOptions && Object.keys(sortOptions).length > 0) {
-      const sortField = Object.keys(sortOptions)[0];
-      paginationWithSort.sortBy = sortField;
-      paginationWithSort.sortOrder = sortOptions[sortField] === -1 ? 'desc' : 'asc';
-    }
-
-    // Use the paginate utility directly with the model and query
-    const result = await paginate(TourModel, baseQuery, paginationWithSort);
-
-    // Populate the results manually
-    if (result.items && result.items.length > 0) {
-      try {
-        const populatedItems = await TourModel.populate(result.items, [
-          { path: 'author', select: 'name email roles' },
-          {
-            path: 'category',
-            select: 'name description',
-            options: { strictPopulate: false }
-          }
-        ]);
-        result.items = populatedItems;
-      } catch (error) {
-        console.error('Error populating categories in getAllTours:', error);
-        // Continue without category population if it fails
-      }
-    }
-
-    // Normalize the result
-    return normalizeDoc(result);
   }
 
-  /**
-   * Get a single tour by ID with all populated fields
-   */
+  return { columnData, categoryIds, authorIds };
+}
+
+export class TourService {
+  /** Tours that aren't currently price-locked (no lock date, or lock date in the future). */
+  private static notPriceLocked(): SQL {
+    return sql`(${tours.priceLockDate} IS NULL OR ${tours.priceLockDate} > now())`;
+  }
+
+  static async getAllTours(filters: { destination?: string; category?: string; status?: string } = {}, paginationParams: TourPaginationParams, sortOptions?: { field: string; order: 'asc' | 'desc' }, includeUnpublished: boolean = false) {
+    const conditions: SQL[] = [this.notPriceLocked()];
+    if (filters.destination) conditions.push(eq(tours.destinationId, filters.destination));
+    if (filters.status) conditions.push(eq(tours.tourStatus, filters.status as 'Draft' | 'Published' | 'Archived'));
+    if (!includeUnpublished) conditions.push(eq(tours.tourStatus, 'Published'));
+
+    let where: SQL | undefined = and(...conditions);
+    if (filters.category) {
+      const matchingTourIds = db.select({ tourId: tourCategories.tourId }).from(tourCategories).innerJoin(globalCategories, eq(tourCategories.categoryId, globalCategories.id)).where(ilike(globalCategories.name, `%${filters.category}%`));
+      where = and(where, inArray(tours.id, matchingTourIds))!;
+    }
+
+    const sortField = sortOptions?.field && (tours as any)[sortOptions.field] ? sortOptions.field : 'createdAt';
+    const sortOrderFn = sortOptions?.order === 'asc' ? asc : desc;
+    const orderColumn = (tours as any)[sortField];
+
+    const page = paginationParams.page || 1;
+    const limit = paginationParams.limit || 10;
+    const skip = (page - 1) * limit;
+
+    const [rows, [{ value: totalItems }]] = await Promise.all([
+      db.select().from(tours).where(where).orderBy(sortOrderFn(orderColumn)).limit(limit).offset(skip),
+      db.select({ value: count() }).from(tours).where(where),
+    ]);
+
+    const items = await attachRelations(rows);
+    return { items, page, limit, totalItems, totalPages: Math.ceil(totalItems / limit) };
+  }
+
   static async getTourById(tourId: string) {
-    if (!mongoose.Types.ObjectId.isValid(tourId)) {
-      throw createHttpError(400, 'Invalid Tour ID');
-    }
-
-    const tour = await TourModel
-      .findById(tourId)
-      .populate('author', 'name email roles')
-      .populate('reviews.user', 'name email roles')
-      .populate({
-        path: 'category',
-        select: 'name description',
-        options: { strictPopulate: false }
-      })
-      .lean();
-
+    const [tour] = await db.select().from(tours).where(eq(tours.id, tourId)).limit(1);
     if (!tour) {
       throw createHttpError(404, 'Tour not found');
     }
 
-    // Enrich facts with current data from the master Facts collection
-    if (tour.facts && Array.isArray(tour.facts) && tour.facts.length > 0) {
-      const enrichedFacts = await Promise.all(
-        tour.facts.map(async (tourFact: any) => {
-          // If the fact has a factId, look up the current fact data
-          if (tourFact.factId) {
-            try {
-              const masterFact = await FactsModel.findById(tourFact.factId).lean();
-              if (masterFact) {
-                // Merge master fact data with tour fact data
-                // Keep the tour's value, but update name, icon, and field_type from master
-                return {
-                  ...tourFact,
-                  title: masterFact.name, // Update title with current name
-                  name: masterFact.name,  // Also set name for consistency
-                  icon: masterFact.icon,
-                  field_type: masterFact.field_type,
-                  _id: masterFact._id
-                };
-              }
-            } catch (error) {
-              console.error(`Error fetching master fact ${tourFact.factId}:`, error);
-            }
-          }
-          // If no factId or lookup failed, return the tour fact as-is
-          return tourFact;
-        })
-      );
-      tour.facts = enrichedFacts;
+    const [enriched] = await attachRelations([tour]);
+
+    // Enrich facts with current data from the master facts table.
+    const factsArr = Array.isArray(enriched.facts) ? enriched.facts : [];
+    if (factsArr.length > 0) {
+      const factIds = factsArr.map((f: any) => f.factId).filter(Boolean);
+      const masterFacts = factIds.length
+        ? await db.select().from(factsTable).where(inArray(factsTable.id, factIds))
+        : [];
+      const masterById = new Map(masterFacts.map((f) => [f.id, f]));
+
+      enriched.facts = factsArr.map((fact: any) => {
+        const master = fact.factId ? masterById.get(fact.factId) : undefined;
+        if (!master) return fact;
+        return { ...fact, title: master.name, name: master.name, icon: master.icon, field_type: master.fieldType };
+      });
     }
 
-    // Normalize the result
-    return normalizeDoc(tour);
+    return enriched;
   }
 
-  /**
-   * Create a new tour
-   */
-  static async createTour(tourData: Partial<Tour>, authorId: string) {
-    try {
-      console.log('Creating tour with data:', {
-        ...tourData,
-        author: authorId
-      });
+  static async createTour(tourData: Partial<Tour> & Record<string, unknown>, authorId: string) {
+    const { columnData, categoryIds } = splitTourData(tourData);
 
-      const newTour = new TourModel({
-        ...tourData,
-        author: authorId,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      });
+    const [newTour] = await db
+      .insert(tours)
+      .values({ ...columnData, title: columnData.title!, code: columnData.code!, description: columnData.description! } as typeof tours.$inferInsert)
+      .returning();
 
-      const savedTour = await newTour.save();
+    await syncTourCategories(newTour.id, categoryIds);
+    await syncTourAuthors(newTour.id, [authorId]);
 
-      // Normalize the result
-      return normalizeDoc(savedTour);
-    } catch (error: any) {
-      console.error('Error creating tour:', error);
-      if (error instanceof Error) {
-        console.error('Error message:', error.message);
-      }
-      if (error.name === 'ValidationError') {
-        console.error('Validation errors:', error.errors);
-      }
-      throw error;
-    }
+    const [enriched] = await attachRelations([newTour]);
+    return enriched;
   }
 
-  /**
-   * Update an existing tour
-   */
-  static async updateTour(tourId: string, updateData: Partial<Tour>, authorId?: string) {
-    if (!mongoose.Types.ObjectId.isValid(tourId)) {
-      throw createHttpError(400, 'Invalid Tour ID');
-    }
+  static async updateTour(tourId: string, updateData: Partial<Tour> & Record<string, unknown>, authorId?: string) {
+    const where = authorId
+      ? and(eq(tours.id, tourId), inArray(tours.id, db.select({ tourId: tourAuthors.tourId }).from(tourAuthors).where(eq(tourAuthors.userId, authorId))))
+      : eq(tours.id, tourId);
 
-    // Build query - only allow authors to update their tours (unless admin)
-    const query: any = { _id: tourId };
-    if (authorId) {
-      query.author = authorId;
-    }
-
-    const updatedTour = await TourModel.findOneAndUpdate(
-      query,
-      { ...updateData, updatedAt: new Date() },
-      { new: true, runValidators: true }
-    ).populate('author', 'name email roles');
-
-    if (!updatedTour) {
+    const [existing] = await db.select({ id: tours.id }).from(tours).where(where).limit(1);
+    if (!existing) {
       throw createHttpError(404, 'Tour not found or unauthorized');
     }
 
-    // Normalize the result
-    return normalizeDoc(updatedTour);
+    const { columnData, categoryIds } = splitTourData(updateData);
+    columnData.updatedAt = new Date();
+
+    const [updatedTour] = await db.update(tours).set(columnData).where(eq(tours.id, tourId)).returning();
+    await syncTourCategories(tourId, categoryIds);
+
+    const [enriched] = await attachRelations([updatedTour]);
+    return enriched;
   }
 
-  /**
-   * Delete a tour
-   */
   static async deleteTour(tourId: string, authorId?: string) {
-    if (!mongoose.Types.ObjectId.isValid(tourId)) {
-      throw createHttpError(400, 'Invalid Tour ID');
-    }
+    const where = authorId
+      ? and(eq(tours.id, tourId), inArray(tours.id, db.select({ tourId: tourAuthors.tourId }).from(tourAuthors).where(eq(tourAuthors.userId, authorId))))
+      : eq(tours.id, tourId);
 
-    const query: any = { _id: tourId };
-    if (authorId) {
-      query.author = authorId;
-    }
-
-    const deletedTour = await TourModel.findOneAndDelete(query);
-
-    if (!deletedTour) {
+    const [deleted] = await db.delete(tours).where(where).returning();
+    if (!deleted) {
       throw createHttpError(404, 'Tour not found or unauthorized');
     }
-
-    // Normalize the result
-    return normalizeDoc(deletedTour);
+    return deleted;
   }
 
-  /**
-   * Search tours with multiple criteria
-   */
-  static async searchTours(searchParams: {
-    keyword?: string;
-    destination?: string;
-    minPrice?: number;
-    maxPrice?: number;
-    rating?: number;
-    category?: string;
-  }, paginationParams: PaginationParams) {
-    const query: any = { tourStatus: 'Published' };
+  static async searchTours(searchParams: { keyword?: string; destination?: string; minPrice?: number; maxPrice?: number; rating?: number; category?: string }, paginationParams: TourPaginationParams) {
+    const conditions: SQL[] = [eq(tours.tourStatus, 'Published')];
 
-    // Keyword search across multiple fields
     if (searchParams.keyword) {
-      query.$or = [
-        { title: { $regex: searchParams.keyword, $options: 'i' } },
-        { description: { $regex: searchParams.keyword, $options: 'i' } },
-        { outline: { $regex: searchParams.keyword, $options: 'i' } }
-      ];
+      conditions.push(or(ilike(tours.title, `%${searchParams.keyword}%`), ilike(tours.description, `%${searchParams.keyword}%`), ilike(tours.outline, `%${searchParams.keyword}%`))!);
     }
+    if (searchParams.destination) conditions.push(eq(tours.destinationId, searchParams.destination));
+    if (searchParams.minPrice !== undefined) conditions.push(gte(tours.price, searchParams.minPrice));
+    if (searchParams.maxPrice !== undefined) conditions.push(lte(tours.price, searchParams.maxPrice));
+    if (searchParams.rating !== undefined) conditions.push(gte(tours.averageRating, searchParams.rating));
 
-    // Filter by destination
-    if (searchParams.destination) {
-      query.destination = searchParams.destination;
-    }
-
-    // Price range filtering
-    if (searchParams.minPrice || searchParams.maxPrice) {
-      query.price = {};
-      if (searchParams.minPrice) query.price.$gte = searchParams.minPrice;
-      if (searchParams.maxPrice) query.price.$lte = searchParams.maxPrice;
-    }
-
-    // Rating filter
-    if (searchParams.rating) {
-      query.averageRating = { $gte: searchParams.rating };
-    }
-
-    // Category filter
+    let where: SQL = and(...conditions)!;
     if (searchParams.category) {
-      query['category.categoryName'] = { $regex: searchParams.category, $options: 'i' };
+      const matchingTourIds = db.select({ tourId: tourCategories.tourId }).from(tourCategories).where(eq(tourCategories.categoryId, searchParams.category));
+      where = and(where, inArray(tours.id, matchingTourIds))!;
     }
 
-    const tourQuery = TourModel.find(query)
-      .populate("author", "name roles")
-      .populate({
-        path: "category",
-        select: "name description",
-        options: { strictPopulate: false }
-      })
-      .sort({ createdAt: -1 });
+    const page = paginationParams.page || 1;
+    const limit = paginationParams.limit || 10;
+    const skip = (page - 1) * limit;
 
-    return paginate(tourQuery, paginationParams);
+    const [rows, [{ value: totalItems }]] = await Promise.all([
+      db.select().from(tours).where(where).orderBy(desc(tours.createdAt)).limit(limit).offset(skip),
+      db.select({ value: count() }).from(tours).where(where),
+    ]);
+
+    const items = await attachRelations(rows);
+    return { items, page, limit, totalItems, totalPages: Math.ceil(totalItems / limit) };
   }
 
-  /**
-   * Get tours by specific criteria
-   */
   static async getToursBy(criteria: 'latest' | 'rating' | 'discounted' | 'special-offers', limit: number = 10) {
-    let query: any = { tourStatus: 'Published' };
-    let sort: any = {};
+    const conditions: SQL[] = [eq(tours.tourStatus, 'Published')];
+    let orderBy = desc(tours.createdAt);
 
     switch (criteria) {
       case 'latest':
-        sort = { createdAt: -1 };
         break;
       case 'rating':
-        query.reviewCount = { $gt: 0 };
-        sort = { averageRating: -1 };
+        conditions.push(gt(tours.reviewCount, 0));
+        orderBy = desc(tours.averageRating);
         break;
       case 'discounted':
-        query.$or = [
-          { discountEnabled: true },
-          { 'pricingOptions.discountEnabled': true }
-        ];
-        sort = { createdAt: -1 };
+        conditions.push(sql`(${tours.discount}->>'discountEnabled')::boolean IS TRUE`);
         break;
       case 'special-offers':
-        query.isSpecialOffer = true;
-        sort = { createdAt: -1 };
+        conditions.push(eq(tours.isSpecialOffer, true));
         break;
     }
 
-    const tours = await TourModel.find(query)
-      .sort(sort)
-      .limit(limit)
-      .populate("author", "name roles")
-      .lean();
-
-    // Populate category with error handling
-    try {
-      const populatedTours = await TourModel.populate(tours, {
-        path: 'category',
-        select: 'name description',
-        options: { strictPopulate: false }
-      });
-
-      // Normalize the result
-      return normalizeDoc(populatedTours);
-    } catch (error) {
-      console.error('Error populating categories in getToursBy:', error);
-      // Return tours without populated categories if populate fails
-      return normalizeDoc(tours);
-    }
+    const rows = await db.select().from(tours).where(and(...conditions)).orderBy(orderBy).limit(limit);
+    return attachRelations(rows);
   }
 
-  /**
-   * Get user's tours
-   */
-  static async getUserTours(userId: string, isAdmin: boolean = false, paginationParams: PaginationParams) {
-    const query = isAdmin ? {} : { author: userId };
+  static async getUserTours(userId: string, isAdmin: boolean, paginationParams: TourPaginationParams) {
+    const where = isAdmin ? undefined : inArray(tours.id, db.select({ tourId: tourAuthors.tourId }).from(tourAuthors).where(eq(tourAuthors.userId, userId)));
 
-    // Use the paginate utility directly with the model and query
-    const result = await paginate(TourModel, query, paginationParams);
+    const page = paginationParams.page || 1;
+    const limit = paginationParams.limit || 10;
+    const skip = (page - 1) * limit;
 
-    // Populate the results manually
-    if (result.items && result.items.length > 0) {
-      try {
-        const populatedItems = await TourModel.populate(result.items, [
-          { path: 'author', select: 'name email roles' },
-          {
-            path: 'category',
-            select: 'name description',
-            options: { strictPopulate: false }
-          }
-        ]);
-        result.items = populatedItems;
-      } catch (error) {
-        console.error('Error populating categories in getUserTours:', error);
-        // Continue without category population if it fails
-      }
-    }
+    const [rows, [{ value: totalItems }]] = await Promise.all([
+      db.select().from(tours).where(where).orderBy(desc(tours.createdAt)).limit(limit).offset(skip),
+      db.select({ value: count() }).from(tours).where(where),
+    ]);
 
-    // Normalize the result
-    return normalizeDoc(result);
+    const items = await attachRelations(rows);
+    return { items, page, limit, totalItems, totalPages: Math.ceil(totalItems / limit) };
   }
 
-  /**
-   * Get user's tour titles only (for dropdowns)
-   */
   static async getUserTourTitles(userId: string) {
-    const tours = await TourModel
-      .find({ author: userId })
-      .select('_id title code')
-      .sort({ createdAt: -1 })
-      .lean();
-
-    // Normalize the result
-    return normalizeDoc(tours);
+    return db
+      .select({ id: tours.id, title: tours.title, code: tours.code })
+      .from(tours)
+      .where(inArray(tours.id, db.select({ tourId: tourAuthors.tourId }).from(tourAuthors).where(eq(tourAuthors.userId, userId))))
+      .orderBy(desc(tours.createdAt));
   }
 
-  /**
-   * Increment tour views
-   */
   static async incrementTourViews(tourId: string) {
-    if (!mongoose.Types.ObjectId.isValid(tourId)) {
-      throw createHttpError(400, 'Invalid tour ID');
-    }
-
-    const result = await TourModel.findByIdAndUpdate(
-      tourId,
-      { $inc: { views: 1 } },
-      { new: true }
-    );
-
-    if (!result) {
+    const [updated] = await db.update(tours).set({ views: sql`${tours.views} + 1` }).where(eq(tours.id, tourId)).returning({ views: tours.views });
+    if (!updated) {
       throw createHttpError(404, 'Tour not found');
     }
-
-    return result.views;
+    return updated.views;
   }
 
-  /**
-   * Increment tour bookings
-   */
   static async incrementTourBookings(tourId: string) {
-    if (!mongoose.Types.ObjectId.isValid(tourId)) {
-      throw createHttpError(400, 'Invalid tour ID');
-    }
-
-    const result = await TourModel.findByIdAndUpdate(
-      tourId,
-      { $inc: { bookingCount: 1 } },
-      { new: true }
-    );
-
-    if (!result) {
+    const [updated] = await db.update(tours).set({ bookingCount: sql`${tours.bookingCount} + 1` }).where(eq(tours.id, tourId)).returning({ bookingCount: tours.bookingCount });
+    if (!updated) {
       throw createHttpError(404, 'Tour not found');
     }
-
-    return result.bookingCount;
+    return updated.bookingCount;
   }
 }

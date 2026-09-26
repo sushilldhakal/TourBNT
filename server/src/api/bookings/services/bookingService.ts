@@ -1,225 +1,220 @@
-import mongoose from 'mongoose';
-import BookingModel from '../bookingModel';
-import { Booking } from '../bookingTypes';
-import { PaginationParams, paginate } from '../../../utils/pagination';
-import { normalizeDoc } from '../../../utils/normalizeDoc';
+import { db, bookings, tours, users } from '@tourbnt/db';
+import { eq, and, gte, lt, inArray, desc, asc, count, sql } from 'drizzle-orm';
 import createHttpError from 'http-errors';
-import { BaseService } from '../../../services/BaseService';
-import Tour from '../../tours/tourModel';
 
-/**
- * Booking Service Layer
- * Contains all business logic for booking operations
- */
-export class BookingService extends BaseService<Booking> {
-    private static instance: BookingService;
+type BookingRow = typeof bookings.$inferSelect;
 
-    constructor() {
-        super(BookingModel);
+interface PaginationParams {
+    page: number;
+    limit: number;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
+}
+
+const TOUR_COLUMNS = { id: tours.id, title: tours.title, code: tours.code, coverImage: tours.coverImage, price: tours.price, location: tours.location } as const;
+const USER_COLUMNS = { id: users.id, name: users.name, email: users.email, phone: users.phone } as const;
+
+function generateBookingReference(): string {
+    const timestamp = Date.now().toString(36).toUpperCase();
+    const random = Math.random().toString(36).substring(2, 6).toUpperCase();
+    return `BK-${timestamp}-${random}`;
+}
+
+/** Batches tour/user lookups for a set of bookings and merges them in as `tour`/`user`. */
+async function attachRelations(rows: BookingRow[], opts: { tour?: boolean; user?: boolean } = { tour: true, user: true }): Promise<any[]> {
+    if (rows.length === 0) return [];
+
+    const tourIds = Array.from(new Set(rows.map((b) => b.tourId)));
+    const userIds = Array.from(new Set(rows.map((b) => b.userId).filter((id): id is string => !!id)));
+
+    const [tourRows, userRows] = await Promise.all([
+        opts.tour !== false && tourIds.length > 0 ? db.select(TOUR_COLUMNS).from(tours).where(inArray(tours.id, tourIds)) : Promise.resolve([]),
+        opts.user !== false && userIds.length > 0 ? db.select(USER_COLUMNS).from(users).where(inArray(users.id, userIds)) : Promise.resolve([]),
+    ]);
+
+    const tourById = new Map(tourRows.map((t) => [t.id, t]));
+    const userById = new Map(userRows.map((u) => [u.id, u]));
+
+    return rows.map((b) => ({
+        ...b,
+        tour: tourById.get(b.tourId) ?? null,
+        user: b.userId ? userById.get(b.userId) ?? null : null,
+    }));
+}
+
+function sortColumn(sortBy?: string) {
+    switch (sortBy) {
+        case 'departureDate':
+            return bookings.departureDate;
+        case 'totalAmount':
+            return sql`(${bookings.pricing}->>'totalPrice')::numeric`;
+        default:
+            return bookings.createdAt;
     }
+}
 
-    /**
-     * Get singleton instance
-     */
-    static getInstance(): BookingService {
-        if (!BookingService.instance) {
-            BookingService.instance = new BookingService();
+export class BookingService {
+    static async checkAvailability(tourId: string, departureDate: Date): Promise<{ available: boolean; remainingCapacity: number }> {
+        const [tour] = await db.select({ maxSize: tours.maxSize }).from(tours).where(eq(tours.id, tourId)).limit(1);
+        if (!tour) {
+            throw createHttpError(404, 'Tour not found');
         }
-        return BookingService.instance;
-    }
 
-    /**
-     * Check tour availability for a specific date
-     */
-    async checkAvailability(tourId: string, departureDate: Date): Promise<{ available: boolean; remainingCapacity: number }> {
-        try {
-            // Get tour details
-            const tour = await Tour.findById(tourId);
-            if (!tour) {
-                throw createHttpError(404, 'Tour not found');
-            }
+        const dayStart = new Date(departureDate);
+        dayStart.setHours(0, 0, 0, 0);
+        const dayEnd = new Date(departureDate);
+        dayEnd.setHours(23, 59, 59, 999);
 
-            // Get existing bookings for this tour and date
-            const existingBookings = await BookingModel.find({
-                tour: tourId,
-                departureDate: {
-                    $gte: new Date(departureDate.setHours(0, 0, 0, 0)),
-                    $lt: new Date(departureDate.setHours(23, 59, 59, 999))
-                },
-                status: { $in: ['pending', 'confirmed'] }
-            });
-
-            // Calculate total booked participants
-            const totalBooked = existingBookings.reduce((sum, booking) => {
-                return sum + (booking.participants?.adults || 0) + (booking.participants?.children || 0);
-            }, 0);
-
-            // Check against tour capacity
-            const maxCapacity = tour.maxSize || 10;
-            const remainingCapacity = maxCapacity - totalBooked;
-
-            return {
-                available: remainingCapacity > 0,
-                remainingCapacity: Math.max(0, remainingCapacity)
-            };
-        } catch (error: any) {
-            console.error('Error checking availability:', error);
-            throw error;
-        }
-    }
-
-    /**
-     * Create a new booking with availability check
-     */
-    async createBooking(bookingData: Partial<Booking>): Promise<Booking> {
-        try {
-            // Validate required fields
-            if (!bookingData.tour || !bookingData.departureDate) {
-                throw createHttpError(400, 'Tour and departure date are required');
-            }
-
-            // Check availability
-            const totalParticipants = (bookingData.participants?.adults || 0) + (bookingData.participants?.children || 0);
-            const availability = await this.checkAvailability(
-                bookingData.tour.toString(),
-                new Date(bookingData.departureDate)
+        const existingBookings = await db
+            .select({ participants: bookings.participants })
+            .from(bookings)
+            .where(
+                and(
+                    eq(bookings.tourId, tourId),
+                    gte(bookings.departureDate, dayStart),
+                    lt(bookings.departureDate, dayEnd),
+                    inArray(bookings.status, ['pending', 'confirmed'])
+                )
             );
 
-            if (!availability.available || availability.remainingCapacity < totalParticipants) {
-                throw createHttpError(400, `Insufficient capacity. Only ${availability.remainingCapacity} spots remaining.`);
-            }
+        const totalBooked = existingBookings.reduce((sum, b) => sum + (b.participants?.adults || 0) + (b.participants?.children || 0), 0);
 
-            // Generate booking reference if not provided
-            if (!bookingData.bookingReference) {
-                const timestamp = Date.now().toString(36).toUpperCase();
-                const random = Math.random().toString(36).substring(2, 6).toUpperCase();
-                bookingData.bookingReference = `BK-${timestamp}-${random}`;
-            }
+        const maxCapacity = tour.maxSize || 10;
+        const remainingCapacity = maxCapacity - totalBooked;
 
-            // Create booking
-            const booking = await this.create(bookingData);
-
-            return booking;
-        } catch (error: any) {
-            console.error('Error creating booking:', error);
-            throw error;
-        }
+        return {
+            available: remainingCapacity > 0,
+            remainingCapacity: Math.max(0, remainingCapacity),
+        };
     }
 
-    /**
-     * Get all bookings with filtering and pagination
-     */
-    async getAllBookings(filters: any = {}, paginationParams: PaginationParams) {
-        const result = await paginate(BookingModel, filters, paginationParams);
-
-        // Populate tour and user information
-        if (result.items && result.items.length > 0) {
-            const populatedItems = await BookingModel.populate(result.items, [
-                { path: 'tour', select: 'title code coverImage price' },
-                { path: 'user', select: 'name email' }
-            ]);
-            result.items = populatedItems;
+    static async createBooking(bookingData: any): Promise<BookingRow> {
+        if (!bookingData.tour || !bookingData.departureDate) {
+            throw createHttpError(400, 'Tour and departure date are required');
         }
 
-        // Normalize the result
-        return normalizeDoc(result);
+        const departureDate = new Date(bookingData.departureDate);
+        const totalParticipants = (bookingData.participants?.adults || 0) + (bookingData.participants?.children || 0);
+        const availability = await BookingService.checkAvailability(bookingData.tour, departureDate);
+
+        if (!availability.available || availability.remainingCapacity < totalParticipants) {
+            throw createHttpError(400, `Insufficient capacity. Only ${availability.remainingCapacity} spots remaining.`);
+        }
+
+        const [booking] = await db
+            .insert(bookings)
+            .values({
+                tourId: bookingData.tour,
+                tourTitle: bookingData.tourTitle,
+                tourCode: bookingData.tourCode,
+                userId: bookingData.user ?? null,
+                isGuestBooking: !!bookingData.isGuestBooking,
+                guestInfo: bookingData.guestInfo ?? null,
+                departureDate,
+                participants: bookingData.participants,
+                travelers: bookingData.travelers ?? [],
+                pricingOptionId: bookingData.pricingOptionId ?? null,
+                pricing: bookingData.pricing,
+                contactName: bookingData.contactName,
+                contactEmail: bookingData.contactEmail,
+                contactPhone: bookingData.contactPhone,
+                specialRequests: bookingData.specialRequests ?? null,
+                bookingReference: bookingData.bookingReference || generateBookingReference(),
+            })
+            .returning();
+
+        return booking;
     }
 
-    /**
-     * Get booking by ID
-     */
-    async getBookingById(bookingId: string) {
-        if (!mongoose.Types.ObjectId.isValid(bookingId)) {
-            throw createHttpError(400, 'Invalid booking ID');
-        }
+    static async getAllBookings(filters: { status?: string; paymentStatus?: string; tourId?: string } = {}, paginationParams: PaginationParams) {
+        const conditions = [];
+        if (filters.status) conditions.push(eq(bookings.status, filters.status as any));
+        if (filters.paymentStatus) conditions.push(eq(bookings.paymentStatus, filters.paymentStatus as any));
+        if (filters.tourId) conditions.push(eq(bookings.tourId, filters.tourId));
+        const where = conditions.length > 0 ? and(...conditions) : undefined;
 
-        const booking = await BookingModel
-            .findById(bookingId)
-            .populate('tour', 'title code coverImage price location')
-            .populate('user', 'name email phone')
-            .lean();
+        const { page, limit, sortBy, sortOrder } = paginationParams;
+        const orderFn = sortOrder === 'asc' ? asc : desc;
 
+        const [rows, [{ value: totalItems }]] = await Promise.all([
+            db.select().from(bookings).where(where).orderBy(orderFn(sortColumn(sortBy) as any)).limit(limit).offset((page - 1) * limit),
+            db.select({ value: count() }).from(bookings).where(where),
+        ]);
+
+        const items = await attachRelations(rows, { tour: true, user: true });
+
+        return {
+            items,
+            page,
+            limit,
+            totalItems,
+            totalPages: Math.ceil(totalItems / limit),
+        };
+    }
+
+    static async getBookingById(bookingId: string) {
+        const [booking] = await db.select().from(bookings).where(eq(bookings.id, bookingId)).limit(1);
         if (!booking) {
             throw createHttpError(404, 'Booking not found');
         }
-
-        // Normalize the result
-        return normalizeDoc(booking);
+        const [withRelations] = await attachRelations([booking]);
+        return withRelations;
     }
 
-    /**
-     * Get booking by reference
-     */
-    async getBookingByReference(reference: string) {
-        const booking = await BookingModel
-            .findOne({ bookingReference: reference })
-            .populate('tour', 'title code coverImage price location')
-            .populate('user', 'name email phone')
-            .lean();
-
+    static async getBookingByReference(reference: string) {
+        const [booking] = await db.select().from(bookings).where(eq(bookings.bookingReference, reference)).limit(1);
         if (!booking) {
             throw createHttpError(404, 'Booking not found');
         }
-
-        // Normalize the result
-        return normalizeDoc(booking);
+        const [withRelations] = await attachRelations([booking]);
+        return withRelations;
     }
 
-    /**
-     * Get user bookings with status filtering
-     */
-    async getUserBookings(userId: string, paginationParams: PaginationParams, status?: string) {
-        const query: any = { user: userId };
+    static async getUserBookings(userId: string, paginationParams: PaginationParams, status?: string) {
+        const conditions = [eq(bookings.userId, userId)];
+        if (status) conditions.push(eq(bookings.status, status as any));
+        const where = and(...conditions);
 
-        // Apply status filter if provided
-        if (status) {
-            query.status = status;
-        }
+        const { page, limit } = paginationParams;
 
-        const result = await paginate(BookingModel, query, paginationParams);
+        const [rows, [{ value: totalItems }]] = await Promise.all([
+            db.select().from(bookings).where(where).orderBy(desc(bookings.createdAt)).limit(limit).offset((page - 1) * limit),
+            db.select({ value: count() }).from(bookings).where(where),
+        ]);
 
-        // Populate tour information
-        if (result.items && result.items.length > 0) {
-            const populatedItems = await BookingModel.populate(result.items, {
-                path: 'tour',
-                select: 'title code coverImage price location'
-            });
-            result.items = populatedItems;
-        }
+        const items = await attachRelations(rows, { tour: true, user: false });
 
-        // Normalize the result
-        return normalizeDoc(result);
+        return {
+            items,
+            page,
+            limit,
+            totalItems,
+            totalPages: Math.ceil(totalItems / limit),
+        };
     }
 
-    /**
-     * Get tour bookings
-     */
-    async getTourBookings(tourId: string, paginationParams: PaginationParams) {
-        const query = { tour: tourId };
-        const result = await paginate(BookingModel, query, paginationParams);
+    static async getTourBookings(tourId: string, paginationParams: PaginationParams) {
+        const where = eq(bookings.tourId, tourId);
+        const { page, limit } = paginationParams;
 
-        // Populate user information
-        if (result.items && result.items.length > 0) {
-            const populatedItems = await BookingModel.populate(result.items, {
-                path: 'user',
-                select: 'name email phone'
-            });
-            result.items = populatedItems;
-        }
+        const [rows, [{ value: totalItems }]] = await Promise.all([
+            db.select().from(bookings).where(where).orderBy(desc(bookings.createdAt)).limit(limit).offset((page - 1) * limit),
+            db.select({ value: count() }).from(bookings).where(where),
+        ]);
 
-        // Normalize the result
-        return normalizeDoc(result);
+        const items = await attachRelations(rows, { tour: false, user: true });
+
+        return {
+            items,
+            page,
+            limit,
+            totalItems,
+            totalPages: Math.ceil(totalItems / limit),
+        };
     }
 
-    /**
-     * Update booking status
-     */
-    async updateBookingStatus(bookingId: string, status: string, notes?: string) {
-        if (!mongoose.Types.ObjectId.isValid(bookingId)) {
-            throw createHttpError(400, 'Invalid booking ID');
-        }
-
-        const updateData: any = { status };
+    static async updateBookingStatus(bookingId: string, status: string, notes?: string) {
+        const updateData: Partial<BookingRow> = { status: status as any, updatedAt: new Date() };
 
         if (status === 'confirmed') {
             updateData.confirmedAt = new Date();
@@ -234,34 +229,17 @@ export class BookingService extends BaseService<Booking> {
             updateData.notes = notes;
         }
 
-        const booking = await BookingModel.findByIdAndUpdate(
-            bookingId,
-            updateData,
-            { new: true, runValidators: true }
-        ).populate('tour', 'title code');
-
+        const [booking] = await db.update(bookings).set(updateData).where(eq(bookings.id, bookingId)).returning();
         if (!booking) {
             throw createHttpError(404, 'Booking not found');
         }
 
-        // Normalize the result
-        return normalizeDoc(booking);
+        const [withRelations] = await attachRelations([booking], { tour: true, user: false });
+        return withRelations;
     }
 
-    /**
-     * Update payment status
-     */
-    async updatePaymentStatus(
-        bookingId: string,
-        paymentStatus: string,
-        paidAmount?: number,
-        transactionId?: string
-    ) {
-        if (!mongoose.Types.ObjectId.isValid(bookingId)) {
-            throw createHttpError(400, 'Invalid booking ID');
-        }
-
-        const updateData: any = { paymentStatus };
+    static async updatePaymentStatus(bookingId: string, paymentStatus: string, paidAmount?: number, transactionId?: string) {
+        const updateData: Partial<BookingRow> = { paymentStatus: paymentStatus as any, updatedAt: new Date() };
 
         if (paidAmount !== undefined) {
             updateData.paidAmount = paidAmount;
@@ -271,39 +249,24 @@ export class BookingService extends BaseService<Booking> {
             updateData.transactionId = transactionId;
         }
 
-        const booking = await BookingModel.findByIdAndUpdate(
-            bookingId,
-            updateData,
-            { new: true, runValidators: true }
-        );
-
+        const [booking] = await db.update(bookings).set(updateData).where(eq(bookings.id, bookingId)).returning();
         if (!booking) {
             throw createHttpError(404, 'Booking not found');
         }
 
-        // Normalize the result
-        return normalizeDoc(booking);
+        return booking;
     }
 
-    /**
-     * Cancel booking with 48-hour policy check
-     */
-    async cancelBooking(bookingId: string, reason?: string) {
-        if (!mongoose.Types.ObjectId.isValid(bookingId)) {
-            throw createHttpError(400, 'Invalid booking ID');
-        }
-
-        const booking = await BookingModel.findById(bookingId);
+    static async cancelBooking(bookingId: string, reason?: string) {
+        const [booking] = await db.select().from(bookings).where(eq(bookings.id, bookingId)).limit(1);
         if (!booking) {
             throw createHttpError(404, 'Booking not found');
         }
 
-        // Check if booking is already cancelled
         if (booking.status === 'cancelled') {
             throw createHttpError(400, 'Booking is already cancelled');
         }
 
-        // Check 48-hour cancellation policy
         const departureDate = new Date(booking.departureDate);
         const now = new Date();
         const hoursUntilDeparture = (departureDate.getTime() - now.getTime()) / (1000 * 60 * 60);
@@ -312,118 +275,50 @@ export class BookingService extends BaseService<Booking> {
             throw createHttpError(400, 'Cancellation not allowed within 48 hours of departure');
         }
 
-        return this.updateBookingStatus(bookingId, 'cancelled', reason);
+        return BookingService.updateBookingStatus(bookingId, 'cancelled', reason);
     }
 
-    /**
-     * Generate booking voucher (placeholder for PDF generation)
-     */
-    async generateVoucher(bookingId: string): Promise<any> {
-        if (!mongoose.Types.ObjectId.isValid(bookingId)) {
-            throw createHttpError(400, 'Invalid booking ID');
-        }
-
-        const booking = await BookingModel
-            .findById(bookingId)
-            .populate('tour', 'title code coverImage price location')
-            .populate('user', 'name email phone')
-            .lean();
-
+    static async generateVoucher(bookingId: string) {
+        const [booking] = await db.select().from(bookings).where(eq(bookings.id, bookingId)).limit(1);
         if (!booking) {
             throw createHttpError(404, 'Booking not found');
         }
 
-        // Return booking data for voucher generation
-        // In a real implementation, this would generate a PDF
-        const voucherData = {
-            bookingReference: booking.bookingReference,
-            tour: booking.tour,
-            customer: booking.user || booking.guestInfo,
-            departureDate: booking.departureDate,
-            participants: booking.participants,
-            travelers: booking.travelers,
-            pricing: booking.pricing,
-            status: booking.status,
+        const [withRelations] = await attachRelations([booking]);
+
+        return {
+            bookingReference: withRelations.bookingReference,
+            tour: withRelations.tour,
+            customer: withRelations.user || withRelations.guestInfo,
+            departureDate: withRelations.departureDate,
+            participants: withRelations.participants,
+            travelers: withRelations.travelers,
+            pricing: withRelations.pricing,
+            status: withRelations.status,
             contactInfo: {
-                name: booking.contactName,
-                email: booking.contactEmail,
-                phone: booking.contactPhone
-            }
+                name: withRelations.contactName,
+                email: withRelations.contactEmail,
+                phone: withRelations.contactPhone,
+            },
         };
-
-        // Normalize the result
-        return normalizeDoc(voucherData);
-    }
-
-    /**
-     * Get booking statistics
-     */
-    async getBookingStats() {
-        const stats = await BookingModel.aggregate([
-            {
-                $group: {
-                    _id: '$status',
-                    count: { $sum: 1 },
-                    totalRevenue: { $sum: '$pricing.totalPrice' },
-                    paidRevenue: { $sum: '$paidAmount' }
-                }
-            }
-        ]);
-
-        return stats;
-    }
-
-    // Static methods for backward compatibility
-    static async checkAvailability(tourId: string, departureDate: Date) {
-        return BookingService.getInstance().checkAvailability(tourId, departureDate);
-    }
-
-    static async createBooking(bookingData: Partial<Booking>) {
-        return BookingService.getInstance().createBooking(bookingData);
-    }
-
-    static async getAllBookings(filters: any, paginationParams: PaginationParams) {
-        return BookingService.getInstance().getAllBookings(filters, paginationParams);
-    }
-
-    static async getBookingById(bookingId: string) {
-        return BookingService.getInstance().getBookingById(bookingId);
-    }
-
-    static async getBookingByReference(reference: string) {
-        return BookingService.getInstance().getBookingByReference(reference);
-    }
-
-    static async getUserBookings(userId: string, paginationParams: PaginationParams, status?: string) {
-        return BookingService.getInstance().getUserBookings(userId, paginationParams, status);
-    }
-
-    static async getTourBookings(tourId: string, paginationParams: PaginationParams) {
-        return BookingService.getInstance().getTourBookings(tourId, paginationParams);
-    }
-
-    static async updateBookingStatus(bookingId: string, status: string, notes?: string) {
-        return BookingService.getInstance().updateBookingStatus(bookingId, status, notes);
-    }
-
-    static async updatePaymentStatus(
-        bookingId: string,
-        paymentStatus: string,
-        paidAmount?: number,
-        transactionId?: string
-    ) {
-        return BookingService.getInstance().updatePaymentStatus(bookingId, paymentStatus, paidAmount, transactionId);
-    }
-
-    static async cancelBooking(bookingId: string, reason?: string) {
-        return BookingService.getInstance().cancelBooking(bookingId, reason);
-    }
-
-    static async generateVoucher(bookingId: string) {
-        return BookingService.getInstance().generateVoucher(bookingId);
     }
 
     static async getBookingStats() {
-        return BookingService.getInstance().getBookingStats();
+        const rows = await db
+            .select({
+                status: bookings.status,
+                count: count(),
+                totalRevenue: sql<number>`COALESCE(SUM((${bookings.pricing}->>'totalPrice')::numeric), 0)`,
+                paidRevenue: sql<number>`COALESCE(SUM(${bookings.paidAmount}), 0)`,
+            })
+            .from(bookings)
+            .groupBy(bookings.status);
+
+        return rows.map((r) => ({
+            _id: r.status,
+            count: r.count,
+            totalRevenue: Number(r.totalRevenue),
+            paidRevenue: Number(r.paidRevenue),
+        }));
     }
 }

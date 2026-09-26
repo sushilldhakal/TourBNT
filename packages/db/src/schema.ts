@@ -208,6 +208,26 @@ export const sellerDestinationPreferences = pgTable('seller_destination_preferen
   sellerDestinationIdx: uniqueIndex('seller_destination_prefs_idx').on(table.sellerId, table.destinationId),
 }));
 
+// Seller-level (not per-category/destination) preference settings — one row
+// per seller. Mirrors the `globalSettings` sub-document the Mongo version
+// kept alongside its per-category/destination preference arrays.
+export const sellerSettings = pgTable('seller_settings', {
+  sellerId: text('seller_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  categorySettings: jsonb('category_settings').$type<{
+    autoAcceptNewCategories?: boolean;
+    defaultVisibility?: boolean;
+    hideEmptyCategories?: boolean;
+  } | null>(),
+  destinationSettings: jsonb('destination_settings').$type<{
+    autoAcceptNewDestinations?: boolean;
+    defaultVisibility?: boolean;
+    hideEmptyDestinations?: boolean;
+    groupByCountry?: boolean;
+    showPopularFirst?: boolean;
+  } | null>(),
+  ...timestamps,
+});
+
 // ---------------------------------------------------------------------------
 // Tours (Express-owned; schema defined here as the shared source of truth)
 // ---------------------------------------------------------------------------
@@ -245,6 +265,7 @@ export const tours = pgTable('tours', {
   reviewCount: integer('review_count').notNull().default(0),
   isSpecialOffer: boolean('is_special_offer').notNull().default(false),
   views: integer('views').notNull().default(0),
+  bookingCount: integer('booking_count').notNull().default(0),
 
   price: doublePrecision('price'),
   pricePerPerson: boolean('price_per_person').notNull().default(true),

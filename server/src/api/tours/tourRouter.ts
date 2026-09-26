@@ -345,7 +345,7 @@ router.get('/user/:userId/titles', authenticate, getUserToursTitle);
  *         required: true
  *         schema:
  *           type: string
- *         description: Tour ID (MongoDB ObjectId)
+ *         description: Tour ID
  *     responses:
  *       200:
  *         description: Tour retrieved successfully
