@@ -9,12 +9,25 @@
 export enum UserRole {
     ADMIN = 'admin',
     SELLER = 'seller',
-    ADVERTISER = 'advertiser',
     GUIDE = 'guide',
-    VENUE = 'venue',
+    HOTEL = 'hotel',
+    GUESTHOUSE = 'guesthouse',
+    RESTAURANT = 'restaurant',
+    TRANSPORT = 'transport',
+    ADVERTISER = 'advertiser',
     USER = 'user',
     SUBSCRIBER = 'subscriber',
 }
+
+/** Business-partner roles, granted via admin approval of a business application. */
+export const BUSINESS_PARTNER_ROLES = [
+    UserRole.GUIDE,
+    UserRole.HOTEL,
+    UserRole.GUESTHOUSE,
+    UserRole.RESTAURANT,
+    UserRole.TRANSPORT,
+    UserRole.ADVERTISER,
+] as const;
 
 /**
  * Role groups for different access levels
@@ -24,10 +37,11 @@ export const RoleGroups = {
     DASHBOARD_ACCESS: [
         UserRole.ADMIN,
         UserRole.SELLER,
-        UserRole.ADVERTISER,
-        UserRole.GUIDE,
-        UserRole.VENUE,
+        ...BUSINESS_PARTNER_ROLES,
     ],
+
+    // Business-partner roles — limited dashboard scope (own listing only).
+    BUSINESS_PARTNER: BUSINESS_PARTNER_ROLES,
 
     // Admin only
     ADMIN_ONLY: [UserRole.ADMIN],
@@ -115,9 +129,12 @@ export const getRoleName = (role: string | null): string => {
     const roleMap: Record<string, string> = {
         [UserRole.ADMIN]: 'Administrator',
         [UserRole.SELLER]: 'Seller',
-        [UserRole.ADVERTISER]: 'Advertiser',
         [UserRole.GUIDE]: 'Guide',
-        [UserRole.VENUE]: 'Venue Manager',
+        [UserRole.HOTEL]: 'Hotel',
+        [UserRole.GUESTHOUSE]: 'Guesthouse',
+        [UserRole.RESTAURANT]: 'Restaurant',
+        [UserRole.TRANSPORT]: 'Transport Provider',
+        [UserRole.ADVERTISER]: 'Advertiser',
         [UserRole.USER]: 'User',
         [UserRole.SUBSCRIBER]: 'Subscriber',
     };
@@ -136,9 +153,12 @@ export const getRoleBadgeColor = (role: string | null): string => {
     const colorMap: Record<string, string> = {
         [UserRole.ADMIN]: 'destructive',
         [UserRole.SELLER]: 'default',
-        [UserRole.ADVERTISER]: 'secondary',
         [UserRole.GUIDE]: 'secondary',
-        [UserRole.VENUE]: 'secondary',
+        [UserRole.HOTEL]: 'secondary',
+        [UserRole.GUESTHOUSE]: 'secondary',
+        [UserRole.RESTAURANT]: 'secondary',
+        [UserRole.TRANSPORT]: 'secondary',
+        [UserRole.ADVERTISER]: 'secondary',
         [UserRole.USER]: 'secondary',
         [UserRole.SUBSCRIBER]: 'secondary',
     };

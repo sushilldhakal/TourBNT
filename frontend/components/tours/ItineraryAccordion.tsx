@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
+import { Star } from 'lucide-react';
 import { Itinerary } from '@/lib/types';
 import { formatDate, formatTime } from '@/lib/tourUtils';
 import { cn } from '@/lib/utils';
@@ -11,6 +13,14 @@ import {
     AccordionTrigger,
 } from '@/components/ui/accordion';
 import RichTextRenderer from '@/components/RichTextRenderer';
+
+const PARTNER_ROLE_LABEL: Record<string, string> = {
+    transport: 'Transport',
+    accommodation: 'Stay',
+    guide: 'Guide',
+    meals: 'Meals',
+    other: 'Also involved',
+};
 
 interface ItineraryAccordionProps {
     itinerary: Itinerary[];
@@ -115,6 +125,35 @@ export function ItineraryAccordion({ itinerary, outline }: ItineraryAccordionPro
                                                 <div className="text-xs sm:text-sm">
                                                     <span className="font-medium text-muted-foreground">Destination: </span>
                                                     <span className="text-foreground">{day.destination}</span>
+                                                </div>
+                                            )}
+
+                                            {/* Logistics: transport/accommodation/guide/meals — linked to the
+                                                provider's TourBNT profile when registered, plain text otherwise */}
+                                            {day.partners && day.partners.length > 0 && (
+                                                <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs sm:text-sm">
+                                                    {day.partners.map((p, pIndex) => (
+                                                        <div key={pIndex}>
+                                                            <span className="font-medium text-muted-foreground">{PARTNER_ROLE_LABEL[p.role] || p.role}: </span>
+                                                            {p.businessPartnerId && p.businessPartnerSlug ? (
+                                                                <Link
+                                                                    href={`/partners/${p.businessPartnerType || 'guide'}/${p.businessPartnerSlug}`}
+                                                                    className="text-primary hover:underline inline-flex items-center gap-1"
+                                                                >
+                                                                    {p.name}
+                                                                    {typeof p.businessPartnerRating === 'number' && (
+                                                                        <span className="inline-flex items-center gap-0.5 text-muted-foreground">
+                                                                            <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                                                                            {p.businessPartnerRating.toFixed(1)}
+                                                                        </span>
+                                                                    )}
+                                                                </Link>
+                                                            ) : (
+                                                                <span className="text-foreground">{p.name}</span>
+                                                            )}
+                                                            {p.notes && <span className="text-muted-foreground"> ({p.notes})</span>}
+                                                        </div>
+                                                    ))}
                                                 </div>
                                             )}
                                         </div>

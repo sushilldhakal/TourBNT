@@ -168,7 +168,20 @@ export interface FactData {
 }
 
 // Itinerary types
+export interface ItineraryPartner {
+    role: 'transport' | 'accommodation' | 'guide' | 'meals' | 'other';
+    businessPartnerId?: string;
+    name: string;
+    notes?: string;
+    // Enriched at read-time from the live business record when businessPartnerId is set.
+    businessPartnerSlug?: string;
+    businessPartnerType?: string;
+    businessPartnerRating?: number;
+    businessPartnerReviewCount?: number;
+}
+
 export interface Itinerary {
+    id?: string;
     day?: string;
     title: string;
     description: string;
@@ -177,6 +190,7 @@ export interface Itinerary {
     time?: string;
     destination?: string;
     outline?: string;
+    partners?: ItineraryPartner[];
 }
 
 // FAQ types

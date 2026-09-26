@@ -8,6 +8,7 @@ import {
   doublePrecision,
   boolean,
   timestamp,
+  date,
   jsonb,
   uniqueIndex,
   index,
@@ -44,7 +45,20 @@ const timestamps = {
 // Enums
 // ---------------------------------------------------------------------------
 
-export const userRoleEnum = pgEnum('user_role', ['user', 'admin', 'seller', 'subscriber']);
+export const userRoleEnum = pgEnum('user_role', [
+  'user',
+  'admin',
+  'seller',
+  'subscriber',
+  // Business-partner roles — flipped onto a user by the matching
+  // businessPartners approval flow, mirroring how 'seller' is set today.
+  'guide',
+  'hotel',
+  'guesthouse',
+  'restaurant',
+  'transport',
+  'advertiser',
+]);
 export const approvalStatusEnum = pgEnum('approval_status', ['pending', 'approved', 'rejected']);
 export const tourStatusEnum = pgEnum('tour_status', ['Draft', 'Published', 'Archived']);
 export const postStatusEnum = pgEnum('post_status', ['Draft', 'Published', 'Archived']);
@@ -56,8 +70,41 @@ export const notificationTypeEnum = pgEnum('notification_type', [
   'destination_approved',
   'destination_deleted',
   'general',
+  'business_partner_approved',
+  'business_partner_rejected',
+  'business_review_received',
+  'ad_approved',
+  'ad_rejected',
 ]);
 export const mediaKindEnum = pgEnum('media_kind', ['image', 'video', 'pdf']);
+
+// Business-partner domain enums (guides, hotels, guesthouses, restaurants,
+// transport/logistics providers, and general advertisers).
+export const businessPartnerTypeEnum = pgEnum('business_partner_type', [
+  'guide',
+  'hotel',
+  'guesthouse',
+  'restaurant',
+  'transport',
+  'advertiser',
+]);
+// The role a business partner plays on a specific tour itinerary day.
+export const itineraryPartnerRoleEnum = pgEnum('itinerary_partner_role', [
+  'transport',
+  'accommodation',
+  'guide',
+  'meals',
+  'other',
+]);
+// Where on the site an ad campaign is eligible to render.
+export const adPlacementSlotEnum = pgEnum('ad_placement_slot', [
+  'tour_detail',
+  'tour_sidebar',
+  'hotel_page',
+  'search_results',
+  'homepage',
+]);
+export const adCampaignStatusEnum = pgEnum('ad_campaign_status', ['draft', 'active', 'paused', 'ended']);
 
 // ---------------------------------------------------------------------------
 // Users
@@ -528,6 +575,215 @@ export const faqs = pgTable('faqs', {
 }));
 
 // ---------------------------------------------------------------------------
+// Business Partners (Express-owned) — guides, hotels, guesthouses,
+// restaurants, transport/logistics providers, and general advertisers.
+// Onboarded via the same admin-approval shape as globalCategories/
+// globalDestinations (isApproved/approvalStatus/approvedBy/rejectedBy/
+// rejectionReason/approvedAt/rejectedAt/submittedAt) rather than another
+// JSONB blob on `users` like the seller flow — this one is queryable/
+// indexable and supports reviews, itinerary links, and ad campaigns below.
+// ---------------------------------------------------------------------------
+
+export const businessPartners = pgTable('business_partners', {
+  id: id(),
+  ownerId: text('owner_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  type: businessPartnerTypeEnum('type').notNull(),
+  name: text('name').notNull(),
+  slug: text('slug').notNull(),
+  description: text('description'),
+  logo: text('logo'),
+  coverImage: text('cover_image'),
+  email: text('email'),
+  phone: text('phone'),
+  website: text('website'),
+  address: jsonb('address').$type<{
+    address?: string;
+    city?: string;
+    state?: string;
+    postalCode?: string;
+    country?: string;
+  } | null>(),
+  destinationId: text('destination_id').references(() => globalDestinations.id),
+  // Type-specific extras (guide: certifications/languages; hotel/guesthouse:
+  // roomCount/amenities; transport: vehicleTypes/capacity; restaurant: cuisine).
+  details: jsonb('details').$type<Record<string, unknown> | null>(),
+  isApproved: boolean('is_approved').notNull().default(false),
+  approvalStatus: approvalStatusEnum('approval_status').notNull().default('pending'),
+  approvedBy: text('approved_by').references(() => users.id),
+  rejectedBy: text('rejected_by').references(() => users.id),
+  rejectionReason: text('rejection_reason'),
+  approvedAt: timestamp('approved_at', { withTimezone: true }),
+  rejectedAt: timestamp('rejected_at', { withTimezone: true }),
+  submittedAt: timestamp('submitted_at', { withTimezone: true }).defaultNow().notNull(),
+  isActive: boolean('is_active').notNull().default(true),
+  averageRating: doublePrecision('average_rating').notNull().default(0),
+  reviewCount: integer('review_count').notNull().default(0),
+  approvedReviewCount: integer('approved_review_count').notNull().default(0),
+  views: integer('views').notNull().default(0),
+  ...timestamps,
+}, (table) => ({
+  slugIdx: uniqueIndex('business_partners_slug_idx').on(table.slug),
+  ownerIdx: index('business_partners_owner_idx').on(table.ownerId),
+  typeIdx: index('business_partners_type_idx').on(table.type),
+  statusIdx: index('business_partners_status_idx').on(table.approvalStatus),
+}));
+
+export const businessDocuments = pgTable('business_documents', {
+  id: id(),
+  businessPartnerId: text('business_partner_id').notNull().references(() => businessPartners.id, { onDelete: 'cascade' }),
+  docType: text('doc_type').notNull(),
+  url: text('url').notNull(),
+  publicId: text('public_id'),
+  originalFilename: text('original_filename'),
+  uploadedAt: timestamp('uploaded_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  partnerIdx: index('business_documents_partner_idx').on(table.businessPartnerId),
+}));
+
+// Directory-discoverability targeting (organic listing/search visibility) —
+// separate from the ad-campaign targeting tables further below.
+export const businessPartnerCategories = pgTable('business_partner_categories', {
+  businessPartnerId: text('business_partner_id').notNull().references(() => businessPartners.id, { onDelete: 'cascade' }),
+  categoryId: text('category_id').notNull().references(() => globalCategories.id, { onDelete: 'cascade' }),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.businessPartnerId, table.categoryId] }),
+}));
+
+export const businessPartnerDestinations = pgTable('business_partner_destinations', {
+  businessPartnerId: text('business_partner_id').notNull().references(() => businessPartners.id, { onDelete: 'cascade' }),
+  destinationId: text('destination_id').notNull().references(() => globalDestinations.id, { onDelete: 'cascade' }),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.businessPartnerId, table.destinationId] }),
+}));
+
+// ---------------------------------------------------------------------------
+// Business Reviews (Express-owned) — a parallel review stack for business
+// partners, structurally identical to reviews/reviewReplies above but FK'd
+// to businessPartnerId. Uses a real per-user like table (businessReviewLikes)
+// from the start, unlike reviews.likes' bare counter.
+// ---------------------------------------------------------------------------
+
+export const businessReviews = pgTable('business_reviews', {
+  id: id(),
+  businessPartnerId: text('business_partner_id').notNull().references(() => businessPartners.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => users.id),
+  rating: doublePrecision('rating').notNull(),
+  comment: text('comment').notNull(),
+  status: reviewStatusEnum('status').notNull().default('pending'),
+  likes: integer('likes').notNull().default(0),
+  views: integer('views').notNull().default(0),
+  ...timestamps,
+}, (table) => ({
+  partnerUserIdx: uniqueIndex('business_reviews_partner_user_idx').on(table.businessPartnerId, table.userId),
+  statusIdx: index('business_reviews_status_idx').on(table.status),
+}));
+
+export const businessReviewReplies = pgTable('business_review_replies', {
+  id: id(),
+  reviewId: text('review_id').notNull().references(() => businessReviews.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => users.id),
+  comment: text('comment').notNull(),
+  likes: integer('likes').notNull().default(0),
+  views: integer('views').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  reviewIdx: index('business_review_replies_review_idx').on(table.reviewId),
+}));
+
+export const businessReviewLikes = pgTable('business_review_likes', {
+  id: id(),
+  reviewId: text('review_id').notNull().references(() => businessReviews.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  uniqueLike: uniqueIndex('business_review_likes_unique_idx').on(table.reviewId, table.userId),
+}));
+
+// ---------------------------------------------------------------------------
+// Tour itinerary <-> business partner links. A tour agent can attach a
+// registered business (linked, reviewable) or a plain free-typed name
+// (businessPartnerId left null) to a specific itinerary day. `dayId` matches
+// a stable client-generated id living inside `tours.itinerary`'s JSONB items,
+// so links survive day drag-and-drop reordering.
+// ---------------------------------------------------------------------------
+
+export const tourItineraryPartners = pgTable('tour_itinerary_partners', {
+  id: id(),
+  tourId: text('tour_id').notNull().references(() => tours.id, { onDelete: 'cascade' }),
+  dayId: text('day_id').notNull(),
+  role: itineraryPartnerRoleEnum('role').notNull(),
+  businessPartnerId: text('business_partner_id').references(() => businessPartners.id, { onDelete: 'set null' }),
+  name: text('name').notNull(),
+  notes: text('notes'),
+  sortOrder: integer('sort_order').notNull().default(0),
+  ...timestamps,
+}, (table) => ({
+  tourDayIdx: index('tour_itinerary_partners_tour_day_idx').on(table.tourId, table.dayId),
+  partnerIdx: index('tour_itinerary_partners_partner_idx').on(table.businessPartnerId),
+}));
+
+// ---------------------------------------------------------------------------
+// Ad campaigns (Express-owned) — any approved businessPartners row (not just
+// type='advertiser') can run ad creatives, targeted by category/destination
+// and a placement slot, so ads only show on relevant pages (e.g. trekking-
+// gear ads on trekking-category tour pages, nearby-food ads on hotel pages).
+// Billing-ready (`isPaid`) but no payment gateway is wired up in this pass.
+// ---------------------------------------------------------------------------
+
+export const advertisements = pgTable('advertisements', {
+  id: id(),
+  businessPartnerId: text('business_partner_id').notNull().references(() => businessPartners.id, { onDelete: 'cascade' }),
+  title: text('title').notNull(),
+  description: text('description'),
+  imageUrl: text('image_url'),
+  ctaLabel: text('cta_label'),
+  ctaUrl: text('cta_url').notNull(),
+  placementSlot: adPlacementSlotEnum('placement_slot').notNull(),
+  campaignStatus: adCampaignStatusEnum('campaign_status').notNull().default('draft'),
+  startDate: timestamp('start_date', { withTimezone: true }),
+  endDate: timestamp('end_date', { withTimezone: true }),
+  isApproved: boolean('is_approved').notNull().default(false),
+  approvalStatus: approvalStatusEnum('approval_status').notNull().default('pending'),
+  approvedBy: text('approved_by').references(() => users.id),
+  rejectedBy: text('rejected_by').references(() => users.id),
+  rejectionReason: text('rejection_reason'),
+  approvedAt: timestamp('approved_at', { withTimezone: true }),
+  rejectedAt: timestamp('rejected_at', { withTimezone: true }),
+  submittedAt: timestamp('submitted_at', { withTimezone: true }).defaultNow().notNull(),
+  impressionCount: integer('impression_count').notNull().default(0),
+  clickCount: integer('click_count').notNull().default(0),
+  isPaid: boolean('is_paid').notNull().default(false),
+  ...timestamps,
+}, (table) => ({
+  partnerIdx: index('advertisements_partner_idx').on(table.businessPartnerId),
+  slotIdx: index('advertisements_slot_idx').on(table.placementSlot, table.campaignStatus, table.approvalStatus),
+}));
+
+export const adCategoryTargets = pgTable('ad_category_targets', {
+  adId: text('ad_id').notNull().references(() => advertisements.id, { onDelete: 'cascade' }),
+  categoryId: text('category_id').notNull().references(() => globalCategories.id, { onDelete: 'cascade' }),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.adId, table.categoryId] }),
+}));
+
+export const adDestinationTargets = pgTable('ad_destination_targets', {
+  adId: text('ad_id').notNull().references(() => advertisements.id, { onDelete: 'cascade' }),
+  destinationId: text('destination_id').notNull().references(() => globalDestinations.id, { onDelete: 'cascade' }),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.adId, table.destinationId] }),
+}));
+
+export const adDailyStats = pgTable('ad_daily_stats', {
+  id: id(),
+  adId: text('ad_id').notNull().references(() => advertisements.id, { onDelete: 'cascade' }),
+  date: date('date').notNull(),
+  impressions: integer('impressions').notNull().default(0),
+  clicks: integer('clicks').notNull().default(0),
+}, (table) => ({
+  adDateIdx: uniqueIndex('ad_daily_stats_ad_date_idx').on(table.adId, table.date),
+}));
+
+// ---------------------------------------------------------------------------
 // Relations (used for `db.query.*` joined reads)
 // ---------------------------------------------------------------------------
 
@@ -538,6 +794,8 @@ export const usersRelations = relations(users, ({ many }) => ({
   reviews: many(reviews),
   posts: many(posts),
   mediaAssets: many(mediaAssets),
+  businessPartners: many(businessPartners),
+  businessReviews: many(businessReviews),
 }));
 
 export const globalCategoriesRelations = relations(globalCategories, ({ many }) => ({
@@ -627,4 +885,72 @@ export const notificationsRelations = relations(notifications, ({ one }) => ({
 
 export const mediaAssetsRelations = relations(mediaAssets, ({ one }) => ({
   owner: one(users, { fields: [mediaAssets.userId], references: [users.id] }),
+}));
+
+export const businessPartnersRelations = relations(businessPartners, ({ one, many }) => ({
+  owner: one(users, { fields: [businessPartners.ownerId], references: [users.id] }),
+  destination: one(globalDestinations, { fields: [businessPartners.destinationId], references: [globalDestinations.id] }),
+  documents: many(businessDocuments),
+  categories: many(businessPartnerCategories),
+  destinations: many(businessPartnerDestinations),
+  reviews: many(businessReviews),
+  itineraryLinks: many(tourItineraryPartners),
+  ads: many(advertisements),
+}));
+
+export const businessDocumentsRelations = relations(businessDocuments, ({ one }) => ({
+  businessPartner: one(businessPartners, { fields: [businessDocuments.businessPartnerId], references: [businessPartners.id] }),
+}));
+
+export const businessPartnerCategoriesRelations = relations(businessPartnerCategories, ({ one }) => ({
+  businessPartner: one(businessPartners, { fields: [businessPartnerCategories.businessPartnerId], references: [businessPartners.id] }),
+  category: one(globalCategories, { fields: [businessPartnerCategories.categoryId], references: [globalCategories.id] }),
+}));
+
+export const businessPartnerDestinationsRelations = relations(businessPartnerDestinations, ({ one }) => ({
+  businessPartner: one(businessPartners, { fields: [businessPartnerDestinations.businessPartnerId], references: [businessPartners.id] }),
+  destination: one(globalDestinations, { fields: [businessPartnerDestinations.destinationId], references: [globalDestinations.id] }),
+}));
+
+export const businessReviewsRelations = relations(businessReviews, ({ one, many }) => ({
+  businessPartner: one(businessPartners, { fields: [businessReviews.businessPartnerId], references: [businessPartners.id] }),
+  user: one(users, { fields: [businessReviews.userId], references: [users.id] }),
+  replies: many(businessReviewReplies),
+  likes: many(businessReviewLikes),
+}));
+
+export const businessReviewRepliesRelations = relations(businessReviewReplies, ({ one }) => ({
+  review: one(businessReviews, { fields: [businessReviewReplies.reviewId], references: [businessReviews.id] }),
+  user: one(users, { fields: [businessReviewReplies.userId], references: [users.id] }),
+}));
+
+export const businessReviewLikesRelations = relations(businessReviewLikes, ({ one }) => ({
+  review: one(businessReviews, { fields: [businessReviewLikes.reviewId], references: [businessReviews.id] }),
+  user: one(users, { fields: [businessReviewLikes.userId], references: [users.id] }),
+}));
+
+export const tourItineraryPartnersRelations = relations(tourItineraryPartners, ({ one }) => ({
+  tour: one(tours, { fields: [tourItineraryPartners.tourId], references: [tours.id] }),
+  businessPartner: one(businessPartners, { fields: [tourItineraryPartners.businessPartnerId], references: [businessPartners.id] }),
+}));
+
+export const advertisementsRelations = relations(advertisements, ({ one, many }) => ({
+  businessPartner: one(businessPartners, { fields: [advertisements.businessPartnerId], references: [businessPartners.id] }),
+  categoryTargets: many(adCategoryTargets),
+  destinationTargets: many(adDestinationTargets),
+  dailyStats: many(adDailyStats),
+}));
+
+export const adCategoryTargetsRelations = relations(adCategoryTargets, ({ one }) => ({
+  ad: one(advertisements, { fields: [adCategoryTargets.adId], references: [advertisements.id] }),
+  category: one(globalCategories, { fields: [adCategoryTargets.categoryId], references: [globalCategories.id] }),
+}));
+
+export const adDestinationTargetsRelations = relations(adDestinationTargets, ({ one }) => ({
+  ad: one(advertisements, { fields: [adDestinationTargets.adId], references: [advertisements.id] }),
+  destination: one(globalDestinations, { fields: [adDestinationTargets.destinationId], references: [globalDestinations.id] }),
+}));
+
+export const adDailyStatsRelations = relations(adDailyStats, ({ one }) => ({
+  ad: one(advertisements, { fields: [adDailyStats.adId], references: [advertisements.id] }),
 }));

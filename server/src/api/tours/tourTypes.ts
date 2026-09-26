@@ -196,10 +196,18 @@ export interface Tour {
   tourStatus: string;
   outline: string;
   itinerary: {
+    id?: string;
     day?: string;
     title: string;
     description: string;
+    destination?: string;
     date?: Date;
+    partners?: {
+      role: 'transport' | 'accommodation' | 'guide' | 'meals' | 'other';
+      businessPartnerId?: string;
+      name: string;
+      notes?: string;
+    }[];
   }[];
   category: string[];
   dates: {

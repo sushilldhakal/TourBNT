@@ -167,3 +167,93 @@ export const createDestinationApprovalNotification = async (
   }).returning();
   return notification;
 };
+
+// Helpers for the business-partner onboarding flow (guides, hotels,
+// guesthouses, restaurants, transport providers, advertisers).
+export const createBusinessPartnerApprovalNotification = async (
+  recipientId: string,
+  senderId: string,
+  businessName: string,
+  businessPartnerId: string
+) => {
+  const [notification] = await db.insert(notifications).values({
+    recipientId,
+    senderId,
+    type: 'business_partner_approved',
+    title: 'Business Application Approved',
+    message: `Congratulations! Your business "${businessName}" has been approved and is now live on the platform.`,
+    data: { businessPartnerId, businessName },
+  }).returning();
+  return notification;
+};
+
+export const createBusinessPartnerRejectionNotification = async (
+  recipientId: string,
+  senderId: string,
+  businessName: string,
+  businessPartnerId: string,
+  rejectionReason: string
+) => {
+  const [notification] = await db.insert(notifications).values({
+    recipientId,
+    senderId,
+    type: 'business_partner_rejected',
+    title: 'Business Application Rejected',
+    message: `Your business application "${businessName}" has been rejected. Reason: ${rejectionReason}`,
+    data: { businessPartnerId, businessName, rejectionReason },
+  }).returning();
+  return notification;
+};
+
+export const createBusinessReviewNotification = async (
+  recipientId: string,
+  senderId: string,
+  businessName: string,
+  businessPartnerId: string,
+  rating: number
+) => {
+  const [notification] = await db.insert(notifications).values({
+    recipientId,
+    senderId,
+    type: 'business_review_received',
+    title: 'New Review Received',
+    message: `Your business "${businessName}" received a new ${rating}-star review.`,
+    data: { businessPartnerId, businessName, rating },
+  }).returning();
+  return notification;
+};
+
+export const createAdApprovalNotification = async (
+  recipientId: string,
+  senderId: string,
+  adTitle: string,
+  adId: string
+) => {
+  const [notification] = await db.insert(notifications).values({
+    recipientId,
+    senderId,
+    type: 'ad_approved',
+    title: 'Ad Campaign Approved',
+    message: `Your ad campaign "${adTitle}" has been approved and can now go live.`,
+    data: { adId, adTitle },
+  }).returning();
+  return notification;
+};
+
+export const createAdRejectionNotification = async (
+  recipientId: string,
+  senderId: string,
+  adTitle: string,
+  adId: string,
+  rejectionReason: string
+) => {
+  const [notification] = await db.insert(notifications).values({
+    recipientId,
+    senderId,
+    type: 'ad_rejected',
+    title: 'Ad Campaign Rejected',
+    message: `Your ad campaign "${adTitle}" has been rejected. Reason: ${rejectionReason}`,
+    data: { adId, adTitle, rejectionReason },
+  }).returning();
+  return notification;
+};

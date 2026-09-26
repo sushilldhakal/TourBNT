@@ -1,7 +1,8 @@
-import { db, tours, tourCategories, tourAuthors, globalCategories, users, facts as factsTable } from '@tourbnt/db';
+import { db, tours, tourCategories, tourAuthors, globalCategories, users, facts as factsTable, tourItineraryPartners, businessPartners } from '@tourbnt/db';
 import { eq, and, or, ilike, gte, lte, gt, desc, asc, sql, inArray, count, type SQL } from 'drizzle-orm';
 import createHttpError from 'http-errors';
 import { Tour } from '../tourTypes';
+import { ITINERARY_ROLE_TO_PARTNER_TYPES } from '../../businessPartners/businessPartnerTypes';
 
 type TourRow = typeof tours.$inferSelect;
 
@@ -61,6 +62,103 @@ async function syncTourAuthors(tourId: string, authorIds: string[] | undefined) 
   if (authorIds.length > 0) {
     await db.insert(tourAuthors).values(authorIds.map((userId) => ({ tourId, userId })));
   }
+}
+
+/**
+ * Flattens each itinerary day's `partners[]` into `tourItineraryPartners`
+ * rows (delete-then-reinsert, same sentinel convention as syncTourCategories)
+ * so a business partner's own dashboard can reverse-lookup "tours featuring
+ * me". Validates that any `businessPartnerId` reference resolves to an
+ * approved business of a type compatible with its itinerary role.
+ */
+async function syncTourItineraryPartners(tourId: string, itinerary: unknown[] | undefined) {
+  if (itinerary === undefined) return;
+
+  type LinkRow = { tourId: string; dayId: string; role: 'transport' | 'accommodation' | 'guide' | 'meals' | 'other'; businessPartnerId: string | null; name: string; notes: string | null; sortOrder: number };
+  const rows: LinkRow[] = [];
+
+  for (const day of itinerary as any[]) {
+    const dayId = day?.id;
+    if (!dayId || !Array.isArray(day.partners)) continue;
+    day.partners.forEach((p: any, idx: number) => {
+      if (!p || !p.role || !p.name) return;
+      rows.push({
+        tourId,
+        dayId,
+        role: p.role,
+        businessPartnerId: p.businessPartnerId || null,
+        name: p.name,
+        notes: p.notes || null,
+        sortOrder: idx,
+      });
+    });
+  }
+
+  const referencedIds = Array.from(new Set(rows.map((r) => r.businessPartnerId).filter((id): id is string => !!id)));
+  if (referencedIds.length > 0) {
+    const partners = await db
+      .select({ id: businessPartners.id, type: businessPartners.type, approvalStatus: businessPartners.approvalStatus })
+      .from(businessPartners)
+      .where(inArray(businessPartners.id, referencedIds));
+    const byId = new Map(partners.map((p) => [p.id, p]));
+
+    for (const row of rows) {
+      if (!row.businessPartnerId) continue;
+      const partner = byId.get(row.businessPartnerId);
+      if (!partner || partner.approvalStatus !== 'approved') {
+        throw createHttpError(400, `Itinerary partner "${row.name}" references an unapproved or unknown business (day ${row.dayId}, role ${row.role})`);
+      }
+      const allowedTypes = ITINERARY_ROLE_TO_PARTNER_TYPES[row.role] || [];
+      if (!allowedTypes.includes(partner.type)) {
+        throw createHttpError(400, `Business type "${partner.type}" is not valid for itinerary role "${row.role}" (day ${row.dayId})`);
+      }
+    }
+  }
+
+  await db.delete(tourItineraryPartners).where(eq(tourItineraryPartners.tourId, tourId));
+  if (rows.length > 0) {
+    await db.insert(tourItineraryPartners).values(rows);
+  }
+}
+
+/**
+ * Enriches every itinerary day's `partners[]` with the referenced business's
+ * *current* name/slug/rating (rather than a stale write-time snapshot). A
+ * partner that's since been deleted or unapproved gracefully degrades to
+ * plain text — `businessPartnerId` is dropped but the stored `name` remains.
+ */
+async function enrichItineraryPartners(itinerary: unknown): Promise<unknown> {
+  if (!Array.isArray(itinerary)) return itinerary;
+
+  const referencedIds = new Set<string>();
+  for (const day of itinerary as any[]) {
+    for (const p of day?.partners ?? []) {
+      if (p?.businessPartnerId) referencedIds.add(p.businessPartnerId);
+    }
+  }
+  if (referencedIds.size === 0) return itinerary;
+
+  const partnerRows = await db
+    .select({ id: businessPartners.id, name: businessPartners.name, slug: businessPartners.slug, type: businessPartners.type, averageRating: businessPartners.averageRating, reviewCount: businessPartners.approvedReviewCount, approvalStatus: businessPartners.approvalStatus })
+    .from(businessPartners)
+    .where(inArray(businessPartners.id, Array.from(referencedIds)));
+  const byId = new Map(partnerRows.map((p) => [p.id, p]));
+
+  return (itinerary as any[]).map((day) => {
+    if (!Array.isArray(day?.partners)) return day;
+    return {
+      ...day,
+      partners: day.partners.map((p: any) => {
+        if (!p?.businessPartnerId) return p;
+        const live = byId.get(p.businessPartnerId);
+        if (!live || live.approvalStatus !== 'approved') {
+          const { businessPartnerId, ...rest } = p;
+          return rest;
+        }
+        return { ...p, name: live.name, businessPartnerSlug: live.slug, businessPartnerType: live.type, businessPartnerRating: live.averageRating, businessPartnerReviewCount: live.reviewCount };
+      }),
+    };
+  });
 }
 
 /** Splits raw tour input into columns that live on `tours` vs. the join tables. */
@@ -154,6 +252,8 @@ export class TourService {
       });
     }
 
+    enriched.itinerary = await enrichItineraryPartners(enriched.itinerary);
+
     return enriched;
   }
 
@@ -167,6 +267,7 @@ export class TourService {
 
     await syncTourCategories(newTour.id, categoryIds);
     await syncTourAuthors(newTour.id, [authorId]);
+    await syncTourItineraryPartners(newTour.id, columnData.itinerary as unknown[] | undefined);
 
     const [enriched] = await attachRelations([newTour]);
     return enriched;
@@ -184,6 +285,10 @@ export class TourService {
 
     const { columnData, categoryIds } = splitTourData(updateData);
     columnData.updatedAt = new Date();
+
+    // Validate itinerary partner links before writing the tour row, so a
+    // bad reference rejects the whole update rather than partially applying.
+    await syncTourItineraryPartners(tourId, columnData.itinerary as unknown[] | undefined);
 
     const [updatedTour] = await db.update(tours).set(columnData).where(eq(tours.id, tourId)).returning();
     await syncTourCategories(tourId, categoryIds);

@@ -15,15 +15,21 @@ const optionalNumber = z.number().optional();
 // ITINERARY SCHEMAS
 // ============================================================================
 
+export const itineraryPartnerSchema = z.object({
+    role: z.enum(['transport', 'accommodation', 'guide', 'meals', 'other']),
+    businessPartnerId: optionalString,
+    name: z.string(),
+    notes: optionalString,
+});
+
 export const itineraryItemSchema = z.object({
+    id: optionalString,
     day: optionalString,
     title: optionalString,
     description: optionalString,
     destination: optionalString,
     dateTime: optionalDate,
-    accommodation: optionalString,
-    meals: optionalString,
-    activities: optionalString,
+    partners: z.array(itineraryPartnerSchema).optional(),
 });
 
 export const itinerarySchema = z.array(itineraryItemSchema);

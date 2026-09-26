@@ -8,6 +8,13 @@
       "when": 1790421337345,
       "tag": "0000_faulty_scarecrow",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790426937202,
+      "tag": "0001_eager_zuras",
+      "breakpoints": true
     }
   ]
 }

@@ -158,8 +158,31 @@ export const processDateRanges = (dateRangesData: any): DateRange[] => {
   }
 };
 
+const ITINERARY_PARTNER_ROLES = new Set(['transport', 'accommodation', 'guide', 'meals', 'other']);
+
 /**
- * Process itinerary data
+ * Process a single itinerary day's `partners[]` — each entry links a
+ * transport/accommodation/guide/meals provider to the day, either as a
+ * registered business (`businessPartnerId` set) or a plain free-typed name.
+ */
+const processItineraryPartners = (partners: any): Array<{ role: string; businessPartnerId?: string; name: string; notes?: string }> => {
+  if (!Array.isArray(partners)) return [];
+  return partners
+    .filter((p: any) => p && p.role && ITINERARY_PARTNER_ROLES.has(p.role) && p.name)
+    .map((p: any) => ({
+      role: p.role,
+      ...(p.businessPartnerId && { businessPartnerId: String(p.businessPartnerId) }),
+      name: String(p.name),
+      ...(p.notes && { notes: String(p.notes) }),
+    }));
+};
+
+/**
+ * Process itinerary data. Preserves every field the tour-builder form
+ * collects (previously this silently dropped `destination`/`accommodation`/
+ * `meals`/`activities` down to just `{day,title,description,date}`) and
+ * carries a stable per-day `id` so itinerary-partner links
+ * (`tourItineraryPartners`) survive day drag-and-drop reordering.
  */
 export const processItineraryData = (itinerary: any) => {
   try {
@@ -169,12 +192,31 @@ export const processItineraryData = (itinerary: any) => {
       return [];
     }
 
-    return parsed.map((item: any) => ({
-      day: item.day || '',
-      title: item.title || '',
-      description: item.description || '',
-      date: item.date ? new Date(item.date) : undefined
-    }));
+    return parsed.map((item: any) => {
+      let partners = processItineraryPartners(item.partners);
+
+      // Back-compat: older payloads (or the picker falling back to plain
+      // text) may still carry legacy `accommodation`/`meals`/`activities`
+      // free-text strings instead of a `partners[]` array — fold them in as
+      // unregistered (no businessPartnerId) entries rather than losing them.
+      if (partners.length === 0) {
+        const legacy: Array<{ role: string; name: string }> = [];
+        if (item.accommodation) legacy.push({ role: 'accommodation', name: String(item.accommodation) });
+        if (item.meals) legacy.push({ role: 'meals', name: String(item.meals) });
+        if (item.activities) legacy.push({ role: 'other', name: String(item.activities) });
+        partners = legacy;
+      }
+
+      return {
+        id: item.id || `day_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+        day: item.day || '',
+        title: item.title || '',
+        description: item.description || '',
+        destination: item.destination || '',
+        date: item.date ? new Date(item.date) : undefined,
+        partners,
+      };
+    });
   } catch (error) {
     console.error("Error processing itinerary data:", error);
     return [];

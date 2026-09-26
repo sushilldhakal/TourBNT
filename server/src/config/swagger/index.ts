@@ -452,6 +452,9 @@ const options: swaggerJsdoc.Options = {
         './src/api/global/**/*.ts',
         './src/api/generate/*.ts',
         './src/api/comment/*.ts',
+        './src/api/businessPartners/*.ts',
+        './src/api/businessReviews/*.ts',
+        './src/api/ads/*.ts',
         './src/config/swagger/schemas.ts',
     ],
 };

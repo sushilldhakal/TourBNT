@@ -8,6 +8,7 @@ import { TourFacts } from '@/components/tours/TourFacts';
 import { TourDetailClient, BookingWidgetClient } from '@/components/tours/TourDetailClient';
 import TourCard from '@/components/tours/TourCard';
 import { TourPageLayout } from '@/components/tours/TourPageLayout';
+import { RelevantAdSlot } from '@/components/ads/RelevantAdSlot';
 
 interface PageProps {
     params: Promise<{
@@ -198,8 +199,13 @@ export default async function SingleTourPage({ params }: PageProps) {
                     </div>
 
                     {/* Sidebar Column (1/3 width on desktop) - appears below content on mobile */}
-                    <div className="lg:col-span-1 order-first lg:order-last">
+                    <div className="lg:col-span-1 order-first lg:order-last space-y-6">
                         <BookingWidgetClient tour={tour} />
+                        <RelevantAdSlot
+                            placementSlot="tour_sidebar"
+                            categoryId={Array.isArray(tour.category) ? (tour.category[0] as any)?.id : undefined}
+                            destinationId={typeof tour.destination === 'object' ? (tour.destination as any)?.id : (tour.destination as string | undefined)}
+                        />
                     </div>
                 </div>
 
