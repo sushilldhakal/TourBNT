@@ -287,7 +287,7 @@ bookingRouter.get(
     '/',
     authenticate,
     authorizeRoles('admin', 'seller') as RequestHandler,
-    paginationMiddleware,
+    paginationMiddleware(),
     filterSortMiddleware(['status', 'paymentStatus', 'tourId'], ['createdAt', 'departureDate', 'totalAmount']),
     asyncAuthHandler(getAllBookings)
 );

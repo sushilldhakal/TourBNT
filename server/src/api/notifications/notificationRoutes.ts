@@ -65,7 +65,7 @@ const router = express.Router();
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  */
-router.get('/', authenticate, paginationMiddleware, getUserNotifications as any);
+router.get('/', authenticate, paginationMiddleware(), getUserNotifications as any);
 
 /**
  * @swagger

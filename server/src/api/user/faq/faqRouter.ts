@@ -19,7 +19,7 @@ const faqsRouter = express.Router();
  * GET /api/v1/faqs
  * List all FAQs (PUBLIC)
  */
-faqsRouter.get('/', paginationMiddleware, asyncAuthHandler(getAllFaqs));
+faqsRouter.get('/', paginationMiddleware(), asyncAuthHandler(getAllFaqs));
 
 /**
  * POST /api/v1/faqs

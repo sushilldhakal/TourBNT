@@ -386,7 +386,7 @@ userRouter.delete(
  */
 userRouter.get('/',
   authenticate,
-  paginationMiddleware,
+  paginationMiddleware(),
   filterSortMiddleware(['roles', 'sellerStatus'], ['createdAt', 'name', 'email']),
   authorizeRoles('admin'),
   getAllUsers

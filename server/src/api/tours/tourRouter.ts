@@ -122,7 +122,7 @@ const upload = multer({
  *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.get('/',
-  paginationMiddleware,
+  paginationMiddleware(),
   filterSortMiddleware(['status', 'category', 'destination'], ['createdAt', 'price', 'title', 'views', 'rating']),
   getAllTours
 );
@@ -456,7 +456,7 @@ router.get('/:tourId/availability', validateObjectId(), checkTourAvailability);
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.get('/:tourId/reviews', validateObjectId(), paginationMiddleware, getTourReviews);
+router.get('/:tourId/reviews', validateObjectId(), paginationMiddleware(), getTourReviews);
 
 /**
  * @swagger
@@ -583,7 +583,7 @@ router.get('/:tourId/rating', validateObjectId(), getTourRating);
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.get('/:tourId/bookings', authenticate, authorizeRoles('admin', 'seller'), validateObjectId(), paginationMiddleware, getTourBookings);
+router.get('/:tourId/bookings', authenticate, authorizeRoles('admin', 'seller'), validateObjectId(), paginationMiddleware(), getTourBookings);
 
 // RESTful update and delete routes (requires authentication and admin/seller role)
 /**

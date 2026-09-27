@@ -78,7 +78,7 @@ const router = express.Router({ mergeParams: true }); // mergeParams allows acce
  *                   type: number
  */
 router.get('/',
-    paginationMiddleware,
+    paginationMiddleware(),
     filterSortMiddleware(['status'], ['createdAt', 'rating']),
     getAllApprovedReviews
 );

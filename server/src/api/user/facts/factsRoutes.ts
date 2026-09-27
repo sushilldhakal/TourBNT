@@ -15,7 +15,7 @@ factsRouter.get(
     '/',
     authenticate,
     authorizeRoles('admin', 'seller') as RequestHandler,
-    paginationMiddleware,
+    paginationMiddleware(),
     asyncAuthHandler(getAllFacts)
 );
 

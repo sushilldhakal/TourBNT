@@ -12,7 +12,7 @@ const commentRouter = express.Router();
 /**
  * GET /api/v1/comments — admin sees all comments, sellers see comments on their own posts.
  */
-commentRouter.get('/', authenticate, authorizeRoles('admin', 'seller') as any, paginationMiddleware, getAllComments);
+commentRouter.get('/', authenticate, authorizeRoles('admin', 'seller') as any, paginationMiddleware(), getAllComments);
 
 /**
  * POST /api/v1/comments/:commentId/replies

@@ -84,7 +84,7 @@ const deleteCategoryById = (req: any, res: any) => {
  *                     totalPages:
  *                       type: integer
  */
-router.get('/', paginationMiddleware, getApprovedCategories);
+router.get('/', paginationMiddleware(), getApprovedCategories);
 
 // RESTful routes - ADMIN ONLY
 /**

@@ -84,7 +84,7 @@ const deleteDestinationById = (req: any, res: any) => {
  *                     totalPages:
  *                       type: integer
  */
-router.get('/', paginationMiddleware, getApprovedDestinations);
+router.get('/', paginationMiddleware(), getApprovedDestinations);
 
 // RESTful routes - ADMIN ONLY
 /**

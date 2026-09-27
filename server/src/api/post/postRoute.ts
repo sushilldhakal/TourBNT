@@ -23,7 +23,7 @@ const postRouter = express.Router();
 
 // Post-related routes - RESTful patterns
 postRouter.get('/',
-  paginationMiddleware,
+  paginationMiddleware(),
   filterSortMiddleware(['status', 'author'], ['createdAt', 'updatedAt', 'title', 'views']),
   getAllPosts
 );
@@ -43,7 +43,7 @@ postRouter.patch('/:postId', authenticate, uploadNone, editPost);
 postRouter.delete('/:postId', authenticate, deletePost);
 
 // Nested post resource routes - RESTful patterns
-postRouter.get('/:postId/comments', paginationMiddleware, getCommentsByPost);
+postRouter.get('/:postId/comments', paginationMiddleware(), getCommentsByPost);
 postRouter.post('/:postId/comments', authenticate, addComment);
 
 // Old comment routes - kept for backward compatibility during migration

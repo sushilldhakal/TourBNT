@@ -19,7 +19,7 @@ const subscriberRouter = express.Router();
  *       200:
  *         description: Subscribers retrieved successfully
  */
-subscriberRouter.get('/', authenticate as any, authorizeRoles('admin'), paginationMiddleware, getAllSubscribers);
+subscriberRouter.get('/', authenticate as any, authorizeRoles('admin'), paginationMiddleware(), getAllSubscribers);
 
 /**
  * @swagger
