@@ -14,30 +14,50 @@ console.log(`Loading env from: ${envFile}`);
 
 const createAdminUser = async () => {
     try {
-        const [existingAdmin] = await db.select().from(users).where(eq(users.role, 'admin')).limit(1);
-        if (existingAdmin) {
-            console.log('Admin user already exists:', existingAdmin.email);
-            process.exit(0);
+        const email = process.env.ADMIN_EMAIL;
+        const password = process.env.ADMIN_PASSWORD;
+        const name = process.env.ADMIN_NAME || 'Admin';
+        const phone = process.env.ADMIN_PHONE;
+
+        if (!email || !password) {
+            console.error('❌ ADMIN_EMAIL and ADMIN_PASSWORD env vars are required.');
+            console.error('   Usage: ADMIN_EMAIL=you@example.com ADMIN_PASSWORD=... npm run create-admin');
+            process.exit(1);
+        }
+        if (password.length < 8) {
+            console.error('❌ ADMIN_PASSWORD must be at least 8 characters.');
+            process.exit(1);
         }
 
-        const hashedPassword = await bcrypt.hash('30354380@Atmc', 10); // Change this password!
+        const [existingByEmail] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        if (existingByEmail) {
+            const [updated] = await db
+                .update(users)
+                .set({ role: 'admin', verified: true, password: hashedPassword, name })
+                .where(eq(users.id, existingByEmail.id))
+                .returning();
+            console.log('✅ Existing user promoted to admin and password updated.');
+            console.log('Email:', updated.email);
+            process.exit(0);
+        }
 
         const [adminUser] = await db
             .insert(users)
             .values({
-                name: 'Admin User',
-                email: 'info@tourbnt.com', // Change this email!
+                name,
+                email,
                 password: hashedPassword,
-                phone: '0433926079',
+                phone,
                 role: 'admin',
                 verified: true,
             })
             .returning();
 
-        console.log('Admin user created successfully!');
+        console.log('✅ Admin user created successfully!');
         console.log('Email:', adminUser.email);
-        console.log('Password: admin123'); // Remember to change this!
-        console.log('Please change the password after first login!');
+        console.log('Please store the password securely — it is not logged here.');
 
         process.exit(0);
     } catch (error) {

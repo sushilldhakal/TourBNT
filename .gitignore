@@ -244,3 +244,4 @@ public/uploads/
 !.dockerignore
 !.gitignore
 .qodo
+.neon

@@ -41,5 +41,9 @@
     "devDependencies": {
         "concurrently": "^8.2.2",
         "drizzle-orm": "^0.45.3"
+    },
+    "dependencies": {
+        "@neon/config": "^1.8.2",
+        "@neon/env": "^1.4.7"
     }
 }
