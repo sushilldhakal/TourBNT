@@ -81,9 +81,15 @@ export const filterSortMiddleware = (
             sort = { field: sortField, order: sortOrder };
         }
 
-        // Attach filter and sort params to request
+        // Attach filter params to request. Sort is only overwritten when
+        // this request actually asked for one — paginationMiddleware()
+        // (which always runs first) already set a default req.sort, and
+        // unconditionally overwriting it with undefined here breaks every
+        // request that doesn't pass ?sort=.
         req.filters = filters;
-        req.sort = sort;
+        if (sort) {
+            req.sort = sort;
+        }
 
         next();
     };
