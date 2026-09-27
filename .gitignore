@@ -146,16 +146,6 @@ config.local.*
 *.local
 
 # ============================================
-# Docker (exclude local/dev compose files — production deploys are native,
-# not Docker; see .github/workflows/deploy.yml)
-# ============================================
-docker-compose*.yml
-!Dockerfile
-!.dockerignore
-
-# Keep Dockerfile and .dockerignore for Cloud Run
-
-# ============================================
 # Deployment Scripts (SECURITY)
 # ============================================
 # Exclude all shell scripts by default
@@ -242,7 +232,6 @@ public/uploads/
 # ============================================
 !.env.example
 !.env.production.example
-!.dockerignore
 !.gitignore
 .qodo
 .neon

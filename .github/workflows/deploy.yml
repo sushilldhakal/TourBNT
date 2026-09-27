@@ -1,15 +1,9 @@
 name: Deploy to Oracle Cloud
 
 # Fully automatic: every push to main syncs the source to the production
-# Oracle Cloud server and builds it there natively (no Docker, no cross-arch
-# emulation). There is no manual approval step — a broken commit on main
-# goes live immediately.
-#
-# Why native instead of Docker: the Oracle VM is ARM64 (Ampere A1) but
-# GitHub's runners are x86_64, so a Docker build had to cross-compile under
-# QEMU emulation — that's what made deploys take 20-30+ minutes. Building
-# directly on the target server has no emulation and uses its own 12GB RAM,
-# so `npm install`/`next build`/`tsc` all run at native speed.
+# Oracle Cloud server and builds it there directly with Node/npm, then
+# reloads it under PM2. There is no manual approval step — a broken commit
+# on main goes live immediately.
 on:
   push:
     branches: [main]
@@ -67,9 +61,8 @@ jobs:
             cd ${{ env.APP_DIR }}
 
             # dotenv.config() in server/src/config/config.ts loads from cwd,
-            # and PM2 runs server/ecosystem.config.js with cwd=server/, so
-            # this is the one file that actually has to exist — not the old
-            # Docker-era root .env.production.
+            # and server/ecosystem.config.js sets cwd=server/, so this is
+            # the one file that actually has to exist on the server.
             if [ ! -f server/.env ]; then
               echo "❌ server/.env missing on the server — aborting deploy."
               exit 1
@@ -87,8 +80,7 @@ jobs:
             echo "🔨 Building frontend..."
             # NEXT_PUBLIC_* vars are inlined at build time, so this can't
             # come from a runtime env file the way server/.env does — it
-            # has to be exported right here, same value the old Docker
-            # build-arg used.
+            # has to be exported right here.
             export NEXT_PUBLIC_BACKEND_URL=https://tourbnt.com
             npm run build --prefix frontend
 

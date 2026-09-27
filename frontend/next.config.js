@@ -14,10 +14,7 @@ const nextConfig = {
     ],
   },
 
-  // Enable standalone output for Docker
-  output: "standalone",
-
-  // The merged frontend still has type errors. Skip them so the Oracle image can build.
+  // The merged frontend still has type errors. Skip them so production builds succeed.
   typescript: {
     ignoreBuildErrors: true,
   },

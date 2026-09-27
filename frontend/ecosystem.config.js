@@ -14,9 +14,9 @@ module.exports = {
     // PM2 was invoked from (not this file's directory), so it can't find
     // its own .next build output and crash-loops on startup.
     cwd: __dirname,
-    // Runs the standard Next.js production server (not the Docker-only
-    // "standalone" build output, which nests server.js in a way that only
-    // makes sense inside that isolated build context).
+    // Runs the standard Next.js production server against the regular
+    // `next build` output (this app's .next directory, not a standalone
+    // bundle).
     script: nextBin,
     args: 'start -p 3000 -H 0.0.0.0',
     instances: 2,  // Run 2 instances for load balancing
