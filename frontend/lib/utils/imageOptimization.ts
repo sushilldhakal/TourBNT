@@ -1,9 +1,11 @@
 /**
  * Image Optimization Utilities
- * 
- * Provides functions for optimizing images using Cloudinary transformations.
- * Generates thumbnail URLs with appropriate sizing and quality settings.
- * 
+ *
+ * Media now lives in Cloudflare R2, which has no on-the-fly transform API,
+ * so every function here is a no-op passthrough for R2 URLs — they still
+ * apply Cloudinary transformations for any pre-migration asset URLs that
+ * remain on the legacy Cloudinary account.
+ *
  * Requirements: 10.2
  */
 

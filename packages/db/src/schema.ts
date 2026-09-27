@@ -124,6 +124,10 @@ export const users = pgTable('users', {
   avatar: text('avatar'),
   phone: text('phone'),
   verified: boolean('verified').notNull().default(false),
+  // Stable R2 object-key prefix this seller/business-partner's tour media is
+  // stored under (e.g. "acme-tours"), assigned once at onboarding approval —
+  // see mediaFolderService.ensureMediaFolder. Null until they onboard.
+  mediaFolder: text('media_folder'),
   paymentMethods: jsonb('payment_methods').$type<
     Array<{ cardNumber?: string; expirationDate?: string; cardholderName?: string }>
   >().default([]),
@@ -132,14 +136,12 @@ export const users = pgTable('users', {
   ...timestamps,
 }, (table) => ({
   emailIdx: uniqueIndex('users_email_idx').on(table.email),
+  mediaFolderIdx: uniqueIndex('users_media_folder_idx').on(table.mediaFolder),
 }));
 
 export const userSettings = pgTable('user_settings', {
   id: id(),
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  cloudinaryCloud: text('cloudinary_cloud').default(''),
-  cloudinaryApiKey: text('cloudinary_api_key').default(''),
-  cloudinaryApiSecret: text('cloudinary_api_secret').default(''),
   openaiApiKey: text('openai_api_key').default(''),
   googleApiKey: text('google_api_key').default(''),
   ...timestamps,

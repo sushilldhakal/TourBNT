@@ -116,8 +116,7 @@ export function ErrorState({ message, onRetry }: ErrorStateProps) {
                     <div className="text-sm text-muted-foreground mt-4 space-y-2">
                         <p className="font-medium">Need help?</p>
                         <ul className="list-disc list-inside space-y-1 ml-2">
-                            <li>Check your Cloudinary API configuration</li>
-                            <li>Verify your API keys are set correctly</li>
+                            <li>Verify your API keys are set correctly in Settings</li>
                             <li>Contact your administrator if the issue persists</li>
                         </ul>
                     </div>

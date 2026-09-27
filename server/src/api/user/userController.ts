@@ -8,6 +8,7 @@ import { eq, desc, asc, count, sql, type SQL } from "drizzle-orm";
 import { config } from "../../config/config";
 import { sendResetPasswordEmail as sendResetPasswordEmailMaileroo, sendVerificationEmail as sendVerificationEmailMaileroo } from "../../controller/maileroo";
 import { uploadSellerDocuments } from "../../services/sellerDocumentService";
+import { ensureMediaFolder } from "../../services/mediaFolderService";
 import { HTTP_STATUS, sendSuccess, sendPaginatedResponse } from "../../utils/apiResponse";
 import { getAuthCookieOptions, getClearCookieOptions, COOKIE_NAMES, COOKIE_DURATIONS } from "../../utils/cookieUtils";
 import * as pgUsers from "./userRepo.pg";
@@ -260,7 +261,7 @@ export const updateUser = async (req: Request, res: Response, next: NextFunction
         try {
           uploadedDocuments = await uploadSellerDocuments(req.files as { [fieldname: string]: Express.Multer.File[] });
         } catch (uploadError) {
-          console.error('Failed to upload documents to Cloudinary:', uploadError);
+          console.error('Failed to upload documents:', uploadError);
           return next(createHttpError(500, "Failed to upload documents. Please try again."));
         }
       }
@@ -416,6 +417,9 @@ export const approveSellerApplication = async (req: Request, res: Response, next
       .set({ role: 'seller', sellerInfo: updatedSellerInfo, updatedAt: new Date() })
       .where(eq(users.id, userId))
       .returning();
+
+    // Create their tour-media R2 folder now, so it's ready before their first upload.
+    await ensureMediaFolder(userId, sellerInfo.companyName);
 
     res.json({ user: pgUsers.withoutPassword(updatedUser), message: "Seller application approved successfully" });
   } catch (err) {

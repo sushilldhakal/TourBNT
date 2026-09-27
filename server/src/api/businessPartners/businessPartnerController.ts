@@ -16,6 +16,7 @@ import {
 import { eq, and, ilike, desc, count, inArray, sql } from 'drizzle-orm';
 import { HTTP_STATUS, sendSuccess, sendPaginatedResponse, sendValidationError, sendNotFoundError, sendForbiddenError, handleUnauthorized } from '../../utils/apiResponse';
 import { uploadBusinessDocuments, deleteBusinessDocuments } from '../../services/businessDocumentService';
+import { ensureMediaFolder } from '../../services/mediaFolderService';
 import * as notifications from '../notifications/notificationController';
 import type { BusinessPartnerType } from './businessPartnerTypes';
 
@@ -346,6 +347,9 @@ export const approveBusinessPartner = async (req: Request, res: Response, next: 
 
     await db.update(users).set({ role: existing.type, updatedAt: new Date() }).where(eq(users.id, existing.ownerId));
 
+    // Create their tour-media R2 folder now, so it's ready before their first upload.
+    await ensureMediaFolder(existing.ownerId, existing.name);
+
     try {
       await notifications.createBusinessPartnerApprovalNotification(existing.ownerId, approvedBy, existing.name, existing.id);
     } catch (notificationError) {
@@ -411,7 +415,7 @@ export const deleteBusinessPartner = async (req: Request, res: Response, next: N
       try {
         await deleteBusinessDocuments(docs.map((d) => d.publicId).filter((id): id is string => !!id));
       } catch (cleanupError) {
-        console.error('Error cleaning up business documents from Cloudinary:', cleanupError);
+        console.error('Error cleaning up business documents:', cleanupError);
       }
     }
 

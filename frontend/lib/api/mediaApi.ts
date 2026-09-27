@@ -129,7 +129,7 @@ export async function getAllMedia(
 /**
  * Upload media files
  * 
- * Uploads one or more media files to Cloudinary storage.
+ * Uploads one or more media files to the server, which stores them in R2.
  * Supports images, videos, and PDFs.
  * 
  * @param params - Upload parameters including FormData and user ID
@@ -218,13 +218,6 @@ export async function uploadMedia(
         const statusCode = error.statusCode || error.response?.status;
         const errorMessage = error.message || error.response?.data?.message;
 
-        // Cloudinary API key not configured (410 Gone)
-        if (statusCode === 410) {
-            throw new Error(
-                'Cloudinary API key not configured. Please configure your API keys in settings to enable media uploads.'
-            );
-        }
-
         // File size errors (413 Payload Too Large)
         if (statusCode === 413 || errorMessage?.toLowerCase().includes('file size') || errorMessage?.toLowerCase().includes('too large')) {
             throw new Error(
@@ -284,7 +277,7 @@ export async function uploadMedia(
 /**
  * Delete media files
  * 
- * Deletes one or more media items from Cloudinary storage.
+ * Deletes one or more media items from R2 storage.
  * Supports both single and bulk deletion.
  * 
  * @param params - Delete parameters including user ID, media IDs, and media type
@@ -364,13 +357,6 @@ export async function deleteMedia(
             );
         }
 
-        // Cloudinary-specific errors
-        if (errorMessage?.toLowerCase().includes('cloudinary')) {
-            throw new Error(
-                'Failed to delete media from cloud storage. Please try again or contact support.'
-            );
-        }
-
         // Generic error with custom message if available
         throw new Error(
             errorMessage || 'Failed to delete media. Please try again.'
@@ -379,10 +365,10 @@ export async function deleteMedia(
 }
 
 /**
- * Helper function to extract public ID from Cloudinary URL
- * 
- * @param url - Cloudinary URL
- * @returns Public ID extracted from URL
+ * Helper function to extract the object key/filename from a media URL
+ *
+ * @param url - Media URL
+ * @returns Identifier extracted from the URL
  */
 export function extractPublicId(url: string): string | undefined {
     const parts = url.split('/');
@@ -392,15 +378,15 @@ export function extractPublicId(url: string): string | undefined {
 }
 
 /**
- * Helper function to generate thumbnail URL from Cloudinary URL
- * 
- * Applies Cloudinary transformations to create optimized thumbnails.
- * 
- * @param url - Original Cloudinary URL
+ * Helper function to generate a thumbnail URL.
+ *
+ * R2 has no on-the-fly image transformation, so this is a passthrough for
+ * R2-hosted media — it only rewrites URLs still served from the legacy
+ * Cloudinary account (kept during migration for previously-uploaded assets).
+ *
+ * @param url - Original media URL
  * @param width - Desired thumbnail width (default: 300px)
- * @returns Transformed URL with thumbnail parameters
- * 
- * Requirements: 10.2
+ * @returns Transformed URL with thumbnail parameters, or the original URL as-is
  */
 export function getThumbnailUrl(url: string, width: number = 300): string {
     if (!url || !url.includes('cloudinary.com')) {

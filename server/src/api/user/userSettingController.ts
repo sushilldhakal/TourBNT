@@ -11,7 +11,7 @@ export const addOrUpdateSettings = async (req: Request, res: Response, next: Nex
     if (!userId) {
       return next(createHttpError(401, 'Not authenticated'));
     }
-    const { CLOUDINARY_CLOUD, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET, OPENAI_API_KEY, GOOGLE_API_KEY } = req.body;
+    const { OPENAI_API_KEY, GOOGLE_API_KEY } = req.body;
 
     const [existing] = await db.select().from(userSettings).where(eq(userSettings.userId, userId)).limit(1);
 
@@ -21,18 +21,12 @@ export const addOrUpdateSettings = async (req: Request, res: Response, next: Nex
         .insert(userSettings)
         .values({
           userId,
-          cloudinaryCloud: CLOUDINARY_CLOUD || '',
-          cloudinaryApiKey: CLOUDINARY_API_KEY ? encrypt(CLOUDINARY_API_KEY) : '',
-          cloudinaryApiSecret: CLOUDINARY_API_SECRET ? encrypt(CLOUDINARY_API_SECRET) : '',
           openaiApiKey: OPENAI_API_KEY ? encrypt(OPENAI_API_KEY) : '',
           googleApiKey: GOOGLE_API_KEY ? encrypt(GOOGLE_API_KEY) : '',
         })
         .returning();
     } else {
       const updates: Partial<typeof userSettings.$inferInsert> = { updatedAt: new Date() };
-      if (CLOUDINARY_CLOUD !== undefined) updates.cloudinaryCloud = CLOUDINARY_CLOUD;
-      if (CLOUDINARY_API_KEY !== undefined) updates.cloudinaryApiKey = encrypt(CLOUDINARY_API_KEY);
-      if (CLOUDINARY_API_SECRET !== undefined) updates.cloudinaryApiSecret = encrypt(CLOUDINARY_API_SECRET);
       if (OPENAI_API_KEY !== undefined) updates.openaiApiKey = encrypt(OPENAI_API_KEY);
       if (GOOGLE_API_KEY !== undefined) updates.googleApiKey = encrypt(GOOGLE_API_KEY);
 
@@ -41,8 +35,6 @@ export const addOrUpdateSettings = async (req: Request, res: Response, next: Nex
 
     const responseSettings = {
       ...settings,
-      cloudinaryApiKey: CLOUDINARY_API_KEY || (settings.cloudinaryApiKey ? '••••••••' : ''),
-      cloudinaryApiSecret: CLOUDINARY_API_SECRET || (settings.cloudinaryApiSecret ? '••••••••' : ''),
       openaiApiKey: OPENAI_API_KEY || (settings.openaiApiKey ? '••••••••' : ''),
       googleApiKey: GOOGLE_API_KEY || (settings.googleApiKey ? '••••••••' : ''),
     };
@@ -65,14 +57,12 @@ export const getUserSettings = async (req: Request, res: Response) => {
     if (!settings) {
       [settings] = await db
         .insert(userSettings)
-        .values({ userId, cloudinaryCloud: '', cloudinaryApiKey: '', cloudinaryApiSecret: '', openaiApiKey: '', googleApiKey: '' })
+        .values({ userId, openaiApiKey: '', googleApiKey: '' })
         .returning();
     }
 
     const responseSettings = {
       ...settings,
-      cloudinaryApiKey: settings.cloudinaryApiKey ? '••••••••' : '',
-      cloudinaryApiSecret: settings.cloudinaryApiSecret ? '••••••••' : '',
       openaiApiKey: settings.openaiApiKey ? '••••••••' : '',
       googleApiKey: settings.googleApiKey ? '••••••••' : '',
     };
@@ -102,14 +92,6 @@ export const getDecryptedApiKey = async (req: Request, res: Response) => {
     let updates: Partial<typeof userSettings.$inferInsert> | undefined;
 
     switch (keyType) {
-      case 'cloudinary_api_key':
-        decryptedKey = decrypt(settings.cloudinaryApiKey || '');
-        fallbackKey = process.env.CLOUDINARY_API_KEY || '';
-        break;
-      case 'cloudinary_api_secret':
-        decryptedKey = decrypt(settings.cloudinaryApiSecret || '');
-        fallbackKey = process.env.CLOUDINARY_API_SECRET || '';
-        break;
       case 'openai_api_key':
         decryptedKey = decrypt(settings.openaiApiKey || '');
         fallbackKey = process.env.OPENAI_API_KEY || '';
@@ -126,12 +108,6 @@ export const getDecryptedApiKey = async (req: Request, res: Response) => {
       decryptedKey = fallbackKey;
 
       switch (keyType) {
-        case 'cloudinary_api_key':
-          updates = { cloudinaryApiKey: encrypt(fallbackKey) };
-          break;
-        case 'cloudinary_api_secret':
-          updates = { cloudinaryApiSecret: encrypt(fallbackKey) };
-          break;
         case 'openai_api_key':
           updates = { openaiApiKey: encrypt(fallbackKey) };
           break;

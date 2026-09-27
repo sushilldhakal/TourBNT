@@ -139,7 +139,7 @@ export interface Timestamps {
     PDF = 'pdf',
   }
   
-  /** Cloudinary resource types */
+  /** Media resource types */
   export enum ResourceType {
     IMAGE = 'image',
     VIDEO = 'video',
@@ -465,7 +465,7 @@ export interface Timestamps {
   // MEDIA & GALLERY
   // ============================================================================
   
-  /** Media item from Cloudinary */
+  /** Media item stored in R2 */
   export interface MediaItem {
     id: string;
     publicId: string;

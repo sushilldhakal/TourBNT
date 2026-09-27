@@ -165,8 +165,7 @@ export function useMedia(options: UseMediaOptions) {
         },
         onError: (error) => {
             let errorTitle = 'Upload Failed';
-            if (error.message.includes('Cloudinary API key')) errorTitle = 'Configuration Required';
-            else if (error.message.includes('file size') || error.message.includes('10MB')) errorTitle = 'File Too Large';
+            if (error.message.includes('file size') || error.message.includes('10MB')) errorTitle = 'File Too Large';
             else if (error.message.includes('file type') || error.message.includes('unsupported')) errorTitle = 'Invalid File Type';
             else if (error.message.includes('Network') || error.message.includes('connection')) errorTitle = 'Network Error';
             else if (error.message.includes('timeout')) errorTitle = 'Upload Timeout';

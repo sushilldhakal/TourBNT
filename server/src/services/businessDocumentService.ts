@@ -1,13 +1,5 @@
-import { v2 as cloudinary } from 'cloudinary';
-import { config } from '../config/config';
 import fs from 'fs';
-
-cloudinary.config({
-  cloud_name: config.cloudinary.cloud,
-  api_key: config.cloudinary.apiKey,
-  api_secret: config.cloudinary.secret,
-  secure: true
-});
+import { uploadFileToR2, deleteFromR2 } from '../config/r2Config';
 
 export interface UploadedBusinessDocument {
   docType: string;
@@ -18,7 +10,7 @@ export interface UploadedBusinessDocument {
 
 /**
  * Uploads business-partner onboarding documents (registration, tax, ID,
- * license, etc.) to Cloudinary, returning a flat list ready to insert as
+ * license, etc.) to R2, returning a flat list ready to insert as
  * `businessDocuments` rows — mirrors `sellerDocumentService.uploadSellerDocuments`
  * but returns a normalized array instead of a JSONB-shaped map.
  */
@@ -30,27 +22,17 @@ export const uploadBusinessDocuments = async (
 
   try {
     for (const [fieldName, fileArray] of Object.entries(files)) {
-      for (let i = 0; i < fileArray.length; i++) {
-        const file = fileArray[i];
-
+      for (const file of fileArray) {
         if (!fs.existsSync(file.path)) {
           throw new Error(`File not found: ${file.path}`);
         }
 
-        const result = await cloudinary.uploader.upload(file.path, {
-          folder: 'admin/business-documents',
-          use_filename: true,
-          unique_filename: true,
-          overwrite: false,
-          resource_type: 'auto',
-          public_id: `${fieldName}_${Date.now()}_${i}_${file.originalname.split('.')[0]}`,
-          tags: ['business-document', fieldName, 'admin-only'],
-        });
+        const result = await uploadFileToR2(file.path, 'admin/business-documents', file.originalname, file.mimetype);
 
         uploaded.push({
           docType: fieldName,
-          publicId: result.public_id,
-          url: result.secure_url,
+          publicId: result.key,
+          url: result.url,
           originalFilename: file.originalname,
         });
 
@@ -80,7 +62,5 @@ export const uploadBusinessDocuments = async (
 };
 
 export const deleteBusinessDocuments = async (publicIds: string[]): Promise<void> => {
-  for (const publicId of publicIds) {
-    await cloudinary.uploader.destroy(publicId);
-  }
+  await deleteFromR2(publicIds);
 };

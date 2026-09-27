@@ -1,25 +1,11 @@
-import { v2 as cloudinary } from 'cloudinary';
-import { config } from '../config/config';
 import fs from 'fs';
+import { uploadFileToR2 } from '../config/r2Config';
 
-cloudinary.config({
-  cloud_name: config.cloudinary.cloud,
-  api_key: config.cloudinary.apiKey,
-  api_secret: config.cloudinary.secret,
-  secure: true,
-});
-
-/** Uploads an ad creative image to Cloudinary and returns its secure URL. */
+/** Uploads an ad creative image to R2 and returns its public URL. */
 export const uploadAdImage = async (file: Express.Multer.File): Promise<string> => {
   try {
-    const result = await cloudinary.uploader.upload(file.path, {
-      folder: 'ads',
-      use_filename: true,
-      unique_filename: true,
-      overwrite: false,
-      resource_type: 'image',
-    });
-    return result.secure_url;
+    const result = await uploadFileToR2(file.path, 'ads', file.originalname, file.mimetype);
+    return result.url;
   } finally {
     try {
       if (fs.existsSync(file.path)) fs.unlinkSync(file.path);

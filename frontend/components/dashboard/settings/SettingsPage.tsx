@@ -1,8 +1,8 @@
 /**
  * SettingsPage Component
- * 
+ *
  * Main settings page for managing API integrations.
- * Handles Cloudinary, OpenAI, and Google Maps API keys.
+ * Handles OpenAI and Google Maps API keys.
  */
 
 'use client';
@@ -31,7 +31,6 @@ import {
     EyeOff,
     KeyRound,
     Loader2,
-    Cloud as CloudIcon,
     BrainCircuit,
     MapPin,
     CheckCircle2,
@@ -47,9 +46,6 @@ import { DashboardCardHeader } from '../layout/CardHeader';
 
 
 const formSchema = z.object({
-    CLOUDINARY_CLOUD: z.string().optional(),
-    CLOUDINARY_API_KEY: z.string().optional(),
-    CLOUDINARY_API_SECRET: z.string().optional(),
     OPENAI_API_KEY: z.string().optional(),
     GOOGLE_API_KEY: z.string().optional(),
 });
@@ -61,11 +57,8 @@ export function SettingsPage() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [decryptedKeys, setDecryptedKeys] = useState<Record<string, string>>({});
     const [isLoadingKeys, setIsLoadingKeys] = useState<Record<string, boolean>>({});
-    const [activeTab, setActiveTab] = useState('cloudinary');
+    const [activeTab, setActiveTab] = useState('openai');
     const [initialValues, setInitialValues] = useState<FormValues>({
-        CLOUDINARY_CLOUD: '',
-        CLOUDINARY_API_KEY: '',
-        CLOUDINARY_API_SECRET: '',
         OPENAI_API_KEY: '',
         GOOGLE_API_KEY: '',
     });
@@ -78,9 +71,6 @@ export function SettingsPage() {
     const form = useForm<FormValues>({
         resolver: zodResolver(formSchema),
         defaultValues: {
-            CLOUDINARY_CLOUD: '',
-            CLOUDINARY_API_KEY: '',
-            CLOUDINARY_API_SECRET: '',
             OPENAI_API_KEY: '',
             GOOGLE_API_KEY: '',
         },
@@ -89,12 +79,7 @@ export function SettingsPage() {
     // Populate form with fetched data
     useEffect(() => {
         if (data) {
-            const settingsData = data.settings || data;
-
             const initialFormValues: FormValues = {
-                CLOUDINARY_CLOUD: settingsData.cloudinaryCloud || '',
-                CLOUDINARY_API_KEY: '',
-                CLOUDINARY_API_SECRET: '',
                 OPENAI_API_KEY: '',
                 GOOGLE_API_KEY: '',
             };
@@ -135,35 +120,7 @@ export function SettingsPage() {
         const formData = new FormData();
         let hasChanges = false;
 
-        // Check if Cloudinary cloud name has changed
-        if (
-            values.CLOUDINARY_CLOUD &&
-            values.CLOUDINARY_CLOUD.trim() !== '' &&
-            values.CLOUDINARY_CLOUD !== initialValues.CLOUDINARY_CLOUD
-        ) {
-            formData.append('CLOUDINARY_CLOUD', values.CLOUDINARY_CLOUD);
-            hasChanges = true;
-        }
-
         // Only include API keys if they've been modified and are not empty
-        if (
-            values.CLOUDINARY_API_KEY &&
-            values.CLOUDINARY_API_KEY.trim() !== '' &&
-            values.CLOUDINARY_API_KEY !== initialValues.CLOUDINARY_API_KEY
-        ) {
-            formData.append('CLOUDINARY_API_KEY', values.CLOUDINARY_API_KEY);
-            hasChanges = true;
-        }
-
-        if (
-            values.CLOUDINARY_API_SECRET &&
-            values.CLOUDINARY_API_SECRET.trim() !== '' &&
-            values.CLOUDINARY_API_SECRET !== initialValues.CLOUDINARY_API_SECRET
-        ) {
-            formData.append('CLOUDINARY_API_SECRET', values.CLOUDINARY_API_SECRET);
-            hasChanges = true;
-        }
-
         if (
             values.OPENAI_API_KEY &&
             values.OPENAI_API_KEY.trim() !== '' &&
@@ -203,8 +160,6 @@ export function SettingsPage() {
             setIsLoadingKeys((prev) => ({ ...prev, [keyType]: true }));
 
             const keyTypeMap: Record<string, string> = {
-                CLOUDINARY_API_KEY: 'cloudinary_api_key',
-                CLOUDINARY_API_SECRET: 'cloudinary_api_secret',
                 OPENAI_API_KEY: 'openai_api_key',
                 GOOGLE_API_KEY: 'google_api_key',
             };
@@ -264,10 +219,6 @@ export function SettingsPage() {
         const settingsData = data.settings || data;
 
         switch (key) {
-            case 'CLOUDINARY_API_KEY':
-                return !!settingsData.cloudinaryApiKey;
-            case 'CLOUDINARY_API_SECRET':
-                return !!settingsData.cloudinaryApiSecret;
             case 'OPENAI_API_KEY':
                 return !!settingsData.openaiApiKey;
             case 'GOOGLE_API_KEY':
@@ -344,74 +295,6 @@ export function SettingsPage() {
             />
         );
     };
-
-    const renderCloudinaryContent = () => (
-        <Card className="pt-0">
-            <CardHeader className="bg-gradient-to-r from-primary/5 to-primary/10 border-b pt-4 rounded-t-xl">
-                <div className="flex items-center gap-2">
-                    <div className="bg-primary/10 p-2 rounded-full">
-                        <CloudIcon className="h-5 w-5 text-primary" />
-                    </div>
-                    <div>
-                        <CardTitle>Cloudinary Integration</CardTitle>
-                        <CardDescription>
-                            Configure your Cloudinary account for image and file uploads
-                        </CardDescription>
-                    </div>
-                </div>
-            </CardHeader>
-            <CardContent className="p-6 space-y-6">
-                <div className="bg-primary/5 p-4 rounded-lg border border-primary/10">
-                    <div className="flex gap-3">
-                        <InfoIcon className="h-5 w-5 text-primary shrink-0 mt-0.5" />
-                        <div>
-                            <p className="text-sm text-primary-foreground dark:text-primary">
-                                Visit{' '}
-                                <Link
-                                    className="text-primary font-medium inline-flex items-center hover:underline"
-                                    target="_blank"
-                                    href="https://cloudinary.com/"
-                                >
-                                    Cloudinary <ExternalLink className="h-3 w-3 ml-0.5" />
-                                </Link>{' '}
-                                to create a free account. Then get your API keys from the{' '}
-                                <Link
-                                    className="text-primary font-medium inline-flex items-center hover:underline"
-                                    target="_blank"
-                                    href="https://console.cloudinary.com/settings/c-ccd6ef073e22dd5e5f1b220b3fd801/api-keys"
-                                >
-                                    Cloudinary Dashboard <ExternalLink className="h-3 w-3 ml-0.5" />
-                                </Link>
-                            </p>
-                            <p className="text-sm text-primary-foreground dark:text-primary mt-2">
-                                To upload PDF files, go to Settings → Security and enable the PDF and ZIP files
-                                delivery option.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="space-y-4">
-                    <FormField
-                        control={form.control}
-                        name="CLOUDINARY_CLOUD"
-                        render={({ field }: any) => (
-                            <FormItem>
-                                <FormLabel>Cloudinary Cloud Name</FormLabel>
-                                <FormControl>
-                                    <Input type="text" className="w-full" {...field} />
-                                </FormControl>
-                                <FormMessage />
-                            </FormItem>
-                        )}
-                    />
-
-                    {renderApiKeyField('CLOUDINARY_API_KEY', 'Cloudinary API Key')}
-                    {renderApiKeyField('CLOUDINARY_API_SECRET', 'Cloudinary API Secret')}
-                </div>
-            </CardContent>
-        </Card>
-    );
 
     const renderOpenAIContent = () => (
         <Card className="pt-0">
@@ -566,23 +449,13 @@ export function SettingsPage() {
 
             <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)}>
-                    <Tabs defaultValue="cloudinary" value={activeTab} onValueChange={setActiveTab}>
+                    <Tabs defaultValue="openai" value={activeTab} onValueChange={setActiveTab}>
                         <div className="grid grid-cols-1 lg:grid-cols-[250px_1fr] gap-8">
                             {/* Sidebar */}
                             <div className="space-y-6">
                                 <Card>
                                     <CardContent className="p-4">
                                         <TabsList className="flex flex-col h-auto bg-transparent space-y-1">
-                                            <TabsTrigger
-                                                value="cloudinary"
-                                                className="w-full justify-start gap-2 data-[state=active]:bg-primary/10 data-[state=active]:text-primary"
-                                            >
-                                                <CloudIcon className="h-4 w-4" />
-                                                <span>Cloudinary</span>
-                                                {isKeySet('CLOUDINARY_API_KEY') && (
-                                                    <CheckCircle2 className="h-3 w-3 ml-auto text-primary" />
-                                                )}
-                                            </TabsTrigger>
                                             <TabsTrigger
                                                 value="openai"
                                                 className="w-full justify-start gap-2 data-[state=active]:bg-primary/10 data-[state=active]:text-primary"
@@ -660,9 +533,6 @@ export function SettingsPage() {
                                     </Alert>
                                 ) : (
                                     <>
-                                        <TabsContent value="cloudinary" className="mt-0 space-y-6">
-                                            {renderCloudinaryContent()}
-                                        </TabsContent>
                                         <TabsContent value="openai" className="mt-0 space-y-6">
                                             {renderOpenAIContent()}
                                         </TabsContent>

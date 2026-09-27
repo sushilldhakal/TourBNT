@@ -3,7 +3,7 @@ import fs from 'fs';
 import createHttpError from 'http-errors';
 import { db, users } from '@tourbnt/db';
 import { eq } from 'drizzle-orm';
-import { uploadToCloudinary } from '../../config/cloudinaryConfig';
+import { uploadFileToR2 } from '../../config/r2Config';
 import { sendSuccess } from '../../utils/apiResponse';
 import * as pgUsers from './userRepo.pg';
 
@@ -31,8 +31,8 @@ export const uploadAvatar = async (req: Request, res: Response, next: NextFuncti
     if (req.body.avatarUrl) {
       avatarUrl = req.body.avatarUrl;
     } else if (req.file) {
-      const result = await uploadToCloudinary(req.file.path);
-      avatarUrl = result.secure_url;
+      const result = await uploadFileToR2(req.file.path, 'avatars', req.file.originalname, req.file.mimetype);
+      avatarUrl = result.url;
 
       fs.unlink(req.file.path, (err) => {
         if (err) console.error('Error deleting local file:', err);

@@ -228,7 +228,7 @@ userRouter.get('/me/avatar', authenticate, getUserAvatar);
  *             properties:
  *               openAIKey:
  *                 type: string
- *               CLOUDINARY_CLOUD:
+ *               GOOGLE_API_KEY:
  *                 type: string
  *     responses:
  *       200:
@@ -253,7 +253,7 @@ userRouter.patch('/me/settings', uploadNone, authenticate, addOrUpdateSettings);
  *         name: keyType
  *         schema:
  *           type: string
- *         description: Type of API key (openAIKey, CLOUDINARY_API_KEY, etc.)
+ *         description: Type of API key (openai_api_key, google_api_key)
  *     responses:
  *       200:
  *         description: API key retrieved successfully

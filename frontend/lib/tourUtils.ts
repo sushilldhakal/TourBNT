@@ -283,8 +283,7 @@ export function isVideo(url: string): boolean {
     // Check for common video hosting patterns
     const isVideoHost = lowerUrl.includes('video') ||
         lowerUrl.includes('youtube') ||
-        lowerUrl.includes('vimeo') ||
-        lowerUrl.includes('cloudinary') && lowerUrl.includes('video');
+        lowerUrl.includes('vimeo');
 
     return hasVideoExtension || isVideoHost;
 }

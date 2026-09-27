@@ -27,9 +27,6 @@ const addUserSettings = async () => {
         if (existingSettings) {
             console.log('Settings already exist for this user');
             console.log('Current settings:', {
-                cloudinaryCloud: existingSettings.cloudinaryCloud,
-                hasApiKey: !!existingSettings.cloudinaryApiKey,
-                hasApiSecret: !!existingSettings.cloudinaryApiSecret,
                 hasOpenAI: !!existingSettings.openaiApiKey,
                 hasGoogle: !!existingSettings.googleApiKey
             });
@@ -51,22 +48,14 @@ const addUserSettings = async () => {
         }
 
         // Get credentials from environment variables
-        const cloudinaryCloud = process.env.CLOUDINARY_CLOUD || '';
-        const cloudinaryApiKey = process.env.CLOUDINARY_API_KEY || '';
-        const cloudinaryApiSecret = process.env.CLOUDINARY_API_SECRET || '';
         const openaiApiKey = process.env.OPENAI_API_KEY || '';
         const googleApiKey = process.env.GOOGLE_API_KEY || '';
 
         console.log('Creating/updating settings with credentials from .env...');
-        console.log('Cloudinary Cloud:', cloudinaryCloud);
-        console.log('Cloudinary API Key:', cloudinaryApiKey ? cloudinaryApiKey.substring(0, 5) + '...' : 'Not set');
-        console.log('Cloudinary API Secret:', cloudinaryApiSecret ? '***' : 'Not set');
         console.log('OpenAI API Key:', openaiApiKey ? openaiApiKey.substring(0, 5) + '...' : 'Not set');
         console.log('Google API Key:', googleApiKey ? googleApiKey.substring(0, 5) + '...' : 'Not set');
 
         // Encrypt sensitive data
-        const encryptedApiKey = cloudinaryApiKey ? encrypt(cloudinaryApiKey) : '';
-        const encryptedApiSecret = cloudinaryApiSecret ? encrypt(cloudinaryApiSecret) : '';
         const encryptedOpenAI = openaiApiKey ? encrypt(openaiApiKey) : '';
         const encryptedGoogle = googleApiKey ? encrypt(googleApiKey) : '';
 
@@ -75,18 +64,12 @@ const addUserSettings = async () => {
             .insert(userSettings)
             .values({
                 userId,
-                cloudinaryCloud,
-                cloudinaryApiKey: encryptedApiKey,
-                cloudinaryApiSecret: encryptedApiSecret,
                 openaiApiKey: encryptedOpenAI,
                 googleApiKey: encryptedGoogle,
             })
             .onConflictDoUpdate({
                 target: userSettings.userId,
                 set: {
-                    cloudinaryCloud,
-                    cloudinaryApiKey: encryptedApiKey,
-                    cloudinaryApiSecret: encryptedApiSecret,
                     openaiApiKey: encryptedOpenAI,
                     googleApiKey: encryptedGoogle,
                     updatedAt: new Date(),
