@@ -10,6 +10,10 @@ const nextBin = require.resolve('next/dist/bin/next');
 module.exports = {
   apps: [{
     name: 'tourbnt-frontend',
+    // Explicit cwd — without it, `next start` runs from whatever directory
+    // PM2 was invoked from (not this file's directory), so it can't find
+    // its own .next build output and crash-loops on startup.
+    cwd: __dirname,
     // Runs the standard Next.js production server (not the Docker-only
     // "standalone" build output, which nests server.js in a way that only
     // makes sense inside that isolated build context).
