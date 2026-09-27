@@ -146,9 +146,10 @@ config.local.*
 *.local
 
 # ============================================
-# Docker (Exclude local docker-compose files)
+# Docker (exclude local/dev compose files, keep the tracked prod one)
 # ============================================
 docker-compose*.yml
+!docker-compose.prod.yml
 !Dockerfile
 !.dockerignore
 
