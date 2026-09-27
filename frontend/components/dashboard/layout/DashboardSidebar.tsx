@@ -18,7 +18,8 @@ import {
     TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { useAuth } from '@/lib/hooks/useAuth';
-import { isAdmin } from '@/lib/utils/roles';
+import { isAdmin, RoleGroups } from '@/lib/utils/roles';
+import { Megaphone, Building2 } from 'lucide-react';
 
 /**
  * Dashboard Sidebar Component
@@ -37,6 +38,7 @@ interface NavigationItem {
     icon: any;
     children?: NavigationItem[];
     adminOnly?: boolean; // Flag to mark admin-only items
+    partnerOnly?: boolean; // Flag to mark items for business-partner roles only (guide/hotel/guesthouse/restaurant/transport/advertiser)
 }
 
 const baseNavigationItems: NavigationItem[] = [
@@ -78,6 +80,22 @@ const baseNavigationItems: NavigationItem[] = [
             { href: '/dashboard/users/seller-applications', label: 'Seller Applications', icon: Briefcase, adminOnly: true },
         ]
     },
+    {
+        label: 'Business Partners',
+        icon: Building2,
+        adminOnly: true,
+        children: [
+            { href: '/dashboard/business-partners', label: 'Applications', icon: List, adminOnly: true },
+            { href: '/dashboard/ads', label: 'Ad Campaigns', icon: Megaphone, adminOnly: true },
+        ]
+    },
+    // "My Business" — limited dashboard for guides/hotels/guesthouses/restaurants/transport/advertisers.
+    {
+        href: '/dashboard/business',
+        label: 'My Business',
+        icon: Building2,
+        partnerOnly: true,
+    },
     // Add My Profile link at top level (accessible to all authenticated users)
     {
         href: '/dashboard/profile', // We'll create this page
@@ -107,6 +125,7 @@ export function DashboardSidebar({ isCollapsed, onToggle }: DashboardSidebarProp
     const [expandedItems, setExpandedItems] = useState<string[]>([]);
     const { userRole, isHydrated, user } = useAuth();
     const isUserAdmin = isAdmin(userRole);
+    const isBusinessPartner = !!userRole && (RoleGroups.BUSINESS_PARTNER as readonly string[]).includes(userRole);
 
     // Extract userId to avoid dependency issues
     const userId = user?.id;
@@ -117,8 +136,11 @@ export function DashboardSidebar({ isCollapsed, onToggle }: DashboardSidebarProp
 
         return baseNavigationItems
             .filter((item) => {
-                // First, filter out parent items that are admin-only
+                // First, filter out parent items that are admin-only or partner-only
                 if (item.adminOnly && !isUserAdmin) {
+                    return false;
+                }
+                if (item.partnerOnly && !isBusinessPartner) {
                     return false;
                 }
 
@@ -156,7 +178,7 @@ export function DashboardSidebar({ isCollapsed, onToggle }: DashboardSidebarProp
                 // Return the item (children already filtered if applicable)
                 return item;
             });
-    }, [isHydrated, isUserAdmin, userId]);
+    }, [isHydrated, isUserAdmin, isBusinessPartner, userId]);
 
     // Auto-expand parent menu if child is active
     useState(() => {

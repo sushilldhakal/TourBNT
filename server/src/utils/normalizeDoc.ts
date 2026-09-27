@@ -1,4 +1,3 @@
-import { Types } from 'mongoose';
 import { validateDataIntegrity, NormalizationPerformanceMonitor } from './dataIntegrityValidator';
 
 /**
@@ -238,9 +237,7 @@ const normalizeOne = (doc: any, options: NormalizeOptions): any => {
     const result: PlainObject = { ...obj };
 
     if (options.addId && result._id) {
-        result.id = result._id instanceof Types.ObjectId
-            ? result._id.toString()
-            : String(result._id);
+        result.id = String(result._id);
     }
 
     if (options.removeId) delete result._id;

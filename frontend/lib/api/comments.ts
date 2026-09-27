@@ -1,12 +1,6 @@
 import { api, handleApiError, extractResponseData } from './apiClient';
 
 /**
- * Comment API Methods
- * Migrated from dashboard/src/http/commentApi.ts
- * Follows server API specifications from API_DOCUMENTATION.md
- */
-
-/**
  * Add a new comment to a post
  */
 export const addComment = async (commentData: FormData, postId: string) => {

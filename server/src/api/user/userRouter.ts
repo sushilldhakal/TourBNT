@@ -17,7 +17,7 @@ import {
   getCurrentUser
 } from "./userController";
 import { uploadAvatar, getUserAvatar } from './userAvatarController';
-import { body, param } from 'express-validator';
+import { body } from 'express-validator';
 import { authenticate, authorizeRoles, requireOwnerOrAdmin } from "../../middlewares/authenticate";
 import { paginationMiddleware } from "../../middlewares/pagination";
 import { filterSortMiddleware } from "../../middlewares/filterSort";
@@ -281,7 +281,7 @@ userRouter.get('/me/settings/key', authenticate, getDecryptedApiKey);
  *         required: true
  *         schema:
  *           type: string
- *         description: User ID (MongoDB ObjectId)
+ *         description: User ID
  *     requestBody:
  *       required: true
  *       content:
@@ -320,7 +320,7 @@ userRouter.get('/me/settings/key', authenticate, getDecryptedApiKey);
  *         required: true
  *         schema:
  *           type: string
- *         description: User ID (MongoDB ObjectId)
+ *         description: User ID
  *     responses:
  *       200:
  *         description: User deleted successfully
@@ -333,7 +333,7 @@ userRouter.get('/me/settings/key', authenticate, getDecryptedApiKey);
  */
 userRouter.patch(
   '/:userId',
-  [param('userId').isMongoId(), authenticate],
+  authenticate,
   requireOwnerOrAdmin((req) => req.params.userId),
   uploadSellerDocs,
   updateUserById
@@ -341,7 +341,7 @@ userRouter.patch(
 
 userRouter.delete(
   '/:userId',
-  [param('userId').isMongoId(), authenticate],
+  authenticate,
   requireOwnerOrAdmin((req) => req.params.userId),
   deleteUser
 );
@@ -407,7 +407,7 @@ userRouter.get('/',
  *         required: true
  *         schema:
  *           type: string
- *         description: User ID (MongoDB ObjectId)
+ *         description: User ID
  *     responses:
  *       200:
  *         description: User retrieved successfully
@@ -420,7 +420,7 @@ userRouter.get('/',
  *       404:
  *         description: User not found
  */
-userRouter.get('/:userId', [param('userId').isMongoId(), authenticate], authorizeRoles('admin'), getUserById);
+userRouter.get('/:userId', authenticate, authorizeRoles('admin'), getUserById);
 
 /**
  * @swagger
@@ -458,7 +458,7 @@ userRouter.get('/:userId', [param('userId').isMongoId(), authenticate], authoriz
  *       403:
  *         description: Forbidden - Admin access required
  */
-userRouter.patch('/:userId/role', [param('userId').isMongoId(), authenticate], authorizeRoles('admin'), changeUserRole);
+userRouter.patch('/:userId/role', authenticate, authorizeRoles('admin'), changeUserRole);
 
 // ============================================================================
 // SELLER MANAGEMENT (Admin only)
@@ -507,7 +507,7 @@ userRouter.get('/seller-applications', authenticate, authorizeRoles('admin'), ge
  *       403:
  *         description: Forbidden - Admin access required
  */
-userRouter.patch('/:userId/approve-seller', [param('userId').isMongoId(), authenticate], authorizeRoles('admin'), approveSellerApplication);
+userRouter.patch('/:userId/approve-seller', authenticate, authorizeRoles('admin'), approveSellerApplication);
 
 /**
  * @swagger
@@ -542,7 +542,7 @@ userRouter.patch('/:userId/approve-seller', [param('userId').isMongoId(), authen
  *       403:
  *         description: Forbidden - Admin access required
  */
-userRouter.patch('/:userId/reject-seller', [param('userId').isMongoId(), authenticate], authorizeRoles('admin'), rejectSellerApplication);
+userRouter.patch('/:userId/reject-seller', authenticate, authorizeRoles('admin'), rejectSellerApplication);
 
 /**
  * @swagger
@@ -582,7 +582,7 @@ userRouter.patch('/:userId/reject-seller', [param('userId').isMongoId(), authent
  *       403:
  *         description: Forbidden - Admin access required
  */
-userRouter.patch('/:userId/seller-status', [param('userId').isMongoId(), authenticate], authorizeRoles('admin'), async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+userRouter.patch('/:userId/seller-status', authenticate, authorizeRoles('admin'), async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const { status, rejectionReason } = req.body;
   if (status === 'approved') {
     return approveSellerApplication(req, res, next);
@@ -620,6 +620,6 @@ userRouter.patch('/:userId/seller-status', [param('userId').isMongoId(), authent
  *       403:
  *         description: Forbidden - Admin access required
  */
-userRouter.delete('/:userId/delete-seller', [param('userId').isMongoId(), authenticate], authorizeRoles('admin'), deleteSellerApplication);
+userRouter.delete('/:userId/delete-seller', authenticate, authorizeRoles('admin'), deleteSellerApplication);
 
 export default userRouter;

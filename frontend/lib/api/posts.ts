@@ -3,7 +3,7 @@ import { api, serverApi, handleApiError, extractResponseData } from './apiClient
 
 
 /**
- * Get all posts public 
+ * Get all posts public
  */
 export const getPosts = async () => {
     try {
@@ -102,30 +102,6 @@ export const deletePost = async (postId: string) => {
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'deleting post');
-    }
-};
-
-/**
- * Like a post
- */
-export const likePost = async (postId: string, userId: string) => {
-    try {
-        const response = await api.patch(`/posts/like/${postId}`, { userId });
-        return extractResponseData(response);
-    } catch (error) {
-        throw handleApiError(error, 'liking post');
-    }
-};
-
-/**
- * Track post view
- */
-export const viewPost = async (postId: string) => {
-    try {
-        const response = await api.patch(`/posts/view/${postId}`);
-        return extractResponseData(response);
-    } catch (error) {
-        throw handleApiError(error, 'tracking post view');
     }
 };
 

@@ -1,7 +1,6 @@
-import mongoose from 'mongoose';
-
-// Interface for seller information
+// Interface for seller information (stored as JSONB on users.seller_info)
 export interface SellerInfo {
+  [key: string]: unknown;
   companyName: string;
   companyRegistrationNumber: string;
   companyType: string;
@@ -51,20 +50,16 @@ export interface SellerInfo {
   alternatePhone?: string;
 }
 
-export interface User{
-  _id: mongoose.Types.ObjectId;
+export interface User {
+  id: string;
   name: string;
   email: string;
   password: string;
-  roles: string;
-  phone: number;
+  role: string;
+  phone: string | null;
   verified: boolean;
-  avatar: string;
-  wishlists: string[];
-  bookings: string[];
-  reviews: string[];
-  payment_methods: string[];
-  sellerInfo?: SellerInfo;
+  avatar: string | null;
+  sellerInfo?: SellerInfo | null;
   createdAt: Date;
   updatedAt: Date;
 }

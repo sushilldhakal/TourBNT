@@ -7,14 +7,14 @@ import createHttpError from 'http-errors';
  */
 
 /**
- * Validate MongoDB ObjectId format
+ * Validate that an ID route parameter is present (Postgres primary keys are
+ * UUID strings, not MongoDB ObjectIds, so this just checks non-empty).
  */
 export const validateObjectId = (paramName: string = 'tourId') => {
   return (req: Request, res: Response, next: NextFunction) => {
     const id = req.params[paramName];
-    const objectIdRegex = /^[0-9a-fA-F]{24}$/;
 
-    if (!id || !objectIdRegex.test(id)) {
+    if (!id || typeof id !== 'string' || id.trim() === '') {
       return next(createHttpError(HTTP_STATUS.BAD_REQUEST, `Invalid ${paramName} format`));
     }
 

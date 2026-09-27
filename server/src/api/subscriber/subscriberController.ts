@@ -1,10 +1,10 @@
 import { Request, Response } from 'express';
-import { validationResult } from 'express-validator';
-import Subscriber from './subscriberModel';
-import { HTTP_STATUS, sendSuccess, sendError, sendPaginatedResponse } from '../../utils/apiResponse';
-import { hybridPagination } from '../../utils/paginationUtils';
+import { db, subscribers } from '@tourbnt/db';
+import { count, desc, eq } from 'drizzle-orm';
+import { HTTP_STATUS, sendSuccess, sendPaginatedResponse } from '../../utils/apiResponse';
 
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
  * Subscribe a new email to newsletter
@@ -12,31 +12,23 @@ const normalizeEmail = (email: string) => email.trim().toLowerCase();
  * PUBLIC endpoint
  */
 export const createSubscriber = async (req: Request, res: Response) => {
-  // Check for validation errors
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
+  const email = normalizeEmail(req.body.email || '');
+
+  if (!email || !EMAIL_REGEX.test(email)) {
     return res.status(HTTP_STATUS.BAD_REQUEST).json({
       error: {
         code: 'VALIDATION_ERROR',
         message: 'Invalid request data',
-        details: errors.array().reduce((acc, err) => {
-          if (err.type === 'field') {
-            acc[err.path] = err.msg;
-          }
-          return acc;
-        }, {} as Record<string, string>),
+        details: { email: 'A valid email is required' },
         timestamp: new Date().toISOString(),
         path: req.path
       }
     });
   }
 
-  const email = normalizeEmail(req.body.email);
-
   try {
-    // Check if email already exists
-    const existingSubscriber = await Subscriber.findOne({ email });
-    if (existingSubscriber) {
+    const [existing] = await db.select().from(subscribers).where(eq(subscribers.email, email)).limit(1);
+    if (existing) {
       return res.status(HTTP_STATUS.CONFLICT).json({
         error: {
           code: 'DUPLICATE_SUBSCRIPTION',
@@ -48,11 +40,10 @@ export const createSubscriber = async (req: Request, res: Response) => {
       });
     }
 
-    // Create new subscriber
-    const newSubscriber = await Subscriber.create({ email });
+    const [subscriber] = await db.insert(subscribers).values({ email }).returning();
     res.status(HTTP_STATUS.CREATED).json({
       message: 'Successfully subscribed to newsletter',
-      subscriber: newSubscriber
+      subscriber
     });
   } catch (error) {
     console.error('Error in createSubscriber:', error);
@@ -74,18 +65,20 @@ export const createSubscriber = async (req: Request, res: Response) => {
  */
 export const getAllSubscribers = async (req: Request, res: Response) => {
   try {
-    // Use hybrid pagination utility
-    return hybridPagination(
-      Subscriber,
-      {},
-      req,
-      res,
-      {
-        sort: { createdAt: -1 },
-        memoryThreshold: 100,
-        message: 'Subscribers retrieved successfully'
-      }
-    );
+    const { page, limit, skip } = req.pagination || { page: 1, limit: 10, skip: 0 };
+    const pageLimit = typeof limit === 'number' ? limit : 10;
+
+    const [items, [{ value: totalItems }]] = await Promise.all([
+      db.select().from(subscribers).orderBy(desc(subscribers.createdAt)).limit(pageLimit).offset(skip),
+      db.select({ value: count() }).from(subscribers),
+    ]);
+
+    sendPaginatedResponse(res, items, {
+      page,
+      limit: pageLimit,
+      totalItems,
+      totalPages: Math.ceil(totalItems / pageLimit),
+    }, 'Subscribers retrieved successfully');
   } catch (error) {
     console.error('Error in getAllSubscribers:', error);
     res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
@@ -107,9 +100,7 @@ export const getAllSubscribers = async (req: Request, res: Response) => {
 export const deleteSubscriber = async (req: Request, res: Response) => {
   const email = normalizeEmail(req.params.email);
 
-  // Basic email format validation
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email)) {
+  if (!EMAIL_REGEX.test(email)) {
     return res.status(HTTP_STATUS.BAD_REQUEST).json({
       error: {
         code: 'VALIDATION_ERROR',
@@ -122,8 +113,8 @@ export const deleteSubscriber = async (req: Request, res: Response) => {
   }
 
   try {
-    const existingSubscriber = await Subscriber.findOne({ email });
-    if (!existingSubscriber) {
+    const [deleted] = await db.delete(subscribers).where(eq(subscribers.email, email)).returning();
+    if (!deleted) {
       return res.status(HTTP_STATUS.NOT_FOUND).json({
         error: {
           code: 'NOT_FOUND',
@@ -134,8 +125,6 @@ export const deleteSubscriber = async (req: Request, res: Response) => {
       });
     }
 
-    await Subscriber.deleteOne({ email });
-    // Return 204 No Content for successful deletion
     res.status(HTTP_STATUS.NO_CONTENT).send();
   } catch (error) {
     console.error('Error in deleteSubscriber:', error);

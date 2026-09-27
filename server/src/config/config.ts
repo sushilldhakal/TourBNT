@@ -2,8 +2,9 @@ import { config as conf } from "dotenv";
 conf();
 
 // Required environment variables
+// DATABASE_URL (Postgres) is the single source of truth database for the whole platform.
 const requiredEnvVars = [
-  'MONGO_CONNECTION_STRING',
+  'DATABASE_URL',
   'JWT_SECRET'
 ];
 
@@ -20,7 +21,8 @@ if (missingVars.length > 0) {
 
 const _config = {
   port: Number(process.env.PORT) || 4000,
-  databaseUrl: process.env.MONGO_CONNECTION_STRING!,
+  // Postgres — single source of truth (see packages/db for the shared Drizzle schema).
+  postgresUrl: process.env.DATABASE_URL!,
   env: process.env.NODE_ENV || 'development',
   jwtSecret: process.env.JWT_SECRET || 'secret',
 

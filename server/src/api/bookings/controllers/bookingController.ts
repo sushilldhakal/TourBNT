@@ -9,10 +9,11 @@ import createHttpError from 'http-errors';
 export const createBooking = async (req: Request
 , res: Response, next: NextFunction) => {
     try {
-        const { tourId, tourTitle, tourCode, departureDate, participants, pricing, contactInfo, specialRequests } = req.body;
+        const { tourId, tourTitle, tourCode, departureDate, participants, contactInfo, specialRequests, paymentType, pricingOptionId } = req.body;
 
-        // Validate required fields
-        if (!tourId || !departureDate || !participants || !pricing || !contactInfo) {
+        // Validate required fields. Pricing is computed server-side from the
+        // tour's own stored configuration — the client never supplies it.
+        if (!tourId || !departureDate || !participants || !contactInfo) {
             throw createHttpError(400, 'Missing required booking information');
         }
 
@@ -25,7 +26,8 @@ export const createBooking = async (req: Request
             tourCode,
             departureDate,
             participants,
-            pricing,
+            paymentType,
+            pricingOptionId,
             contactName: contactInfo.fullName,
             contactEmail: contactInfo.email,
             contactPhone: contactInfo.phone,
@@ -62,6 +64,7 @@ export const getAllBookings = async (req: Request
     try {
         // Get pagination params from middleware
         const { page, limit } = req.pagination || { page: 1, limit: 10 };
+        const pageLimit = typeof limit === 'number' ? limit : 10;
 
         // Get filters from middleware
         const filters: any = req.filters || {};
@@ -72,7 +75,7 @@ export const getAllBookings = async (req: Request
 
         const result = await BookingService.getAllBookings(filters, {
             page,
-            limit,
+            limit: pageLimit,
             sortBy,
             sortOrder
         });
@@ -286,7 +289,7 @@ export const downloadVoucher = async (req: Request
         const booking = await BookingService.getBookingById(bookingId);
 
         // Verify user has access to this booking
-        if (req.user && booking.user && booking.user.toString() !== req.user.id) {
+        if (req.user && booking.userId && booking.userId !== req.user.id) {
             throw createHttpError(403, 'You do not have access to this booking');
         }
 

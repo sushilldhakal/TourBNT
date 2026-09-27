@@ -16,6 +16,7 @@ import type {
     TourDates,
     Pricing,
     Discount,
+    PaymentOptions,
 } from '@/lib/schemas/tourEditor';
 
 // ============================================================================
@@ -82,6 +83,17 @@ export const getDefaultPricingOption = (option?: Partial<PricingOption>): Pricin
 });
 
 /**
+ * Default payment-options configuration — full payment only, until the
+ * seller opts in to offering deposits or pay-on-arrival.
+ */
+export const getDefaultPaymentOptions = (paymentOptions?: Partial<PaymentOptions>): PaymentOptions => ({
+    fullPaymentEnabled: paymentOptions?.fullPaymentEnabled ?? true,
+    depositEnabled: paymentOptions?.depositEnabled ?? false,
+    depositPercentage: paymentOptions?.depositPercentage ?? 20,
+    payOnArrivalEnabled: paymentOptions?.payOnArrivalEnabled ?? false,
+});
+
+/**
  * Default pricing configuration
  */
 export const getDefaultPricing = (pricing?: Partial<Pricing>): Pricing => ({
@@ -99,6 +111,7 @@ export const getDefaultPricing = (pricing?: Partial<Pricing>): Pricing => ({
     pricingOptions: Array.isArray(pricing?.pricingOptions)
         ? pricing.pricingOptions.map(opt => getDefaultPricingOption(opt))
         : [],
+    paymentOptions: getDefaultPaymentOptions(pricing?.paymentOptions),
 });
 
 /**
@@ -154,14 +167,15 @@ export const getDefaultTourDates = (dates?: Partial<TourDates>): TourDates => ({
  * Default itinerary item configuration
  */
 export const getDefaultItineraryItem = (item?: Partial<ItineraryItem>): ItineraryItem => ({
+    // Stable id so itinerary-partner links (transport/accommodation/guide/meals)
+    // survive drag-and-drop reordering of days.
+    id: item?.id ?? (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `day_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`),
     day: item?.day ?? '',
     title: item?.title ?? '',
     description: item?.description ?? '',
     destination: item?.destination ?? '',
     dateTime: item?.dateTime ?? new Date(),
-    accommodation: item?.accommodation ?? '',
-    meals: item?.meals ?? '',
-    activities: item?.activities ?? '',
+    partners: item?.partners ?? [],
 });
 
 /**

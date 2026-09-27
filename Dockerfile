@@ -21,6 +21,11 @@ RUN npm run build
 # Stage 2: Build Backend
 FROM node:18-alpine AS backend-builder
 
+WORKDIR /app
+
+COPY packages/db ./packages/db
+RUN npm install --prefix packages/db && npm run build --prefix packages/db
+
 WORKDIR /app/server
 
 # Copy server package files
@@ -28,7 +33,7 @@ COPY server/package*.json ./
 COPY server/tsconfig.json ./
 
 # Install server dependencies
-RUN npm ci --only=production
+RUN npm install
 
 # Copy server source
 COPY server/ ./
@@ -43,6 +48,11 @@ WORKDIR /app
 
 # Install production dependencies only
 RUN apk add --no-cache tini
+
+# Shared Postgres/Drizzle package (@tourbnt/db) — the Express server is the
+# only consumer (all DB access lives there); server/node_modules references
+# it via "file:../packages/db", so it must exist at this relative path too.
+COPY --from=backend-builder /app/packages/db ./packages/db
 
 # Copy built frontend
 COPY --from=frontend-builder /app/frontend/.next ./frontend/.next

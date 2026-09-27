@@ -78,8 +78,8 @@ export const updateFacts = async (factData: FormData, factId: string) => {
  */
 export const deleteFacts = async (factId: string) => {
     try {
-        const response = await api.delete('/facts', { 
-            data: { ids: [factId] } 
+        const response = await api.delete('/facts', {
+            data: { ids: [factId] }
         });
         return extractResponseData(response);
     } catch (error) {
@@ -93,8 +93,8 @@ export const deleteFacts = async (factId: string) => {
  */
 export const deleteMultipleFacts = async (factIds: string[]) => {
     try {
-        const response = await api.delete('/facts', { 
-            data: { ids: factIds } 
+        const response = await api.delete('/facts', {
+            data: { ids: factIds }
         });
         return extractResponseData(response);
     } catch (error) {

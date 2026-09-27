@@ -16,7 +16,10 @@ export interface BookingData {
         children: number;
         infants?: number;
     };
-    pricing: {
+    // The server always recomputes pricing from the tour's own stored
+    // configuration (see calculateBookingPricing) — it never trusts this.
+    // Kept optional purely for older callers; new code shouldn't send it.
+    pricing?: {
         basePrice: number;
         adultPrice: number;
         childPrice: number;
@@ -24,6 +27,10 @@ export interface BookingData {
         totalPrice: number;
         currency: string;
     };
+    // Which policy (full payment / deposit / pay on arrival) the traveler
+    // chose — must be one the tour has enabled, enforced server-side.
+    paymentType: 'full_payment' | 'deposit_percentage' | 'pay_on_arrival';
+    pricingOptionId?: string;
     contactInfo: {
         fullName: string;
         email: string;

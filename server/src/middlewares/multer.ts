@@ -163,3 +163,69 @@ export const uploadSellerDocs = multer({
   { name: 'businessInsurance', maxCount: 5 },
   { name: 'businessLicense', maxCount: 5 }
 ]);
+
+// Business-partner documents upload storage (guides/hotels/guesthouses/
+// restaurants/transport/advertisers onboarding).
+const businessDocsStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    const uploadPath = path.join(__dirname, '../../public/data/uploads/business-docs');
+    if (!fs.existsSync(uploadPath)) {
+      fs.mkdirSync(uploadPath, { recursive: true });
+    }
+    cb(null, uploadPath);
+  },
+  filename: function (req, file, cb) {
+    cb(null, generateSecureFilename(file.originalname));
+  },
+});
+
+export const uploadBusinessDocs = multer({
+  storage: businessDocsStorage,
+  fileFilter: function (req, file, cb) {
+    const allowedTypes = ['image/jpeg', 'image/png', 'application/pdf'];
+    if (allowedTypes.includes(file.mimetype) && validateFileType(file.mimetype, file.originalname)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only JPEG, PNG, and PDF files are allowed or file extension does not match'));
+    }
+  },
+  limits: {
+    fileSize: 10 * 1024 * 1024,
+    files: 20
+  }
+}).fields([
+  { name: 'businessRegistration', maxCount: 3 },
+  { name: 'taxRegistration', maxCount: 3 },
+  { name: 'idVerification', maxCount: 3 },
+  { name: 'businessLicense', maxCount: 3 },
+  { name: 'other', maxCount: 5 }
+]);
+
+// Ad creative image upload (single image per ad).
+const adImageStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    const uploadPath = path.join(__dirname, '../../public/data/uploads/ad-images');
+    if (!fs.existsSync(uploadPath)) {
+      fs.mkdirSync(uploadPath, { recursive: true });
+    }
+    cb(null, uploadPath);
+  },
+  filename: function (req, file, cb) {
+    cb(null, generateSecureFilename(file.originalname));
+  },
+});
+
+export const uploadAdImage = multer({
+  storage: adImageStorage,
+  fileFilter: function (req, file, cb) {
+    const allowedTypes = ['image/jpeg', 'image/png'];
+    if (allowedTypes.includes(file.mimetype) && validateFileType(file.mimetype, file.originalname)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only JPEG and PNG images are allowed or file extension does not match'));
+    }
+  },
+  limits: {
+    fileSize: 5 * 1024 * 1024
+  }
+}).single('image');

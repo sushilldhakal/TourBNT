@@ -1,52 +1,47 @@
 import { Response } from 'express';
-import Notification from './notificationModel';
-import {
-  Request
-} from '../../middlewares/authenticate';
-import { HTTP_STATUS, sendSuccess, sendError, sendPaginatedResponse } from '../../utils/apiResponse';
+import { db, notifications, users } from '@tourbnt/db';
+import { eq, and, desc, count } from 'drizzle-orm';
+import { Request } from '../../middlewares/authenticate';
+import { HTTP_STATUS, sendSuccess, sendPaginatedResponse } from '../../utils/apiResponse';
 
 // Get notifications for authenticated user
-export const getUserNotifications = async (req: Request
-  , res: Response) => {
+export const getUserNotifications = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
       return res.status(HTTP_STATUS.UNAUTHORIZED).json({
-        error: {
-          code: 'AUTHENTICATION_REQUIRED',
-          message: 'Authentication required',
-          timestamp: new Date().toISOString(),
-          path: req.path
-        }
+        error: { code: 'AUTHENTICATION_REQUIRED', message: 'Authentication required', timestamp: new Date().toISOString(), path: req.path }
       });
     }
 
-    // Get pagination from middleware
     const { page, limit, skip } = req.pagination || { page: 1, limit: 10, skip: 0 };
+    const pageLimit = typeof limit === 'number' ? limit : 10;
     const { unreadOnly } = req.query;
 
-    let query: any = { recipient: userId };
-    if (unreadOnly === 'true') {
-      query.isRead = false;
-    }
+    const where = unreadOnly === 'true'
+      ? and(eq(notifications.recipientId, userId), eq(notifications.isRead, false))
+      : eq(notifications.recipientId, userId);
 
-    const notifications = await Notification.find(query)
-      .populate('sender', 'name email')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(Number(limit));
+    const [rows, [{ value: total }], [{ value: unreadCount }]] = await Promise.all([
+      db
+        .select({ notification: notifications, sender: { id: users.id, name: users.name, email: users.email } })
+        .from(notifications)
+        .leftJoin(users, eq(notifications.senderId, users.id))
+        .where(where)
+        .orderBy(desc(notifications.createdAt))
+        .limit(pageLimit)
+        .offset(skip),
+      db.select({ value: count() }).from(notifications).where(where),
+      db.select({ value: count() }).from(notifications).where(and(eq(notifications.recipientId, userId), eq(notifications.isRead, false))),
+    ]);
 
-    const total = await Notification.countDocuments(query);
-    const unreadCount = await Notification.countDocuments({
-      recipient: userId,
-      isRead: false
-    });
+    const items = rows.map(({ notification, sender }) => ({ ...notification, sender }));
 
-    return sendPaginatedResponse(res, notifications, {
-      page: page,
-      limit: limit as number,
+    return sendPaginatedResponse(res, items, {
+      page,
+      limit: pageLimit,
       totalItems: total,
-      totalPages: Math.ceil(total / Number(limit))
+      totalPages: Math.ceil(total / pageLimit),
     }, `Notifications retrieved successfully. Unread: ${unreadCount}`);
   } catch (error) {
     res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
@@ -62,44 +57,30 @@ export const getUserNotifications = async (req: Request
 };
 
 // Mark notification as read
-export const markNotificationAsRead = async (req: Request
-  , res: Response) => {
+export const markNotificationAsRead = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     const { id } = req.params;
 
     if (!userId) {
       return res.status(HTTP_STATUS.UNAUTHORIZED).json({
-        error: {
-          code: 'AUTHENTICATION_REQUIRED',
-          message: 'Authentication required',
-          timestamp: new Date().toISOString(),
-          path: req.path
-        }
+        error: { code: 'AUTHENTICATION_REQUIRED', message: 'Authentication required', timestamp: new Date().toISOString(), path: req.path }
       });
     }
 
-    const notification = await Notification.findOne({
-      _id: id,
-      recipient: userId
-    });
+    const [updated] = await db
+      .update(notifications)
+      .set({ isRead: true, readAt: new Date() })
+      .where(and(eq(notifications.id, id), eq(notifications.recipientId, userId)))
+      .returning();
 
-    if (!notification) {
+    if (!updated) {
       return res.status(HTTP_STATUS.NOT_FOUND).json({
-        error: {
-          code: 'NOTIFICATION_NOT_FOUND',
-          message: 'Notification not found',
-          timestamp: new Date().toISOString(),
-          path: req.path
-        }
+        error: { code: 'NOTIFICATION_NOT_FOUND', message: 'Notification not found', timestamp: new Date().toISOString(), path: req.path }
       });
     }
 
-    notification.isRead = true;
-    notification.readAt = new Date();
-    await notification.save();
-
-    return sendSuccess(res, notification, 'Notification marked as read');
+    return sendSuccess(res, updated, 'Notification marked as read');
   } catch (error) {
     res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       error: {
@@ -114,40 +95,28 @@ export const markNotificationAsRead = async (req: Request
 };
 
 // Delete notification
-export const deleteNotification = async (req: Request
-  , res: Response) => {
+export const deleteNotification = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     const { id } = req.params;
 
     if (!userId) {
       return res.status(HTTP_STATUS.UNAUTHORIZED).json({
-        error: {
-          code: 'AUTHENTICATION_REQUIRED',
-          message: 'Authentication required',
-          timestamp: new Date().toISOString(),
-          path: req.path
-        }
+        error: { code: 'AUTHENTICATION_REQUIRED', message: 'Authentication required', timestamp: new Date().toISOString(), path: req.path }
       });
     }
 
-    const notification = await Notification.findOneAndDelete({
-      _id: id,
-      recipient: userId
-    });
+    const [deleted] = await db
+      .delete(notifications)
+      .where(and(eq(notifications.id, id), eq(notifications.recipientId, userId)))
+      .returning();
 
-    if (!notification) {
+    if (!deleted) {
       return res.status(HTTP_STATUS.NOT_FOUND).json({
-        error: {
-          code: 'NOTIFICATION_NOT_FOUND',
-          message: 'Notification not found',
-          timestamp: new Date().toISOString(),
-          path: req.path
-        }
+        error: { code: 'NOTIFICATION_NOT_FOUND', message: 'Notification not found', timestamp: new Date().toISOString(), path: req.path }
       });
     }
 
-    // Return 204 No Content for successful deletion
     res.status(HTTP_STATUS.NO_CONTENT).send();
   } catch (error) {
     res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
@@ -160,4 +129,131 @@ export const deleteNotification = async (req: Request
       }
     });
   }
+};
+
+// Helpers used by other modules (destination approval/rejection flows) to
+// create notifications directly, without going through an HTTP route.
+export const createDestinationRejectionNotification = async (
+  recipientId: string,
+  senderId: string,
+  destinationName: string,
+  destinationId: string,
+  rejectionReason: string
+) => {
+  const [notification] = await db.insert(notifications).values({
+    recipientId,
+    senderId,
+    type: 'destination_rejected',
+    title: 'Destination Submission Rejected',
+    message: `Your destination "${destinationName}" has been rejected. Reason: ${rejectionReason}`,
+    data: { destinationId, destinationName, rejectionReason },
+  }).returning();
+  return notification;
+};
+
+export const createDestinationApprovalNotification = async (
+  recipientId: string,
+  senderId: string,
+  destinationName: string,
+  destinationId: string
+) => {
+  const [notification] = await db.insert(notifications).values({
+    recipientId,
+    senderId,
+    type: 'destination_approved',
+    title: 'Destination Approved',
+    message: `Congratulations! Your destination "${destinationName}" has been approved and is now available for tours.`,
+    data: { destinationId, destinationName },
+  }).returning();
+  return notification;
+};
+
+// Helpers for the business-partner onboarding flow (guides, hotels,
+// guesthouses, restaurants, transport providers, advertisers).
+export const createBusinessPartnerApprovalNotification = async (
+  recipientId: string,
+  senderId: string,
+  businessName: string,
+  businessPartnerId: string
+) => {
+  const [notification] = await db.insert(notifications).values({
+    recipientId,
+    senderId,
+    type: 'business_partner_approved',
+    title: 'Business Application Approved',
+    message: `Congratulations! Your business "${businessName}" has been approved and is now live on the platform.`,
+    data: { businessPartnerId, businessName },
+  }).returning();
+  return notification;
+};
+
+export const createBusinessPartnerRejectionNotification = async (
+  recipientId: string,
+  senderId: string,
+  businessName: string,
+  businessPartnerId: string,
+  rejectionReason: string
+) => {
+  const [notification] = await db.insert(notifications).values({
+    recipientId,
+    senderId,
+    type: 'business_partner_rejected',
+    title: 'Business Application Rejected',
+    message: `Your business application "${businessName}" has been rejected. Reason: ${rejectionReason}`,
+    data: { businessPartnerId, businessName, rejectionReason },
+  }).returning();
+  return notification;
+};
+
+export const createBusinessReviewNotification = async (
+  recipientId: string,
+  senderId: string,
+  businessName: string,
+  businessPartnerId: string,
+  rating: number
+) => {
+  const [notification] = await db.insert(notifications).values({
+    recipientId,
+    senderId,
+    type: 'business_review_received',
+    title: 'New Review Received',
+    message: `Your business "${businessName}" received a new ${rating}-star review.`,
+    data: { businessPartnerId, businessName, rating },
+  }).returning();
+  return notification;
+};
+
+export const createAdApprovalNotification = async (
+  recipientId: string,
+  senderId: string,
+  adTitle: string,
+  adId: string
+) => {
+  const [notification] = await db.insert(notifications).values({
+    recipientId,
+    senderId,
+    type: 'ad_approved',
+    title: 'Ad Campaign Approved',
+    message: `Your ad campaign "${adTitle}" has been approved and can now go live.`,
+    data: { adId, adTitle },
+  }).returning();
+  return notification;
+};
+
+export const createAdRejectionNotification = async (
+  recipientId: string,
+  senderId: string,
+  adTitle: string,
+  adId: string,
+  rejectionReason: string
+) => {
+  const [notification] = await db.insert(notifications).values({
+    recipientId,
+    senderId,
+    type: 'ad_rejected',
+    title: 'Ad Campaign Rejected',
+    message: `Your ad campaign "${adTitle}" has been rejected. Reason: ${rejectionReason}`,
+    data: { adId, adTitle, rejectionReason },
+  }).returning();
+  return notification;
 };

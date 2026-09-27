@@ -1,678 +1,410 @@
-import { Request, Response, RequestHandler } from 'express';
-import mongoose from 'mongoose';
-import GlobalCategory from './globalCategoryModel';
-import SellerCategoryPreferences from '../seller/sellerCategoryPreferencesModel';
-import User from '../../user/userModel';
-import { sendSuccess, sendError, sendPaginatedResponse, sendValidationError, sendNotFoundError } from '../../../utils/apiResponse';
+import { Request, Response } from 'express';
+import { db, globalCategories, sellerCategoryPreferences, sellerSettings, users } from '@tourbnt/db';
+import { eq, and, or, ilike, desc, inArray, sql } from 'drizzle-orm';
+import type { SellerInfo } from '../../user/userTypes';
 
-// Utility function to ensure user has sellerInfo
-const ensureSellerInfo = async (user: any, userId: string) => {
-  if (!user.sellerInfo && user.roles === 'seller') {
-    console.log(`🔧 Initializing sellerInfo for user ${userId}`);
-    user.sellerInfo = {
-      destination: [],
-      category: [],                    // ✅ NEW: User-specific category array
-      companyName: '',
-      companyRegistrationNumber: '',
-      companyType: '',
-      registrationDate: '',
-      taxId: '',
-      businessAddress: {
-        address: '',
-        city: '',
-        state: '',
-        postalCode: '',
-        country: ''
-      },
-      bankDetails: {
-        bankName: '',
-        accountNumber: '',
-        accountHolderName: '',
-        branchCode: ''
-      },
-      businessDescription: '',
-      sellerType: '',
-      isApproved: false,
-      appliedAt: new Date()
-    };
-    await user.save();
-    console.log(`✅ SellerInfo initialized for user ${userId}`);
+type CategoryRow = typeof globalCategories.$inferSelect;
+
+const toSlug = (name: string) =>
+  name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+const withCreator = async (category: CategoryRow) => {
+  const [creator] = category.createdBy
+    ? await db.select({ id: users.id, name: users.name, email: users.email }).from(users).where(eq(users.id, category.createdBy)).limit(1)
+    : [null];
+  let parentCategory: { name: string; slug: string } | null = null;
+  const parentId = (category.metadata as { parentCategory?: string } | null)?.parentCategory;
+  if (parentId) {
+    const [parent] = await db.select({ name: globalCategories.name, slug: globalCategories.slug }).from(globalCategories).where(eq(globalCategories.id, parentId)).limit(1);
+    parentCategory = parent || null;
   }
-  return user;
+  return { ...category, createdBy: creator, metadata: { ...(category.metadata as object), parentCategory } };
 };
 
 // Get category by ID (public)
 export const getCategoryById = async (req: Request, res: Response): Promise<void> => {
   try {
     const { categoryId } = req.params;
-
     if (!categoryId) {
-      return sendValidationError(res, 'Category ID is required', [{
-        field: 'categoryId',
-        message: 'Category ID is required'
-      }]);
-    }
-
-    const category = await GlobalCategory.findById(categoryId)
-      .populate('createdBy', 'name email')
-      .populate('metadata.parentCategory', 'name slug');
-
-    if (!category) {
-      res.status(404).json({
-        success: false,
-        message: 'Category not found'
-      });
+      res.status(400).json({ success: false, message: 'Category ID is required' });
       return;
     }
 
-    return sendSuccess(res, category, 'Category retrieved successfully');
+    const [category] = await db.select().from(globalCategories).where(eq(globalCategories.id, categoryId)).limit(1);
+    if (!category) {
+      res.status(404).json({ success: false, message: 'Category not found' });
+      return;
+    }
+
+    res.json({ success: true, message: 'Category retrieved successfully', data: await withCreator(category) });
   } catch (error) {
     console.error('Error fetching category by ID:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch category'
-    });
+    res.status(500).json({ success: false, message: 'Failed to fetch category' });
   }
 };
 
 // Get all approved categories (public)
 export const getApprovedCategories = async (req: Request, res: Response): Promise<void> => {
   try {
-    const categories = await GlobalCategory.find({
-      isApproved: true,
-      approvalStatus: 'approved'
-    })
-      .populate('createdBy', 'name email')
-      .populate('metadata.parentCategory', 'name slug')
-      .sort({ createdAt: -1 });
+    const rows = await db
+      .select({ category: globalCategories, creator: { id: users.id, name: users.name, email: users.email } })
+      .from(globalCategories)
+      .leftJoin(users, eq(globalCategories.createdBy, users.id))
+      .where(and(eq(globalCategories.isApproved, true), eq(globalCategories.approvalStatus, 'approved')))
+      .orderBy(desc(globalCategories.createdAt));
 
-    return sendSuccess(res, categories, 'Approved categories retrieved successfully');
+    const categories = rows.map(({ category, creator }) => ({ ...category, createdBy: creator }));
+    res.json({ success: true, message: 'Approved categories retrieved successfully', data: categories });
   } catch (error) {
     console.error('Error fetching approved categories:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch categories'
-    });
+    res.status(500).json({ success: false, message: 'Failed to fetch categories' });
   }
 };
 
-// Get categories by type (public)
+// Get categories by type (public) — kept for route compatibility; the
+// underlying schema has no `type` field (it never did in Mongo either), so
+// this behaves as a plain approved-categories search.
 export const getCategoriesByType = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { type } = req.params;
     const { search } = req.query;
-
-    let query: any = {
-      isApproved: true,
-      approvalStatus: 'approved'
-    };
-
-    if (type) {
-      query.type = { $regex: new RegExp(type as string, 'i') };
+    const conditions = [eq(globalCategories.isApproved, true), eq(globalCategories.approvalStatus, 'approved')];
+    if (search && typeof search === 'string') {
+      conditions.push(ilike(globalCategories.name, `%${search}%`));
     }
 
-    if (search) {
-      query.$text = { $search: search as string };
-    }
+    const categories = await db
+      .select({
+        name: globalCategories.name,
+        description: globalCategories.description,
+        slug: globalCategories.slug,
+        imageUrl: globalCategories.imageUrl,
+        popularity: globalCategories.popularity,
+        usageCount: globalCategories.usageCount,
+      })
+      .from(globalCategories)
+      .where(and(...conditions))
+      .orderBy(desc(globalCategories.popularity), globalCategories.name);
 
-    const categories = await GlobalCategory.find(query)
-      .sort({ popularity: -1, name: 1 })
-      .select('name description slug imageUrl type popularity usageCount');
-
-    const categoriesData = {
-      categories,
-      count: categories.length
-    };
-
-    return sendSuccess(res, categoriesData, 'Categories retrieved successfully');
+    res.json({ success: true, message: 'Categories retrieved successfully', data: { categories, count: categories.length } });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching categories by type',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    res.status(500).json({ success: false, message: 'Error fetching categories by type', error: error instanceof Error ? error.message : 'Unknown error' });
   }
 };
 
 // Get user-specific categories (from user.sellerInfo.category array)
-// This includes user's personal active/inactive status for each category
-export const getUserCategories = async (req: Request
-  , res: Response): Promise<void> => {
+export const getUserCategories = async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = req.user?.id;
-
     if (!userId) {
-      res.status(401).json({
-        success: false,
-        message: 'Authentication required'
-      });
+      res.status(401).json({ success: false, message: 'Authentication required' });
       return;
     }
 
-    let user = await User.findById(userId);
-
+    const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
     if (!user) {
-      res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
+      res.status(404).json({ success: false, message: 'User not found' });
       return;
     }
 
-    // Initialize sellerInfo if user is a seller but doesn't have it
-    if (!user.sellerInfo && user.roles === 'seller') {
-      user = await ensureSellerInfo(user, userId.toString());
-    }
-
-    // If user is not a seller or still no sellerInfo, return empty
-    if (!user || !user.sellerInfo) {
-      res.json({
-        success: true,
-        data: [],
-        count: 0
-      });
+    const sellerInfo = user.sellerInfo as SellerInfo | null;
+    const userCategories = sellerInfo?.category || [];
+    if (userCategories.length === 0) {
+      res.json({ success: true, data: [], count: 0 });
       return;
     }
 
-    // Initialize category array if it doesn't exist
-    if (!user.sellerInfo.category) {
-      user.sellerInfo.category = [];
-      await user.save();
-    }
+    const categoryIds = userCategories.map((c) => c.categoryId);
+    const globalRows = await db
+      .select()
+      .from(globalCategories)
+      .where(and(inArray(globalCategories.id, categoryIds), inArray(globalCategories.approvalStatus, ['pending', 'approved'])));
+    const globalById = new Map(globalRows.map((c) => [c.id, c]));
 
-    // Now populate the categories
-    await user.populate({
-      path: 'sellerInfo.category.categoryId',
-      model: 'GlobalCategory',
-      match: {
-        approvalStatus: { $in: ['pending', 'approved'] } // Include both pending and approved categories
-      }
-    });
-
-    // Filter out categories where the global category was deleted/rejected
-    const validCategories = user.sellerInfo.category
-      .filter((cat: any) => cat.categoryId) // Global category still exists
-      .map((userCat: any) => ({
-        ...(userCat.categoryId.toObject ? userCat.categoryId.toObject() : userCat.categoryId),
-        isActive: userCat.isActive,           // ✅ USER-SPECIFIC STATUS
-        isApproved: userCat.isApproved,       // ✅ USER-SPECIFIC STATUS
-        approvalStatus: userCat.approvalStatus // ✅ USER-SPECIFIC STATUS
+    const validCategories = userCategories
+      .filter((uc) => globalById.has(uc.categoryId))
+      .map((uc) => ({
+        ...globalById.get(uc.categoryId),
+        isActive: uc.isActive,
+        isApproved: uc.isApproved,
+        approvalStatus: uc.approvalStatus,
       }));
 
-    res.json({
-      success: true,
-      data: validCategories,
-      count: validCategories.length
-    });
+    res.json({ success: true, data: validCategories, count: validCategories.length });
   } catch (error) {
     console.error('Error fetching user categories:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching user categories',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    res.status(500).json({ success: false, message: 'Error fetching user categories', error: error instanceof Error ? error.message : 'Unknown error' });
   }
 };
 
-// Get categories for seller (shows own categories + searchable approved categories)
-export const getSellerCategories = async (req: Request
-  , res: Response): Promise<void> => {
+// Get categories for seller (own categories, or all for admin)
+export const getSellerCategories = async (req: Request, res: Response): Promise<void> => {
   try {
     const sellerId = req.user?.id;
-    const userRole = req.user?.roles;
-
+    const isAdmin = req.user?.roles?.includes('admin') || false;
     if (!sellerId) {
-      res.status(401).json({
-        success: false,
-        message: 'Authentication required'
-      });
+      res.status(401).json({ success: false, message: 'Authentication required' });
       return;
     }
 
-    // If user is admin, return all categories (pending + approved)
-    if (userRole?.includes('admin')) {
-      const allCategories = await GlobalCategory.find({})
-        .sort({ submittedAt: -1 });
+    const rows = isAdmin
+      ? await db.select().from(globalCategories).orderBy(desc(globalCategories.submittedAt))
+      : await db.select().from(globalCategories).where(eq(globalCategories.createdBy, sellerId)).orderBy(desc(globalCategories.submittedAt));
 
-      res.json({
-        success: true,
-        data: allCategories,
-        count: allCategories.length
-      });
-      return;
-    }
-
-    // For sellers, return only categories they created (any status)
-    const sellerCategories = await GlobalCategory.find({
-      createdBy: sellerId
-    }).sort({ submittedAt: -1 });
-
-    res.json({
-      success: true,
-      data: sellerCategories,
-      count: sellerCategories.length
-    });
+    res.json({ success: true, data: rows, count: rows.length });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching seller categories',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    res.status(500).json({ success: false, message: 'Error fetching seller categories', error: error instanceof Error ? error.message : 'Unknown error' });
   }
 };
 
-// Search categories for sellers (to discover existing categories before creating new ones)
-export const searchCategories = async (req: Request
-  , res: Response): Promise<void> => {
+// Search categories for sellers
+export const searchCategories = async (req: Request, res: Response): Promise<void> => {
   try {
     const sellerId = req.user?.id;
     if (!sellerId) {
-      res.status(401).json({
-        success: false,
-        message: 'Authentication required'
-      });
+      res.status(401).json({ success: false, message: 'Authentication required' });
       return;
     }
 
     const { query, parentCategory } = req.query;
 
-    // Build search criteria
-    const searchCriteria: any = {
-      // Show approved categories + seller's own categories (any status)
-      $or: [
-        { isApproved: true, approvalStatus: 'approved' },
-        { createdBy: sellerId }
-      ]
-    };
-
-    // Add text search if query provided
+    const conditions = [
+      or(and(eq(globalCategories.isApproved, true), eq(globalCategories.approvalStatus, 'approved')), eq(globalCategories.createdBy, sellerId))!,
+    ];
     if (query && typeof query === 'string') {
-      searchCriteria.$text = { $search: query };
+      conditions.push(or(ilike(globalCategories.name, `%${query}%`), ilike(globalCategories.description, `%${query}%`))!);
     }
-
-    // Add parent category filter
     if (parentCategory && typeof parentCategory === 'string') {
-      searchCriteria['metadata.parentCategory'] = parentCategory;
+      conditions.push(sql`(${globalCategories.metadata}->>'parentCategory') = ${parentCategory}`);
     }
 
-    const categories = await GlobalCategory.find(searchCriteria)
-      .populate('createdBy', 'name email')
-      .populate('metadata.parentCategory', 'name slug')
-      .sort({ usageCount: -1, popularity: -1, submittedAt: -1 })
+    const categories = await db
+      .select()
+      .from(globalCategories)
+      .where(and(...conditions))
+      .orderBy(desc(globalCategories.usageCount), desc(globalCategories.popularity), desc(globalCategories.submittedAt))
       .limit(50);
 
-    res.json({
-      success: true,
-      data: categories,
-      count: categories.length
-    });
+    res.json({ success: true, data: categories, count: categories.length });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error searching categories',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    res.status(500).json({ success: false, message: 'Error searching categories', error: error instanceof Error ? error.message : 'Unknown error' });
   }
 };
 
 // Get enabled categories for seller (for tour creation)
-export const getEnabledCategories = async (req: Request
-  , res: Response): Promise<void> => {
+export const getEnabledCategories = async (req: Request, res: Response): Promise<void> => {
   try {
     const sellerId = req.user?.id;
     if (!sellerId) {
-      res.status(401).json({
-        success: false,
-        message: 'Authentication required'
-      });
+      res.status(401).json({ success: false, message: 'Authentication required' });
       return;
     }
 
-    const sellerPrefs = await SellerCategoryPreferences.findOne({ seller: sellerId })
-      .populate({
-        path: 'categoryPreferences.category',
-        match: { isApproved: true, approvalStatus: 'approved' }
-      });
+    const rows = await db
+      .select({ pref: sellerCategoryPreferences, category: globalCategories })
+      .from(sellerCategoryPreferences)
+      .innerJoin(globalCategories, eq(sellerCategoryPreferences.categoryId, globalCategories.id))
+      .where(and(
+        eq(sellerCategoryPreferences.sellerId, sellerId),
+        eq(sellerCategoryPreferences.isEnabled, true),
+        eq(globalCategories.isApproved, true),
+        eq(globalCategories.approvalStatus, 'approved'),
+      ))
+      .orderBy(sellerCategoryPreferences.sortOrder);
 
-    const enabledCategories = sellerPrefs ?
-      sellerPrefs.categoryPreferences
-        .filter((pref: any) => pref.isEnabled && pref.category)
-        .sort((a: any, b: any) => (a.sortOrder || 0) - (b.sortOrder || 0)) : [];
-
-    res.json({
-      success: true,
-      data: enabledCategories,
-      count: enabledCategories.length
-    });
+    const enabledCategories = rows.map(({ pref, category }) => ({ ...pref, category }));
+    res.json({ success: true, data: enabledCategories, count: enabledCategories.length });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching enabled categories',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    res.status(500).json({ success: false, message: 'Error fetching enabled categories', error: error instanceof Error ? error.message : 'Unknown error' });
   }
 };
 
 // Submit new category for approval
-export const submitCategory = async (req: Request
-  , res: Response): Promise<void> => {
+export const submitCategory = async (req: Request, res: Response): Promise<void> => {
   try {
-    console.log('📝 submitCategory - req.body:', req.body);
-    console.log('📝 submitCategory - req.body keys:', Object.keys(req.body));
-    console.log('📝 submitCategory - name value:', `"${req.body.name}"`);
-    console.log('📝 submitCategory - description value:', `"${req.body.description}"`);
-
     const { name, description, imageUrl, parentCategory, reason } = req.body;
     const createdBy = req.user?.id;
 
     if (!createdBy) {
-      res.status(401).json({
-        success: false,
-        message: 'Authentication required'
-      });
+      res.status(401).json({ success: false, message: 'Authentication required' });
       return;
     }
-
-    // Validate required fields
     if (!name || !description) {
-      console.log('❌ Validation failed - name:', !!name, 'description:', !!description);
-      res.status(400).json({
-        success: false,
-        message: 'Name and description are required'
-      });
+      res.status(400).json({ success: false, message: 'Name and description are required' });
       return;
     }
 
-    // Check for duplicate names
-    const existingCategory = await GlobalCategory.findOne({
-      name: { $regex: new RegExp(`^${name}$`, 'i') }
-    });
-
+    const [existingCategory] = await db.select().from(globalCategories).where(ilike(globalCategories.name, name)).limit(1);
     if (existingCategory) {
-      res.status(400).json({
-        success: false,
-        message: 'A category with this name already exists'
-      });
+      res.status(400).json({ success: false, message: 'A category with this name already exists' });
       return;
     }
 
-    // Generate slug from name
-    const slug = name
-      .toLowerCase()
-      .replace(/[^a-z0-9\s-]/g, '')
-      .replace(/\s+/g, '-')
-      .replace(/-+/g, '-')
-      .replace(/^-+|-+$/g, '');
+    const [category] = await db
+      .insert(globalCategories)
+      .values({
+        name,
+        description,
+        imageUrl,
+        reason,
+        slug: toSlug(name),
+        metadata: parentCategory ? { parentCategory } : null,
+        createdBy,
+        submittedAt: new Date(),
+      })
+      .returning();
 
-    const category = new GlobalCategory({
-      name,
-      description,
-      imageUrl,
-      reason,
-      slug,
-      parentCategory,
-      createdBy,
-      submittedAt: new Date()
-    });
-
-    await category.save();
-
-    // Also add the category to user's sellerInfo.category array
-    const user = await User.findById(createdBy);
-    if (user && user.sellerInfo) {
-      if (!user.sellerInfo.category) {
-        user.sellerInfo.category = [];
-      }
-
-      // Add the new category to user's list as pending
-      user.sellerInfo.category.push({
-        categoryId: (category._id as any).toString(),
+    const [user] = await db.select().from(users).where(eq(users.id, createdBy)).limit(1);
+    if (user?.sellerInfo) {
+      const sellerInfo = user.sellerInfo as SellerInfo;
+      const categoryList = sellerInfo.category || [];
+      categoryList.push({
+        categoryId: category.id,
         categoryName: category.name,
-        isActive: false, // Inactive until approved
+        isActive: false,
         isApproved: false,
         approvalStatus: 'pending',
-        addedAt: new Date()
+        addedAt: new Date(),
       });
-
-      await user.save();
-      console.log(`✅ Added category "${category.name}" to user ${createdBy} category list as pending`);
+      await db.update(users).set({ sellerInfo: { ...sellerInfo, category: categoryList }, updatedAt: new Date() }).where(eq(users.id, createdBy));
     }
 
-    res.status(201).json({
-      success: true,
-      message: 'Category submitted for approval',
-      data: category
-    });
+    res.status(201).json({ success: true, message: 'Category submitted for approval', data: category });
   } catch (error) {
     console.error('Error submitting category:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error submitting category',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    res.status(500).json({ success: false, message: 'Error submitting category', error: error instanceof Error ? error.message : 'Unknown error' });
   }
 };
 
 // Update category
-export const updateCategory = async (req: Request
-  , res: Response): Promise<void> => {
+export const updateCategory = async (req: Request, res: Response): Promise<void> => {
   try {
     const { categoryId } = req.params;
     const sellerId = req.user?.id;
     const updateData = req.body;
 
-    console.log("📝 Raw request data:");
-    console.log("  - categoryId:", categoryId);
-    console.log("  - sellerId:", sellerId);
-    console.log("  - req.body:", updateData);
-    console.log("  - req.body keys:", Object.keys(updateData));
-    console.log("  - Content-Type:", req.headers['content-type']);
     if (!sellerId) {
-      res.status(401).json({
-        success: false,
-        message: 'Authentication required'
-      });
+      res.status(401).json({ success: false, message: 'Authentication required' });
       return;
     }
 
-    if (!mongoose.Types.ObjectId.isValid(categoryId)) {
-      res.status(400).json({
-        success: false,
-        message: 'Invalid category ID'
-      });
-      return;
-    }
+    const isAdmin = req.user?.roles.includes('admin') || false;
+    const [category] = await db.select().from(globalCategories).where(eq(globalCategories.id, categoryId)).limit(1);
 
-    // Check if user is admin
-    const isAdmin = req.user?.roles.includes('admin');
-    console.log('🔍 Update category - User role:', req.user?.roles, 'Is admin:', isAdmin);
-
-    // Find the category - admin can edit any category, others can only edit their own
-    const category = await GlobalCategory.findOne(
-      isAdmin
-        ? { _id: categoryId } // Admin can edit any category
-        : { _id: categoryId, createdBy: sellerId } // Regular users can only edit their own
-    );
-
-    if (!category) {
+    if (!category || (!isAdmin && category.createdBy !== sellerId)) {
       res.status(404).json({
         success: false,
-        message: isAdmin
-          ? 'Category not found'
-          : 'Category not found or you do not have permission to update it'
+        message: isAdmin ? 'Category not found' : 'Category not found or you do not have permission to update it'
       });
       return;
     }
 
-    console.log('✅ Category found for update:', category._id, 'by user:', req.user?.roles);
-    console.log('📝 Original category data:', {
-      name: category.name,
-      description: category.description,
-      imageUrl: category.imageUrl,
-      isApproved: category.isApproved
-    });
-    console.log('📝 Update data received:', updateData);
+    const { isActive, name, description, imageUrl, reason, metadata } = updateData;
+    void isActive; // user-specific, not part of the global category
 
-    // Filter out fields that don't belong to global category model
-    const { isActive, ...globalCategoryData } = updateData;
-
-    console.log('📝 Filtered global category data:', globalCategoryData);
-    if (isActive !== undefined) {
-      console.log('⚠️ isActive field ignored (user-specific, not global):', isActive);
-    }
-
-    // Update category with new data
-    const updateObject = {
-      ...globalCategoryData,
-      lastModified: new Date(),
+    const updates: Partial<typeof globalCategories.$inferInsert> = {
+      name: name ?? category.name,
+      description: description ?? category.description,
+      imageUrl: imageUrl ?? category.imageUrl,
+      reason: reason ?? category.reason,
+      metadata: metadata ?? category.metadata,
+      updatedAt: new Date(),
     };
 
-    console.log('📝 Update object to apply:', updateObject);
-
-    // Only reset approval status if a regular user is editing (not admin)
     if (!isAdmin) {
-      updateObject.approvalStatus = 'pending';
-      updateObject.isApproved = false;
-      console.log('🔄 Regular user edit - resetting approval status to pending');
-    } else {
-      console.log('👑 Admin edit - preserving approval status');
+      updates.approvalStatus = 'pending';
+      updates.isApproved = false;
     }
 
-    console.log('📝 Final update object:', updateObject);
-
-    Object.assign(category, updateObject);
-
-    console.log('📝 Category after Object.assign:', {
-      name: category.name,
-      description: category.description,
-      imageUrl: category.imageUrl,
-      isApproved: category.isApproved
-    });
-
-    await category.save();
-
-    res.json({
-      success: true,
-      message: 'Category updated successfully',
-      data: category
-    });
+    const [updated] = await db.update(globalCategories).set(updates).where(eq(globalCategories.id, categoryId)).returning();
+    res.json({ success: true, message: 'Category updated successfully', data: updated });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error updating category',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    res.status(500).json({ success: false, message: 'Error updating category', error: error instanceof Error ? error.message : 'Unknown error' });
   }
 };
 
 // Admin: Get pending categories
-export const getPendingCategories = async (req: Request
-  , res: Response): Promise<void> => {
+export const getPendingCategories = async (req: Request, res: Response): Promise<void> => {
   try {
-    // Check if user is admin
     if (!req.user?.roles?.includes('admin')) {
-      res.status(403).json({
-        success: false,
-        message: 'Admin access required'
-      });
+      res.status(403).json({ success: false, message: 'Admin access required' });
       return;
     }
 
-    const pendingCategories = await GlobalCategory.find({
-      approvalStatus: 'pending'
-    })
-      .populate('createdBy', 'name email')
-      .sort({ submittedAt: -1 });
+    const rows = await db
+      .select({ category: globalCategories, creator: { id: users.id, name: users.name, email: users.email } })
+      .from(globalCategories)
+      .leftJoin(users, eq(globalCategories.createdBy, users.id))
+      .where(eq(globalCategories.approvalStatus, 'pending'))
+      .orderBy(desc(globalCategories.submittedAt));
 
-    res.json({
-      success: true,
-      data: pendingCategories,
-      count: pendingCategories.length
-    });
+    const pendingCategories = rows.map(({ category, creator }) => ({ ...category, createdBy: creator }));
+    res.json({ success: true, data: pendingCategories, count: pendingCategories.length });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching pending categories',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    res.status(500).json({ success: false, message: 'Error fetching pending categories', error: error instanceof Error ? error.message : 'Unknown error' });
   }
 };
 
+const syncUserCategoryStatus = async (createdBy: string | null, categoryId: string, patch: Partial<{ isApproved: boolean; approvalStatus: string; isActive: boolean }>) => {
+  if (!createdBy) return;
+  const [creator] = await db.select().from(users).where(eq(users.id, createdBy)).limit(1);
+  const sellerInfo = creator?.sellerInfo as SellerInfo | null;
+  const categoryList = sellerInfo?.category;
+  if (!creator || !sellerInfo || !categoryList) return;
+
+  const entry = categoryList.find((c) => c.categoryId === categoryId);
+  if (!entry) return;
+  Object.assign(entry, patch);
+  await db.update(users).set({ sellerInfo: { ...sellerInfo, category: categoryList }, updatedAt: new Date() }).where(eq(users.id, createdBy));
+};
+
 // Admin: Approve category
-export const approveCategory = async (req: Request
-  , res: Response): Promise<void> => {
+export const approveCategory = async (req: Request, res: Response) => {
   try {
-    // Check if user is admin
     if (!req.user?.roles?.includes('admin')) {
-      res.status(403).json({
-        success: false,
-        message: 'Admin access required'
-      });
-      return;
+      return res.status(403).json({ success: false, message: 'Admin access required' });
     }
 
     const { categoryId } = req.params;
     const approvedBy = req.user.id;
 
-    const category = await GlobalCategory.findById(categoryId);
+    const [category] = await db.select().from(globalCategories).where(eq(globalCategories.id, categoryId)).limit(1);
     if (!category) {
-      res.status(404).json({
-        success: false,
-        message: 'Category not found'
-      });
-      return;
+      return res.status(404).json({ success: false, message: 'Category not found' });
     }
 
-    category.isApproved = true;
-    category.approvalStatus = 'approved';
-    category.approvedBy = approvedBy as any;
-    category.approvedAt = new Date();
-    category.rejectedBy = undefined;
-    category.rejectedAt = undefined;
-    category.rejectionReason = undefined;
-    await category.save();
+    const [updated] = await db
+      .update(globalCategories)
+      .set({
+        isApproved: true,
+        approvalStatus: 'approved',
+        approvedBy,
+        approvedAt: new Date(),
+        rejectedBy: null,
+        rejectedAt: null,
+        rejectionReason: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(globalCategories.id, categoryId))
+      .returning();
 
-    // Also update the creator's user category array
-    const creator = await User.findById(category.createdBy);
-    if (creator && creator.sellerInfo && creator.sellerInfo.category) {
-      const userCategory = creator.sellerInfo.category.find(
-        cat => cat.categoryId.toString() === categoryId.toString()
-      );
+    await syncUserCategoryStatus(category.createdBy, categoryId, { isApproved: true, approvalStatus: 'approved', isActive: true });
 
-      if (userCategory) {
-        userCategory.isApproved = true;
-        userCategory.approvalStatus = 'approved';
-        userCategory.isActive = true; // Activate for the creator
-        await creator.save();
-        console.log(`✅ Updated category "${category.name}" in creator ${category.createdBy} category list to approved`);
-      }
-    }
-
-    res.json({
-      success: true,
-      message: 'Category approved successfully',
-      data: category
-    });
+    res.json({ success: true, message: 'Category approved successfully', data: updated });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error approving category',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    res.status(500).json({ success: false, message: 'Error approving category', error: error instanceof Error ? error.message : 'Unknown error' });
   }
 };
 
 // Admin: Reject category
-export const rejectCategory = async (req: Request
-  , res: Response): Promise<void> => {
+export const rejectCategory = async (req: Request, res: Response) => {
   try {
-    // Check if user is admin
     if (!req.user?.roles?.includes('admin')) {
-      res.status(403).json({
-        success: false,
-        message: 'Admin access required'
-      });
-      return;
+      return res.status(403).json({ success: false, message: 'Admin access required' });
     }
 
     const { categoryId } = req.params;
@@ -680,666 +412,319 @@ export const rejectCategory = async (req: Request
     const rejectedBy = req.user.id;
 
     if (!reason) {
-      res.status(400).json({
-        success: false,
-        message: 'Rejection reason is required'
-      });
-      return;
+      return res.status(400).json({ success: false, message: 'Rejection reason is required' });
     }
 
-    const category = await GlobalCategory.findById(categoryId);
+    const [category] = await db.select().from(globalCategories).where(eq(globalCategories.id, categoryId)).limit(1);
     if (!category) {
-      res.status(404).json({
-        success: false,
-        message: 'Category not found'
-      });
-      return;
+      return res.status(404).json({ success: false, message: 'Category not found' });
     }
 
-    category.isApproved = false;
-    category.approvalStatus = 'rejected';
-    category.rejectedBy = rejectedBy as any;
-    category.rejectedAt = new Date();
-    category.rejectionReason = reason;
-    category.approvedBy = undefined;
-    category.approvedAt = undefined;
-    await category.save();
+    const [updated] = await db
+      .update(globalCategories)
+      .set({
+        isApproved: false,
+        approvalStatus: 'rejected',
+        rejectedBy,
+        rejectedAt: new Date(),
+        rejectionReason: reason,
+        approvedBy: null,
+        approvedAt: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(globalCategories.id, categoryId))
+      .returning();
 
-    // Also update the creator's user category array
-    const creator = await User.findById(category.createdBy);
-    if (creator && creator.sellerInfo && creator.sellerInfo.category) {
-      const userCategory = creator.sellerInfo.category.find(
-        cat => cat.categoryId.toString() === categoryId.toString()
-      );
+    await syncUserCategoryStatus(category.createdBy, categoryId, { isApproved: false, approvalStatus: 'rejected', isActive: false });
 
-      if (userCategory) {
-        userCategory.isApproved = false;
-        userCategory.approvalStatus = 'rejected';
-        userCategory.isActive = false; // Deactivate for the creator
-        await creator.save();
-        console.log(`✅ Updated category "${category.name}" in creator ${category.createdBy} category list to rejected`);
-      }
-    }
-
-    res.json({
-      success: true,
-      message: 'Category rejected successfully',
-      data: category
-    });
+    res.json({ success: true, message: 'Category rejected successfully', data: updated });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error rejecting category',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    res.status(500).json({ success: false, message: 'Error rejecting category', error: error instanceof Error ? error.message : 'Unknown error' });
   }
 };
 
 // Admin: Delete category
-export const deleteCategory = async (req: Request
-  , res: Response): Promise<void> => {
+export const deleteCategory = async (req: Request, res: Response): Promise<void> => {
   try {
-    // Check if user is admin
     if (!req.user?.roles?.includes('admin')) {
-      res.status(403).json({
-        success: false,
-        message: 'Admin access required'
-      });
+      res.status(403).json({ success: false, message: 'Admin access required' });
       return;
     }
 
     const { categoryId } = req.params;
-
-    const category = await GlobalCategory.findById(categoryId);
-    if (!category) {
-      res.status(404).json({
-        success: false,
-        message: 'Category not found'
-      });
+    const [deleted] = await db.delete(globalCategories).where(eq(globalCategories.id, categoryId)).returning();
+    if (!deleted) {
+      res.status(404).json({ success: false, message: 'Category not found' });
       return;
     }
 
-    await GlobalCategory.findByIdAndDelete(categoryId);
-
-    res.json({
-      success: true,
-      message: 'Category deleted successfully'
-    });
+    res.json({ success: true, message: 'Category deleted successfully' });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error deleting category',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    res.status(500).json({ success: false, message: 'Error deleting category', error: error instanceof Error ? error.message : 'Unknown error' });
   }
 };
 
 // Update seller category preferences
-export const updateCategoryPreferences = async (req: Request
-  , res: Response): Promise<void> => {
+export const updateCategoryPreferences = async (req: Request, res: Response): Promise<void> => {
   try {
     const sellerId = req.user?.id;
     if (!sellerId) {
-      res.status(401).json({
-        success: false,
-        message: 'Authentication required'
-      });
+      res.status(401).json({ success: false, message: 'Authentication required' });
       return;
     }
 
     const { preferences, globalSettings } = req.body;
 
-    let sellerPrefs = await SellerCategoryPreferences.findOne({ seller: sellerId });
-
-    if (!sellerPrefs) {
-      sellerPrefs = new SellerCategoryPreferences({
-        seller: sellerId,
-        categoryPreferences: [],
-        globalSettings: globalSettings || {}
-      });
-    }
-
     if (preferences && Array.isArray(preferences)) {
-      preferences.forEach((update: any) => {
-        const preference = sellerPrefs.categoryPreferences.find(
-          (pref: any) => pref.category.toString() === update.categoryId.toString()
-        );
-
-        if (preference) {
-          if (update.isVisible !== undefined) preference.isVisible = update.isVisible;
-          if (update.isEnabled !== undefined) preference.isEnabled = update.isEnabled;
-          if (update.customName !== undefined) preference.customName = update.customName;
-          if (update.sortOrder !== undefined) preference.sortOrder = update.sortOrder;
-        } else {
-          sellerPrefs.categoryPreferences.push({
-            category: update.categoryId,
+      for (const update of preferences) {
+        await db
+          .insert(sellerCategoryPreferences)
+          .values({
+            sellerId,
+            categoryId: update.categoryId,
             isVisible: update.isVisible ?? true,
             isEnabled: update.isEnabled ?? true,
             customName: update.customName,
-            sortOrder: update.sortOrder ?? 0
+            sortOrder: update.sortOrder ?? 0,
+          })
+          .onConflictDoUpdate({
+            target: [sellerCategoryPreferences.sellerId, sellerCategoryPreferences.categoryId],
+            set: {
+              ...(update.isVisible !== undefined && { isVisible: update.isVisible }),
+              ...(update.isEnabled !== undefined && { isEnabled: update.isEnabled }),
+              ...(update.customName !== undefined && { customName: update.customName }),
+              ...(update.sortOrder !== undefined && { sortOrder: update.sortOrder }),
+              updatedAt: new Date(),
+            },
           });
-        }
-      });
-
-      sellerPrefs.lastUpdated = new Date();
-      await sellerPrefs.save();
+      }
     }
 
     if (globalSettings) {
-      sellerPrefs.globalSettings = { ...sellerPrefs.globalSettings, ...globalSettings };
-      await sellerPrefs.save();
+      await db
+        .insert(sellerSettings)
+        .values({ sellerId, categorySettings: globalSettings })
+        .onConflictDoUpdate({
+          target: sellerSettings.sellerId,
+          set: { categorySettings: globalSettings, updatedAt: new Date() },
+        });
     }
 
-    res.json({
-      success: true,
-      message: 'Category preferences updated successfully',
-      data: sellerPrefs
-    });
+    const rows = await db.select().from(sellerCategoryPreferences).where(eq(sellerCategoryPreferences.sellerId, sellerId));
+    res.json({ success: true, message: 'Category preferences updated successfully', data: rows });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error updating category preferences',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    res.status(500).json({ success: false, message: 'Error updating category preferences', error: error instanceof Error ? error.message : 'Unknown error' });
   }
 };
 
 // Get favorite categories
-export const getFavoriteCategories = async (req: Request
-  , res: Response): Promise<void> => {
+export const getFavoriteCategories = async (req: Request, res: Response): Promise<void> => {
   try {
     const sellerId = req.user?.id;
-
     if (!sellerId) {
-      res.status(401).json({
-        success: false,
-        message: 'Authentication required'
-      });
+      res.status(401).json({ success: false, message: 'Authentication required' });
       return;
     }
 
-    const sellerPrefs = await SellerCategoryPreferences.findOne({ seller: sellerId })
-      .populate({
-        path: 'categoryPreferences.category',
-        match: { isApproved: true },
-        select: 'name description slug imageUrl type popularity usageCount'
-      });
+    const rows = await db
+      .select({ category: globalCategories })
+      .from(sellerCategoryPreferences)
+      .innerJoin(globalCategories, eq(sellerCategoryPreferences.categoryId, globalCategories.id))
+      .where(and(eq(sellerCategoryPreferences.sellerId, sellerId), eq(sellerCategoryPreferences.isFavorite, true), eq(globalCategories.isApproved, true)));
 
-    if (!sellerPrefs) {
-      res.json({
-        success: true,
-        data: [],
-        count: 0
-      });
-      return;
-    }
-
-    const favoriteCategories = sellerPrefs.categoryPreferences
-      .filter((pref: any) => pref.isFavorite && pref.category)
-      .map((pref: any) => pref.category);
-
-    res.json({
-      success: true,
-      data: favoriteCategories,
-      count: favoriteCategories.length
-    });
+    const favoriteCategories = rows.map((r) => r.category);
+    res.json({ success: true, data: favoriteCategories, count: favoriteCategories.length });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching favorite categories',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    res.status(500).json({ success: false, message: 'Error fetching favorite categories', error: error instanceof Error ? error.message : 'Unknown error' });
   }
 };
 
 // Toggle favorite category
-export const toggleFavoriteCategory = async (req: Request
-  , res: Response) => {
+export const toggleFavoriteCategory = async (req: Request, res: Response) => {
   try {
     const sellerId = req.user?.id;
     if (!sellerId) {
-      return res.status(401).json({
-        success: false,
-        message: 'Authentication required'
-      });
+      return res.status(401).json({ success: false, message: 'Authentication required' });
     }
-
     const { categoryId } = req.params;
 
-    let sellerPrefs = await SellerCategoryPreferences.findOne({ seller: sellerId });
+    const [existing] = await db
+      .select()
+      .from(sellerCategoryPreferences)
+      .where(and(eq(sellerCategoryPreferences.sellerId, sellerId), eq(sellerCategoryPreferences.categoryId, categoryId)))
+      .limit(1);
 
-    if (!sellerPrefs) {
-      sellerPrefs = new SellerCategoryPreferences({
-        seller: sellerId,
-        categoryPreferences: [],
-        globalSettings: {}
-      });
-    }
-
-    const preference = sellerPrefs.categoryPreferences.find(
-      (pref: any) => pref.category.toString() === categoryId.toString()
-    );
-
-    if (preference) {
-      preference.isFavorite = !preference.isFavorite;
+    if (existing) {
+      await db.update(sellerCategoryPreferences).set({ isFavorite: !existing.isFavorite, updatedAt: new Date() }).where(eq(sellerCategoryPreferences.id, existing.id));
     } else {
-      sellerPrefs.categoryPreferences.push({
-        category: categoryId as any,
-        isVisible: true,
-        isEnabled: true,
-        isFavorite: true
-      });
+      await db.insert(sellerCategoryPreferences).values({ sellerId, categoryId, isVisible: true, isEnabled: true, isFavorite: true });
     }
 
-    sellerPrefs.lastUpdated = new Date();
-    await sellerPrefs.save();
-
-    res.json({
-      success: true,
-      message: 'Category favorite status updated',
-      data: sellerPrefs
-    });
+    const rows = await db.select().from(sellerCategoryPreferences).where(eq(sellerCategoryPreferences.sellerId, sellerId));
+    res.json({ success: true, message: 'Category favorite status updated', data: rows });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error updating favorite status',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    res.status(500).json({ success: false, message: 'Error updating favorite status', error: error instanceof Error ? error.message : 'Unknown error' });
   }
 };
 
 // Add existing category to seller's list
-export const addExistingCategoryToSeller = async (req: Request
-  , res: Response): Promise<void> => {
+export const addExistingCategoryToSeller = async (req: Request, res: Response): Promise<void> => {
   try {
     const { categoryId } = req.params;
     const sellerId = req.user?.id;
 
     if (!sellerId) {
-      res.status(401).json({
-        success: false,
-        message: 'Authentication required'
-      });
+      res.status(401).json({ success: false, message: 'Authentication required' });
       return;
     }
 
-    if (!mongoose.Types.ObjectId.isValid(categoryId)) {
-      res.status(400).json({
-        success: false,
-        message: 'Invalid category ID'
-      });
-      return;
-    }
-
-    // Check if category exists and is approved
-    const category = await GlobalCategory.findOne({
-      _id: categoryId,
-      isApproved: true,
-      approvalStatus: 'approved'
-    });
+    const [category] = await db
+      .select()
+      .from(globalCategories)
+      .where(and(eq(globalCategories.id, categoryId), eq(globalCategories.isApproved, true), eq(globalCategories.approvalStatus, 'approved')))
+      .limit(1);
 
     if (!category) {
-      res.status(404).json({
-        success: false,
-        message: 'Category not found or not approved'
-      });
+      res.status(404).json({ success: false, message: 'Category not found or not approved' });
       return;
     }
 
-    // Get or create seller preferences
-    let sellerPrefs = await SellerCategoryPreferences.findOne({ seller: sellerId });
-
-    if (!sellerPrefs) {
-      sellerPrefs = new SellerCategoryPreferences({
-        seller: sellerId,
-        categoryPreferences: [],
-        globalSettings: {}
+    await db
+      .insert(sellerCategoryPreferences)
+      .values({ sellerId, categoryId, isVisible: true, isEnabled: true })
+      .onConflictDoUpdate({
+        target: [sellerCategoryPreferences.sellerId, sellerCategoryPreferences.categoryId],
+        set: { isVisible: true, isEnabled: true, updatedAt: new Date() },
       });
-    }
 
-    // Check if category is already in seller's list
-    const existingPref = sellerPrefs.categoryPreferences.find(
-      (pref: any) => pref.category.toString() === categoryId.toString()
-    );
+    await db.update(globalCategories).set({ usageCount: sql`${globalCategories.usageCount} + 1` }).where(eq(globalCategories.id, categoryId));
 
-    if (existingPref) {
-      // Update existing preference
-      existingPref.isVisible = true;
-      existingPref.isEnabled = true;
-    } else {
-      // Add new preference
-      sellerPrefs.categoryPreferences.push({
-        category: categoryId as any,
-        isVisible: true,
-        isEnabled: true,
-        isFavorite: false
-      });
-    }
-
-    // Increment usage count
-    category.usageCount = (category.usageCount || 0) + 1;
-    await category.save();
-
-    sellerPrefs.lastUpdated = new Date();
-    await sellerPrefs.save();
-
-    // Also add to user's sellerInfo.category array
-    let user = await User.findById(sellerId);
+    const [user] = await db.select().from(users).where(eq(users.id, sellerId)).limit(1);
     if (user) {
-      // Ensure user has sellerInfo
-      user = await ensureSellerInfo(user, sellerId.toString());
+      const sellerInfo = (user.sellerInfo as SellerInfo | null) || ({ category: [] } as unknown as SellerInfo);
+      const categoryList = sellerInfo.category || [];
+      const existingEntry = categoryList.find((c) => c.categoryId === categoryId);
 
-      if (user && user.sellerInfo) {
-        if (!user.sellerInfo.category) {
-          user.sellerInfo.category = [];
-        }
-
-        // Check if category already exists in user's list
-        const existingUserCategory = user.sellerInfo.category.find(
-          cat => cat.categoryId.toString() === categoryId.toString()
-        );
-
-        if (!existingUserCategory) {
-          // Add new category to user's list as active and approved
-          user.sellerInfo.category.push({
-            categoryId: categoryId,
-            categoryName: category.name,
-            isActive: true,
-            isApproved: true,
-            approvalStatus: 'approved',
-            addedAt: new Date()
-          });
-
-          await user.save();
-          console.log(`✅ Added category "${category.name}" to user ${sellerId} category list`);
-        } else {
-          // Update existing category to be active
-          existingUserCategory.isActive = true;
-          existingUserCategory.isApproved = true;
-          existingUserCategory.approvalStatus = 'approved';
-
-          await user.save();
-          console.log(`✅ Updated category "${category.name}" in user ${sellerId} category list to active`);
-        }
+      if (existingEntry) {
+        existingEntry.isActive = true;
+        existingEntry.isApproved = true;
+        existingEntry.approvalStatus = 'approved';
+      } else {
+        categoryList.push({ categoryId, categoryName: category.name, isActive: true, isApproved: true, approvalStatus: 'approved', addedAt: new Date() });
       }
+
+      await db.update(users).set({ sellerInfo: { ...sellerInfo, category: categoryList }, updatedAt: new Date() }).where(eq(users.id, sellerId));
     }
 
-    res.json({
-      success: true,
-      message: 'Category added to your list successfully',
-      data: {
-        category,
-        preferences: sellerPrefs
-      }
-    });
+    const prefs = await db.select().from(sellerCategoryPreferences).where(eq(sellerCategoryPreferences.sellerId, sellerId));
+    res.json({ success: true, message: 'Category added to your list successfully', data: { category, preferences: prefs } });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error adding category to seller list',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    res.status(500).json({ success: false, message: 'Error adding category to seller list', error: error instanceof Error ? error.message : 'Unknown error' });
   }
 };
 
 // Toggle category active status (user-specific, not global)
-// This endpoint toggles the user's personal isActive status for a category
-export const toggleCategoryActiveStatus = async (req: Request
-  , res: Response) => {
+export const toggleCategoryActiveStatus = async (req: Request, res: Response) => {
   try {
     const { categoryId } = req.params;
     const sellerId = req.user?.id;
-
-    console.log(`🔄 Toggle request for category ${categoryId} by seller ${sellerId}`);
-
     if (!sellerId) {
-      return res.status(401).json({
-        success: false,
-        message: 'Authentication required'
-      });
+      return res.status(401).json({ success: false, message: 'Authentication required' });
     }
 
-    // Find the user and their category preferences
-    let user = await User.findById(sellerId);
-    console.log("🔍 User lookup result:", {
-      userId: sellerId,
-      userFound: !!user,
-      hasSellerInfo: !!(user?.sellerInfo),
-      userRole: user?.roles
-    });
-
+    const [user] = await db.select().from(users).where(eq(users.id, sellerId)).limit(1);
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
+      return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    if (!user.sellerInfo) {
-      // If user has seller role but no sellerInfo, initialize it
-      if (user.roles === 'seller') {
-        console.log(`🔧 Initializing sellerInfo for user ${sellerId}`);
-        user = await ensureSellerInfo(user, sellerId.toString());
-      } else {
-        return res.status(404).json({
-          success: false,
-          message: 'User is not a seller'
-        });
+    let sellerInfo = user.sellerInfo as SellerInfo | null;
+    if (!sellerInfo) {
+      if (user.role !== 'seller') {
+        return res.status(404).json({ success: false, message: 'User is not a seller' });
       }
+      sellerInfo = { category: [] } as unknown as SellerInfo;
     }
 
-    // Check if the global category exists (allow both approved and pending for creators)
-    const globalCategory = await GlobalCategory.findOne({
-      _id: categoryId
-    });
-
-    console.log("🔍 Global category lookup:", {
-      categoryId,
-      found: !!globalCategory,
-      approvalStatus: globalCategory?.approvalStatus,
-      createdBy: globalCategory?.createdBy?.toString(),
-      isCreator: globalCategory?.createdBy?.toString() === sellerId.toString()
-    });
-
+    const [globalCategory] = await db.select().from(globalCategories).where(eq(globalCategories.id, categoryId)).limit(1);
     if (!globalCategory) {
-      return res.status(404).json({
-        success: false,
-        message: 'Category not found'
-      });
+      return res.status(404).json({ success: false, message: 'Category not found' });
     }
 
-    // Check if category is approved OR if user is the creator
-    const isCreator = globalCategory.createdBy?.toString() === sellerId.toString();
+    const isCreator = globalCategory.createdBy === sellerId;
     const isApproved = globalCategory.approvalStatus === 'approved';
-
     if (!isApproved && !isCreator) {
-      return res.status(404).json({
-        success: false,
-        message: 'Category not approved and you are not the creator'
+      return res.status(404).json({ success: false, message: 'Category not approved and you are not the creator' });
+    }
+
+    const categoryList = sellerInfo.category || [];
+    const entry = categoryList.find((c) => c.categoryId === categoryId);
+
+    if (!entry) {
+      categoryList.push({ categoryId, categoryName: globalCategory.name, isActive: isApproved, isApproved, approvalStatus: globalCategory.approvalStatus, addedAt: new Date() });
+      await db.update(users).set({ sellerInfo: { ...sellerInfo, category: categoryList }, updatedAt: new Date() }).where(eq(users.id, sellerId));
+
+      return res.json({
+        success: true,
+        message: `Category added successfully (${globalCategory.approvalStatus})`,
+        data: { id: categoryId, name: globalCategory.name, isActive: isApproved, approvalStatus: globalCategory.approvalStatus }
       });
     }
 
-    // Find the category in user's category array
-    const userCategoryIndex = user?.sellerInfo?.category?.findIndex(
-      cat => cat.categoryId.toString() === categoryId
-    );
-
-    if (userCategoryIndex === -1 || userCategoryIndex === undefined) {
-      // If category not in user's list, add it
-      if (user && user.sellerInfo) {
-        if (!user.sellerInfo.category) {
-          user.sellerInfo.category = [];
-        }
-
-        // Set status based on global category status
-        const userCategoryStatus = {
-          categoryId: categoryId,
-          categoryName: globalCategory.name,
-          isActive: isApproved ? true : false, // Only activate if globally approved
-          isApproved: isApproved,
-          approvalStatus: globalCategory.approvalStatus,
-          addedAt: new Date()
-        };
-
-        user.sellerInfo.category.push(userCategoryStatus);
-        await user.save();
-
-        console.log(`✅ Added category "${globalCategory.name}" to seller ${sellerId} with status: ${globalCategory.approvalStatus}`);
-
-        return res.json({
-          success: true,
-          message: `Category added successfully (${globalCategory.approvalStatus})`,
-          data: {
-            id: categoryId,
-            name: globalCategory.name,
-            isActive: userCategoryStatus.isActive,
-            approvalStatus: userCategoryStatus.approvalStatus
-          }
-        });
-      }
+    if (!entry.isActive && entry.approvalStatus === 'pending' && !isCreator) {
+      return res.status(400).json({ success: false, message: 'Cannot activate pending category. Wait for admin approval.' });
+    }
+    if (!entry.isActive && entry.approvalStatus === 'rejected') {
+      return res.status(400).json({ success: false, message: 'Cannot activate rejected category.' });
     }
 
-    // Toggle the user's specific isActive status
-    if (!user || !user.sellerInfo || !user.sellerInfo.category || userCategoryIndex === undefined || userCategoryIndex === -1) {
-      return res.status(404).json({
-        success: false,
-        message: 'Category not found in user preferences'
-      });
-    }
-
-    const userCategory = user.sellerInfo.category[userCategoryIndex];
-    const previousStatus = userCategory.isActive;
-
-    // Don't allow activating pending categories (unless user is creator)
-    if (!userCategory.isActive && userCategory.approvalStatus === 'pending' && !isCreator) {
-      return res.status(400).json({
-        success: false,
-        message: 'Cannot activate pending category. Wait for admin approval.'
-      });
-    }
-
-    // Don't allow activating rejected categories
-    if (!userCategory.isActive && userCategory.approvalStatus === 'rejected') {
-      return res.status(400).json({
-        success: false,
-        message: 'Cannot activate rejected category.'
-      });
-    }
-
-    userCategory.isActive = !userCategory.isActive;
-    await user.save();
-
-    console.log(`✅ Seller ${sellerId} toggled category "${globalCategory.name}" from isActive: ${previousStatus} to isActive: ${userCategory.isActive} (user-specific)`);
-    console.log(`📋 Global category status remains unchanged`);
+    entry.isActive = !entry.isActive;
+    await db.update(users).set({ sellerInfo: { ...sellerInfo, category: categoryList }, updatedAt: new Date() }).where(eq(users.id, sellerId));
 
     res.json({
       success: true,
-      message: `Category ${userCategory.isActive ? 'activated' : 'deactivated'} successfully for your account`,
-      data: {
-        id: categoryId,
-        name: globalCategory.name,
-        isActive: userCategory.isActive,
-        approvalStatus: userCategory.approvalStatus,
-        globalApprovalStatus: globalCategory.approvalStatus
-      }
+      message: `Category ${entry.isActive ? 'activated' : 'deactivated'} successfully for your account`,
+      data: { id: categoryId, name: globalCategory.name, isActive: entry.isActive, approvalStatus: entry.approvalStatus, globalApprovalStatus: globalCategory.approvalStatus }
     });
   } catch (error) {
-    console.error('❌ Error in toggleCategoryActiveStatus:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error toggling category status',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    console.error('Error in toggleCategoryActiveStatus:', error);
+    res.status(500).json({ success: false, message: 'Error toggling category status', error: error instanceof Error ? error.message : 'Unknown error' });
   }
-}
+};
 
 // Remove existing category from seller's list (user-specific)
-export const removeExistingCategoryFromSeller = async (req: Request
-  , res: Response): Promise<void> => {
+export const removeExistingCategoryFromSeller = async (req: Request, res: Response): Promise<void> => {
   try {
     const { categoryId } = req.params;
     const sellerId = req.user?.id;
 
     if (!sellerId) {
-      res.status(401).json({
-        success: false,
-        message: 'Authentication required'
-      });
+      res.status(401).json({ success: false, message: 'Authentication required' });
       return;
     }
 
-    if (!mongoose.Types.ObjectId.isValid(categoryId)) {
-      res.status(400).json({
-        success: false,
-        message: 'Invalid category ID'
-      });
-      return;
-    }
-
-    // Get user and ensure sellerInfo exists
-    const user = await User.findById(sellerId);
+    const [user] = await db.select().from(users).where(eq(users.id, sellerId)).limit(1);
     if (!user) {
-      res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
+      res.status(404).json({ success: false, message: 'User not found' });
       return;
     }
 
-    // Ensure sellerInfo exists
-    const updatedUser = await ensureSellerInfo(user, sellerId.toString());
-
-    // Check if category exists in user's list
-    if (!updatedUser.sellerInfo || !updatedUser.sellerInfo.category) {
-      res.status(404).json({
-        success: false,
-        message: 'No categories found in your list'
-      });
+    const sellerInfo = (user.sellerInfo as SellerInfo | null) || ({ category: [] } as unknown as SellerInfo);
+    const categoryList = sellerInfo.category || [];
+    const idx = categoryList.findIndex((c) => c.categoryId === categoryId);
+    if (idx === -1) {
+      res.status(404).json({ success: false, message: 'Category not found in your list' });
       return;
     }
 
-    const categoryIndex = updatedUser.sellerInfo.category.findIndex(
-      (cat: any) => cat.categoryId.toString() === categoryId.toString()
-    );
+    const categoryName = categoryList[idx].categoryName;
+    categoryList.splice(idx, 1);
+    await db.update(users).set({ sellerInfo: { ...sellerInfo, category: categoryList }, updatedAt: new Date() }).where(eq(users.id, sellerId));
 
-    if (categoryIndex === -1) {
-      res.status(404).json({
-        success: false,
-        message: 'Category not found in your list'
-      });
-      return;
-    }
+    await db.update(globalCategories).set({ usageCount: sql`greatest(${globalCategories.usageCount} - 1, 0)` }).where(eq(globalCategories.id, categoryId));
 
-    // Get category name for logging
-    const categoryName = updatedUser.sellerInfo.category[categoryIndex].categoryName;
-
-    // Remove the category from user's list
-    updatedUser.sellerInfo.category.splice(categoryIndex, 1);
-    await updatedUser.save();
-
-    // Decrement usage count on global category
-    const globalCategory = await GlobalCategory.findById(categoryId);
-    if (globalCategory && globalCategory.usageCount > 0) {
-      globalCategory.usageCount = globalCategory.usageCount - 1;
-      await globalCategory.save();
-    }
-
-    console.log(`✅ Removed category "${categoryName}" from user ${sellerId} category list`);
-
-    res.json({
-      success: true,
-      message: 'Category removed from your list successfully',
-      data: {
-        categoryId,
-        categoryName,
-        removedAt: new Date()
-      }
-    });
+    res.json({ success: true, message: 'Category removed from your list successfully', data: { categoryId, categoryName, removedAt: new Date() } });
   } catch (error) {
     console.error('Error removing category from seller list:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error removing category from seller list',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    res.status(500).json({ success: false, message: 'Error removing category from seller list', error: error instanceof Error ? error.message : 'Unknown error' });
   }
 };

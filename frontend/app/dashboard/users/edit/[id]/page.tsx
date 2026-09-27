@@ -491,9 +491,12 @@ export default function EditUserPage() {
                                                                 <SelectContent>
                                                                     <SelectItem value={UserRole.ADMIN}>Administrator</SelectItem>
                                                                     <SelectItem value={UserRole.SELLER}>Seller</SelectItem>
-                                                                    <SelectItem value={UserRole.ADVERTISER}>Advertiser</SelectItem>
                                                                     <SelectItem value={UserRole.GUIDE}>Guide</SelectItem>
-                                                                    <SelectItem value={UserRole.VENUE}>Venue Manager</SelectItem>
+                                                                    <SelectItem value={UserRole.HOTEL}>Hotel</SelectItem>
+                                                                    <SelectItem value={UserRole.GUESTHOUSE}>Guesthouse</SelectItem>
+                                                                    <SelectItem value={UserRole.RESTAURANT}>Restaurant</SelectItem>
+                                                                    <SelectItem value={UserRole.TRANSPORT}>Transport Provider</SelectItem>
+                                                                    <SelectItem value={UserRole.ADVERTISER}>Advertiser</SelectItem>
                                                                     <SelectItem value={UserRole.USER}>User</SelectItem>
                                                                     <SelectItem value={UserRole.SUBSCRIBER}>Subscriber</SelectItem>
                                                                 </SelectContent>

@@ -1,5 +1,178 @@
 import { Departure, PricingOption, TourDates } from './types';
 
+// ---------------------------------------------------------------------------
+// Booking pricing preview
+// ---------------------------------------------------------------------------
+// Mirrors server/src/api/bookings/utils/pricingCalculator.ts so the price a
+// traveler sees while booking matches what the server actually charges (the
+// server always recomputes this authoritatively — this is display-only).
+
+export type BookingPaymentType = 'full_payment' | 'deposit_percentage' | 'pay_on_arrival';
+
+export interface BookingPaymentOptions {
+    fullPaymentEnabled: boolean;
+    depositEnabled: boolean;
+    depositPercentage: number;
+    payOnArrivalEnabled: boolean;
+}
+
+export interface BookingPricingPreview {
+    basePrice: number;
+    adultPrice: number;
+    childPrice: number;
+    infantPrice: number;
+    totalPrice: number;
+    currency: string;
+    amountDueNow: number;
+    amountDueLater: number;
+    depositPercentage?: number;
+}
+
+interface PreviewDiscount {
+    discountEnabled?: boolean;
+    discountPrice?: number;
+    discountPercentage?: number;
+    percentageOrPrice?: boolean;
+    discountDateRange?: { from?: string | Date; to?: string | Date };
+}
+
+interface PreviewTour {
+    price?: number;
+    salePrice?: number;
+    saleEnabled?: boolean;
+    pricePerPerson?: boolean;
+    pricingOptions?: PricingOption[];
+    pricingOptionsEnabled?: boolean;
+    discount?: PreviewDiscount;
+    paymentOptions?: BookingPaymentOptions;
+}
+
+/** Children are priced at this fraction of the adult price when the tour
+ * hasn't defined an explicit "child" pricing option. */
+const DEFAULT_CHILD_PRICE_RATIO = 0.7;
+
+const DEFAULT_PAYMENT_OPTIONS: BookingPaymentOptions = { fullPaymentEnabled: true, depositEnabled: false, depositPercentage: 20, payOnArrivalEnabled: false };
+
+function isPreviewDiscountActive(discount: PreviewDiscount | undefined, now: Date): boolean {
+    if (!discount?.discountEnabled) return false;
+    const from = discount.discountDateRange?.from ? new Date(discount.discountDateRange.from) : null;
+    const to = discount.discountDateRange?.to ? new Date(discount.discountDateRange.to) : null;
+    if (from && now < from) return false;
+    if (to && now > to) return false;
+    return true;
+}
+
+/** Applies a discount ONCE to a subtotal (not per unit) — "$X off" / "Y% off" coupon semantics. */
+function applyPreviewDiscount(subtotal: number, discount: PreviewDiscount | undefined, now: Date): number {
+    if (!isPreviewDiscountActive(discount, now)) return subtotal;
+    if (discount!.percentageOrPrice) {
+        return Math.max(0, subtotal * (1 - (discount!.discountPercentage || 0) / 100));
+    }
+    return Math.max(0, subtotal - (discount!.discountPrice || 0));
+}
+
+function previewBaseUnitPrice(tour: PreviewTour): number {
+    if (tour.saleEnabled && tour.salePrice != null) return tour.salePrice;
+    return tour.price ?? 0;
+}
+
+function computePreviewDueAmounts(
+    totalPrice: number,
+    paymentType: BookingPaymentType,
+    tour: PreviewTour
+): { amountDueNow: number; amountDueLater: number; depositPercentage?: number } {
+    const options = tour.paymentOptions || DEFAULT_PAYMENT_OPTIONS;
+
+    switch (paymentType) {
+        case 'full_payment':
+            return { amountDueNow: totalPrice, amountDueLater: 0 };
+        case 'pay_on_arrival':
+            return { amountDueNow: 0, amountDueLater: totalPrice };
+        case 'deposit_percentage': {
+            const amountDueNow = Math.round(totalPrice * (options.depositPercentage / 100) * 100) / 100;
+            return { amountDueNow, amountDueLater: Math.round((totalPrice - amountDueNow) * 100) / 100, depositPercentage: options.depositPercentage };
+        }
+    }
+}
+
+/**
+ * Preview a booking's price breakdown from the tour's own pricing
+ * configuration. Purely a display estimate — the server independently
+ * recomputes and enforces the authoritative total on submit.
+ */
+export function calculateBookingPricingPreview(
+    tour: PreviewTour,
+    participants: { adults: number; children: number; infants?: number },
+    paymentType: BookingPaymentType,
+    pricingOptionId?: string | null
+): BookingPricingPreview {
+    const now = new Date();
+    const currency = 'USD';
+
+    if (tour.pricePerPerson === false) {
+        let groupPrice = previewBaseUnitPrice(tour);
+        if (!(tour.saleEnabled && tour.salePrice != null)) {
+            groupPrice = applyPreviewDiscount(groupPrice, tour.discount, now);
+        }
+        return {
+            basePrice: groupPrice,
+            adultPrice: groupPrice,
+            childPrice: 0,
+            infantPrice: 0,
+            totalPrice: groupPrice,
+            currency,
+            ...computePreviewDueAmounts(groupPrice, paymentType, tour),
+        };
+    }
+
+    const pricingOptions = tour.pricingOptions || [];
+    let adultUnit: number;
+    let childUnit: number;
+    let adultSubtotal: number;
+    let childSubtotal: number;
+
+    if (tour.pricingOptionsEnabled && pricingOptions.length > 0) {
+        const adultOption = pricingOptionId
+            ? pricingOptions.find((o) => (o.id || o._id) === pricingOptionId)
+            : pricingOptions.find((o) => o.category === 'adult');
+        const childOption = pricingOptions.find((o) => o.category === 'child');
+
+        const resolvedAdultOption = adultOption || pricingOptions[0];
+        adultUnit = resolvedAdultOption?.price || 0;
+        adultSubtotal = applyPreviewDiscount(adultUnit * participants.adults, resolvedAdultOption?.discount, now);
+
+        childUnit = childOption ? childOption.price : adultUnit;
+        childSubtotal = childOption
+            ? applyPreviewDiscount(childUnit * participants.children, childOption.discount, now)
+            : applyPreviewDiscount(childUnit * participants.children, resolvedAdultOption?.discount, now);
+    } else {
+        adultUnit = previewBaseUnitPrice(tour);
+        childUnit = adultUnit * DEFAULT_CHILD_PRICE_RATIO;
+
+        const rawSubtotal = adultUnit * participants.adults + childUnit * participants.children;
+        const discountedSubtotal = (tour.saleEnabled && tour.salePrice != null)
+            ? rawSubtotal
+            : applyPreviewDiscount(rawSubtotal, tour.discount, now);
+
+        const ratio = rawSubtotal > 0 ? discountedSubtotal / rawSubtotal : 1;
+        adultSubtotal = adultUnit * participants.adults * ratio;
+        childSubtotal = childUnit * participants.children * ratio;
+    }
+
+    const infantPrice = 0; // infants travel free — no pricing-option category exists for them today.
+    const totalPrice = adultSubtotal + childSubtotal + infantPrice;
+
+    return {
+        basePrice: adultUnit,
+        adultPrice: adultSubtotal,
+        childPrice: childSubtotal,
+        infantPrice,
+        totalPrice,
+        currency,
+        ...computePreviewDueAmounts(totalPrice, paymentType, tour),
+    };
+}
+
 /**
  * Format price with currency symbol
  * @param price - The price to format
@@ -225,10 +398,11 @@ export function calculateDeparturePrice(
                     if (selectedOption.discount.percentageOrPrice) {
                         // Percentage discount
                         const discountAmount = (originalPrice * (selectedOption.discount.discountPercentage || 0)) / 100;
-                        displayPrice = originalPrice - discountAmount;
+                        displayPrice = Math.max(0, originalPrice - discountAmount);
                     } else {
-                        // Fixed price discount - discountPrice IS the final price
-                        displayPrice = selectedOption.discount.discountPrice || originalPrice;
+                        // Fixed amount discount — discountPrice is subtracted from the
+                        // original price (matches PricingOptionCard's interpretation).
+                        displayPrice = Math.max(0, originalPrice - (selectedOption.discount.discountPrice || 0));
                     }
                 }
             }

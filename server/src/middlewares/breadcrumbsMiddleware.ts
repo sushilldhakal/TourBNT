@@ -1,8 +1,7 @@
 /// <reference path="../types/express.d.ts" />
 import { Request, Response, NextFunction } from "express";
-import tourModel from "../api/tours/tourModel";
-import userModel from "../api/user/userModel";
-import mongoose from "mongoose";
+import { db, tours, users } from "@tourbnt/db";
+import { eq } from "drizzle-orm";
 
 export interface Breadcrumb {
   label: string;
@@ -19,46 +18,32 @@ const breadcrumbsMiddleware = async (req: Request, res: Response, next: NextFunc
     let label = parts[i];
 
     if (i > 0 && parts[i - 1] === 'tours') {
-      // Skip fetching tour title for special routes
       if (['reviews', 'all', 'pending'].includes(label)) {
-        // Just capitalize the label for special routes
         label = label.charAt(0).toUpperCase() + label.slice(1);
       } else {
-        // Only try to fetch a tour if the label is a valid ObjectId
-        if (mongoose.isValidObjectId(label)) {
-          try {
-            const tour = await tourModel.findById(label).select('title');
-            if (tour) {
-              label = tour.title;
-            }
-          } catch (error) {
-            console.error(`Error fetching tour title for ID ${label}:`, error);
-            // Handle the error appropriately, such as logging and returning a generic label
+        try {
+          const [tour] = await db.select({ title: tours.title }).from(tours).where(eq(tours.id, label)).limit(1);
+          if (tour) {
+            label = tour.title;
           }
+        } catch (error) {
+          console.error(`Error fetching tour title for ID ${label}:`, error);
         }
       }
     } else if (i > 0 && parts[i - 1] === 'users') {
-      // Check if label is a valid ObjectId
-      if (mongoose.isValidObjectId(label)) {
-        try {
-          const user = await userModel.findById(label).select('name');
-          if (user) {
-            label = user.name;
-          }
-        } catch (error) {
-          console.error(`Error fetching user name for ID ${label}:`, error);
-          // Handle the error appropriately, such as logging and returning a generic label
+      try {
+        const [user] = await db.select({ name: users.name }).from(users).where(eq(users.id, label)).limit(1);
+        if (user) {
+          label = user.name;
+        } else {
+          label = `Username: ${label}`;
         }
-      } else {
-        // Handle non-ObjectId identifier (e.g., username)
-        label = `Username: ${label}`;
+      } catch (error) {
+        console.error(`Error fetching user name for ID ${label}:`, error);
       }
     }
 
-    breadcrumbs.push({
-      label,
-      url,
-    });
+    breadcrumbs.push({ label, url });
   }
 
   req.breadcrumbs = breadcrumbs;

@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/dialog';
 import { getDefaultItineraryItem } from '@/lib/utils/defaultTourValues';
 import NovelEditor from '@/components/dashboard/editor/NovelEditor';
+import { BusinessPartnerPicker } from './BusinessPartnerPicker';
 /**
  * TourItinerary Component
  * Handles tour itinerary with outline and dynamic day-by-day items
@@ -284,36 +285,36 @@ function ItineraryItem({ index, onRemove, onDragStart, onDragOver, onDrop }: Iti
                     />
                 </div>
 
-                {/* Additional Details Row */}
-                <div className="grid grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                        <Label htmlFor={`itinerary.options.0.${index}.accommodation`}>
-                            Accommodation
-                        </Label>
-                        <Input
-                            id={`itinerary.options.0.${index}.accommodation`}
-                            placeholder="Hotel name"
-                            {...register(`itinerary.options.0.${index}.accommodation`)}
+                {/* Logistics — link a registered TourBNT business, or type a plain name if it's not registered */}
+                <div className="space-y-2 pt-2 border-t border-border">
+                    <p className="text-sm font-medium">Logistics for this day</p>
+                    <p className="text-xs text-muted-foreground -mt-1">
+                        Start typing to find a registered guide, hotel, restaurant or transport provider — travelers will see a link to their reviews. Otherwise just type a name.
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <BusinessPartnerPicker
+                            basePath={`itinerary.options.0.${index}`}
+                            role="transport"
+                            label="Transport / Logistics"
+                            placeholder="e.g. ABC Travels — car to Pokhara"
                         />
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor={`itinerary.options.0.${index}.meals`}>
-                            Meals
-                        </Label>
-                        <Input
-                            id={`itinerary.options.0.${index}.meals`}
-                            placeholder="B, L, D"
-                            {...register(`itinerary.options.0.${index}.meals`)}
+                        <BusinessPartnerPicker
+                            basePath={`itinerary.options.0.${index}`}
+                            role="accommodation"
+                            label="Accommodation"
+                            placeholder="e.g. Hotel Everest View"
                         />
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor={`itinerary.options.0.${index}.activities`}>
-                            Activities
-                        </Label>
-                        <Input
-                            id={`itinerary.options.0.${index}.activities`}
-                            placeholder="Main activities"
-                            {...register(`itinerary.options.0.${index}.activities`)}
+                        <BusinessPartnerPicker
+                            basePath={`itinerary.options.0.${index}`}
+                            role="guide"
+                            label="Guide"
+                            placeholder="e.g. Gandruk Trekking Guide"
+                        />
+                        <BusinessPartnerPicker
+                            basePath={`itinerary.options.0.${index}`}
+                            role="meals"
+                            label="Restaurant"
+                            placeholder="e.g. Local Kitchen Restaurant"
                         />
                     </div>
                 </div>

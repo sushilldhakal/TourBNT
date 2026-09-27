@@ -1,5 +1,4 @@
-import mongoose from 'mongoose';
-import { PricingOption, DateRange, FactValue } from '../tourTypes';
+import { PricingOption, DateRange } from '../tourTypes';
 
 /**
  * Data Processing Utilities
@@ -43,20 +42,16 @@ export const safeToNumber = (value: any, defaultValue: number = 0): number => {
 
 /**
  * Process category data from form submission
- * Returns array of ObjectIds for the category field
+ * Returns array of category ID strings for the category field
  */
-export const processCategoryData = (category: any): Array<mongoose.Types.ObjectId> => {
+export const processCategoryData = (category: any): Array<string> => {
   try {
-
     // Handle category data as JSON string
     if (typeof category === 'string') {
       try {
         const parsedCategories = JSON.parse(category);
         if (Array.isArray(parsedCategories)) {
-          return parsedCategories.map((cat: any) => {
-            const catId = cat.categoryId || cat.id || cat.value;
-            return new mongoose.Types.ObjectId(catId);
-          });
+          return parsedCategories.map((cat: any) => String(cat.categoryId || cat.id || cat.value));
         }
       } catch (parseError) {
         console.error('Error parsing category JSON string:', parseError);
@@ -66,25 +61,17 @@ export const processCategoryData = (category: any): Array<mongoose.Types.ObjectI
     // Handle special case with mixed object structure
     if (category && typeof category === 'object' && !Array.isArray(category) && category[''] && typeof category[''] === 'string') {
       const parsedCategories = JSON.parse(category['']);
-      return parsedCategories.map((cat: any) => {
-        const catId = cat.id || cat.value || cat.categoryId;
-        return new mongoose.Types.ObjectId(catId);
-      });
+      return parsedCategories.map((cat: any) => String(cat.id || cat.value || cat.categoryId));
     }
 
     // Handle array of categories
     if (Array.isArray(category)) {
-      return category.map((cat: any) => {
-        const catId = cat.id || cat.value || cat.categoryId;
-        return new mongoose.Types.ObjectId(catId);
-      });
+      return category.map((cat: any) => String(cat.id || cat.value || cat.categoryId));
     }
 
     // Handle single category object
     if (category && typeof category === 'object') {
-      const catId = category.id || category.value || category.categoryId;
-
-      return [new mongoose.Types.ObjectId(catId)];
+      return [String(category.id || category.value || category.categoryId)];
     }
 
     return [];
@@ -149,6 +136,39 @@ export const processPricingOptions = (pricingOptionsData: any): PricingOption[] 
 };
 
 /**
+ * Process payment options data — which policies (full payment / deposit /
+ * pay on arrival) a traveler can choose from when booking this tour.
+ * Always normalizes to a complete, valid object: if nothing ends up enabled
+ * (bad input, or the seller unchecked everything), falls back to
+ * full-payment-only so a tour is never left unbookable.
+ */
+export const processPaymentOptions = (paymentOptions: any) => {
+  try {
+    const parsed = parseJsonField(paymentOptions);
+    if (!parsed || typeof parsed !== 'object') {
+      return { fullPaymentEnabled: true, depositEnabled: false, depositPercentage: 20, payOnArrivalEnabled: false };
+    }
+
+    const fullPaymentEnabled = convertToBoolean(parsed.fullPaymentEnabled);
+    const depositEnabled = convertToBoolean(parsed.depositEnabled);
+    const payOnArrivalEnabled = convertToBoolean(parsed.payOnArrivalEnabled);
+    const depositPercentage = Math.min(99, Math.max(1, safeToNumber(parsed.depositPercentage, 20)));
+
+    const anyEnabled = fullPaymentEnabled || depositEnabled || payOnArrivalEnabled;
+
+    return {
+      fullPaymentEnabled: anyEnabled ? fullPaymentEnabled : true,
+      depositEnabled,
+      depositPercentage,
+      payOnArrivalEnabled,
+    };
+  } catch (error) {
+    console.error("Error processing payment options:", error);
+    return { fullPaymentEnabled: true, depositEnabled: false, depositPercentage: 20, payOnArrivalEnabled: false };
+  }
+};
+
+/**
  * Process date ranges data
  */
 export const processDateRanges = (dateRangesData: any): DateRange[] => {
@@ -171,8 +191,31 @@ export const processDateRanges = (dateRangesData: any): DateRange[] => {
   }
 };
 
+const ITINERARY_PARTNER_ROLES = new Set(['transport', 'accommodation', 'guide', 'meals', 'other']);
+
 /**
- * Process itinerary data
+ * Process a single itinerary day's `partners[]` — each entry links a
+ * transport/accommodation/guide/meals provider to the day, either as a
+ * registered business (`businessPartnerId` set) or a plain free-typed name.
+ */
+const processItineraryPartners = (partners: any): Array<{ role: string; businessPartnerId?: string; name: string; notes?: string }> => {
+  if (!Array.isArray(partners)) return [];
+  return partners
+    .filter((p: any) => p && p.role && ITINERARY_PARTNER_ROLES.has(p.role) && p.name)
+    .map((p: any) => ({
+      role: p.role,
+      ...(p.businessPartnerId && { businessPartnerId: String(p.businessPartnerId) }),
+      name: String(p.name),
+      ...(p.notes && { notes: String(p.notes) }),
+    }));
+};
+
+/**
+ * Process itinerary data. Preserves every field the tour-builder form
+ * collects (previously this silently dropped `destination`/`accommodation`/
+ * `meals`/`activities` down to just `{day,title,description,date}`) and
+ * carries a stable per-day `id` so itinerary-partner links
+ * (`tourItineraryPartners`) survive day drag-and-drop reordering.
  */
 export const processItineraryData = (itinerary: any) => {
   try {
@@ -182,12 +225,31 @@ export const processItineraryData = (itinerary: any) => {
       return [];
     }
 
-    return parsed.map((item: any) => ({
-      day: item.day || '',
-      title: item.title || '',
-      description: item.description || '',
-      date: item.date ? new Date(item.date) : undefined
-    }));
+    return parsed.map((item: any) => {
+      let partners = processItineraryPartners(item.partners);
+
+      // Back-compat: older payloads (or the picker falling back to plain
+      // text) may still carry legacy `accommodation`/`meals`/`activities`
+      // free-text strings instead of a `partners[]` array — fold them in as
+      // unregistered (no businessPartnerId) entries rather than losing them.
+      if (partners.length === 0) {
+        const legacy: Array<{ role: string; name: string }> = [];
+        if (item.accommodation) legacy.push({ role: 'accommodation', name: String(item.accommodation) });
+        if (item.meals) legacy.push({ role: 'meals', name: String(item.meals) });
+        if (item.activities) legacy.push({ role: 'other', name: String(item.activities) });
+        partners = legacy;
+      }
+
+      return {
+        id: item.id || `day_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+        day: item.day || '',
+        title: item.title || '',
+        description: item.description || '',
+        destination: item.destination || '',
+        date: item.date ? new Date(item.date) : undefined,
+        partners,
+      };
+    });
   } catch (error) {
     console.error("Error processing itinerary data:", error);
     return [];
@@ -451,6 +513,8 @@ export const extractTourFields = (req: any) => {
   // Prioritize nested pricing discount over top-level fields
   const finalDiscountEnabled = nestedPricing.discount?.discountEnabled !== undefined ? nestedPricing.discount.discountEnabled : discountEnabled;
   const finalDiscountPrice = nestedPricing.discount?.discountPrice !== undefined ? nestedPricing.discount.discountPrice : discountPrice;
+  const finalDiscountPercentage = nestedPricing.discount?.discountPercentage;
+  const finalPercentageOrPrice = nestedPricing.discount?.percentageOrPrice;
 
   // Extract priceLockDate from nested pricing object or top-level
   const finalPriceLockDate = nestedPricing.priceLockDate || priceLockDate;
@@ -458,6 +522,8 @@ export const extractTourFields = (req: any) => {
   const finalDiscountDateRange = nestedPricing.discount?.dateRange || discountDateRange;
 
   const finalPricingOptionsEnabled = pricingOptionsEnabled !== undefined ? pricingOptionsEnabled : nestedPricing.pricingOptionsEnabled;
+
+  const finalPaymentOptions = req.body.paymentOptions !== undefined ? req.body.paymentOptions : nestedPricing.paymentOptions;
 
   const result = {
     // Basic fields
@@ -471,11 +537,13 @@ export const extractTourFields = (req: any) => {
     minSize: safeToNumber(minSize),
     maxSize: safeToNumber(maxSize),
     pricingOptionsEnabled: finalPricingOptionsEnabled,
+    paymentOptions: processPaymentOptions(finalPaymentOptions),
 
     // Discount data (flat structure)
     discount: {
       discountEnabled: convertToBoolean(finalDiscountEnabled),
       discountPrice: safeToNumber(finalDiscountPrice),
+      discountPercentage: safeToNumber(finalDiscountPercentage),
       discountDateRange: finalDiscountDateRange ? (() => {
         try {
           // Handle both string and object formats
@@ -503,7 +571,7 @@ export const extractTourFields = (req: any) => {
           return undefined;
         }
       })() : undefined,
-      percentageOrPrice: false
+      percentageOrPrice: convertToBoolean(finalPercentageOrPrice)
     },
 
     // Tour dates data - map to correct field name for database schema

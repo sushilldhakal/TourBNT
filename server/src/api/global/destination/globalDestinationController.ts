@@ -1,83 +1,28 @@
 import { Request, Response } from 'express';
-import mongoose from 'mongoose';
-import GlobalDestination from './globalDestinationModel';
-import SellerDestinationPreferences from '../seller/sellerDestinationPreferencesModel';
-import Notification from '../../notifications/notificationModel';
-import User from '../../user/userModel';
-import { 
-  sendSuccess, 
-  sendError, 
-  sendAuthError, 
-  sendValidationError, 
-  sendForbiddenError,
-  sendNotFoundError
-} from '../../../utils/apiResponse';
-
-// Utility function to ensure user has sellerInfo
-const ensureSellerInfo = async (user: any, userId: string) => {
-  if (!user.sellerInfo && user.roles === 'seller') {
-    console.log(`🔧 Initializing sellerInfo for user ${userId}`);
-    user.sellerInfo = {
-      destination: [],
-      companyName: '',
-      companyRegistrationNumber: '',
-      companyType: '',
-      registrationDate: '',
-      taxId: '',
-      businessAddress: {
-        address: '',
-        city: '',
-        state: '',
-        postalCode: '',
-        country: ''
-      },
-      bankDetails: {
-        bankName: '',
-        accountNumber: '',
-        accountHolderName: '',
-        branchCode: ''
-      },
-      businessDescription: '',
-      sellerType: '',
-      isApproved: false,
-      appliedAt: new Date()
-    };
-    await user.save();
-    console.log(`✅ SellerInfo initialized for user ${userId}`);
-  }
-  return user;
-};
+import { db, globalDestinations, sellerDestinationPreferences, sellerSettings, users } from '@tourbnt/db';
+import { eq, and, or, ilike, ne, desc, isNull, isNotNull, sql } from 'drizzle-orm';
+import type { SellerInfo } from '../../user/userTypes';
+import * as notifications from '../../notifications/notificationController';
 
 // Get all approved destinations (public)
 export const getApprovedDestinations = async (req: Request, res: Response): Promise<void> => {
   try {
     const { country, region, search } = req.query;
 
-    let query: any = {
-      isActive: true,
-      isApproved: true,
-      approvalStatus: 'approved'
-    };
+    const conditions = [eq(globalDestinations.isActive, true), eq(globalDestinations.isApproved, true), eq(globalDestinations.approvalStatus, 'approved')];
+    if (country && typeof country === 'string') conditions.push(ilike(globalDestinations.country, `%${country}%`));
+    if (region && typeof region === 'string') conditions.push(ilike(globalDestinations.region, `%${region}%`));
+    if (search && typeof search === 'string') conditions.push(or(ilike(globalDestinations.name, `%${search}%`), ilike(globalDestinations.description, `%${search}%`))!);
 
-    if (country) {
-      query.country = { $regex: new RegExp(country as string, 'i') };
-    }
+    const destinations = await db
+      .select()
+      .from(globalDestinations)
+      .where(and(...conditions))
+      .orderBy(desc(globalDestinations.popularity), globalDestinations.name);
 
-    if (region) {
-      query.region = { $regex: new RegExp(region as string, 'i') };
-    }
-
-    if (search) {
-      query.$text = { $search: search as string };
-    }
-
-    const destinations = await GlobalDestination.find(query)
-      .sort({ popularity: -1, name: 1 })
-      .select('name description coverImage country region city coordinates popularity usageCount fullLocation');
-
-    sendSuccess(res, destinations, 'Approved destinations retrieved successfully', 200);
+    res.json({ success: true, message: 'Approved destinations retrieved successfully', data: destinations });
   } catch (error) {
-    return sendError(res, 'Error fetching approved destinations');
+    res.status(500).json({ success: false, message: 'Error fetching approved destinations' });
   }
 };
 
@@ -85,436 +30,299 @@ export const getApprovedDestinations = async (req: Request, res: Response): Prom
 export const getDestinationsByCountry = async (req: Request, res: Response): Promise<void> => {
   try {
     const { country } = req.params;
+    const destinations = await db
+      .select()
+      .from(globalDestinations)
+      .where(and(ilike(globalDestinations.country, `%${country}%`), eq(globalDestinations.isActive, true), eq(globalDestinations.isApproved, true), eq(globalDestinations.approvalStatus, 'approved')));
 
-    const destinations = await GlobalDestination.find({
-      country: { $regex: new RegExp(country, 'i') },
-      isActive: true,
-      isApproved: true,
-      approvalStatus: 'approved'
-    });
-
-    sendSuccess(res, destinations, 'Destinations by country retrieved successfully', 200);
+    res.json({ success: true, message: 'Destinations by country retrieved successfully', data: destinations });
   } catch (error) {
-    return sendError(res, 'Error fetching destinations by country');
+    res.status(500).json({ success: false, message: 'Error fetching destinations by country' });
   }
 };
 
-// Get destinations for seller (shows own destinations + enabled destinations from preferences)
-export const getSellerDestinations = async (req: Request
-  , res: Response) => {
+// Get destinations for seller (own + enabled from preferences)
+export const getSellerDestinations = async (req: Request, res: Response) => {
   try {
     const sellerId = req.user?.id;
     const isAdmin = req.user?.roles.includes('admin') || false;
-
     if (!sellerId) {
-      return sendAuthError(res, 'Authentication required');
+      return res.status(401).json({ success: false, message: 'Authentication required' });
     }
 
-    // If user is admin, return ALL destinations (no filtering by isActive)
     if (isAdmin) {
-      const allDestinations = await GlobalDestination.find({})
-        .sort({ submittedAt: -1 });
-
-      console.log('🔍 Admin destinations query result count:', allDestinations.length);
-      console.log('🔍 Admin destinations status breakdown:', allDestinations.map(d => ({
-        id: d._id,
-        name: d.name,
-        isActive: d.isActive,
-        status: d.approvalStatus
-      })));
-
-      return sendSuccess(res, allDestinations, 'All destinations retrieved successfully', 200);
+      const allDestinations = await db.select().from(globalDestinations).orderBy(desc(globalDestinations.submittedAt));
+      return res.json({ success: true, data: allDestinations, count: allDestinations.length });
     }
 
-    // Get seller preferences first to check for hidden destinations
-    const sellerPrefs = await SellerDestinationPreferences.findOne({ seller: sellerId })
-      .populate({
-        path: 'destinationPreferences.destination',
-        match: { isApproved: true, approvalStatus: 'approved', deletedAt: { $exists: false } }
-      });
+    const prefRows = await db.select().from(sellerDestinationPreferences).where(eq(sellerDestinationPreferences.sellerId, sellerId));
+    const hiddenIds = new Set(prefRows.filter((p) => !p.isVisible || !p.isEnabled).map((p) => p.destinationId));
+    const enabledIds = prefRows.filter((p) => p.isVisible && p.isEnabled).map((p) => p.destinationId);
 
-    // Get IDs of destinations that seller has explicitly hidden
-    const hiddenDestinationIds = new Set(
-      sellerPrefs ?
-        sellerPrefs.destinationPreferences
-          .filter((pref: any) => (!pref.isVisible || !pref.isEnabled) && pref.destination)
-          .map((pref: any) => {
-            const destId = typeof pref.destination === 'object' ? pref.destination._id.toString() : pref.destination.toString();
-            console.log('🔍 Hidden destination ID:', destId, 'isVisible:', pref.isVisible, 'isEnabled:', pref.isEnabled);
-            return destId;
-          }) : []
-    );
+    const sellerCreated = await db
+      .select()
+      .from(globalDestinations)
+      .where(and(eq(globalDestinations.createdBy, sellerId), ne(globalDestinations.approvalStatus, 'rejected'), isNull(globalDestinations.deletedAt)))
+      .orderBy(desc(globalDestinations.submittedAt));
 
-    console.log('🔍 All hidden destination IDs:', Array.from(hiddenDestinationIds));
-    console.log('🔍 Seller preferences count:', sellerPrefs?.destinationPreferences?.length || 0);
+    const visibleSellerCreated = sellerCreated.filter((d) => !hiddenIds.has(d.id));
 
-    // For sellers, return destinations they created (any status: pending, approved) but exclude rejected and admin-deleted ones
-    // NOTE: isActive controls public visibility, not seller dashboard visibility
-    const sellerCreatedDestinations = await GlobalDestination.find({
-      createdBy: sellerId,
-      approvalStatus: { $ne: 'rejected' }, // Exclude rejected destinations
-      deletedAt: { $exists: false } // Only exclude admin-deleted destinations
-    }).sort({ submittedAt: -1 });
+    const enabledDestinations = enabledIds.length
+      ? await db.select().from(globalDestinations).where(and(sql`${globalDestinations.id} = ANY(${enabledIds})`, eq(globalDestinations.isActive, true), eq(globalDestinations.isApproved, true), eq(globalDestinations.approvalStatus, 'approved')))
+      : [];
 
-    // Filter out hidden destinations from seller-created ones
-    console.log('🔍 Seller created destinations before filtering:', sellerCreatedDestinations.map((d: any) => ({ id: d._id.toString(), name: d.name })));
+    const combined = [...visibleSellerCreated];
+    const existingIds = new Set(visibleSellerCreated.map((d) => d.id));
+    for (const dest of enabledDestinations) {
+      if (!existingIds.has(dest.id)) combined.push(dest);
+    }
+    combined.sort((a, b) => new Date(b.submittedAt || b.createdAt).getTime() - new Date(a.submittedAt || a.createdAt).getTime());
 
-    const visibleSellerCreatedDestinations = sellerCreatedDestinations.filter(
-      (dest: any) => {
-        const isHidden = hiddenDestinationIds.has(dest._id.toString());
-        console.log('🔍 Checking destination:', dest.name, dest._id.toString(), 'isHidden:', isHidden);
-        return !isHidden;
-      }
-    );
-
-    console.log('🔍 Visible seller created destinations after filtering:', visibleSellerCreatedDestinations.map((d: any) => ({ id: d._id.toString(), name: d.name })));
-
-    // Get seller's enabled destinations from preferences
-    const enabledDestinations = sellerPrefs ?
-      sellerPrefs.destinationPreferences
-        .filter((pref: any) => pref.isEnabled && pref.isVisible && pref.destination)
-        .map((pref: any) => pref.destination)
-        .sort((a: any, b: any) => (a.createdAt || 0) - (b.createdAt || 0)) : [];
-
-    // Combine both arrays, removing duplicates based on _id
-    const combinedDestinations = [...visibleSellerCreatedDestinations];
-    const existingIds = new Set(visibleSellerCreatedDestinations.map((dest: any) => dest._id.toString()));
-
-    enabledDestinations.forEach((dest: any) => {
-      if (!existingIds.has(dest._id.toString())) {
-        combinedDestinations.push(dest);
-      }
-    });
-
-    // Sort combined results by submittedAt (newest first)
-    combinedDestinations.sort((a: any, b: any) =>
-      new Date(b.submittedAt || b.createdAt).getTime() -
-      new Date(a.submittedAt || a.createdAt).getTime()
-    );
-
-    sendSuccess(res, combinedDestinations, 'Seller destinations retrieved successfully');
+    res.json({ success: true, data: combined, count: combined.length, message: 'Seller destinations retrieved successfully' });
   } catch (error) {
-    return sendError(res, 'Error fetching seller destinations');
+    res.status(500).json({ success: false, message: 'Error fetching seller destinations' });
   }
 };
 
-// Search destinations for sellers (to discover existing destinations before creating new ones)
-export const searchDestinations = async (req: Request
-  , res: Response) => {
+// Search destinations for sellers
+export const searchDestinations = async (req: Request, res: Response) => {
   try {
     const sellerId = req.user?.id;
     if (!sellerId) {
-      return sendAuthError(res, 'Authentication required');
+      return res.status(401).json({ success: false, message: 'Authentication required' });
     }
 
     const { query, country, region, city } = req.query;
+    const conditions = [
+      eq(globalDestinations.isActive, true),
+      or(and(eq(globalDestinations.isApproved, true), eq(globalDestinations.approvalStatus, 'approved')), eq(globalDestinations.createdBy, sellerId))!,
+    ];
+    if (query && typeof query === 'string') conditions.push(or(ilike(globalDestinations.name, `%${query}%`), ilike(globalDestinations.description, `%${query}%`))!);
+    if (country && typeof country === 'string') conditions.push(ilike(globalDestinations.country, `%${country}%`));
+    if (region && typeof region === 'string') conditions.push(ilike(globalDestinations.region, `%${region}%`));
+    if (city && typeof city === 'string') conditions.push(ilike(globalDestinations.city, `%${city}%`));
 
-    // Build search criteria
-    const searchCriteria: any = {
-      isActive: true,
-      // Show approved destinations + seller's own destinations (any status)
-      $or: [
-        { isApproved: true, approvalStatus: 'approved' },
-        { createdBy: sellerId }
-      ]
-    };
-
-    // Add text search if query provided
-    if (query && typeof query === 'string') {
-      searchCriteria.$text = { $search: query };
-    }
-
-    // Add location filters
-    if (country && typeof country === 'string') {
-      searchCriteria.country = { $regex: new RegExp(country, 'i') };
-    }
-    if (region && typeof region === 'string') {
-      searchCriteria.region = { $regex: new RegExp(region, 'i') };
-    }
-    if (city && typeof city === 'string') {
-      searchCriteria.city = { $regex: new RegExp(city, 'i') };
-    }
-
-    const destinations = await GlobalDestination.find(searchCriteria)
-      .populate('createdBy', 'name email')
-      .sort({ usageCount: -1, popularity: -1, submittedAt: -1 })
+    const rows = await db
+      .select({ destination: globalDestinations, creator: { id: users.id, name: users.name, email: users.email } })
+      .from(globalDestinations)
+      .leftJoin(users, eq(globalDestinations.createdBy, users.id))
+      .where(and(...conditions))
+      .orderBy(desc(globalDestinations.usageCount), desc(globalDestinations.popularity), desc(globalDestinations.submittedAt))
       .limit(50);
 
-    sendSuccess(res, destinations, 'Destinations search completed successfully', 200);
+    const destinations = rows.map(({ destination, creator }) => ({ ...destination, createdBy: creator }));
+    res.json({ success: true, message: 'Destinations search completed successfully', data: destinations });
   } catch (error) {
-    return sendError(res, 'Error searching destinations');
+    res.status(500).json({ success: false, message: 'Error searching destinations' });
   }
 };
 
 // Get enabled destinations for seller (for tour creation)
-export const getEnabledDestinations = async (req: Request
-  , res: Response) => {
+export const getEnabledDestinations = async (req: Request, res: Response) => {
   try {
     const sellerId = req.user?.id;
     if (!sellerId) {
-      return sendAuthError(res, 'Authentication required');
+      return res.status(401).json({ success: false, message: 'Authentication required' });
     }
 
-    const sellerPrefs = await SellerDestinationPreferences.findOne({ seller: sellerId })
-      .populate({
-        path: 'destinationPreferences.destination',
-        match: { isActive: true, isApproved: true, approvalStatus: 'approved' }
-      });
+    const rows = await db
+      .select({ pref: sellerDestinationPreferences, destination: globalDestinations })
+      .from(sellerDestinationPreferences)
+      .innerJoin(globalDestinations, eq(sellerDestinationPreferences.destinationId, globalDestinations.id))
+      .where(and(
+        eq(sellerDestinationPreferences.sellerId, sellerId),
+        eq(sellerDestinationPreferences.isEnabled, true),
+        eq(globalDestinations.isActive, true),
+        eq(globalDestinations.isApproved, true),
+        eq(globalDestinations.approvalStatus, 'approved'),
+      ))
+      .orderBy(sellerDestinationPreferences.sortOrder);
 
-    const enabledDestinations = sellerPrefs ?
-      sellerPrefs.destinationPreferences
-        .filter((pref: any) => pref.isEnabled && pref.destination)
-        .sort((a: any, b: any) => (a.sortOrder || 0) - (b.sortOrder || 0)) : [];
-
-    sendSuccess(res, enabledDestinations, 'Enabled destinations retrieved successfully');
+    const enabledDestinations = rows.map(({ pref, destination }) => ({ ...pref, destination }));
+    res.json({ success: true, data: enabledDestinations, count: enabledDestinations.length });
   } catch (error) {
-    return sendError(res, 'Error fetching enabled destinations');
+    res.status(500).json({ success: false, message: 'Error fetching enabled destinations' });
   }
 };
 
 // Get seller's favorite destinations
-export const getFavoriteDestinations = async (req: Request
-  , res: Response) => {
+export const getFavoriteDestinations = async (req: Request, res: Response) => {
   try {
     const sellerId = req.user?.id;
     if (!sellerId) {
-      return sendAuthError(res, 'Authentication required');
+      return res.status(401).json({ success: false, message: 'Authentication required' });
     }
 
-    const sellerPrefs = await SellerDestinationPreferences.findOne({ seller: sellerId })
-      .populate({
-        path: 'destinationPreferences.destination',
-        match: { isActive: true, isApproved: true, approvalStatus: 'approved' }
-      });
+    const rows = await db
+      .select({ destination: globalDestinations })
+      .from(sellerDestinationPreferences)
+      .innerJoin(globalDestinations, eq(sellerDestinationPreferences.destinationId, globalDestinations.id))
+      .where(and(
+        eq(sellerDestinationPreferences.sellerId, sellerId),
+        eq(sellerDestinationPreferences.isFavorite, true),
+        eq(globalDestinations.isActive, true),
+        eq(globalDestinations.isApproved, true),
+        eq(globalDestinations.approvalStatus, 'approved'),
+      ));
 
-    const favoriteDestinations = sellerPrefs ?
-      sellerPrefs.destinationPreferences
-        .filter((pref: any) => pref.isFavorite && pref.destination)
-        .sort((a: any, b: any) => (a.sortOrder || 0) - (b.sortOrder || 0)) : [];
-
-    sendSuccess(res, favoriteDestinations, 'Favorite destinations retrieved successfully');
+    const favoriteDestinations = rows.map((r) => r.destination);
+    res.json({ success: true, data: favoriteDestinations, count: favoriteDestinations.length });
   } catch (error) {
-    return sendError(res, 'Error fetching favorite destinations');
+    res.status(500).json({ success: false, message: 'Error fetching favorite destinations' });
   }
 };
 
 // Submit new destination for approval
-export const submitDestination = async (req: Request
-  , res: Response) => {
+export const submitDestination = async (req: Request, res: Response) => {
   try {
-    const {
-      name,
-      description,
-      reason,
-      coverImage,
-      country,
-      region,
-      city,
-      coordinates,
-      isActive,
-      popularity,
-      featuredTours,
-      metadata
-    } = req.body;
+    const { name, description, reason, coverImage, country, region, city, coordinates, popularity, metadata } = req.body;
     const createdBy = req.user?.id;
 
     if (!createdBy) {
-      return sendAuthError(res, 'Authentication required');
+      return res.status(401).json({ success: false, message: 'Authentication required' });
     }
-
-    // Validate required fields
     if (!name || !description || !country) {
-      return sendValidationError(res, 'Missing required fields', [{
-        field: 'name',
-        message: 'Name is required'
-      }, {
-        field: 'description',
-        message: 'Description is required'
-      }, {
-        field: 'country',
-        message: 'Country is required'
-      }]);
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields',
+        errors: [{ field: 'name', message: 'Name is required' }, { field: 'description', message: 'Description is required' }, { field: 'country', message: 'Country is required' }],
+      });
     }
 
-    // Check for duplicate destinations (exclude soft-deleted destinations)
-    const existingDestination = await GlobalDestination.findOne({
-      name: { $regex: new RegExp(`^${name}$`, 'i') },
-      country: { $regex: new RegExp(`^${country}$`, 'i') },
-      isActive: true, // Only check active destinations for duplicates
-      $or: [
-        { city: { $regex: new RegExp(`^${city || ''}$`, 'i') } },
-        { city: { $exists: false } }
-      ]
-    });
-    console.log("🏗️ GlobalDestination Model Name:", GlobalDestination.modelName)
-    console.log("🏗️ GlobalDestination Collection:", GlobalDestination.collection.name)
-    console.log("🏗️ GlobalDestination Schema Fields:", Object.keys(GlobalDestination.schema.paths))
-
-    // Log existing destinations count
-    const totalDestinations = await GlobalDestination.countDocuments();
-    console.log("📊 Total destinations in database:", totalDestinations)
-
-    // Log some sample destinations
-    const sampleDestinations = await GlobalDestination.find().limit(3).select('name country city approvalStatus isActive');
-    console.log("📍 Sample destinations:", JSON.stringify(sampleDestinations, null, 2))
-
-    console.log('🔍 Duplicate check for:', { name, country, city });
-    console.log('🔍 Found existing destination:', existingDestination ? 'YES' : 'NO');
+    const [existingDestination] = await db
+      .select()
+      .from(globalDestinations)
+      .where(and(ilike(globalDestinations.name, name), ilike(globalDestinations.country, country), eq(globalDestinations.isActive, true), city ? ilike(globalDestinations.city, city) : isNull(globalDestinations.city)))
+      .limit(1);
 
     if (existingDestination) {
-      return sendValidationError(res, 'A destination with this name and location already exists', [{
-        field: 'name',
-        message: 'Name is required'
-      }, {
-        field: 'country',
-        message: 'Country is required'
-      }]);
+      return res.status(400).json({ success: false, message: 'A destination with this name and location already exists' });
     }
 
-    const destination = new GlobalDestination({
-      name,
-      description,
-      reason,
-      coverImage,
-      country,
-      region,
-      city,
-      coordinates,
-      isActive: false, // Pending destinations should not be active by default
-      isApproved: false,
-      approvalStatus: 'pending',
-      popularity: popularity !== undefined ? popularity : 0,
-      featuredTours: featuredTours || [],
-      metadata,
-      createdBy,
-      submittedAt: new Date()
-    });
-
-    await destination.save();
-
-    // Also add the destination to user's sellerInfo.destination array
-    const user = await User.findById(createdBy);
-    if (user && user.sellerInfo) {
-      if (!user.sellerInfo.destination) {
-        user.sellerInfo.destination = [];
-      }
-
-      // Add the new destination to user's list as pending
-      user.sellerInfo.destination.push({
-        destinationId: (destination._id as any).toString(),
-        destinationName: destination.name,
-        isActive: false, // Inactive until approved
+    const [destination] = await db
+      .insert(globalDestinations)
+      .values({
+        name,
+        description,
+        reason,
+        coverImage,
+        country,
+        region,
+        city,
+        latitude: coordinates?.latitude,
+        longitude: coordinates?.longitude,
+        isActive: false,
         isApproved: false,
         approvalStatus: 'pending',
-        addedAt: new Date()
-      });
+        popularity: popularity ?? 0,
+        metadata,
+        createdBy,
+        submittedAt: new Date(),
+      })
+      .returning();
 
-      await user.save();
-      console.log(`✅ Added destination "${destination.name}" to user ${createdBy} destination list as pending`);
+    const [user] = await db.select().from(users).where(eq(users.id, createdBy)).limit(1);
+    if (user?.sellerInfo) {
+      const sellerInfo = user.sellerInfo as SellerInfo;
+      const destinationList = sellerInfo.destination || [];
+      destinationList.push({ destinationId: destination.id, destinationName: destination.name, isActive: false, isApproved: false, approvalStatus: 'pending', addedAt: new Date() });
+      await db.update(users).set({ sellerInfo: { ...sellerInfo, destination: destinationList }, updatedAt: new Date() }).where(eq(users.id, createdBy));
     }
 
-    sendSuccess(res, destination, 'Destination submitted for approval', 201);
+    res.status(201).json({ success: true, message: 'Destination submitted for approval', data: destination });
   } catch (error) {
-    return sendError(res, 'Error submitting destination');
+    res.status(500).json({ success: false, message: 'Error submitting destination' });
   }
 };
 
 // Admin: Get pending destinations
-export const getPendingDestinations = async (req: Request
-  , res: Response) => {
+export const getPendingDestinations = async (req: Request, res: Response) => {
   try {
-    // Check if user is admin
     if (!req.user?.roles?.includes('admin')) {
-      return sendForbiddenError(res, 'Admin access required');
+      return res.status(403).json({ success: false, message: 'Admin access required' });
     }
 
-    const pendingDestinations = await GlobalDestination.find({
-      approvalStatus: 'pending'
-    })
-      .populate('createdBy', 'name email')
-      .sort({ submittedAt: -1 });
+    const rows = await db
+      .select({ destination: globalDestinations, creator: { id: users.id, name: users.name, email: users.email } })
+      .from(globalDestinations)
+      .leftJoin(users, eq(globalDestinations.createdBy, users.id))
+      .where(eq(globalDestinations.approvalStatus, 'pending'))
+      .orderBy(desc(globalDestinations.submittedAt));
 
-    sendSuccess(res, pendingDestinations, 'Pending destinations retrieved successfully', 200);
+    const pendingDestinations = rows.map(({ destination, creator }) => ({ ...destination, createdBy: creator }));
+    res.json({ success: true, message: 'Pending destinations retrieved successfully', data: pendingDestinations });
   } catch (error) {
-    return sendError(res, 'Error fetching pending destinations');
+    res.status(500).json({ success: false, message: 'Error fetching pending destinations' });
   }
 };
 
+const syncUserDestinationStatus = async (createdBy: string | null, destinationId: string, patch: Partial<{ isApproved: boolean; approvalStatus: string; isActive: boolean }>) => {
+  if (!createdBy) return;
+  const [creator] = await db.select().from(users).where(eq(users.id, createdBy)).limit(1);
+  const sellerInfo = creator?.sellerInfo as SellerInfo | null;
+  const destinationList = sellerInfo?.destination;
+  if (!creator || !sellerInfo || !destinationList) return;
+
+  const entry = destinationList.find((d) => d.destinationId === destinationId);
+  if (!entry) return;
+  Object.assign(entry, patch);
+  await db.update(users).set({ sellerInfo: { ...sellerInfo, destination: destinationList }, updatedAt: new Date() }).where(eq(users.id, createdBy));
+};
+
 // Admin: Approve destination
-export const approveDestination = async (req: Request
-  , res: Response) => {
+export const approveDestination = async (req: Request, res: Response) => {
   try {
-    // Check if user is admin
     if (!req.user?.roles?.includes('admin')) {
-      return sendForbiddenError(res, 'Admin access required');
+      return res.status(403).json({ success: false, message: 'Admin access required' });
     }
 
     const { destinationId } = req.params;
     const approvedBy = req.user.id;
 
-    const destination = await GlobalDestination.findById(destinationId);
+    const [destination] = await db.select().from(globalDestinations).where(eq(globalDestinations.id, destinationId)).limit(1);
     if (!destination) {
-      return sendNotFoundError(res, 'Destination not found');
+      return res.status(404).json({ success: false, message: 'Destination not found' });
     }
 
-    destination.isApproved = true;
-    destination.approvalStatus = 'approved';
-    destination.approvedBy = approvedBy as any;
-    destination.approvedAt = new Date();
-    destination.rejectedBy = undefined;
-    destination.rejectedAt = undefined;
-    destination.rejectionReason = undefined;
-    destination.deletedAt = undefined; // Clear admin deletion when approving
-    destination.deletedBy = undefined;
-    destination.isActive = true; // Make approved destinations active
-    await destination.save();
+    const [updated] = await db
+      .update(globalDestinations)
+      .set({
+        isApproved: true,
+        approvalStatus: 'approved',
+        approvedBy,
+        approvedAt: new Date(),
+        rejectedBy: null,
+        rejectedAt: null,
+        rejectionReason: null,
+        deletedAt: null,
+        deletedBy: null,
+        isActive: true,
+        updatedAt: new Date(),
+      })
+      .where(eq(globalDestinations.id, destinationId))
+      .returning();
 
-    // Also update the creator's user destination array
-    const creator = await User.findById(destination.createdBy);
-    if (creator && creator.sellerInfo && creator.sellerInfo.destination) {
-      const userDestination = creator.sellerInfo.destination.find(
-        dest => dest.destinationId.toString() === destinationId.toString()
-      );
+    await syncUserDestinationStatus(destination.createdBy, destinationId, { isApproved: true, approvalStatus: 'approved', isActive: true });
 
-      if (userDestination) {
-        userDestination.isApproved = true;
-        userDestination.approvalStatus = 'approved';
-        userDestination.isActive = true; // Activate for the creator
-        await creator.save();
-        console.log(`✅ Updated destination "${destination.name}" in creator ${destination.createdBy} destination list to approved`);
+    if (destination.createdBy) {
+      try {
+        await notifications.createDestinationApprovalNotification(destination.createdBy, approvedBy, destination.name, destination.id);
+      } catch (notificationError) {
+        console.error('Error creating approval notification:', notificationError);
       }
     }
 
-    // Create approval notification
-    try {
-      await (Notification as any).createDestinationApprovalNotification(
-        destination.createdBy,
-        approvedBy,
-        destination.name,
-        destination._id
-      );
-    } catch (notificationError) {
-      console.error('Error creating approval notification:', notificationError);
-      // Don't fail the approval if notification fails
-    }
-
-    res.json({
-      success: true,
-      message: 'Destination approved successfully',
-      data: destination
-    });
+    res.json({ success: true, message: 'Destination approved successfully', data: updated });
   } catch (error) {
-    return sendError(res, 'Error approving destination');
+    res.status(500).json({ success: false, message: 'Error approving destination' });
   }
 };
 
 // Admin: Reject destination
-export const rejectDestination = async (req: Request
-  , res: Response) => {
+export const rejectDestination = async (req: Request, res: Response) => {
   try {
-    // Check if user is admin
     if (!req.user?.roles?.includes('admin')) {
-      return sendForbiddenError(res, 'Admin access required');
+      return res.status(403).json({ success: false, message: 'Admin access required' });
     }
 
     const { destinationId } = req.params;
@@ -522,951 +330,521 @@ export const rejectDestination = async (req: Request
     const rejectedBy = req.user.id;
 
     if (!reason) {
-      return sendValidationError(res, 'Rejection reason is required', [{
-        field: 'reason',
-        message: 'Rejection reason is required'
-      }]);
+      return res.status(400).json({ success: false, message: 'Rejection reason is required' });
     }
 
-    const destination = await GlobalDestination.findById(destinationId);
+    const [destination] = await db.select().from(globalDestinations).where(eq(globalDestinations.id, destinationId)).limit(1);
     if (!destination) {
-      return sendNotFoundError(res, 'Destination not found');
+      return res.status(404).json({ success: false, message: 'Destination not found' });
     }
 
-    destination.isApproved = false;
-    destination.approvalStatus = 'rejected';
-    destination.rejectedBy = rejectedBy as any;
-    destination.rejectedAt = new Date();
-    destination.rejectionReason = reason;
-    destination.approvedBy = undefined;
-    destination.approvedAt = undefined;
-    destination.isActive = false; // Hide rejected destinations from seller view
-    await destination.save();
+    const [updated] = await db
+      .update(globalDestinations)
+      .set({
+        isApproved: false,
+        approvalStatus: 'rejected',
+        rejectedBy,
+        rejectedAt: new Date(),
+        rejectionReason: reason,
+        approvedBy: null,
+        approvedAt: null,
+        isActive: false,
+        updatedAt: new Date(),
+      })
+      .where(eq(globalDestinations.id, destinationId))
+      .returning();
 
-    // Also update the creator's user destination array
-    const creator = await User.findById(destination.createdBy);
-    if (creator && creator.sellerInfo && creator.sellerInfo.destination) {
-      const userDestination = creator.sellerInfo.destination.find(
-        dest => dest.destinationId.toString() === destinationId.toString()
-      );
+    await syncUserDestinationStatus(destination.createdBy, destinationId, { isApproved: false, approvalStatus: 'rejected', isActive: false });
 
-      if (userDestination) {
-        userDestination.isApproved = false;
-        userDestination.approvalStatus = 'rejected';
-        userDestination.isActive = false; // Deactivate for the creator
-        await creator.save();
-        console.log(`✅ Updated destination "${destination.name}" in creator ${destination.createdBy} destination list to rejected`);
+    if (destination.createdBy) {
+      try {
+        await notifications.createDestinationRejectionNotification(destination.createdBy, rejectedBy, destination.name, destination.id, reason);
+      } catch (notificationError) {
+        console.error('Error creating rejection notification:', notificationError);
       }
     }
 
-    // Create rejection notification
-    try {
-      await (Notification as any).createDestinationRejectionNotification(
-        destination.createdBy,
-        rejectedBy,
-        destination.name,
-        destination._id,
-        reason
-      );
-    } catch (notificationError) {
-      console.error('Error creating rejection notification:', notificationError);
-      // Don't fail the rejection if notification fails
-    }
-
-    res.json({
-      success: true,
-      message: 'Destination rejected successfully',
-      data: destination
-    });
+    res.json({ success: true, message: 'Destination rejected successfully', data: updated });
   } catch (error) {
-    return sendError(res, 'Error rejecting destination');
+    res.status(500).json({ success: false, message: 'Error rejecting destination' });
   }
 };
 
-// Admin: Delete destination (HARD DELETE - completely remove from database)
-export const deleteDestination = async (req: Request
-  , res: Response) => {
+// Admin: Delete destination (hard delete)
+export const deleteDestination = async (req: Request, res: Response) => {
   try {
-    console.log('🚀 Admin hard deleting destination:', req.user?.roles);
-    // Check if user is admin
     if (!req.user?.roles?.includes('admin')) {
-      return sendForbiddenError(res, 'Admin access required');
+      return res.status(403).json({ success: false, message: 'Admin access required' });
     }
 
     const { destinationId } = req.params;
-
-    const destination = await GlobalDestination.findById(destinationId);
-    if (!destination) {
-      return sendNotFoundError(res, 'Destination not found');
+    const [deleted] = await db.delete(globalDestinations).where(eq(globalDestinations.id, destinationId)).returning();
+    if (!deleted) {
+      return res.status(404).json({ success: false, message: 'Destination not found' });
     }
 
-    // HARD DELETE: completely remove from database
-    console.log('🗑️ Hard deleting destination:', destination.name, destination._id);
-    await GlobalDestination.findByIdAndDelete(destinationId);
-    console.log('✅ Destination completely removed from database');
-
-    // Also remove from all seller preferences
-    await SellerDestinationPreferences.updateMany(
-      {},
-      { $pull: { destinationPreferences: { destination: destinationId } } }
-    );
-    console.log('✅ Removed from all seller preferences');
-
-    res.json({
-      success: true,
-      message: 'Destination permanently deleted from database'
-    });
+    // Seller preferences referencing this destination cascade-delete via the FK.
+    res.json({ success: true, message: 'Destination permanently deleted from database' });
   } catch (error) {
-    return sendError(res, 'Error deleting destination');
+    res.status(500).json({ success: false, message: 'Error deleting destination' });
   }
 };
 
-// Update destination (sellers can update their own destinations, admins can update any)
-export const updateDestination = async (req: Request
-  , res: Response) => {
+// Update destination (sellers can update their own, admins any)
+export const updateDestination = async (req: Request, res: Response) => {
   try {
     const { destinationId } = req.params;
     const userId = req.user?.id;
-    const userRole = req.user?.roles;
-
     if (!userId) {
-      return sendAuthError(res, 'Authentication required');
+      return res.status(401).json({ success: false, message: 'Authentication required' });
     }
 
-    const destination = await GlobalDestination.findById(destinationId);
+    const [destination] = await db.select().from(globalDestinations).where(eq(globalDestinations.id, destinationId)).limit(1);
     if (!destination) {
-      return sendNotFoundError(res, 'Destination not found');
+      return res.status(404).json({ success: false, message: 'Destination not found' });
     }
 
-    // Check permissions: sellers can only update their own destinations, admins can update any
-    const isOwner = destination.createdBy.toString() === userId.toString();
+    const isOwner = destination.createdBy === userId;
     const isAdmin = req.user?.roles.includes('admin') || false;
-
     if (!isOwner && !isAdmin) {
-      return sendForbiddenError(res, 'You can only update destinations you created');
+      return res.status(403).json({ success: false, message: 'You can only update destinations you created' });
     }
 
-    const {
+    const { name, description, coverImage, country, region, city, coordinates, isActive, popularity, metadata } = req.body;
+
+    if (!name || !description || !country) {
+      const missingFields = [];
+      if (!name) missingFields.push({ field: 'name', message: 'name is required' });
+      if (!description) missingFields.push({ field: 'description', message: 'description is required' });
+      if (!country) missingFields.push({ field: 'country', message: 'country is required' });
+      return res.status(400).json({ success: false, message: 'Missing required fields', errors: missingFields });
+    }
+
+    const [duplicate] = await db
+      .select()
+      .from(globalDestinations)
+      .where(and(ne(globalDestinations.id, destinationId), ilike(globalDestinations.name, name), ilike(globalDestinations.country, country), city ? ilike(globalDestinations.city, city) : isNull(globalDestinations.city)))
+      .limit(1);
+
+    if (duplicate) {
+      return res.status(400).json({ success: false, message: 'A destination with this name and location already exists' });
+    }
+
+    const isOnlyActiveToggle = isActive !== undefined &&
+      isActive !== destination.isActive &&
+      name === destination.name &&
+      description === destination.description &&
+      coverImage === destination.coverImage &&
+      country === destination.country &&
+      region === destination.region &&
+      city === destination.city;
+
+    const updates: Partial<typeof globalDestinations.$inferInsert> = {
       name,
       description,
       coverImage,
       country,
       region,
       city,
-      coordinates,
-      isActive,
-      popularity,
-      featuredTours,
-      metadata
-    } = req.body;
+      latitude: coordinates?.latitude ?? destination.latitude,
+      longitude: coordinates?.longitude ?? destination.longitude,
+      isActive: isActive !== undefined ? isActive : destination.isActive,
+      popularity: popularity !== undefined ? popularity : destination.popularity,
+      metadata: metadata ?? destination.metadata,
+      updatedAt: new Date(),
+    };
 
-    // Validate required fields
-    if (!name || !description || !country) {
-      const missingFields = [];
-      if (!name) missingFields.push({ field: 'name', message: 'name is required' });
-      if (!description) missingFields.push({ field: 'description', message: 'description is required' });
-      if (!country) missingFields.push({ field: 'country', message: 'country is required' });
-      return sendValidationError(res, 'Missing required fields', missingFields);
-    }
-
-    // Check for duplicate destinations (excluding current one)
-    const existingDestination = await GlobalDestination.findOne({
-      _id: { $ne: destinationId },
-      name: { $regex: new RegExp(`^${name}$`, 'i') },
-      country: { $regex: new RegExp(`^${country}$`, 'i') },
-      $or: [
-        { city: { $regex: new RegExp(`^${city || ''}$`, 'i') } },
-        { city: { $exists: false } }
-      ]
-    });
-
-    if (existingDestination) {
-      return sendValidationError(res, 'A destination with this name and location already exists', [{
-        field: 'name',
-        message: 'A destination with this name and location already exists'
-      }]);
-    }
-
-    // Check if this is only an isActive toggle by comparing the boolean value change
-    const isOnlyActiveToggle = isActive !== undefined &&
-      isActive !== destination.isActive && // Only if isActive is actually changing
-      name === destination.name &&
-      description === destination.description &&
-      coverImage === destination.coverImage &&
-      country === destination.country &&
-      region === destination.region &&
-      city === destination.city &&
-      (!coordinates || JSON.stringify(coordinates) === JSON.stringify(destination.coordinates));
-
-    console.log('🔍 isActive toggle check:', {
-      isActiveDefined: isActive !== undefined,
-      isActiveChanging: isActive !== destination.isActive,
-      currentIsActive: destination.isActive,
-      newIsActive: isActive,
-      nameMatch: name === destination.name,
-      descriptionMatch: description === destination.description,
-      isOnlyActiveToggle
-    });
-
-    // Update destination fields
-    destination.name = name;
-    destination.description = description;
-    destination.coverImage = coverImage;
-    destination.country = country;
-    destination.region = region;
-    destination.city = city;
-    destination.coordinates = coordinates;
-    destination.isActive = isActive !== undefined ? isActive : destination.isActive;
-    destination.popularity = popularity !== undefined ? popularity : destination.popularity;
-    destination.featuredTours = featuredTours || destination.featuredTours;
-    destination.metadata = metadata;
-
-    // If this is a seller updating an approved destination with content changes (not just isActive toggle), set it back to pending
     if (!isAdmin && destination.approvalStatus === 'approved' && !isOnlyActiveToggle) {
-      destination.isApproved = false;
-      destination.approvalStatus = 'pending';
-      destination.approvedBy = undefined;
-      destination.approvedAt = undefined;
-      destination.rejectedBy = undefined;
-      destination.rejectedAt = undefined;
-      destination.rejectionReason = undefined;
-      destination.submittedAt = new Date(); // Update submission time
-      console.log('🔄 Seller made content changes to approved destination, setting back to pending');
-    } else if (isOnlyActiveToggle) {
-      console.log('🔄 Seller only toggled isActive status, keeping approval status intact');
+      updates.isApproved = false;
+      updates.approvalStatus = 'pending';
+      updates.approvedBy = null;
+      updates.approvedAt = null;
+      updates.rejectedBy = null;
+      updates.rejectedAt = null;
+      updates.rejectionReason = null;
+      updates.submittedAt = new Date();
     }
 
-    await destination.save();
+    const [updated] = await db.update(globalDestinations).set(updates).where(eq(globalDestinations.id, destinationId)).returning();
 
     res.json({
       success: true,
-      message: destination.approvalStatus === 'pending' && !isAdmin
-        ? 'Destination updated and submitted for approval'
-        : 'Destination updated successfully',
-      data: destination
+      message: updated.approvalStatus === 'pending' && !isAdmin ? 'Destination updated and submitted for approval' : 'Destination updated successfully',
+      data: updated,
     });
   } catch (error) {
-    return sendError(res, 'Error updating destination');
+    res.status(500).json({ success: false, message: 'Error updating destination' });
   }
 };
-export const updateDestinationPreferences = async (req: Request
-  , res: Response) => {
+
+export const updateDestinationPreferences = async (req: Request, res: Response) => {
   try {
     const sellerId = req.user?.id;
     if (!sellerId) {
-      return sendAuthError(res, 'Authentication required');
+      return res.status(401).json({ success: false, message: 'Authentication required' });
     }
 
     const { preferences, globalSettings } = req.body;
 
-    let sellerPrefs = await SellerDestinationPreferences.findOne({ seller: sellerId });
-
-    if (!sellerPrefs) {
-      sellerPrefs = new SellerDestinationPreferences({
-        seller: sellerId,
-        destinationPreferences: [],
-        globalSettings: globalSettings || {}
-      });
-    }
-
     if (preferences && Array.isArray(preferences)) {
-      preferences.forEach((update: any) => {
-        const preference = sellerPrefs.destinationPreferences.find(
-          (pref: any) => pref.destination.toString() === update.destinationId.toString()
-        );
-
-        if (preference) {
-          if (update.isVisible !== undefined) preference.isVisible = update.isVisible;
-          if (update.isEnabled !== undefined) preference.isEnabled = update.isEnabled;
-          if (update.customName !== undefined) preference.customName = update.customName;
-          if (update.sortOrder !== undefined) preference.sortOrder = update.sortOrder;
-          if (update.isFavorite !== undefined) preference.isFavorite = update.isFavorite;
-        } else {
-          sellerPrefs.destinationPreferences.push({
-            destination: update.destinationId,
+      for (const update of preferences) {
+        await db
+          .insert(sellerDestinationPreferences)
+          .values({
+            sellerId,
+            destinationId: update.destinationId,
             isVisible: update.isVisible ?? true,
             isEnabled: update.isEnabled ?? true,
             customName: update.customName,
             sortOrder: update.sortOrder ?? 0,
-            isFavorite: update.isFavorite ?? false
+            isFavorite: update.isFavorite ?? false,
+          })
+          .onConflictDoUpdate({
+            target: [sellerDestinationPreferences.sellerId, sellerDestinationPreferences.destinationId],
+            set: {
+              ...(update.isVisible !== undefined && { isVisible: update.isVisible }),
+              ...(update.isEnabled !== undefined && { isEnabled: update.isEnabled }),
+              ...(update.customName !== undefined && { customName: update.customName }),
+              ...(update.sortOrder !== undefined && { sortOrder: update.sortOrder }),
+              ...(update.isFavorite !== undefined && { isFavorite: update.isFavorite }),
+              updatedAt: new Date(),
+            },
           });
-        }
-      });
-
-      sellerPrefs.lastUpdated = new Date();
-      await sellerPrefs.save();
+      }
     }
 
     if (globalSettings) {
-      sellerPrefs.globalSettings = { ...sellerPrefs.globalSettings, ...globalSettings };
-      await sellerPrefs.save();
+      await db
+        .insert(sellerSettings)
+        .values({ sellerId, destinationSettings: globalSettings })
+        .onConflictDoUpdate({ target: sellerSettings.sellerId, set: { destinationSettings: globalSettings, updatedAt: new Date() } });
     }
 
-    res.json({
-      success: true,
-      message: 'Destination preferences updated successfully',
-      data: sellerPrefs
-    });
+    const rows = await db.select().from(sellerDestinationPreferences).where(eq(sellerDestinationPreferences.sellerId, sellerId));
+    res.json({ success: true, message: 'Destination preferences updated successfully', data: rows });
   } catch (error) {
-    return sendError(res, 'Error updating destination preferences');
+    res.status(500).json({ success: false, message: 'Error updating destination preferences' });
   }
 };
 
 // Toggle favorite destination
-export const toggleFavoriteDestination = async (req: Request
-  , res: Response) => {
+export const toggleFavoriteDestination = async (req: Request, res: Response) => {
   try {
     const sellerId = req.user?.id;
     if (!sellerId) {
-      return sendAuthError(res, 'Authentication required');
+      return res.status(401).json({ success: false, message: 'Authentication required' });
     }
-
     const { destinationId } = req.params;
 
-    let sellerPrefs = await SellerDestinationPreferences.findOne({ seller: sellerId });
+    const [existing] = await db
+      .select()
+      .from(sellerDestinationPreferences)
+      .where(and(eq(sellerDestinationPreferences.sellerId, sellerId), eq(sellerDestinationPreferences.destinationId, destinationId)))
+      .limit(1);
 
-    if (!sellerPrefs) {
-      sellerPrefs = new SellerDestinationPreferences({
-        seller: sellerId,
-        destinationPreferences: [],
-        globalSettings: {}
-      });
-    }
-
-    const preference = sellerPrefs.destinationPreferences.find(
-      (pref: any) => pref.destination.toString() === destinationId.toString()
-    );
-
-    if (preference) {
-      preference.isFavorite = !preference.isFavorite;
+    if (existing) {
+      await db.update(sellerDestinationPreferences).set({ isFavorite: !existing.isFavorite, updatedAt: new Date() }).where(eq(sellerDestinationPreferences.id, existing.id));
     } else {
-      sellerPrefs.destinationPreferences.push({
-        destination: destinationId as any,
-        isVisible: true,
-        isEnabled: true,
-        isFavorite: true
-      });
+      await db.insert(sellerDestinationPreferences).values({ sellerId, destinationId, isVisible: true, isEnabled: true, isFavorite: true });
     }
 
-    sellerPrefs.lastUpdated = new Date();
-    await sellerPrefs.save();
-
-    res.json({
-      success: true,
-      message: 'Destination favorite status updated',
-      data: sellerPrefs
-    });
+    const rows = await db.select().from(sellerDestinationPreferences).where(eq(sellerDestinationPreferences.sellerId, sellerId));
+    res.json({ success: true, message: 'Destination favorite status updated', data: rows });
   } catch (error) {
-    return sendError(res, 'Error updating favorite status');
+    res.status(500).json({ success: false, message: 'Error updating favorite status' });
   }
 };
 
 // Add existing destination to seller's list
-export const addExistingDestinationToSeller = async (req: Request
-  , res: Response): Promise<void> => {
-
+export const addExistingDestinationToSeller = async (req: Request, res: Response): Promise<void> => {
   try {
     const { destinationId } = req.params;
     const sellerId = req.user?.id;
 
     if (!sellerId) {
-
-
-      return sendAuthError(res, 'Authentication required');
+      res.status(401).json({ success: false, message: 'Authentication required' });
+      return;
     }
 
-    if (!mongoose.Types.ObjectId.isValid(destinationId)) {
-      return sendValidationError(res, 'Invalid destination ID', [{
-        field: 'destinationId',
-        message: 'Invalid destination ID'
-      }]);
-    }
-    console.log("req.user?.id;", req.user?.id)
-    console.log("destinationId", destinationId)
-
-    // Check if destination exists and is approved
-    const destination = await GlobalDestination.findOne({
-      _id: destinationId,
-      isActive: true,
-      isApproved: true,
-      approvalStatus: 'approved'
-    });
-
-    console.log("Found destination:", destination ? "YES" : "NO");
-    console.log("Destination details:", destination);
+    const [destination] = await db
+      .select()
+      .from(globalDestinations)
+      .where(and(eq(globalDestinations.id, destinationId), eq(globalDestinations.isActive, true), eq(globalDestinations.isApproved, true), eq(globalDestinations.approvalStatus, 'approved')))
+      .limit(1);
 
     if (!destination) {
-      console.log("Destination not found or not approved");
-      return sendNotFoundError(res, 'Approved destination not found');
+      res.status(404).json({ success: false, message: 'Approved destination not found' });
+      return;
     }
 
-    // Find or create seller preferences
-    let sellerPrefs = await SellerDestinationPreferences.findOne({ seller: sellerId });
-    console.log("Existing seller preferences:", sellerPrefs ? "YES" : "NO");
+    const [existingPref] = await db
+      .select()
+      .from(sellerDestinationPreferences)
+      .where(and(eq(sellerDestinationPreferences.sellerId, sellerId), eq(sellerDestinationPreferences.destinationId, destinationId)))
+      .limit(1);
 
-    if (!sellerPrefs) {
-      console.log("Creating new seller preferences");
-      sellerPrefs = new SellerDestinationPreferences({
-        seller: sellerId,
-        destinationPreferences: [],
-        globalSettings: {}
-      });
-    }
-
-    // Check if destination is already in seller's list
-    const existingPreference = sellerPrefs.destinationPreferences.find(
-      (pref: any) => pref.destination.toString() === destinationId.toString()
-    );
-
-    console.log("Destination already in list:", existingPreference ? "YES" : "NO");
-
-    if (existingPreference) {
-      // If already exists, make sure it's enabled and visible
-      console.log("Updating existing preference");
-      existingPreference.isVisible = true;
-      existingPreference.isEnabled = true;
-      existingPreference.isFavorite = true;
+    if (existingPref) {
+      await db.update(sellerDestinationPreferences).set({ isVisible: true, isEnabled: true, isFavorite: true, updatedAt: new Date() }).where(eq(sellerDestinationPreferences.id, existingPref.id));
     } else {
-      // Add new destination to seller's list
-      console.log("Adding new destination to list");
-      sellerPrefs.destinationPreferences.push({
-        destination: destinationId as any,
-        isVisible: true,
-        isEnabled: true,
-        isFavorite: true
-      });
-
-      // Increment seller count on the destination
-      destination.sellerCount = (destination.sellerCount || 0) + 1;
-      await destination.save();
+      await db.insert(sellerDestinationPreferences).values({ sellerId, destinationId, isVisible: true, isEnabled: true, isFavorite: true });
+      await db.update(globalDestinations).set({ sellerCount: sql`${globalDestinations.sellerCount} + 1` }).where(eq(globalDestinations.id, destinationId));
     }
 
-    sellerPrefs.lastUpdated = new Date();
+    await db.update(globalDestinations).set({ usageCount: sql`${globalDestinations.usageCount} + 1` }).where(eq(globalDestinations.id, destinationId));
 
-    try {
-      console.log("Saving seller preferences...");
-      const savedPrefs = await sellerPrefs.save();
-      console.log("Seller preferences saved successfully:", savedPrefs._id);
-    } catch (saveError) {
-      console.error("Error saving seller preferences:", saveError);
-      throw saveError;
-    }
-
-    // Increment usage count for the destination
-    try {
-      console.log("Incrementing usage count...");
-      const updatedDestination = await GlobalDestination.findByIdAndUpdate(destinationId, {
-        $inc: { usageCount: 1 }
-      });
-      console.log("Usage count incremented successfully");
-    } catch (updateError) {
-      console.error("Error updating usage count:", updateError);
-      // Don't throw here as this is not critical
-    }
-
-    // Also add to user's sellerInfo.destination array
-    let user = await User.findById(sellerId);
+    const [user] = await db.select().from(users).where(eq(users.id, sellerId)).limit(1);
     if (user) {
-      // Ensure user has sellerInfo
-      user = await ensureSellerInfo(user, sellerId.toString());
+      const sellerInfo = (user.sellerInfo as SellerInfo | null) || ({ destination: [] } as unknown as SellerInfo);
+      const destinationList = sellerInfo.destination || [];
+      const existingEntry = destinationList.find((d) => d.destinationId === destinationId);
 
-      if (user && user.sellerInfo) {
-        if (!user.sellerInfo.destination) {
-          user.sellerInfo.destination = [];
-        }
-
-        // Check if destination already exists in user's list
-        const existingUserDestination = user.sellerInfo.destination.find(
-          dest => dest.destinationId.toString() === destinationId.toString()
-        );
-
-        if (!existingUserDestination) {
-          // Add new destination to user's list as active and approved
-          user.sellerInfo.destination.push({
-            destinationId: destinationId,
-            destinationName: destination.name,
-            isActive: true,
-            isApproved: true,
-            approvalStatus: 'approved',
-            addedAt: new Date()
-
-          });
-
-          await user.save();
-          console.log(`✅ Added destination "${destination.name}" to user ${sellerId} destination list`);
-        } else {
-          // Update existing destination to be active
-          existingUserDestination.isActive = true;
-          existingUserDestination.isApproved = true;
-          existingUserDestination.approvalStatus = 'approved';
-
-          await user.save();
-          console.log(`✅ Updated destination "${destination.name}" in user ${sellerId} destination list to active`);
-        }
+      if (existingEntry) {
+        existingEntry.isActive = true;
+        existingEntry.isApproved = true;
+        existingEntry.approvalStatus = 'approved';
+      } else {
+        destinationList.push({ destinationId, destinationName: destination.name, isActive: true, isApproved: true, approvalStatus: 'approved', addedAt: new Date() });
       }
+
+      await db.update(users).set({ sellerInfo: { ...sellerInfo, destination: destinationList }, updatedAt: new Date() }).where(eq(users.id, sellerId));
     }
 
-    console.log("Operation completed successfully");
-    res.json({
-      success: true,
-      message: 'Destination added to your list successfully',
-      data: {
-        destination: destination,
-        preferences: sellerPrefs
-      }
-    });
+    const prefs = await db.select().from(sellerDestinationPreferences).where(eq(sellerDestinationPreferences.sellerId, sellerId));
+    res.json({ success: true, message: 'Destination added to your list successfully', data: { destination, preferences: prefs } });
   } catch (error) {
-    return sendError(res, 'Error adding destination to your list');
+    res.status(500).json({ success: false, message: 'Error adding destination to your list' });
   }
 };
 
 // Toggle destination active status (user-specific, not global)
-// This endpoint toggles the user's personal isActive status for a destination
-export const toggleDestinationActiveStatus = async (req: Request
-  , res: Response) => {
+export const toggleDestinationActiveStatus = async (req: Request, res: Response) => {
   try {
     const { destinationId } = req.params;
     const sellerId = req.user?.id;
-
-    console.log(`🔄 Toggle request for destination ${destinationId} by seller ${sellerId}`);
-
     if (!sellerId) {
-      return sendAuthError(res, 'Authentication required');
+      return res.status(401).json({ success: false, message: 'Authentication required' });
     }
-    // Find the user and their destination preferences
-    const user = await User.findById(sellerId);
-    console.log("🔍 User lookup result:", {
-      userId: sellerId,
-      userFound: !!user,
-      hasSellerInfo: !!(user?.sellerInfo),
-      userRole: user?.roles
-    });
 
+    const [user] = await db.select().from(users).where(eq(users.id, sellerId)).limit(1);
     if (!user) {
-      return sendNotFoundError(res, 'User not found');
+      return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    if (!user.sellerInfo) {
-      // If user has seller role but no sellerInfo, initialize it
-      if (user.roles === 'seller') {
-        console.log(`🔧 Initializing sellerInfo for user ${sellerId}`);
-        user.sellerInfo = {
-          destination: [],
-          companyName: '',
-          companyRegistrationNumber: '',
-          companyType: '',
-          registrationDate: '',
-          taxId: '',
-          businessAddress: {
-            address: '',
-            city: '',
-            state: '',
-            postalCode: '',
-            country: ''
-          },
-          bankDetails: {
-            bankName: '',
-            accountNumber: '',
-            accountHolderName: '',
-            branchCode: ''
-          },
-          businessDescription: '',
-          sellerType: '',
-          isApproved: false,
-          appliedAt: new Date()
-        };
-        await user.save();
-        console.log(`✅ SellerInfo initialized for user ${sellerId}`);
-      } else {
-        return sendNotFoundError(res, 'User is not a seller');
+    let sellerInfo = user.sellerInfo as SellerInfo | null;
+    if (!sellerInfo) {
+      if (user.role !== 'seller') {
+        return res.status(404).json({ success: false, message: 'User is not a seller' });
       }
+      sellerInfo = { destination: [] } as unknown as SellerInfo;
     }
 
-    // Check if the global destination exists (allow both approved and pending for creators)
-    const globalDestination = await GlobalDestination.findOne({
-      _id: destinationId
-    });
-
-    console.log("🔍 Global destination lookup:", {
-      destinationId,
-      found: !!globalDestination,
-      approvalStatus: globalDestination?.approvalStatus,
-      createdBy: globalDestination?.createdBy?.toString(),
-      isCreator: globalDestination?.createdBy?.toString() === sellerId.toString()
-    });
-
+    const [globalDestination] = await db.select().from(globalDestinations).where(eq(globalDestinations.id, destinationId)).limit(1);
     if (!globalDestination) {
-      return sendNotFoundError(res, 'Destination not found');
+      return res.status(404).json({ success: false, message: 'Destination not found' });
     }
 
-    // Check if destination is approved OR if user is the creator
-    const isCreator = globalDestination.createdBy?.toString() === sellerId.toString();
+    const isCreator = globalDestination.createdBy === sellerId;
     const isApproved = globalDestination.approvalStatus === 'approved';
-
     if (!isApproved && !isCreator) {
-      return sendNotFoundError(res, 'Destination not approved and you are not the creator');
+      return res.status(404).json({ success: false, message: 'Destination not approved and you are not the creator' });
     }
 
-    // Find the destination in user's destination array
-    const userDestinationIndex = user.sellerInfo.destination?.findIndex(
-      dest => dest.destinationId.toString() === destinationId
-    );
+    const destinationList = sellerInfo.destination || [];
+    const entry = destinationList.find((d) => d.destinationId === destinationId);
 
-    if (userDestinationIndex === -1 || userDestinationIndex === undefined) {
-      // If destination not in user's list, add it
-      if (!user.sellerInfo.destination) {
-        user.sellerInfo.destination = [];
-      }
-
-      // Set status based on global destination status
-      const userDestinationStatus = {
-        destinationId: destinationId,
-        destinationName: globalDestination.name,
-        isActive: isApproved ? true : false, // Only activate if globally approved
-        isApproved: isApproved,
-        approvalStatus: globalDestination.approvalStatus,
-        addedAt: new Date()
-      };
-
-      user.sellerInfo.destination.push(userDestinationStatus);
-      await user.save();
-
-      console.log(`✅ Added destination "${globalDestination.name}" to seller ${sellerId} with status: ${globalDestination.approvalStatus}`);
+    if (!entry) {
+      destinationList.push({ destinationId, destinationName: globalDestination.name, isActive: isApproved, isApproved, approvalStatus: globalDestination.approvalStatus, addedAt: new Date() });
+      await db.update(users).set({ sellerInfo: { ...sellerInfo, destination: destinationList }, updatedAt: new Date() }).where(eq(users.id, sellerId));
 
       return res.json({
         success: true,
         message: `Destination added successfully (${globalDestination.approvalStatus})`,
-        data: {
-          id: destinationId,
-          name: globalDestination.name,
-          isActive: userDestinationStatus.isActive,
-          approvalStatus: userDestinationStatus.approvalStatus
-        }
+        data: { id: destinationId, name: globalDestination.name, isActive: isApproved, approvalStatus: globalDestination.approvalStatus }
       });
     }
 
-    // Toggle the user's specific isActive status
-    if (!user.sellerInfo.destination) {
-      return sendNotFoundError(res, 'Destination not found in user preferences');
+    if (!entry.isActive && entry.approvalStatus === 'pending' && !isCreator) {
+      return res.status(400).json({ success: false, message: 'Cannot activate pending destination. Wait for admin approval.' });
+    }
+    if (!entry.isActive && entry.approvalStatus === 'rejected') {
+      return res.status(400).json({ success: false, message: 'Cannot activate rejected destination.' });
     }
 
-    const userDestination = user.sellerInfo.destination[userDestinationIndex];
-    const previousStatus = userDestination.isActive;
-
-    // Don't allow activating pending destinations (unless user is creator)
-    if (!userDestination.isActive && userDestination.approvalStatus === 'pending' && !isCreator) {
-      return sendValidationError(res, 'Cannot activate pending destination. Wait for admin approval.', [{
-        field: 'isActive',
-        message: 'Cannot activate pending destination. Wait for admin approval.'
-      }]);
-    }
-
-    // Don't allow activating rejected destinations
-    if (!userDestination.isActive && userDestination.approvalStatus === 'rejected') {
-      return sendValidationError(res, 'Cannot activate rejected destination.', [{
-        field: 'isActive',
-        message: 'Cannot activate rejected destination.'
-      }]);
-    }
-
-    userDestination.isActive = !userDestination.isActive;
-    await user.save();
-
-    console.log(`✅ Seller ${sellerId} toggled destination "${globalDestination.name}" from isActive: ${previousStatus} to isActive: ${userDestination.isActive} (user-specific)`);
-    console.log(`📋 Global destination status remains unchanged`);
+    entry.isActive = !entry.isActive;
+    await db.update(users).set({ sellerInfo: { ...sellerInfo, destination: destinationList }, updatedAt: new Date() }).where(eq(users.id, sellerId));
 
     res.json({
       success: true,
-      message: `Destination ${userDestination.isActive ? 'activated' : 'deactivated'} successfully for your account`,
-      data: {
-        id: destinationId,
-        name: globalDestination.name,
-        isActive: userDestination.isActive,
-        approvalStatus: userDestination.approvalStatus,
-        globalApprovalStatus: globalDestination.approvalStatus
-      }
+      message: `Destination ${entry.isActive ? 'activated' : 'deactivated'} successfully for your account`,
+      data: { id: destinationId, name: globalDestination.name, isActive: entry.isActive, approvalStatus: entry.approvalStatus, globalApprovalStatus: globalDestination.approvalStatus }
     });
   } catch (error) {
-    console.error('❌ Error in toggleDestinationActiveStatus:', error);
-    return sendError(res, 'Error toggling destination status');
+    console.error('Error in toggleDestinationActiveStatus:', error);
+    res.status(500).json({ success: false, message: 'Error toggling destination status' });
   }
 };
 
 // Get user-specific destinations with their personal active status
-export const getUserDestinations = async (req: Request
-  , res: Response) => {
+export const getUserDestinations = async (req: Request, res: Response) => {
   try {
     const sellerId = req.user?.id;
-
     if (!sellerId) {
-      return sendAuthError(res, 'Authentication required');
+      return res.status(401).json({ success: false, message: 'Authentication required' });
     }
 
-    // Find the user and populate their destinations
-    const user = await User.findById(sellerId).populate({
-      path: 'sellerInfo.destination.destinationId',
-      model: 'GlobalDestination',
-      match: { approvalStatus: 'approved' }, // Only get approved global destinations
-      select: 'name description coverImage country region city coordinates popularity'
-    });
-
-    if (!user || !user.sellerInfo) {
-      return sendNotFoundError(res, 'Seller not found');
+    const [user] = await db.select().from(users).where(eq(users.id, sellerId)).limit(1);
+    const sellerInfo = user?.sellerInfo as SellerInfo | null;
+    if (!user || !sellerInfo) {
+      return res.status(404).json({ success: false, message: 'Seller not found' });
     }
 
-    // Get user's destination preferences with global destination data
-    const userDestinations = user.sellerInfo.destination?.map(userDest => {
-      const globalDest = userDest.destinationId as any; // Populated destination
+    const destinationList = sellerInfo.destination || [];
+    if (destinationList.length === 0) {
+      return res.json({ success: true, data: [], count: 0, message: 'User destinations retrieved successfully' });
+    }
 
-      if (!globalDest) return null; // Skip if global destination was deleted or not approved
+    const ids = destinationList.map((d) => d.destinationId);
+    const globalRows = await db.select().from(globalDestinations).where(and(sql`${globalDestinations.id} = ANY(${ids})`, eq(globalDestinations.approvalStatus, 'approved')));
+    const byId = new Map(globalRows.map((d) => [d.id, d]));
 
-      return {
-        _id: globalDest._id,
-        name: globalDest.name,
-        description: globalDest.description,
-        coverImage: globalDest.coverImage,
-        country: globalDest.country,
-        region: globalDest.region,
-        city: globalDest.city,
-        coordinates: globalDest.coordinates,
-        popularity: globalDest.popularity,
-        // User-specific status
-        isActive: userDest.isActive,
-        approvalStatus: userDest.approvalStatus,
-        isApproved: userDest.isApproved,
-        addedAt: userDest.addedAt
-      };
-    }).filter(Boolean) || []; // Remove null entries
+    const userDestinations = destinationList
+      .map((userDest) => {
+        const globalDest = byId.get(userDest.destinationId);
+        if (!globalDest) return null;
+        return {
+          _id: globalDest.id,
+          name: globalDest.name,
+          description: globalDest.description,
+          coverImage: globalDest.coverImage,
+          country: globalDest.country,
+          region: globalDest.region,
+          city: globalDest.city,
+          coordinates: { latitude: globalDest.latitude, longitude: globalDest.longitude },
+          popularity: globalDest.popularity,
+          isActive: userDest.isActive,
+          approvalStatus: userDest.approvalStatus,
+          isApproved: userDest.isApproved,
+          addedAt: userDest.addedAt,
+        };
+      })
+      .filter(Boolean);
 
-    res.json({
-      success: true,
-      data: userDestinations,
-      count: userDestinations.length,
-      message: 'User destinations retrieved successfully'
-    });
-
+    res.json({ success: true, data: userDestinations, count: userDestinations.length, message: 'User destinations retrieved successfully' });
   } catch (error) {
-    console.error('❌ Error in getUserDestinations:', error);
-    return sendError(res, 'Error fetching user destinations');
+    console.error('Error in getUserDestinations:', error);
+    res.status(500).json({ success: false, message: 'Error fetching user destinations' });
   }
 };
 
 // Fix destinations with deletedAt but approved status (temporary fix)
-export const fixDeletedApprovedDestinations = async (req: Request
-  , res: Response) => {
+export const fixDeletedApprovedDestinations = async (req: Request, res: Response) => {
   try {
-    // Check if user is admin
     if (!req.user?.roles?.includes('admin')) {
-      return sendForbiddenError(res, 'Admin access required');
+      return res.status(403).json({ success: false, message: 'Admin access required' });
     }
 
-    // Find destinations that are approved but have deletedAt
-    const brokenDestinations = await GlobalDestination.find({
-      approvalStatus: 'approved',
-      isApproved: true,
-      deletedAt: { $exists: true }
-    });
+    const broken = await db
+      .select()
+      .from(globalDestinations)
+      .where(and(eq(globalDestinations.approvalStatus, 'approved'), eq(globalDestinations.isApproved, true), isNotNull(globalDestinations.deletedAt)));
 
-    console.log('🔧 Found broken destinations:', brokenDestinations.length);
+    if (broken.length > 0) {
+      await db
+        .update(globalDestinations)
+        .set({ deletedAt: null, deletedBy: null })
+        .where(and(eq(globalDestinations.approvalStatus, 'approved'), eq(globalDestinations.isApproved, true), isNotNull(globalDestinations.deletedAt)));
+    }
 
-    // Clear deletedAt and deletedBy for these destinations
-    const result = await GlobalDestination.updateMany(
-      {
-        approvalStatus: 'approved',
-        isApproved: true,
-        deletedAt: { $exists: true }
-      },
-      {
-        $unset: {
-          deletedAt: 1,
-          deletedBy: 1
-        }
-      }
-    );
-
-    console.log('🔧 Fixed destinations:', result.modifiedCount);
-
-    res.json({
-      success: true,
-      message: `Fixed ${result.modifiedCount} destinations with conflicting deletion/approval status`,
-      data: {
-        found: brokenDestinations.length,
-        fixed: result.modifiedCount
-      }
-    });
+    res.json({ success: true, message: `Fixed ${broken.length} destinations with conflicting deletion/approval status`, data: { found: broken.length, fixed: broken.length } });
   } catch (error) {
-    return sendError(res, 'Error fixing destinations');
+    res.status(500).json({ success: false, message: 'Error fixing destinations' });
   }
 };
 
-export const removeExistingDestinationFromSeller = async (req: Request
-  , res: Response): Promise<void> => {
+export const removeExistingDestinationFromSeller = async (req: Request, res: Response): Promise<void> => {
   try {
     const { destinationId } = req.params;
     const sellerId = req.user?.id;
 
-    console.log("sellerId", sellerId)
-    console.log("destinationId", destinationId)
-
     if (!sellerId) {
-      return sendAuthError(res, 'Authentication required');
+      res.status(401).json({ success: false, message: 'Authentication required' });
+      return;
     }
 
-    if (!mongoose.Types.ObjectId.isValid(destinationId)) {
-      return sendValidationError(res, 'Invalid destination ID', [{
-        field: 'destinationId',
-        message: 'Invalid destination ID'
-      }]);
-    }
-
-    // Find seller preferences
-    const sellerPrefs = await SellerDestinationPreferences.findOne({ seller: sellerId });
-    console.log("sellerPrefs", sellerPrefs)
-
-    if (!sellerPrefs) {
-      return sendNotFoundError(res, 'No destination preferences found');
-    }
-
-    console.log("Current destination preferences:", sellerPrefs.destinationPreferences);
-    console.log("Looking for destinationId:", destinationId);
-
-    // Log each destination in the preferences for debugging
-    sellerPrefs.destinationPreferences.forEach((pref: any, index: number) => {
-      console.log(`Preference ${index}:`, {
-        destination: pref.destination,
-        destinationString: pref.destination.toString(),
-        matches: pref.destination.toString() === destinationId.toString()
-      });
-    });
-
-    // Check if this is a destination created by the seller
-    const sellerCreatedDestination = await GlobalDestination.findOne({
-      _id: destinationId,
-      createdBy: sellerId,
-      isActive: true
-    });
+    const [sellerCreatedDestination] = await db
+      .select()
+      .from(globalDestinations)
+      .where(and(eq(globalDestinations.id, destinationId), eq(globalDestinations.createdBy, sellerId), eq(globalDestinations.isActive, true)))
+      .limit(1);
 
     if (sellerCreatedDestination) {
-      // Check if destination is approved - if approved, only remove from view, don't delete
       if (sellerCreatedDestination.isApproved && sellerCreatedDestination.approvalStatus === 'approved') {
-        console.log("This is an approved seller-created destination, removing from dashboard view only");
-
-        // Add to seller preferences as disabled/hidden so it doesn't show in their dashboard
-        const existingPreference = sellerPrefs.destinationPreferences.find(
-          (pref: any) => pref.destination.toString() === destinationId.toString()
-        );
-
-        if (existingPreference) {
-          // Update existing preference to hide it
-          existingPreference.isVisible = false;
-          existingPreference.isEnabled = false;
-        } else {
-          // Add new preference entry to hide it
-          sellerPrefs.destinationPreferences.push({
-            destination: destinationId as any,
-            isVisible: false,
-            isEnabled: false,
-            isFavorite: false,
-            sortOrder: 0
+        // Approved seller-created destination: hide from dashboard only, don't delete.
+        await db
+          .insert(sellerDestinationPreferences)
+          .values({ sellerId, destinationId, isVisible: false, isEnabled: false })
+          .onConflictDoUpdate({
+            target: [sellerDestinationPreferences.sellerId, sellerDestinationPreferences.destinationId],
+            set: { isVisible: false, isEnabled: false, updatedAt: new Date() },
           });
-        }
 
-        // Decrease seller count on the destination
-        if (sellerCreatedDestination.sellerCount && sellerCreatedDestination.sellerCount > 0) {
-          sellerCreatedDestination.sellerCount -= 1;
-        }
+        await db.update(globalDestinations).set({ sellerCount: sql`greatest(${globalDestinations.sellerCount} - 1, 0)` }).where(eq(globalDestinations.id, destinationId));
 
-        await sellerCreatedDestination.save();
-        sellerPrefs.lastUpdated = new Date();
-        await sellerPrefs.save();
-
-        // Also update user's sellerInfo.destination array to set as inactive
-        const user = await User.findById(sellerId);
-        if (user && user.sellerInfo && user.sellerInfo.destination) {
-          const userDestination = user.sellerInfo.destination.find(
-            dest => dest.destinationId.toString() === destinationId.toString()
-          );
-          if (userDestination) {
-            userDestination.isActive = false;
-            await user.save();
-            console.log(`✅ Set destination "${sellerCreatedDestination.name}" as inactive in user ${sellerId} destination list`);
+        const [user] = await db.select().from(users).where(eq(users.id, sellerId)).limit(1);
+        const sellerInfo = user?.sellerInfo as SellerInfo | null;
+        if (user && sellerInfo?.destination) {
+          const entry = sellerInfo.destination.find((d) => d.destinationId === destinationId);
+          if (entry) {
+            entry.isActive = false;
+            await db.update(users).set({ sellerInfo, updatedAt: new Date() }).where(eq(users.id, sellerId));
           }
         }
 
-        res.json({
-          success: true,
-          message: 'Destination removed from your dashboard successfully'
-        });
+        res.json({ success: true, message: 'Destination removed from your dashboard successfully' });
         return;
       } else {
-        // If not approved yet, seller can hard delete it completely
-        console.log("This is an unapproved seller-created destination, hard deleting it");
-        await GlobalDestination.findByIdAndDelete(destinationId);
+        // Not approved yet: seller can hard delete it completely.
+        await db.delete(globalDestinations).where(eq(globalDestinations.id, destinationId));
 
-        // Also remove from seller preferences if exists
-        sellerPrefs.destinationPreferences = sellerPrefs.destinationPreferences.filter(
-          (pref: any) => pref.destination.toString() !== destinationId.toString()
-        );
-        await sellerPrefs.save();
-
-        // Also remove from user's sellerInfo.destination array
-        const user = await User.findById(sellerId);
-        if (user && user.sellerInfo && user.sellerInfo.destination) {
-          user.sellerInfo.destination = user.sellerInfo.destination.filter(
-            dest => dest.destinationId.toString() !== destinationId.toString()
-          );
-          await user.save();
-          console.log(`✅ Removed destination from user ${sellerId} destination list (hard delete)`);
+        const [user] = await db.select().from(users).where(eq(users.id, sellerId)).limit(1);
+        const sellerInfo = user?.sellerInfo as SellerInfo | null;
+        if (user && sellerInfo?.destination) {
+          const filtered = sellerInfo.destination.filter((d) => d.destinationId !== destinationId);
+          await db.update(users).set({ sellerInfo: { ...sellerInfo, destination: filtered }, updatedAt: new Date() }).where(eq(users.id, sellerId));
         }
 
-        res.json({
-          success: true,
-          message: 'Destination deleted successfully'
-        });
+        res.json({ success: true, message: 'Destination deleted successfully' });
         return;
       }
     }
 
-    // Remove destination from seller's preferences (for destinations added from existing ones)
-    const initialLength = sellerPrefs.destinationPreferences.length;
-    sellerPrefs.destinationPreferences = sellerPrefs.destinationPreferences.filter(
-      (pref: any) => pref.destination.toString() !== destinationId.toString()
-    );
+    // Destination added from the existing/approved list — just remove the preference.
+    const [existingPref] = await db
+      .select()
+      .from(sellerDestinationPreferences)
+      .where(and(eq(sellerDestinationPreferences.sellerId, sellerId), eq(sellerDestinationPreferences.destinationId, destinationId)))
+      .limit(1);
 
-    if (sellerPrefs.destinationPreferences.length === initialLength) {
-      return sendNotFoundError(res, 'Destination not found in your list');
+    if (!existingPref) {
+      res.status(404).json({ success: false, message: 'Destination not found in your list' });
+      return;
     }
 
-    // Decrease seller count on the destination that was removed from preferences
-    const removedDestination = await GlobalDestination.findById(destinationId);
-    if (removedDestination && removedDestination.sellerCount > 0) {
-      removedDestination.sellerCount -= 1;
-      await removedDestination.save();
-    }
+    await db.delete(sellerDestinationPreferences).where(eq(sellerDestinationPreferences.id, existingPref.id));
+    await db.update(globalDestinations).set({ sellerCount: sql`greatest(${globalDestinations.sellerCount} - 1, 0)` }).where(eq(globalDestinations.id, destinationId));
 
-    sellerPrefs.lastUpdated = new Date();
-    await sellerPrefs.save();
-
-    // Also remove from user's sellerInfo.destination array
-    const user = await User.findById(sellerId);
-    if (user && user.sellerInfo && user.sellerInfo.destination) {
-      const initialUserDestLength = user.sellerInfo.destination.length;
-      user.sellerInfo.destination = user.sellerInfo.destination.filter(
-        dest => dest.destinationId.toString() !== destinationId.toString()
-      );
-
-      if (user.sellerInfo.destination.length < initialUserDestLength) {
-        await user.save();
-        console.log(`✅ Removed destination from user ${sellerId} destination list`);
+    const [user] = await db.select().from(users).where(eq(users.id, sellerId)).limit(1);
+    const sellerInfo = user?.sellerInfo as SellerInfo | null;
+    if (user && sellerInfo?.destination) {
+      const filtered = sellerInfo.destination.filter((d) => d.destinationId !== destinationId);
+      if (filtered.length < sellerInfo.destination.length) {
+        await db.update(users).set({ sellerInfo: { ...sellerInfo, destination: filtered }, updatedAt: new Date() }).where(eq(users.id, sellerId));
       }
     }
 
-    res.json({
-      success: true,
-      message: 'Destination removed from your list successfully',
-      data: sellerPrefs
-    });
+    const prefs = await db.select().from(sellerDestinationPreferences).where(eq(sellerDestinationPreferences.sellerId, sellerId));
+    res.json({ success: true, message: 'Destination removed from your list successfully', data: prefs });
   } catch (error) {
-    return sendError(res, 'Error removing destination from your list');
+    res.status(500).json({ success: false, message: 'Error removing destination from your list' });
   }
 };

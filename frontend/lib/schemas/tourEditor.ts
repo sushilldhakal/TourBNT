@@ -15,15 +15,21 @@ const optionalNumber = z.number().optional();
 // ITINERARY SCHEMAS
 // ============================================================================
 
+export const itineraryPartnerSchema = z.object({
+    role: z.enum(['transport', 'accommodation', 'guide', 'meals', 'other']),
+    businessPartnerId: optionalString,
+    name: z.string(),
+    notes: optionalString,
+});
+
 export const itineraryItemSchema = z.object({
+    id: optionalString,
     day: optionalString,
     title: optionalString,
     description: optionalString,
     destination: optionalString,
     dateTime: optionalDate,
-    accommodation: optionalString,
-    meals: optionalString,
-    activities: optionalString,
+    partners: z.array(itineraryPartnerSchema).optional(),
 });
 
 export const itinerarySchema = z.array(itineraryItemSchema);
@@ -180,6 +186,25 @@ export const pricingOptionSchema = z.object({
 });
 
 // ============================================================================
+// PAYMENT OPTIONS SCHEMA
+// ============================================================================
+
+export const paymentOptionsSchema = z.object({
+    fullPaymentEnabled: z.boolean().default(true),
+    depositEnabled: z.boolean().default(false),
+    depositPercentage: z.number().min(1).max(99).default(20),
+    payOnArrivalEnabled: z.boolean().default(false),
+}).superRefine((data, ctx) => {
+    if (!data.fullPaymentEnabled && !data.depositEnabled && !data.payOnArrivalEnabled) {
+        ctx.addIssue({
+            path: ["fullPaymentEnabled"],
+            code: z.ZodIssueCode.custom,
+            message: "At least one payment option must be enabled.",
+        });
+    }
+});
+
+// ============================================================================
 // PRICING SCHEMA
 // ============================================================================
 
@@ -196,6 +221,7 @@ export const pricingSchema = z.object({
     priceLockedUntil: optionalDate,
     pricingOptionsEnabled: z.boolean().default(false),
     pricingOptions: z.array(pricingOptionSchema).optional(),
+    paymentOptions: paymentOptionsSchema.optional(),
 }).superRefine((data, ctx) => {
     if (data.pricingOptionsEnabled && (!data.pricingOptions || data.pricingOptions.length === 0)) {
         ctx.addIssue({
@@ -394,3 +420,4 @@ export type Departure = z.infer<typeof departureSchema>;
 export type TourDates = z.infer<typeof tourDatesSchema>;
 export type Pricing = z.infer<typeof pricingSchema>;
 export type Discount = z.infer<typeof discountSchema>;
+export type PaymentOptions = z.infer<typeof paymentOptionsSchema>;

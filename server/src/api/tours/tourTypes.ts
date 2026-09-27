@@ -1,4 +1,3 @@
-import mongoose, { Document, Schema } from 'mongoose';
 import { User } from "../user/userTypes";
 
 // Define pricing option interface
@@ -40,7 +39,7 @@ export interface PricingGroup {
 
 // Define a notification for fixed departure tours
 export interface FixedDepartureNotification {
-  userId: mongoose.Types.ObjectId;
+  userId: string;
   notificationType: 'booking_confirmation' | 'cancellation' | 'reminder' | 'update';
   notifiedAt: Date;
   isRead: boolean;
@@ -48,8 +47,8 @@ export interface FixedDepartureNotification {
 
 // Define fixed departure interface
 export interface FixedDeparture {
-  _id?: mongoose.Types.ObjectId;
-  tourId: mongoose.Types.ObjectId;
+  _id?: string;
+  tourId: string;
   startDate: Date;
   endDate: Date;
   pricingCategory: 'standard' | 'premium' | 'budget' | 'custom';
@@ -72,7 +71,7 @@ export interface FixedDeparture {
 
 // Define AddOn interface
 export interface AddOn {
-  _id?: mongoose.Types.ObjectId;
+  _id?: string;
   name: string;
   description: string;
   price: number;
@@ -90,7 +89,7 @@ export interface AddOn {
 
 // Define PromoCode interface
 export interface PromoCode {
-  _id?: mongoose.Types.ObjectId;
+  _id?: string;
   code: string;
   description: string;
   discountType: 'percentage' | 'fixed';
@@ -102,8 +101,8 @@ export interface PromoCode {
   maxUses?: number;
   currentUses: number;
   isActive: boolean;
-  applicableTours: mongoose.Types.ObjectId[] | 'all';
-  createdBy: mongoose.Types.ObjectId;
+  applicableTours: string[] | 'all';
+  createdBy: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -145,11 +144,11 @@ export interface UnifiedTourDates {
   priceLockedUntil?: Date;
 }
 
-export interface Tour extends Document {
+export interface Tour {
   title: string;
   excerpt: string;
   description: string;
-  author: mongoose.Types.ObjectId | User;
+  author: string | User;
   code: string;
   // Old pricing (keeping for backward compatibility)
   price: number;
@@ -171,6 +170,13 @@ export interface Tour extends Document {
   };
   minSize: number;
   maxSize: number;
+  // Which payment policies a traveler can choose from at booking time.
+  paymentOptions?: {
+    fullPaymentEnabled: boolean;
+    depositEnabled: boolean;
+    depositPercentage: number;
+    payOnArrivalEnabled: boolean;
+  };
   pricingOptionsEnabled?: boolean;
   pricingGroups?: PricingGroup[];
   pricingOptions?: Array<{
@@ -197,14 +203,22 @@ export interface Tour extends Document {
   tourStatus: string;
   outline: string;
   itinerary: {
+    id?: string;
     day?: string;
     title: string;
     description: string;
+    destination?: string;
     date?: Date;
+    partners?: {
+      role: 'transport' | 'accommodation' | 'guide' | 'meals' | 'other';
+      businessPartnerId?: string;
+      name: string;
+      notes?: string;
+    }[];
   }[];
-  category: mongoose.Types.ObjectId[];
+  category: string[];
   dates: {
-    id: mongoose.Types.ObjectId;
+    id: string;
     tripDuration: string;
     startDate: Date;
     endDate: Date;
@@ -212,7 +226,7 @@ export interface Tour extends Document {
   include: string[];
   exclude: string[];
   facts: {
-    id: mongoose.Types.ObjectId;
+    id: string;
     title?: string;
     field_type?: "Plain Text" | "Single Select" | "Multi Select";
     value?: string[] | { label: string; value: string; }[];
@@ -220,18 +234,18 @@ export interface Tour extends Document {
     factId?: string; // Reference to master fact _id for cascade updates
   }[],
   faqs: {
-    id: mongoose.Types.ObjectId;
+    id: string;
     question: string;
     answer: string;
   }[],
   reviews: Review[];
   gallery: {
-    id: mongoose.Types.ObjectId;
+    id: string;
     image: string;
   }[],
   map: string,
   location: {
-    id: mongoose.Types.ObjectId;
+    id: string;
     street: string;
     city: string;
     state: string;
@@ -242,7 +256,7 @@ export interface Tour extends Document {
   enquiry: boolean;
   discount?: Discount;
   isSpecialOffer: boolean;
-  destination?: mongoose.Types.ObjectId | null;
+  destination?: string | null;
   views?: number;
   bookingCount?: number;
   averageRating?: number;
@@ -304,8 +318,8 @@ export interface Tour extends Document {
 }
 
 export interface ReviewReply {
-  _id?: mongoose.Types.ObjectId;
-  user: mongoose.Types.ObjectId;
+  _id?: string;
+  user: string;
   comment: string;
   createdAt: Date;
   likes: number;
@@ -313,9 +327,9 @@ export interface ReviewReply {
 }
 
 export interface Review {
-  _id?: mongoose.Types.ObjectId;
-  user: mongoose.Types.ObjectId;
-  tour: mongoose.Types.ObjectId; // Add the tour reference to match MongoDB validation
+  _id?: string;
+  user: string;
+  tour: string;
   rating: number;
   comment: string;
   status: 'pending' | 'approved' | 'rejected';
@@ -342,7 +356,7 @@ export interface FactValue {
   [key: string]: any; // Adjust this if you have specific keys or values
 }
 
-export interface Destination extends Document {
+export interface Destination {
   name: string;
   description: string;
   coverImage: string;
@@ -350,9 +364,9 @@ export interface Destination extends Document {
   region?: string;
   city?: string;
   popularity: number;
-  featuredTours?: mongoose.Types.ObjectId[];
+  featuredTours?: string[];
   isActive: boolean;
-  userId: mongoose.Types.ObjectId;
+  userId: string;
   createdAt: Date;
   updatedAt: Date;
 }

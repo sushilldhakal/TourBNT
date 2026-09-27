@@ -23,7 +23,7 @@ export const getAllFaqs = async (page: number = 1, limit: number = 10) => {
  */
 export const getUserFaq = async (userId: string): Promise<FaqData[]> => {
     try {
-        const response = await api.get(`/api/faqs/user/${userId}`);
+        const response = await api.get(`/faqs/user/${userId}`);
         return extractResponseData(response) as FaqData[];
     } catch (error) {
         throw handleApiError(error, 'fetching user FAQs');
@@ -37,7 +37,7 @@ export const getUserFaq = async (userId: string): Promise<FaqData[]> => {
  */
 export const getSingleFaq = async (faqId: string) => {
     try {
-        const response = await api.get(`/api/faqs/${faqId}`);
+        const response = await api.get(`/faqs/${faqId}`);
         const data = extractResponseData(response);
         // Server returns { faq: ... }, extract just the faq
         return (data as any)?.faq || data;
@@ -66,7 +66,7 @@ export const addFaq = async (faqData: FormData) => {
  */
 export const updateFaq = async (faqData: { question: string; answer: string }, faqId: string) => {
     try {
-        const response = await api.patch(`/api/faqs/${faqId}`, faqData, {
+        const response = await api.patch(`/faqs/${faqId}`, faqData, {
             headers: {
                 'Content-Type': 'application/json',
             },
@@ -83,7 +83,7 @@ export const updateFaq = async (faqData: { question: string; answer: string }, f
  */
 export const deleteFaq = async (faqId: string) => {
     try {
-        const response = await api.delete(`/api/faqs/${faqId}`);
+        const response = await api.delete(`/faqs/${faqId}`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'deleting FAQ');

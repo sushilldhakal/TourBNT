@@ -17,6 +17,9 @@ import globalRoutes from "./api/global";
 import bookingRouter from "./api/bookings/bookingRoutes";
 import notificationRouter from "./api/notifications/notificationRoutes";
 import monitoringRouter from "./api/monitoring/monitoringRoutes";
+import businessPartnerRouter from "./api/businessPartners/businessPartnerRoutes";
+import businessReviewRouter from "./api/businessReviews/businessReviewRoutes";
+import adRouter from "./api/ads/adRoutes";
 import cors from "cors";
 import { config } from "./config/config";
 import breadcrumbsMiddleware from "./middlewares/breadcrumbsMiddleware";
@@ -105,6 +108,9 @@ app.use('/api/v1/global', globalRoutes);
 app.use('/api/v1/bookings', bookingRouter);
 app.use('/api/v1/notifications', notificationRouter);
 app.use('/api/v1/monitoring', monitoringRouter);
+app.use('/api/v1/business-partners', businessPartnerRouter);
+app.use('/api/v1/business-reviews', businessReviewRouter);
+app.use('/api/v1/ads', adRouter);
 
 // API v2 routes - selective endpoint upgrades
 app.use('/api/v2/tours', tourRouterV2);
