@@ -39,6 +39,11 @@ RUN npm install --legacy-peer-deps
 # Copy source code
 COPY server/ .
 
+# Server code and @tourbnt/db must share one drizzle-orm install, or tsc
+# treats their SQL types as incompatible.
+RUN rm -rf /app/packages/db/node_modules/drizzle-orm \
+ && ln -s /app/server/node_modules/drizzle-orm /app/packages/db/node_modules/drizzle-orm
+
 # Build TypeScript
 RUN npm run build
 

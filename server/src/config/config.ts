@@ -5,7 +5,13 @@ conf();
 // DATABASE_URL (Postgres) is the single source of truth database for the whole platform.
 const requiredEnvVars = [
   'DATABASE_URL',
-  'JWT_SECRET'
+  'JWT_SECRET',
+  'CLOUDFLARE_R2_ACCOUNT_ID',
+  'CLOUDFLARE_R2_ACCESS_KEY_ID',
+  'CLOUDFLARE_R2_SECRET_ACCESS_KEY',
+  'CLOUDFLARE_R2_BUCKET_NAME',
+  'CLOUDFLARE_R2_ENDPOINT',
+  'CLOUDFLARE_R2_PUBLIC_URL'
 ];
 
 // Validate required environment variables
@@ -26,11 +32,14 @@ const _config = {
   env: process.env.NODE_ENV || 'development',
   jwtSecret: process.env.JWT_SECRET || 'secret',
 
-  // Cloudinary configuration
-  cloudinary: {
-    cloud: process.env.CLOUDINARY_CLOUD,
-    apiKey: process.env.CLOUDINARY_API_KEY,
-    secret: process.env.CLOUDINARY_API_SECRET
+  // Cloudflare R2 configuration (S3-compatible object storage)
+  r2: {
+    accountId: process.env.CLOUDFLARE_R2_ACCOUNT_ID!,
+    accessKeyId: process.env.CLOUDFLARE_R2_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY!,
+    bucket: process.env.CLOUDFLARE_R2_BUCKET_NAME!,
+    endpoint: process.env.CLOUDFLARE_R2_ENDPOINT!,
+    publicUrl: (process.env.CLOUDFLARE_R2_PUBLIC_URL || '').replace(/\/+$/, ''),
   },
 
 

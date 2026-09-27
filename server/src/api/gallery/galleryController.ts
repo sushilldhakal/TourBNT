@@ -1,32 +1,15 @@
 import { Response, NextFunction } from 'express';
 import { db, mediaAssets, users } from '@tourbnt/db';
 import { eq, and, inArray, desc, count } from 'drizzle-orm';
-import { v2 as cloudinary } from "cloudinary";
 import createHttpError from 'http-errors';
 import {
   Request
 } from '../../middlewares/authenticate';
 import fs from 'fs';
-import { EncryptedKeyService } from '../../services/encryptedKeyService';
+import { uploadFileToR2, deleteFromR2 } from '../../config/r2Config';
 import { HTTP_STATUS, sendSuccess } from '../../utils/apiResponse';
 
 type MediaKind = 'image' | 'video' | 'pdf';
-
-interface CloudinaryResource {
-  asset_id: string;
-  public_id: string;
-  folder: string;
-  filename: string;
-  format: string;
-  resource_type: string;
-  type: string;
-  created_at: string;
-  url: string;
-  secure_url: string;
-  width: string;
-  height: string;
-  bytes: string;
-}
 
 export const getSingleMedia = async (req: Request
   , res: Response, next: NextFunction) => {

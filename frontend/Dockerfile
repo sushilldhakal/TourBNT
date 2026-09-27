@@ -9,8 +9,8 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci
+# Install dependencies. The frontend has no package-lock.json, so npm ci cannot run.
+RUN npm install --legacy-peer-deps
 
 # Build stage
 FROM base AS builder
