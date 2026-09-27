@@ -48,8 +48,9 @@ const ToggleActiveButton = ({
             className="w-full bg-background/60 hover:bg-accent/50"
             onClick={handleToggle}
             disabled={toggleMutation.isPending}
+            aria-label={`${isActive ? 'Deactivate' : 'Activate'} destination`}
         >
-            <Power className="h-4 w-4 mr-1" />
+            <Power className="h-4 w-4 mr-1.5" aria-hidden="true" />
             {toggleMutation.isPending ? 'Updating...' : (isActive ? 'Deactivate' : 'Activate')}
         </Button>
     );
@@ -68,15 +69,20 @@ const DestinationGridView = ({ destinations, isLoading, onRefresh }: Destination
         return Array.from(new Set(ids.filter(Boolean).map((id) => String(id)))).sort();
     }, [destinations]);
 
-    const { data: featuredTourTitles = [] } = useTourTitlesByIds(featuredTourIds, featuredTourIds.length > 0);
+    const { data: featuredTourTitlesRaw } = useTourTitlesByIds(featuredTourIds, featuredTourIds.length > 0);
 
     const featuredTitleMap = useMemo(() => {
+        const list = Array.isArray(featuredTourTitlesRaw)
+            ? featuredTourTitlesRaw
+            : (featuredTourTitlesRaw as unknown as { data?: unknown[] })?.data ?? [];
         const m = new Map<string, string>();
-        for (const t of featuredTourTitles) {
-            if (t?._id) m.set(t._id, t.title);
+        for (const t of list) {
+            const id = (t as { _id?: string; id?: string })?._id ?? (t as { id?: string })?.id;
+            const title = (t as { title?: string })?.title;
+            if (id && title) m.set(String(id), title);
         }
         return m;
-    }, [featuredTourTitles]);
+    }, [featuredTourTitlesRaw]);
 
     const handleUpdate = () => {
         invalidateDestinations({ my: true, admin: true, pending: true });
@@ -138,10 +144,12 @@ const DestinationGridView = ({ destinations, isLoading, onRefresh }: Destination
     if (!destinations || destinations.length === 0) {
         return (
             <div className="p-6">
-                <div className="flex flex-col items-center justify-center text-center space-y-3">
-                    <MapPin className="h-8 w-8 text-muted-foreground" />
-                    <div className="space-y-1">
-                        <p className="text-lg font-medium">No destinations found</p>
+                <div className="flex flex-col items-center justify-center text-center py-12 space-y-4">
+                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted">
+                        <MapPin className="h-8 w-8 text-muted-foreground" aria-hidden="true" />
+                    </div>
+                    <div className="space-y-2">
+                        <p className="text-lg font-semibold">No destinations found</p>
                         <p className="text-sm text-muted-foreground">
                             Get started by adding your first destination.
                         </p>
@@ -173,21 +181,21 @@ const DestinationGridView = ({ destinations, isLoading, onRefresh }: Destination
                     return (
                         <Card
                             key={userDestinationId}
-                            className="group overflow-hidden pt-0 flex flex-col h-full border-border/60 bg-card/70 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg"
+                            className="group overflow-hidden flex flex-col h-full border shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg"
                         >
                             {/* Image Section */}
                             <div className="relative h-48 w-full overflow-hidden bg-muted flex-shrink-0">
                                 {destination.coverImage ? (
                                     <Image
                                         src={destination.coverImage}
-                                        alt={destination.name}
+                                        alt={`${destination.name} destination cover`}
                                         fill
                                         className="object-cover transition-transform duration-300 group-hover:scale-[1.02]"
                                         sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                                     />
                                 ) : (
                                     <div className="w-full h-full bg-gradient-to-br from-muted to-muted/80 flex items-center justify-center">
-                                        <MapPin className="h-12 w-12 text-muted-foreground" />
+                                        <MapPin className="h-12 w-12 text-muted-foreground" aria-hidden="true" />
                                     </div>
                                 )}
                                 {/* Status Badge */}
@@ -207,17 +215,17 @@ const DestinationGridView = ({ destinations, isLoading, onRefresh }: Destination
                                 </div>
                             </div>
 
-                            <CardContent className="p-4 space-y-3 flex-1 flex flex-col">
+                            <CardContent className="p-6 space-y-4 flex-1 flex flex-col">
                                 {/* Title */}
                                 <div>
-                                    <h3 className="font-semibold text-lg truncate">{destination.name}</h3>
+                                    <h3 className="font-semibold text-lg truncate" title={destination.name}>{destination.name}</h3>
                                     <p className="text-sm text-muted-foreground">{getLocationString(destination)}</p>
                                 </div>
 
                                 {Array.isArray(destination.featuredTours) && destination.featuredTours.length > 0 && (
-                                    <div className="flex flex-wrap items-center gap-1.5">
+                                    <div className="flex flex-wrap items-center gap-2">
                                         <Badge variant="outline" className="status-pill status-pill--featured">
-                                            <Star className="h-3 w-3" />
+                                            <Star className="h-3 w-3" aria-hidden="true" />
                                             Featured ({destination.featuredTours.length})
                                         </Badge>
                                         {destination.featuredTours
@@ -245,9 +253,9 @@ const DestinationGridView = ({ destinations, isLoading, onRefresh }: Destination
 
                                 {/* Rejection Reason - show if rejected */}
                                 {destination.approvalStatus === 'rejected' && 'rejectionReason' in destination && destination.rejectionReason && (
-                                    <div className="p-2 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-md">
+                                    <div className="p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg" role="alert">
                                         <div className="flex items-start gap-2">
-                                            <X className="h-4 w-4 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
+                                            <X className="h-4 w-4 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" aria-hidden="true" />
                                             <div className="flex-1">
                                                 <p className="text-xs font-semibold text-red-900 dark:text-red-100 mb-1">
                                                     Rejection Reason
@@ -269,8 +277,8 @@ const DestinationGridView = ({ destinations, isLoading, onRefresh }: Destination
                             </CardContent>
 
                             {/* Actions Footer */}
-                            <CardFooter className="p-4 pt-2 border-t bg-muted/15 flex flex-col gap-2 flex-shrink-0">
-                                <div className="flex gap-2">
+                            <CardFooter className="p-6 pt-4 border-t bg-muted/15 flex flex-col gap-3 flex-shrink-0">
+                                <div className="flex gap-3">
                                     <Button
                                         variant="outline"
                                         size="sm"
@@ -279,8 +287,9 @@ const DestinationGridView = ({ destinations, isLoading, onRefresh }: Destination
                                             setSelectedDestinationId(globalDestinationId);
                                             setEditDialogOpen(true);
                                         }}
+                                        aria-label={`Edit ${destination.name} destination`}
                                     >
-                                        <Edit className="h-4 w-4 mr-1" />
+                                        <Edit className="h-4 w-4 mr-1.5" aria-hidden="true" />
                                         Edit
                                     </Button>
                                     <Button
@@ -292,8 +301,9 @@ const DestinationGridView = ({ destinations, isLoading, onRefresh }: Destination
                                             setSelectedDestinationId(globalDestinationId);
                                             setDeleteDialogOpen(true);
                                         }}
+                                        aria-label={`Delete ${destination.name} destination`}
                                     >
-                                        <Trash2 className="h-4 w-4 mr-1" />
+                                        <Trash2 className="h-4 w-4 mr-1.5" aria-hidden="true" />
                                         Delete
                                     </Button>
                                 </div>

@@ -234,8 +234,9 @@ export default function CommentsPage() {
     });
 
     // Extract comments from the response structure
-    // extractResponseData returns { items: [...], pagination: {...} }
-    const comments = (initialCommentData as { items?: Comment[] })?.items || [];
+    // extractResponseData returns { data: [...], pagination: {...} }
+    const raw = initialCommentData as { data?: Comment[] };
+    const comments = raw?.data ?? [];
 
     const handleAcceptComment = React.useCallback((_id: string) => {
         const formdata = new FormData();

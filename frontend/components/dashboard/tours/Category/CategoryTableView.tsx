@@ -53,8 +53,9 @@ const ToggleActiveButton = ({
             onClick={handleToggle}
             disabled={toggleMutation.isPending}
             title={isActive ? 'Deactivate category' : 'Activate category'}
+            aria-label={isActive ? 'Deactivate category' : 'Activate category'}
         >
-            <Power className={`h-4 w-4 ${isActive ? 'text-green-600' : 'text-gray-400'}`} />
+            <Power className={`h-4 w-4 ${isActive ? 'text-green-600' : 'text-gray-400'}`} aria-hidden="true" />
         </Button>
     );
 };
@@ -115,7 +116,7 @@ const CategoryTableView = ({ categories, isLoading, onRefresh }: CategoryTableVi
                             {category.imageUrl ? (
                                 <Image
                                     src={category.imageUrl}
-                                    alt={category.name}
+                                    alt={`${category.name} category cover`}
                                     fill
                                     className="object-cover rounded"
                                     sizes="48px"
@@ -166,17 +167,17 @@ const CategoryTableView = ({ categories, isLoading, onRefresh }: CategoryTableVi
                             >
                                 {category.approvalStatus === 'approved' ? (
                                     <>
-                                        <Check className="h-3 w-3 mr-1" />
+                                        <Check className="h-3 w-3 mr-1" aria-hidden="true" />
                                         Approved
                                     </>
                                 ) : category.approvalStatus === 'pending' ? (
                                     <>
-                                        <Clock className="h-3 w-3 mr-1" />
+                                        <Clock className="h-3 w-3 mr-1" aria-hidden="true" />
                                         Pending
                                     </>
                                 ) : (
                                     <>
-                                        <XIcon className="h-3 w-3 mr-1" />
+                                        <XIcon className="h-3 w-3 mr-1" aria-hidden="true" />
                                         Rejected
                                     </>
                                 )}
@@ -184,7 +185,7 @@ const CategoryTableView = ({ categories, isLoading, onRefresh }: CategoryTableVi
                         )}
                         {featuredCount > 0 && (
                             <Badge variant="outline" className="status-pill status-pill--featured w-fit">
-                                <Star className="h-3 w-3 mr-1" />
+                                <Star className="h-3 w-3 mr-1" aria-hidden="true" />
                                 Featured ({featuredCount})
                             </Badge>
                         )}
@@ -231,8 +232,9 @@ const CategoryTableView = ({ categories, isLoading, onRefresh }: CategoryTableVi
                                 setEditDialogOpen(true);
                             }}
                             title="Edit category"
+                            aria-label="Edit category"
                         >
-                            <Edit className="h-4 w-4" />
+                            <Edit className="h-4 w-4" aria-hidden="true" />
                         </Button>
                         {!isAdminView && (
                             <ToggleActiveButton
@@ -250,8 +252,9 @@ const CategoryTableView = ({ categories, isLoading, onRefresh }: CategoryTableVi
                                 setDeleteDialogOpen(true);
                             }}
                             title={isAdminView ? "Delete category" : "Remove category"}
+                            aria-label={isAdminView ? "Delete category" : "Remove category"}
                         >
-                            <Trash2 className="h-4 w-4 text-destructive" />
+                            <Trash2 className="h-4 w-4 text-destructive" aria-hidden="true" />
                         </Button>
                     </div>
                 );

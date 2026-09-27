@@ -1,11 +1,15 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
+import Link from 'next/link';
 import { useMutation } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { createBooking, BookingData } from '@/lib/api/bookings';
+import { createConversation } from '@/lib/api/conversations';
+import { useAuth } from '@/lib/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
+import { ToastAction } from '@/components/ui/toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -46,6 +50,7 @@ interface EnquiryFormData {
 export function FrontBooking({ tourData, prefilledDate }: FrontBookingProps) {
     const router = useRouter();
     const { toast } = useToast();
+    const { isAuthenticated, isHydrated } = useAuth();
 
     const [bookingForm, setBookingForm] = useState<BookingFormData>({
         fullName: '',
@@ -62,6 +67,7 @@ export function FrontBooking({ tourData, prefilledDate }: FrontBookingProps) {
         email: '',
         message: ''
     });
+    const [enquirySubmitting, setEnquirySubmitting] = useState(false);
 
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(prefilledDate);
     const [dateRange, setDateRange] = useState<{ from: Date; to: Date } | undefined>();
@@ -118,11 +124,8 @@ export function FrontBooking({ tourData, prefilledDate }: FrontBookingProps) {
                 // Calculate pricing for this departure
                 const pricing = calculateDeparturePrice(
                     departure,
-                    tourData.price,
-                    tourData.salePrice,
-                    tourData.saleEnabled,
-                    tourData.pricingOptions,
-                    tourData.pricingGroups
+                    tourData.price ?? 0,
+                    tourData.pricingOptions
                 );
 
                 priceMap.set(dateKey, {
@@ -294,30 +297,43 @@ export function FrontBooking({ tourData, prefilledDate }: FrontBookingProps) {
         bookingMutation.mutate(bookingData);
     };
 
-    // Handle enquiry submission
-    const handleEnquirySubmit = (e: React.FormEvent) => {
+    // Enquiry: only for logged-in users; we only collect message (name/email from account)
+    const handleEnquirySubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-
-        if (!enquiryForm.fullName || !enquiryForm.email || !enquiryForm.message) {
+        if (!isAuthenticated) return;
+        if (!enquiryForm.message?.trim()) {
             toast({
-                title: "Missing Information",
-                description: "Please fill in all fields",
+                title: "Message required",
+                description: "Please enter your enquiry message",
                 variant: "destructive",
             });
             return;
         }
 
-        // For now, just show success message
-        toast({
-            title: "Enquiry Sent!",
-            description: "We'll get back to you soon.",
-        });
-
-        setEnquiryForm({
-            fullName: '',
-            email: '',
-            message: ''
-        });
+        setEnquirySubmitting(true);
+        try {
+            await createConversation({
+                type: 'enquiry',
+                subject: tourData?.title ? `Enquiry: ${tourData.title}` : 'Tour Enquiry',
+                message: enquiryForm.message.trim(),
+                tourId: tourData?.id,
+            });
+            toast({
+                title: "Enquiry Sent!",
+                description: "We'll reply soon. You can check replies in My Enquiries.",
+                action: (
+                    <ToastAction altText="View my enquiries" onClick={() => router.push('/enquiry')}>
+                        View My Enquiries
+                    </ToastAction>
+                ),
+            });
+            setEnquiryForm((prev) => ({ ...prev, message: '' }));
+        } catch (err: unknown) {
+            const msg = (err as { message?: string })?.message ?? 'Failed to send enquiry';
+            toast({ variant: 'destructive', title: 'Error', description: msg });
+        } finally {
+            setEnquirySubmitting(false);
+        }
     };
 
     return (
@@ -574,55 +590,55 @@ export function FrontBooking({ tourData, prefilledDate }: FrontBookingProps) {
 
                 {tourData?.enquiry && (
                     <TabsContent value="enquiry" className="mt-4 space-y-4">
-                        <div>
-                            <label htmlFor="enquiryName" className="block text-sm font-medium mb-1">
-                                Full Name <span className="text-destructive">*</span>
-                            </label>
-                            <input
-                                type="text"
-                                id="enquiryName"
-                                className="w-full p-2 border border-input rounded-md bg-background"
-                                placeholder="Your full name"
-                                value={enquiryForm.fullName}
-                                onChange={(e) => setEnquiryForm({ ...enquiryForm, fullName: e.target.value })}
-                            />
-                        </div>
+                        {!isHydrated ? (
+                            <div className="py-6 text-center text-muted-foreground">Loading...</div>
+                        ) : !isAuthenticated ? (
+                            <div className="rounded-lg border border-border bg-muted/30 p-6 text-center space-y-4">
+                                <p className="text-muted-foreground">
+                                    Please sign in or sign up to send an enquiry about this tour.
+                                </p>
+                                <div className="flex flex-wrap gap-3 justify-center">
+                                    <Button asChild variant="default">
+                                        <Link href="/auth/login">Sign in</Link>
+                                    </Button>
+                                    <Button asChild variant="outline">
+                                        <Link href="/auth/signup">Sign up</Link>
+                                    </Button>
+                                </div>
+                            </div>
+                        ) : (
+                            <>
+                                <div>
+                                    <label htmlFor="enquiryMessage" className="block text-sm font-medium mb-1">
+                                        Your message <span className="text-destructive">*</span>
+                                    </label>
+                                    <textarea
+                                        id="enquiryMessage"
+                                        className="w-full p-2 border border-input rounded-md bg-background"
+                                        placeholder="I'm interested in this tour and would like more information..."
+                                        rows={5}
+                                        value={enquiryForm.message}
+                                        onChange={(e) => setEnquiryForm({ ...enquiryForm, message: e.target.value })}
+                                    />
+                                </div>
 
-                        <div>
-                            <label htmlFor="enquiryEmail" className="block text-sm font-medium mb-1">
-                                Email Address <span className="text-destructive">*</span>
-                            </label>
-                            <input
-                                type="email"
-                                id="enquiryEmail"
-                                className="w-full p-2 border border-input rounded-md bg-background"
-                                placeholder="email@example.com"
-                                value={enquiryForm.email}
-                                onChange={(e) => setEnquiryForm({ ...enquiryForm, email: e.target.value })}
-                            />
-                        </div>
+                                <Button
+                                    type="button"
+                                    className="w-full"
+                                    size="lg"
+                                    disabled={enquirySubmitting || !enquiryForm.message?.trim()}
+                                    onClick={handleEnquirySubmit}
+                                >
+                                    {enquirySubmitting ? 'Sending...' : 'Send Enquiry'}
+                                </Button>
 
-                        <div>
-                            <label htmlFor="enquiryMessage" className="block text-sm font-medium mb-1">
-                                Message <span className="text-destructive">*</span>
-                            </label>
-                            <textarea
-                                id="enquiryMessage"
-                                className="w-full p-2 border border-input rounded-md bg-background"
-                                placeholder="I'm interested in this tour and would like more information..."
-                                rows={5}
-                                value={enquiryForm.message}
-                                onChange={(e) => setEnquiryForm({ ...enquiryForm, message: e.target.value })}
-                            />
-                        </div>
-
-                        <Button
-                            className="w-full"
-                            size="lg"
-                            onClick={handleEnquirySubmit}
-                        >
-                            Send Enquiry
-                        </Button>
+                                <div className="pt-2 text-center">
+                                    <Button asChild variant="link" className="text-sm">
+                                        <Link href="/enquiry">View my previous enquiries and replies</Link>
+                                    </Button>
+                                </div>
+                            </>
+                        )}
                     </TabsContent>
                 )}
             </Tabs>

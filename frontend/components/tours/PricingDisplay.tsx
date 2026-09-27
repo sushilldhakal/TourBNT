@@ -40,9 +40,9 @@ export function PricingDisplay({ tour, currency = '$' }: PricingDisplayProps) {
             />
 
             {/* Advanced Pricing Options - Only shown if enabled (Requirement 5.3) */}
-            {tour.pricingOptionsEnabled && tour.pricingGroups && (
+            {tour.pricingOptionsEnabled && tour.pricingOptions && tour.pricingOptions.length > 0 && (
                 <PricingOptions
-                    pricingGroups={tour.pricingGroups}
+                    pricingOptions={tour.pricingOptions}
                     currency={currency}
                 />
             )}

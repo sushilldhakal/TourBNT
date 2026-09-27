@@ -24,10 +24,18 @@ interface UseTourMutationReturn {
     isLoading: boolean;
 }
 
-export function useTourQuery(tourId?: string, enabled: boolean = true) {
+/**
+ * Fetch single tour. For edit page omit include (server returns default author, destination, categories).
+ * For public page pass include to request relatedData sections.
+ */
+export function useTourQuery(
+    tourId?: string,
+    enabled: boolean = true,
+    include?: string[]
+) {
     return useQuery({
-        queryKey: queryKeys.tours.detail(tourId),
-        queryFn: () => getSingleTour(tourId!),
+        queryKey: [...queryKeys.tours.detail(tourId), include ?? 'default'],
+        queryFn: () => getSingleTour(tourId!, include?.length ? { include } : undefined),
         enabled: !!tourId && enabled,
     });
 }

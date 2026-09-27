@@ -1,7 +1,9 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useUserCategories } from '@/lib/queries';
+import { useDestinationsRoleBased } from '@/lib/queries/useDestinations';
+import { DestinationTypes } from '@/types/types';
 import { Paperclip, Trash2, Eye, HelpCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -97,8 +99,22 @@ export function TourBasicInfo() {
     const [pageNumber, setPageNumber] = useState<number>(1);
 
     const selectedCategories = watch('category') || [];
+    const tourStatusValue = watch('tourStatus');
+    // MultiSelect expects string[]; form stores category as { label, value, disable }[]
+    const categoryValueForSelect: string[] = Array.isArray(selectedCategories)
+        ? selectedCategories.map((c: { value?: string } | string) =>
+            typeof c === 'string' ? c : (c?.value ?? '')
+        ).filter(Boolean)
+        : [];
     const coverImage = watch('coverImage');
     const file = watch('file');
+
+    // // Debug: log tourStatus and category so we can see the data
+    // useEffect(() => {
+    //     console.log('[TourBasicInfo] tourStatus:', tourStatusValue);
+    //     console.log('[TourBasicInfo] category (raw):', selectedCategories);
+    //     console.log('[TourBasicInfo] category (IDs for MultiSelect):', categoryValueForSelect);
+    // }, [tourStatusValue, selectedCategories, categoryValueForSelect]);
 
     // PDF document load handler
     const onDocumentLoadSuccess = (pdf: PDFDocumentProxy): void => {
@@ -120,9 +136,12 @@ export function TourBasicInfo() {
     };
 
     const { data: categoriesData, isLoading: categoriesLoading } = useUserCategories();
+    const { data: destinations = [], isLoading: destinationsLoading } = useDestinationsRoleBased();
+
+    type CategoryOption = { label: string; value: string; disable: boolean };
 
     // Transform categories to options
-    const categoryOptions: Option[] = React.useMemo(() => {
+    const categoryOptions: CategoryOption[] = React.useMemo(() => {
         type AnyRecord = Record<string, unknown>;
         type CategoryResponse =
             | AnyRecord[]
@@ -148,7 +167,7 @@ export function TourBasicInfo() {
         // Seller endpoint `/global/categories/my-categories` returns relationship objects:
         // { isActive, customName?, category/globalCategory: { _id, name, isActive, ... } }
         return rawList
-            .map((item) => {
+            .map((item): CategoryOption | null => {
                 const itemRec = item as AnyRecord;
                 const catRec = (itemRec['category'] ?? itemRec['globalCategory'] ?? itemRec) as AnyRecord;
 
@@ -175,17 +194,36 @@ export function TourBasicInfo() {
                             ? (catRec['isActive'] as boolean)
                             : true;
 
-                return { label, value: id, disable: !isActive } satisfies unknown as [];
+                return { label, value: id, disable: !isActive };
             })
-            .filter(Boolean) as [];
+            .filter((o): o is CategoryOption => o != null);
     }, [categoriesData]);
 
+    // Merge options with form-selected categories so IDs from tour data exist in the list
+    // (useUserCategories may not include every category the tour has, or options load after form reset)
+    const categoryOptionsForSelect = React.useMemo(() => {
+        const byValue = new Map(categoryOptions.map((o) => [o.value, o]));
+        for (const id of categoryValueForSelect) {
+            if (id && !byValue.has(id)) {
+                const raw = selectedCategories.find(
+                    (c: { value?: string } | string) => (typeof c === 'string' ? c : c?.value) === id
+                );
+                const label = typeof raw === 'object' && raw && 'label' in raw ? String((raw as { label?: string }).label || id) : id;
+                byValue.set(id, { label, value: id, disable: false });
+            }
+        }
+        return Array.from(byValue.values());
+    }, [categoryOptions, categoryValueForSelect, selectedCategories]);
 
-
-
-    // Handle category change
-    const handleCategoryChange = (options: []) => {
-        setValue('category', options, { shouldValidate: true });
+    // Handle category change: MultiSelect passes string[] (IDs); schema expects { label, value, disable }[]
+    const handleCategoryChange = (selectedIds: string[]) => {
+        const categoryObjects = selectedIds.map((id) => {
+            const opt = categoryOptionsForSelect.find((o) => o.value === id);
+            return opt
+                ? { label: opt.label, value: opt.value, disable: opt.disable }
+                : { label: id, value: id, disable: false };
+        });
+        setValue('category', categoryObjects, { shouldValidate: true });
     };
 
     // Handle image select from gallery
@@ -277,17 +315,15 @@ export function TourBasicInfo() {
                 {/* Categories */}
                 <div className="space-y-2">
                     <Label>Category</Label>
-                    {(() => {
-                        return null;
-                    })()}
                     {categoriesLoading ? (
                         <p className="text-sm text-muted-foreground">Loading categories...</p>
-                    ) : categoryOptions && categoryOptions.length > 0 ? (
+                    ) : categoryOptionsForSelect.length > 0 ? (
                         <MultiSelect
-                            value={selectedCategories as unknown as string[]}
+                            defaultValue={categoryValueForSelect}
                             onValueChange={handleCategoryChange}
-                            options={categoryOptions as unknown as []}
+                            options={categoryOptionsForSelect.map((o) => ({ label: o.label, value: o.value, disabled: o.disable }))}
                             placeholder="Select categories..."
+                            resetOnDefaultValueChange={true}
                         />
                     ) : (
                         <p className="text-sm text-muted-foreground">No categories available</p>
@@ -297,32 +333,83 @@ export function TourBasicInfo() {
                     )}
                 </div>
 
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-1">
-                    {/* Tour Status */}
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                     {/* Tour Status */}
                     <div className="space-y-2">
                         <Label htmlFor="tour-status">Tour Status</Label>
                         <Controller
                             name="tourStatus"
                             control={control}
-                            render={({ field }) => (
+                            render={({ field }) => {
+                                const statusOptions = ['Draft', 'Published', 'Archived'] as const;
+                                const raw = field.value ? String(field.value).trim() : '';
+                                const validStatus = statusOptions.find((s) => s.toLowerCase() === raw.toLowerCase()) ?? 'Draft';
+                                return (
                                 <Select
-                                    value={field.value || 'Draft'}
+                                    key={`tour-status-${validStatus}`}
+                                    value={validStatus}
                                     onValueChange={field.onChange}
                                 >
                                     <SelectTrigger className="w-full" id="tour-status">
                                         <SelectValue placeholder="Select tour status" />
                                     </SelectTrigger>
                                     <SelectContent className="z-[9999]">
-                                        <SelectItem value="Published">Published</SelectItem>
                                         <SelectItem value="Draft">Draft</SelectItem>
+                                        <SelectItem value="Published">Published</SelectItem>
                                         <SelectItem value="Archived">Archived</SelectItem>
                                     </SelectContent>
                                 </Select>
-                            )}
+                                );
+                            }}
                         />
                     </div>
 
+                    {/* Destination */}
+                    <div className="space-y-2">
+                        <Label htmlFor="destination">Destination</Label>
+                        <Controller
+                            name="destination"
+                            control={control}
+                            render={({ field }) => {
+                                const valueStr = field.value != null && field.value !== '' ? String(field.value) : undefined;
+                                // Re-mount Select when destinations load so value matches an option and displays correctly
+                                const destKey = `destination-${(destinations?.length ?? 0)}-${valueStr ?? 'empty'}`;
+                                return (
+                                    <Select
+                                        key={destKey}
+                                        onValueChange={(v) => field.onChange(v || '')}
+                                        value={valueStr}
+                                    >
+                                        <SelectTrigger className="w-full" id="destination">
+                                            <SelectValue placeholder="Select a destination" />
+                                        </SelectTrigger>
+                                        <SelectContent className="z-[9999]">
+                                            {destinationsLoading ? (
+                                                <div className="px-2 py-3 text-center text-sm text-muted-foreground">Loading destinations...</div>
+                                            ) : Array.isArray(destinations) && destinations.length > 0 ? (
+                                                (destinations as DestinationTypes[]).map((dest) => {
+                                                    const id = dest._id != null ? String(dest._id) : '';
+                                                    if (!id) return null;
+                                                    return (
+                                                        <SelectItem
+                                                            disabled={dest.isActive === false}
+                                                            key={id}
+                                                            value={id}
+                                                        >
+                                                            {dest.name}
+                                                        </SelectItem>
+                                                    );
+                                                })
+                                            ) : (
+                                                <div className="px-2 py-3 text-center text-sm text-muted-foreground">No destinations available</div>
+                                            )}
+                                        </SelectContent>
+                                    </Select>
+                                );
+                            }}
+                        />
+                        <p className="text-sm text-muted-foreground">Manage destinations in your settings</p>
+                    </div>
                 </div>
 
 

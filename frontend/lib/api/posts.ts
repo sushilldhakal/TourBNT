@@ -64,6 +64,9 @@ export const getAllUserPosts = async ({
  * Get single post by ID
  */
 export const getSinglePost = async (postId: string) => {
+    if (!postId || postId === 'undefined') {
+        throw new Error('Post ID is required');
+    }
     try {
         // Add timestamp to prevent caching issues
         const timestamp = new Date().getTime();
@@ -137,6 +140,9 @@ export const getPostsServer = async () => {
 };
 
 export const getSinglePostServer = async (postId: string) => {
+    if (!postId || postId === 'undefined') {
+        throw new Error('Post ID is required');
+    }
     try {
         const response = await serverApi.get(`/posts/${postId}`);
         return extractResponseData(response);

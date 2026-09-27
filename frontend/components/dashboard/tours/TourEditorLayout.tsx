@@ -68,7 +68,7 @@ export function TourEditorLayout({
                 <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-8 py-8">
 
                     {/* Sidebar Navigation */}
-                    <aside className="space-y-6 lg:sticky lg:top-4 lg:self-start lg:h-[calc(100vh-2rem)] lg:overflow-y-auto">
+                    <aside className="space-y-6 lg:sticky lg:top-18 lg:self-start lg:h-[calc(100vh-2rem)] lg:overflow-y-auto">
                         <Card className="border shadow-sm pt-0" >
                             <CardContent className="p-4">
                                 <TabsList className="flex flex-col h-auto bg-transparent space-y-1 w-full pt-0 pb-0">

@@ -70,9 +70,9 @@ export default function TourCard({ tour, viewMode }: TourCardProps) {
             <div className="bg-card rounded-lg overflow-hidden shadow-sm border border-border hover:shadow-md transition-shadow">
                 {/* Grid View Image Section */}
                 <div className="relative w-full aspect-[16/10] sm:aspect-[4/3] overflow-hidden">
-                    <Link href={`/tours/${tour._id}`}>
+                    <Link href={`/tours/${tour.id}`}>
                         <Image
-                            src={tour.coverImage}
+                            src={tour.coverImage ?? ''}
                             alt={tour.title}
                             fill
                             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
@@ -104,18 +104,18 @@ export default function TourCard({ tour, viewMode }: TourCardProps) {
                 {/* Grid View Details Section */}
                 <div className="p-3 sm:p-4 space-y-2 sm:space-y-3">
                     {/* Tour Title */}
-                    <Link href={`/tours/${tour._id}`}>
+                    <Link href={`/tours/${tour.id}`}>
                         <h3 className="text-base sm:text-lg font-semibold hover:text-primary transition-colors line-clamp-2 min-h-[2.5rem] sm:min-h-[3rem]">
                             {tour.title}
                         </h3>
                     </Link>
 
                     {/* Availability Dates */}
-                    {tour.dates && tour.dates.startDate && tour.dates.endDate && (
+                    {tour.tourDates && tour.tourDates.startDate && tour.tourDates.endDate && (
                         <div className="flex items-center text-xs sm:text-sm text-muted-foreground">
                             <Calendar className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-1.5 flex-shrink-0" />
                             <span className="truncate">
-                                {new Date(tour.dates.startDate).toLocaleDateString()} - {new Date(tour.dates.endDate).toLocaleDateString()}
+                                {new Date(tour.tourDates.startDate).toLocaleDateString()} - {new Date(tour.tourDates.endDate).toLocaleDateString()}
                             </span>
                         </div>
                     )}
@@ -132,7 +132,7 @@ export default function TourCard({ tour, viewMode }: TourCardProps) {
                         <div className="flex flex-wrap gap-1.5">
                             {tour.category.slice(0, 3).map((cat, index) => {
                                 const categoryName = typeof cat === 'string' ? cat : (cat as Category).name;
-                                const categoryId = typeof cat === 'string' ? cat : (cat as Category)._id;
+                                const categoryId = typeof cat === 'string' ? cat : (cat as Category).id;
                                 return (
                                     <Badge key={categoryId || index} variant="outline" className="text-xs">
                                         {categoryName}
@@ -188,7 +188,7 @@ export default function TourCard({ tour, viewMode }: TourCardProps) {
                             </div>
 
                             {/* MORE INFO Button */}
-                            <Link href={`/tours/${tour._id}`}>
+                            <Link href={`/tours/${tour.id}`}>
                                 <Button size="sm" variant="default" className="text-xs sm:text-sm whitespace-nowrap">
                                     MORE INFO
                                 </Button>
@@ -207,9 +207,9 @@ export default function TourCard({ tour, viewMode }: TourCardProps) {
             <div className="flex flex-col md:flex-row">
                 {/* Image Column - 1/3 width on desktop */}
                 <div className="relative w-full md:w-1/3 aspect-[16/10] md:aspect-auto md:h-[240px] overflow-hidden flex-shrink-0">
-                    <Link href={`/tours/${tour._id}`}>
+                    <Link href={`/tours/${tour.id}`}>
                         <Image
-                            src={tour.coverImage}
+                            src={tour.coverImage ?? ''}
                             alt={tour.title}
                             fill
                             sizes="(max-width: 768px) 100vw, 33vw"
@@ -231,7 +231,7 @@ export default function TourCard({ tour, viewMode }: TourCardProps) {
                 {/* Details Column - Flexible width */}
                 <div className="flex-1 p-3 sm:p-4 space-y-2 sm:space-y-3">
                     {/* Title as clickable link */}
-                    <Link href={`/tours/${tour._id}`}>
+                    <Link href={`/tours/${tour.id}`}>
                         <h3 className="text-base sm:text-lg md:text-xl font-semibold hover:text-primary transition-colors line-clamp-2">
                             {tour.title}
                         </h3>
@@ -246,11 +246,11 @@ export default function TourCard({ tour, viewMode }: TourCardProps) {
                     )}
 
                     {/* Availability with calendar icon */}
-                    {tour.dates && tour.dates.startDate && tour.dates.endDate && (
+                    {tour.tourDates && tour.tourDates.startDate && tour.tourDates.endDate && (
                         <div className="flex items-center text-xs sm:text-sm text-muted-foreground">
                             <Calendar className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-1.5 flex-shrink-0" />
                             <span className="truncate">
-                                {new Date(tour.dates.startDate).toLocaleDateString()} - {new Date(tour.dates.endDate).toLocaleDateString()}
+                                {new Date(tour.tourDates.startDate).toLocaleDateString()} - {new Date(tour.tourDates.endDate).toLocaleDateString()}
                             </span>
                         </div>
                     )}
@@ -267,7 +267,7 @@ export default function TourCard({ tour, viewMode }: TourCardProps) {
                         <div className="flex flex-wrap gap-1.5">
                             {tour.category.slice(0, 3).map((cat, index) => {
                                 const categoryName = typeof cat === 'string' ? cat : (cat as Category).name;
-                                const categoryId = typeof cat === 'string' ? cat : (cat as Category)._id;
+                                const categoryId = typeof cat === 'string' ? cat : (cat as Category).id;
                                 return (
                                     <Badge key={categoryId || index} variant="outline" className="text-xs">
                                         {categoryName}
@@ -323,7 +323,7 @@ export default function TourCard({ tour, viewMode }: TourCardProps) {
                     </div>
 
                     {/* MORE INFO Button at bottom */}
-                    <Link href={`/tours/${tour._id}`} className="w-auto md:w-full">
+                    <Link href={`/tours/${tour.id}`} className="w-auto md:w-full">
                         <Button size="sm" variant="default" className="w-full text-xs sm:text-sm whitespace-nowrap">
                             MORE INFO
                         </Button>

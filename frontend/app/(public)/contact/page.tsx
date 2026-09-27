@@ -1,8 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { createConversation } from '@/lib/api/conversations';
+import { toast } from '@/components/ui/use-toast';
+import { useAuth } from '@/lib/hooks/useAuth';
 
 export default function ContactPage() {
+    const { user } = useAuth();
+    const isLoggedIn = !!user?.id;
+
     const [formData, setFormData] = useState({
         name: '',
         email: '',
@@ -10,10 +16,58 @@ export default function ContactPage() {
         subject: '',
         message: '',
     });
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const handleSubmit = (e: React.FormEvent) => {
+    useEffect(() => {
+        if (!isLoggedIn) return;
+        setFormData((prev) => ({
+            ...prev,
+            name: user.name ?? prev.name,
+            email: user.email ?? prev.email,
+            phone: user.phone ?? prev.phone,
+        }));
+    }, [isLoggedIn, user.name, user.email, user.phone]);
+
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        // TODO: Submit form to API
+        setIsSubmitting(true);
+        try {
+            const phone = (isLoggedIn ? user.phone : formData.phone) || formData.phone;
+            const message = [formData.message, phone ? `Phone: ${phone}` : '']
+                .filter(Boolean)
+                .join('\n\n');
+
+            const payload: Parameters<typeof createConversation>[0] = {
+                type: 'contact',
+                subject: formData.subject || 'General Inquiry',
+                message,
+            };
+
+            if (!isLoggedIn) {
+                payload.guestName = formData.name;
+                payload.guestEmail = formData.email;
+            }
+
+            await createConversation(payload);
+
+            toast({
+                title: 'Message sent',
+                description:
+                    "We've received your message. We'll reply in your enquiries page as soon as possible.",
+            });
+            setFormData({
+                name: '',
+                email: '',
+                phone: '',
+                subject: '',
+                message: '',
+            });
+        } catch (err: unknown) {
+            const msg = (err as { message?: string })?.message ?? 'Failed to send message';
+            toast({ variant: 'destructive', title: 'Error', description: msg });
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -79,36 +133,57 @@ export default function ContactPage() {
                             <h2 className="text-2xl font-semibold mb-6">Send us a Message</h2>
                             <form onSubmit={handleSubmit} className="space-y-6">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div>
-                                        <label htmlFor="name" className="block text-sm font-medium mb-2">
-                                            Full Name *
-                                        </label>
-                                        <input
-                                            type="text"
-                                            id="name"
-                                            name="name"
-                                            required
-                                            value={formData.name}
-                                            onChange={handleChange}
-                                            className="w-full px-4 py-2 border border-border rounded-md bg-background focus:ring-2 focus:ring-primary focus:border-transparent"
-                                            placeholder="John Doe"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label htmlFor="email" className="block text-sm font-medium mb-2">
-                                            Email Address *
-                                        </label>
-                                        <input
-                                            type="email"
-                                            id="email"
-                                            name="email"
-                                            required
-                                            value={formData.email}
-                                            onChange={handleChange}
-                                            className="w-full px-4 py-2 border border-border rounded-md bg-background focus:ring-2 focus:ring-primary focus:border-transparent"
-                                            placeholder="john@example.com"
-                                        />
-                                    </div>
+                                    {!isLoggedIn ? (
+                                        <>
+                                            <div>
+                                                <label htmlFor="name" className="block text-sm font-medium mb-2">
+                                                    Full Name *
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    id="name"
+                                                    name="name"
+                                                    required={!isLoggedIn}
+                                                    value={formData.name}
+                                                    onChange={handleChange}
+                                                    className="w-full px-4 py-2 border border-border rounded-md bg-background focus:ring-2 focus:ring-primary focus:border-transparent"
+                                                    placeholder="John Doe"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label
+                                                    htmlFor="email"
+                                                    className="block text-sm font-medium mb-2"
+                                                >
+                                                    Email Address *
+                                                </label>
+                                                <input
+                                                    type="email"
+                                                    id="email"
+                                                    name="email"
+                                                    required={!isLoggedIn}
+                                                    value={formData.email}
+                                                    onChange={handleChange}
+                                                    className="w-full px-4 py-2 border border-border rounded-md bg-background focus:ring-2 focus:ring-primary focus:border-transparent"
+                                                    placeholder="john@example.com"
+                                                />
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <div className="md:col-span-2 rounded-md border border-border bg-muted/40 px-4 py-3 text-sm">
+                                            <p className="font-medium text-foreground">
+                                                We&apos;ll use your profile details for this message.
+                                            </p>
+                                            <p className="text-muted-foreground mt-1">
+                                                {user.name && <span className="mr-2">{user.name}</span>}
+                                                {user.email && (
+                                                    <span className="mr-2">
+                                                        · <span className="font-medium">{user.email}</span>
+                                                    </span>
+                                                )}
+                                            </p>
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -165,9 +240,10 @@ export default function ContactPage() {
 
                                 <button
                                     type="submit"
-                                    className="w-full bg-primary text-primary-foreground py-3 rounded-lg hover:bg-primary/90 transition font-medium"
+                                    disabled={isSubmitting}
+                                    className="w-full bg-primary text-primary-foreground py-3 rounded-lg hover:bg-primary/90 transition font-medium disabled:opacity-70"
                                 >
-                                    Send Message
+                                    {isSubmitting ? 'Sending...' : 'Send Message'}
                                 </button>
                             </form>
                         </div>

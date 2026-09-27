@@ -2,6 +2,7 @@
 
 import { useTourQuery, useLatestTours } from '@/lib/queries';
 import { Tour } from '@/types/types';
+import type { SimilarTourRelated } from '@/types';
 import TourBanner from '@/components/tours/TourBanner';
 import { TourHeader } from '@/components/tours/TourHeader';
 import { TourFacts } from '@/components/tours/TourFacts';
@@ -11,39 +12,54 @@ import { TourPageLayout } from '@/components/tours/TourPageLayout';
 import { TourDetailSkeleton } from '@/components/tours/TourDetailSkeleton';
 import { TourNotFound } from '@/components/tours/TourNotFound';
 
+const PUBLIC_TOUR_INCLUDE = ['author', 'destination', 'destinations', 'categories', 'similarTours', 'pricingInsights', 'availability'] as const;
+
 interface SingleTourPageClientProps {
     tourId: string;
 }
 
 export function SingleTourPageClient({ tourId }: SingleTourPageClientProps) {
     const {
-        data: tourData,
+        data: tourPayload,
         isLoading: isLoadingTour,
         isError: isTourError,
-    } = useTourQuery(tourId, !!tourId);
+    } = useTourQuery(tourId, !!tourId, [...PUBLIC_TOUR_INCLUDE]);
 
     const { data: latestData } = useLatestTours();
 
-    const tour: Tour | null = tourData
-        ? ((tourData as Tour)._id ? (tourData as Tour) : (tourData as { tour?: Tour }).tour ?? (tourData as Tour))
-        : null;
+    const payload = (tourPayload as { data?: { tour?: Tour; relatedData?: unknown }; tour?: Tour; relatedData?: unknown })?.data ?? tourPayload;
+    const tour: Tour | null = payload?.tour
+        ? (payload.tour as unknown as Tour)
+        : tourPayload && (tourPayload as unknown as Tour).id
+            ? (tourPayload as unknown as Tour)
+            : null;
 
+    const similarFromApi = (payload?.relatedData?.similarTours ?? []) as SimilarTourRelated[];
     const toursList = Array.isArray(latestData)
         ? latestData
         : (latestData as { data?: { tours?: Tour[] }; tours?: Tour[] })?.data?.tours ??
         (latestData as { tours?: Tour[] })?.tours ??
         [];
-    const relatedTours: Tour[] = tour
-        ? toursList
-            .filter((t: Tour) => t._id !== tour._id)
-            .slice(0, 3)
-        : [];
+    const relatedTours: Tour[] =
+        similarFromApi.length > 0
+            ? similarFromApi.map((t) => ({
+                  id: t.id,
+                  title: t.title,
+                  coverImage: t.coverImage,
+                  price: t.price,
+                  averageRating: t.averageRating,
+                  reviewCount: t.reviewCount,
+                  tourStatus: t.tourStatus,
+              } as Tour))
+            : tour
+                ? toursList.filter((t: Tour) => t.id !== tour.id).slice(0, 3)
+                : [];
 
     if (isLoadingTour) {
         return <TourDetailSkeleton />;
     }
 
-    if (isTourError || !tour?._id) {
+    if (isTourError || !tour?.id) {
         return <TourNotFound />;
     }
 
@@ -64,7 +80,10 @@ export function SingleTourPageClient({ tourId }: SingleTourPageClientProps) {
                             <TourFacts facts={tour.facts as Parameters<typeof TourFacts>[0]['facts']} />
                         )}
 
-                        <TourDetailClient tour={tour} />
+                        <TourDetailClient
+                            tour={tour}
+                            destinations={(payload?.relatedData as { destinations?: { id: string; name: string }[] } | undefined)?.destinations}
+                        />
                     </div>
 
                     <div className="lg:col-span-1 order-first lg:order-last">
@@ -78,7 +97,7 @@ export function SingleTourPageClient({ tourId }: SingleTourPageClientProps) {
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                             {relatedTours.map((relatedTour) => (
                                 <TourCard
-                                    key={relatedTour._id}
+                                    key={relatedTour.id}
                                     tour={relatedTour}
                                     viewMode="grid"
                                 />

@@ -14,7 +14,7 @@ export interface Subscriber {
 }
 
 export interface SubscribersResponse {
-    items: Subscriber[];
+    data: Subscriber[];
     pagination: {
         page: number;
         limit: number;
@@ -143,9 +143,9 @@ export const getSubscribers = async (params?: { page?: number; limit?: number })
         const url = `/subscribers${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
         const response = await api.get(url);
 
-        // Return the full response data structure that matches backend format
+        // Standard list format: { success, data, message, pagination }
         return {
-            items: response.data.items,
+            data: response.data.data ?? [],
             pagination: response.data.pagination
         };
     } catch (error) {

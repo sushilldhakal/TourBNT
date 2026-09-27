@@ -95,8 +95,11 @@ export default function TourFilters({
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="all">All Categories</SelectItem>
-                                {categories.map((category) => (
-                                    <SelectItem key={category._id} value={category._id}>
+                                {categories.map((category, index) => (
+                                    <SelectItem
+                                        key={(category as { _id?: string })._id ?? (category as { id?: string }).id ?? `cat-${index}`}
+                                        value={(category as { _id?: string })._id ?? (category as { id?: string }).id ?? `cat-${index}`}
+                                    >
                                         {category.name}
                                     </SelectItem>
                                 ))}
@@ -111,8 +114,11 @@ export default function TourFilters({
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="all">All Destinations</SelectItem>
-                                {destinations.map((destination) => (
-                                    <SelectItem key={destination._id} value={destination._id}>
+                                {destinations.map((destination, index) => (
+                                    <SelectItem
+                                        key={(destination as { _id?: string })._id ?? (destination as { id?: string }).id ?? `dest-${index}`}
+                                        value={(destination as { _id?: string })._id ?? (destination as { id?: string }).id ?? `dest-${index}`}
+                                    >
                                         {destination.name}
                                     </SelectItem>
                                 ))}
@@ -127,8 +133,8 @@ export default function TourFilters({
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="all">All Prices</SelectItem>
-                                {priceRanges.map((range) => (
-                                    <SelectItem key={range.value} value={range.value}>
+                                {priceRanges.map((range, index) => (
+                                    <SelectItem key={range.value || `price-${index}`} value={range.value}>
                                         {range.label}
                                     </SelectItem>
                                 ))}
@@ -182,7 +188,7 @@ export default function TourFilters({
                 {activeFiltersCount > 0 && (
                     <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-border">
                         {getSelectedCategoryName() && (
-                            <Badge variant="outline" className="gap-1">
+                            <Badge key="active-category" variant="outline" className="gap-1">
                                 <Tag className="h-3 w-3" />
                                 {getSelectedCategoryName()}
                                 <button
@@ -195,7 +201,7 @@ export default function TourFilters({
                             </Badge>
                         )}
                         {getSelectedDestinationName() && (
-                            <Badge variant="outline" className="gap-1">
+                            <Badge key="active-destination" variant="outline" className="gap-1">
                                 <MapPin className="h-3 w-3" />
                                 {getSelectedDestinationName()}
                                 <button
@@ -208,7 +214,7 @@ export default function TourFilters({
                             </Badge>
                         )}
                         {getSelectedPriceLabel() && (
-                            <Badge variant="outline" className="gap-1">
+                            <Badge key="active-price" variant="outline" className="gap-1">
                                 <DollarSign className="h-3 w-3" />
                                 {getSelectedPriceLabel()}
                                 <button

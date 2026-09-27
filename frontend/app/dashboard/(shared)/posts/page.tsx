@@ -87,7 +87,7 @@ export default function PostsPage() {
     };
 
     // ✅ Extract items from the new API response format
-    const posts = (data as PostsListResponse)?.items ?? [];
+    const posts = (data as PostsListResponse)?.data ?? [];
     const tableData = posts;
 
     const columns: ColumnDef<PostListItem>[] = [

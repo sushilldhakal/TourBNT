@@ -25,12 +25,20 @@ const ReviewSlider = () => {
 
     const { data, isLoading, isError } = useApprovedReviews();
     const approvedReviews = React.useMemo(() => {
-        const list = Array.isArray(data) ? data : (data as { reviews?: Review[] })?.reviews ?? [];
+        // Support standard { data: [] } and legacy { reviews: [] } or raw array
+        const raw = data as { data?: Review[]; reviews?: Review[] } | undefined;
+        const list = Array.isArray(raw?.data)
+            ? raw.data
+            : Array.isArray(raw?.reviews)
+                ? raw.reviews
+                : Array.isArray(data)
+                    ? data
+                    : [];
         if (!list.length) return [];
         return [...list].sort((a: Review, b: Review) => {
-            if (a.likes && b.likes && a.likes !== b.likes) return b.likes - a.likes;
-            if (a.views && b.views && a.views !== b.views) return b.views - a.views;
-            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+            if (a.likes != null && b.likes != null && a.likes !== b.likes) return b.likes - a.likes;
+            if (a.views != null && b.views != null && a.views !== b.views) return b.views - a.views;
+            return new Date((b.createdAt as string) || 0).getTime() - new Date((a.createdAt as string) || 0).getTime();
         }).slice(0, 9);
     }, [data]);
 
@@ -116,7 +124,7 @@ const ReviewSlider = () => {
                     <CarouselWithPlugins setApi={setApi} className="w-full" opts={{ loop: true, align: "center" }} autoplayConfig={{ delay: 5000 }}>
                         <CarouselContent>
                             {approvedReviews.map((review: Review, index: number) => (
-                                <CarouselItem key={review._id} className="md:basis-2/3 lg:basis-2/5 pl-4">
+                                <CarouselItem key={(review as { id?: string; _id?: string }).id ?? (review as { _id?: string })._id ?? index} className="md:basis-2/3 lg:basis-2/5 pl-4">
                                     <div className={cn("transition-transform duration-300 ease-in-out h-full", current === index ? "scale-100 opacity-100" : "scale-75 opacity-50")}>
                                         <Card className="h-full shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden pt-0 border border-primary/10">
                                             <CardContent className="p-0">
@@ -130,7 +138,7 @@ const ReviewSlider = () => {
                                                     <div className="w-16 h-1 bg-gradient-to-r from-primary/60 to-primary/20 rounded-full mb-4"></div>
                                                     <div className="flex items-center">
                                                         <Avatar className="h-12 w-12 border-2 border-primary/10 shadow-md">
-                                                            <AvatarImage src={review.user?.profilePicture} alt={review.user?.name || 'User'} />
+                                                            <AvatarImage src={review.user?.avatar || ''} alt={review.user?.name || 'User'} />
                                                             <AvatarFallback className="bg-primary/10 text-primary font-medium">{review.user?.name ? review.user.name.charAt(0) : 'U'}</AvatarFallback>
                                                         </Avatar>
                                                         <div className="ml-3">

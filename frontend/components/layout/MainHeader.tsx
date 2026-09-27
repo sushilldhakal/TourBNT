@@ -6,7 +6,7 @@ import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { Menu, X, Bell, Search, User, Loader2 } from 'lucide-react';
 import { ModeToggle } from '@/components/ui/ModeToggle';
-import Logo from '@/public/logo';
+import Logo from '@/components/icons/Logo';
 import { useRole } from '@/lib/hooks/useRole';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { ContentContainer } from './PublicLayoutClient';
@@ -206,6 +206,13 @@ export function MainHeader({ onSearchToggle }: MainHeaderProps) {
                                                     My Bookings
                                                 </Link>
                                                 <Link
+                                                    href="/enquiry"
+                                                    className="block px-4 py-2 text-sm hover:bg-accent hover:text-accent-foreground"
+                                                    onClick={() => setShowUserMenu(false)}
+                                                >
+                                                    My Enquiries
+                                                </Link>
+                                                <Link
                                                     href="/settings"
                                                     className="block px-4 py-2 text-sm hover:bg-accent hover:text-accent-foreground"
                                                     onClick={() => setShowUserMenu(false)}
@@ -272,6 +279,20 @@ export function MainHeader({ onSearchToggle }: MainHeaderProps) {
                                         onClick={() => setIsOpen(false)}
                                     >
                                         Profile
+                                    </Link>
+                                    <Link
+                                        href="/booking"
+                                        className="text-secondary-foreground hover:bg-accent hover:text-accent-foreground block rounded-md px-3 py-2 text-base font-medium"
+                                        onClick={() => setIsOpen(false)}
+                                    >
+                                        My Bookings
+                                    </Link>
+                                    <Link
+                                        href="/enquiry"
+                                        className="text-secondary-foreground hover:bg-accent hover:text-accent-foreground block rounded-md px-3 py-2 text-base font-medium"
+                                        onClick={() => setIsOpen(false)}
+                                    >
+                                        My Enquiries
                                     </Link>
                                     <button
                                         onClick={() => {

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Fraunces, Geist, Geist_Mono } from "next/font/google";
+import { Fraunces, Geist_Mono, Nunito_Sans } from "next/font/google";
 import "./globals-optimized.css";
 import { ThemeProvider } from "@/providers/ThemeProvider";
 import { LayoutProvider } from "@/providers/LayoutProvider";
@@ -10,8 +10,8 @@ import { AuthRedirect } from "@/components/auth/AuthRedirect";
 import AuthBootstrap from "@/providers/AuthBootstrap";
 
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const nunitoSans = Nunito_Sans({
+  variable: "--font-nunito-sans",
   subsets: ["latin"],
 });
 
@@ -38,7 +38,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable} antialiased`}
+        className={`${nunitoSans.variable} ${geistMono.variable} ${fraunces.variable} antialiased data-[scroll-locked]:!overflow-visible`}
         suppressHydrationWarning={true}
       >
         <ThemeProvider

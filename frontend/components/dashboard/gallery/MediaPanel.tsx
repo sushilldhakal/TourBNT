@@ -249,15 +249,18 @@ export function MediaPanel({
                                 </Button>
                         }
 
-                        <button
+                        <Button
+                            variant="ghost"
+                            size="icon"
                             onClick={onClose}
                             className={cn(
-                                'text-md',
+                                'h-8 w-8',
                                 !isSingleSelection && 'col-span-2'
                             )}
+                            aria-label="Close panel"
                         >
-                            <Icon name="lu/LuX" size={16} className="mr-2" />
-                        </button>
+                            <Icon name="lu/LuX" size={16} />
+                        </Button>
                     </div>
                 </div>
 
@@ -351,6 +354,7 @@ export function MediaPanel({
                                             onClick={() => handleCopyUrl(item.secureUrl)}
                                             className="p-1 rounded hover:bg-accent text-xs"
                                             title="Copy URL"
+                                            aria-label="Copy URL"
                                         >
                                             <Icon name="hi/HiClipboardCopy" size={16} />
                                         </Button>
@@ -360,6 +364,7 @@ export function MediaPanel({
                                                 onClick={() => onEdit(item.id)}
                                                 className="p-1 rounded hover:bg-accent text-xs"
                                                 title="Edit"
+                                                aria-label="Edit media"
                                             >
                                                 <Icon name="hi/HiPencil" size={16} />
                                             </Button>

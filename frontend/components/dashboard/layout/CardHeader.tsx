@@ -37,8 +37,8 @@ export function DashboardCardHeader({
     iconClassName = 'h-5 w-5 text-muted-foreground',
     title,
     description,
-    titleClassName = 'text-2xl font-bold text-foreground',
-    descriptionClassName = 'text-muted-foreground mt-2 max-w-3xl',
+    titleClassName = 'text-2xl font-semibold text-foreground',
+    descriptionClassName = 'text-sm text-muted-foreground mt-2 max-w-3xl',
     badge,
     badgeVariant = 'outline',
     actions,
@@ -60,9 +60,12 @@ export function DashboardCardHeader({
                             aria-label={backButton.label || 'Go back'}
                         >
                             {backButton.icon ? (
-                                <backButton.icon className="h-5 w-5" />
+                                (() => {
+                                    const BackIcon = backButton.icon;
+                                    return BackIcon ? <BackIcon className="h-5 w-5" aria-hidden="true" /> : null;
+                                })()
                             ) : (
-                                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                                 </svg>
                             )}
@@ -70,7 +73,7 @@ export function DashboardCardHeader({
                     )}
                     <div>
                         <div className="flex items-center gap-2 mb-1">
-                            {Icon && <Icon className={iconClassName} />}
+                            {Icon && <Icon className={iconClassName} aria-hidden="true" />}
                             {badge && (
                                 <Badge variant={badgeVariant} className="bg-card text-muted-foreground font-medium">
                                     {badge}
@@ -100,7 +103,7 @@ export function DashboardCardHeader({
             <div className={`mb-6 ${className}`}>
                 <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
-                        {Icon && <Icon className={iconClassName} />}
+                        {Icon && <Icon className={iconClassName} aria-hidden="true" />}
                         {badge && (
                             <Badge variant={badgeVariant} className="bg-card text-muted-foreground font-medium">
                                 {badge}
@@ -122,7 +125,7 @@ export function DashboardCardHeader({
         <div className={`mb-8 ${className}`}>
             <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                    {Icon && <Icon className={iconClassName} />}
+                    {Icon && <Icon className={iconClassName} aria-hidden="true" />}
                     {badge && (
                         <Badge variant={badgeVariant} className="bg-card text-muted-foreground font-medium">
                             {badge}

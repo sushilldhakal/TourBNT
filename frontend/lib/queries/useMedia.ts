@@ -219,7 +219,7 @@ export function useMedia(options: UseMediaOptions) {
         },
     });
 
-    const items = query.data?.pages.flatMap((page) => page.items || []) ?? [];
+    const items = query.data?.pages.flatMap((page) => page.data ?? []) ?? [];
     const totalCount = query.data?.pages[0]?.pagination?.totalItems ?? 0;
     const loadMore = () => {
         if (query.hasNextPage && !query.isFetchingNextPage) {
@@ -249,7 +249,7 @@ export function useMedia(options: UseMediaOptions) {
 
 export function getFlattenedMedia(data: any) {
     if (!data?.pages) return [];
-    return data.pages.flatMap((page: MediaQueryResponse) => page.resources);
+    return data.pages.flatMap((page: MediaQueryResponse) => page.data ?? []);
 }
 
 export function getMediaCount(data: any): number {
@@ -257,7 +257,7 @@ export function getMediaCount(data: any): number {
     const firstPage = data.pages[0] as MediaQueryResponse;
     if (firstPage.totalCount !== undefined) return firstPage.totalCount;
     return data.pages.reduce(
-        (total: number, page: MediaQueryResponse) => total + (page.resources?.length || 0),
+        (total: number, page: MediaQueryResponse) => total + (page.data?.length ?? 0),
         0
     );
 }

@@ -53,7 +53,7 @@ export const loginUser = async (credentials: {
     password: string;
     keepMeSignedIn?: boolean;
 }): Promise<User> => {
-    const response = await api.post('/users/login', credentials);
+    const response = await api.post('/auth/login', credentials);
 
     const body = response?.data;
     let userData: any = null;

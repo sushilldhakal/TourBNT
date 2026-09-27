@@ -522,7 +522,7 @@ export interface Timestamps {
   /** Media query response */
   export interface MediaQueryResponse {
     success: boolean;
-    items: MediaItem[];
+    data: MediaItem[];
     message: string;
     pagination: {
       page: number;
@@ -591,12 +591,6 @@ export interface Timestamps {
     discountEnabled?: boolean;
     isActive: boolean;
     discount?: Discount;
-  }
-  
-  /** Pricing group for display */
-  export interface PricingGroup {
-    label: string;
-    options: PricingOption[];
   }
   
   /** Tour pricing calculation result */
@@ -943,7 +937,6 @@ export interface Timestamps {
     maxSize: number;
     pricingOptionsEnabled?: boolean;
     pricingOptions?: PricingOption[];
-    pricingGroups?: PricingGroup[];
     saleEnabled?: boolean;
     salePrice?: number;
     discountEnabled?: boolean;
@@ -1033,6 +1026,100 @@ export interface Timestamps {
     // Common fields
     message?: string;
     error?: string;
+  }
+
+  /** Category as { label, value } (lean, matches API and form) */
+  export interface CategoryLabelValue {
+    label: string;
+    value: string;
+    disable?: boolean;
+  }
+
+  /** Lean tour from single-tour API: author/destination IDs, category as [{ label, value }] */
+  export interface TourLean extends Omit<Tour, 'author' | 'destination' | 'category'> {
+    author: string[];
+    destination?: string;
+    category?: CategoryLabelValue[];
+  }
+
+  /** One author in relatedData.authors */
+  export interface AuthorRelated {
+    id: string;
+    name?: string;
+    email?: string;
+    roles?: string[];
+    avatar?: string;
+    phone?: string;
+  }
+
+  /** Destination in relatedData.destination */
+  export interface DestinationRelated {
+    id: string;
+    name: string;
+    slug?: string;
+    country?: string;
+    region?: string;
+    description?: string;
+    thumbnail?: string;
+    coordinates?: { lat?: number; lng?: number };
+  }
+
+  /** One category in relatedData.categories */
+  export interface CategoryRelated {
+    id: string;
+    label: string;
+    value: string;
+    slug?: string;
+    description?: string;
+  }
+
+  /** Minimal tour for relatedData.similarTours */
+  export interface SimilarTourRelated {
+    id: string;
+    title: string;
+    slug?: string;
+    coverImage?: string;
+    price?: number;
+    averageRating?: number;
+    reviewCount?: number;
+    tourStatus?: string;
+  }
+
+  /** Optional relatedData sections from GET /tours/:id?include=... */
+  export interface RelatedData {
+    authors?: AuthorRelated[];
+    destination?: DestinationRelated;
+    categories?: CategoryRelated[];
+    similarTours?: SimilarTourRelated[];
+    pricingInsights?: Record<string, unknown>;
+    availability?: Record<string, unknown>;
+  }
+
+  export interface BreadcrumbItem {
+    label: string;
+    url: string;
+  }
+
+  export interface SingleTourMeta {
+    requestId?: string;
+    timestamp?: string;
+    version?: string;
+    cached?: boolean;
+  }
+
+  /** Single-tour API response data (GET /tours/:id) */
+  export interface SingleTourData {
+    tour: TourLean;
+    relatedData?: RelatedData;
+    breadcrumbs?: BreadcrumbItem[];
+    meta?: SingleTourMeta;
+  }
+
+  /** Full API envelope for single tour */
+  export interface SingleTourApiResponse {
+    success: boolean;
+    message?: string;
+    data: SingleTourData;
   }
   
   // ============================================================================

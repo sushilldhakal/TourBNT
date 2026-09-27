@@ -3,18 +3,11 @@
 import { useApprovedDestinations } from "@/lib/queries";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { MapPin, ChevronLeft, ChevronRight, Globe, Building } from "lucide-react";
+import { MapPin, Globe, Building } from "lucide-react";
 import { useEffect, useState, useMemo } from "react";
-import {
-    Carousel,
-    CarouselContent,
-    CarouselItem,
-    type CarouselApi
-} from "@/components/ui/carousel-lazy";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardFooter } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import RichTextRenderer from "@/components/RichTextRenderer";
-import { getApprovedDestinations } from "@/lib/api/globalApi";
 import { ContentContainer } from "@/components/layout/PublicLayoutClient";
 import { Destination } from "@/types/types";
 import Image from "next/image";
@@ -22,12 +15,14 @@ import Image from "next/image";
 
 
 export default function DestinationTour() {
-    const [api, setApi] = useState<CarouselApi | null>(null);
+    const [activeIndex, setActiveIndex] = useState(0);
+    const [animationKey, setAnimationKey] = useState(0);
 
     const { data: destinationResponse, isLoading } = useApprovedDestinations();
 
     const sortedDestinations = useMemo(() => {
-        const items = (destinationResponse as { items?: Destination[] })?.items;
+        const raw = destinationResponse as { data?: Destination[] };
+        const items = raw?.data ?? [];
         if (!items) return [];
         return [...items]
             .sort((a: Destination, b: Destination) => {
@@ -39,14 +34,23 @@ export default function DestinationTour() {
             .slice(0, 8);
     }, [destinationResponse]);
 
+    // Some APIs return DestinationTypes shape (with id/region/city). We keep runtime-safe access here.
+    type DestinationUi = Destination & {
+        id?: string;
+        region?: string;
+        city?: string;
+    };
+    const uiDestinations = sortedDestinations as unknown as DestinationUi[];
+
     useEffect(() => {
-        if (!api) return;
-        const handleSelect = () => { };
-        api.on("select", handleSelect);
-        return () => {
-            api.off("select", handleSelect);
-        };
-    }, [api]);
+        if (!uiDestinations.length) return;
+        const interval = setInterval(() => {
+            setActiveIndex((prev) => (prev + 1) % uiDestinations.length);
+            setAnimationKey((prev) => prev + 1);
+        }, 5000);
+
+        return () => clearInterval(interval);
+    }, [uiDestinations.length]);
 
     if (isLoading) {
         return (
@@ -79,116 +83,156 @@ export default function DestinationTour() {
                                 View All Destinations
                             </Button>
                         </Link>
-                        <div className="flex items-center gap-2">
-                            <Button
-                                variant="outline"
-                                size="icon"
-                                className="h-8 w-8 rounded-full"
-                                onClick={() => api?.scrollPrev()}
-                            >
-                                <ChevronLeft className="h-4 w-4" />
-                            </Button>
-                            <Button
-                                variant="outline"
-                                size="icon"
-                                className="h-8 w-8 rounded-full"
-                                onClick={() => api?.scrollNext()}
-                            >
-                                <ChevronRight className="h-4 w-4" />
-                            </Button>
-                        </div>
                     </div>
                 </div>
 
-                <Carousel
-                    setApi={setApi}
-                    className="w-full"
-                    opts={{
-                        align: "start",
-                        loop: true,
-                    }}
-                >
-                    <CarouselContent className="-ml-2 md:-ml-4">
-                        {sortedDestinations.map((destination: Destination) => (
-                            <CarouselItem key={destination.id} className="pl-2 md:pl-4 md:basis-1/2 lg:basis-1/4">
-                                <Card className="overflow-hidden p-0 h-full border-0 shadow-lg hover:shadow-xl transition-all duration-300 group">
-                                    <div className="relative h-80 overflow-hidden">
-                                        {/* Background Image */}
-                                        <Image
-                                            width={60}
-                                            height={60}
-                                            src={destination.coverImage}
-                                            alt={destination.name}
-                                            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
-                                        />featuredTours
+                {uiDestinations.length > 0 && (
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        {/* Column 1: list (3) */}
+                        <div className="space-y-3">
+                            {uiDestinations.slice(0, 3).map((destination, idx) => {
+                                const index = idx;
+                                const isActive = index === activeIndex;
+                                return (
+                                    <button
+                                        key={destination.id ?? destination.id ?? `${destination.name}-${idx}`}
+                                        type="button"
+                                        onClick={() => {
+                                            setActiveIndex(index);
+                                            setAnimationKey((prev) => prev + 1);
+                                        }}
+                                        className={`w-full text-left rounded-xl border bg-background p-4 transition-all ${isActive ? "ring-2 ring-primary/50 shadow-sm" : "hover:shadow-sm"}`}
+                                    >
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <div className="font-semibold text-foreground line-clamp-1">
+                                                    {destination.name}
+                                                </div>
+                                                <div className="mt-1 text-sm text-muted-foreground line-clamp-2">
+                                                    <RichTextRenderer
+                                                        content={destination.description}
+                                                        className="[&>p]:mb-0 [&>p]:leading-relaxed"
+                                                    />
+                                                </div>
+                                                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                                    <span className="inline-flex items-center gap-1">
+                                                        <MapPin className="h-3 w-3" />
+                                                        {destination.country}
+                                                    </span>
+                                                    {destination.city && (
+                                                        <span className="inline-flex items-center gap-1">
+                                                            <Building className="h-3 w-3" />
+                                                            {destination.city}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            {destination.featuredTours?.length ? (
+                                                <Badge variant="secondary" className="shrink-0">
+                                                    {destination.featuredTours.length} tours
+                                                </Badge>
+                                            ) : null}
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
 
-                                        {/* Gradient Overlay */}
-                                        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-black/20"></div>
+                        {/* Column 2: list (3) */}
+                        <div className="space-y-3">
+                            {uiDestinations.slice(3, 6).map((destination, idx) => {
+                                const index = idx + 3;
+                                const isActive = index === activeIndex;
+                                return (
+                                    <button
+                                        key={destination.id ?? destination.id ?? `${destination.name}-${idx}-b`}
+                                        type="button"
+                                        onClick={() => {
+                                            setActiveIndex(index);
+                                            setAnimationKey((prev) => prev + 1);
+                                        }}
+                                        className={`w-full text-left rounded-xl border bg-background p-4 transition-all ${isActive ? "ring-2 ring-primary/50 shadow-sm" : "hover:shadow-sm"}`}
+                                    >
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <div className="font-semibold text-foreground line-clamp-1">
+                                                    {destination.name}
+                                                </div>
+                                                <div className="mt-1 text-sm text-muted-foreground line-clamp-2">
+                                                    <RichTextRenderer
+                                                        content={destination.description}
+                                                        className="[&>p]:mb-0 [&>p]:leading-relaxed"
+                                                    />
+                                                </div>
+                                                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                                    <span className="inline-flex items-center gap-1">
+                                                        <MapPin className="h-3 w-3" />
+                                                        {destination.country}
+                                                    </span>
+                                                    {destination.region && (
+                                                        <span className="inline-flex items-center gap-1">
+                                                            <Globe className="h-3 w-3" />
+                                                            {destination.region}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            {destination.featuredTours?.length ? (
+                                                <Badge variant="secondary" className="shrink-0">
+                                                    {destination.featuredTours.length} tours
+                                                </Badge>
+                                            ) : null}
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
 
-                                        {/* Tours Badge */}
-                                        {destination.featuredTours && destination.featuredTours.length > 0 && (
-                                            <Badge className="absolute top-3 right-3 bg-primary/90 hover:bg-primary backdrop-blur-sm">
-                                                {destination.featuredTours.length} Tours
-                                            </Badge>
-                                        )}
+                        {/* Column 3: image slider */}
+                        <Card className="overflow-hidden p-0 border-0 shadow-lg">
+                            <div className="relative h-[360px] lg:h-full min-h-[360px]">
+                                <div
+                                    key={animationKey}
+                                    className="absolute inset-0 transition-opacity duration-500"
+                                >
+                                    <Image
+                                        src={uiDestinations[activeIndex]?.coverImage}
+                                        alt={uiDestinations[activeIndex]?.name ?? "Destination"}
+                                        fill
+                                        className="object-cover"
+                                        sizes="(max-width: 1024px) 100vw, 33vw"
+                                        priority={false}
+                                    />
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-black/10" />
+                                </div>
 
-                                        {/* Content Overlay */}
-                                        <div className="absolute inset-0 p-4 flex flex-col justify-end">
-                                            {/* Destination Name */}
-                                            <h3 className="font-bold text-xl text-white mb-2 line-clamp-2 drop-shadow-lg">
-                                                {destination.name}
-                                            </h3>
-
-                                            {/* Description */}
-                                            <div className="text-white/90 text-sm mb-3 line-clamp-2 drop-shadow-md">
+                                <div className="absolute inset-x-0 bottom-0 p-5">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <div className="text-white font-semibold text-lg line-clamp-1">
+                                                {uiDestinations[activeIndex]?.name}
+                                            </div>
+                                            <div className="mt-1 text-white/80 text-sm line-clamp-2">
                                                 <RichTextRenderer
-                                                    content={destination.description}
-                                                    className="text-sm [&>p]:mb-0 [&>p]:leading-relaxed [&>p]:text-white/90"
+                                                    content={uiDestinations[activeIndex]?.description}
+                                                    className="text-sm [&>p]:mb-0 [&>p]:leading-relaxed [&>p]:text-white/80"
                                                 />
                                             </div>
-
-                                            {/* Location Info */}
-                                            <div className="flex flex-wrap gap-2 text-xs text-white/80 mb-3">
-                                                <div className="flex items-center gap-1">
-                                                    <MapPin className="h-3 w-3" />
-                                                    <span>{destination.country}</span>
-                                                </div>
-                                                {destination.region && (
-                                                    <>
-                                                        <span>•</span>
-                                                        <div className="flex items-center gap-1">
-                                                            <Globe className="h-3 w-3" />
-                                                            <span>{destination.region}</span>
-                                                        </div>
-                                                    </>
-                                                )}
-                                                {destination.city && (
-                                                    <>
-                                                        <span>•</span>
-                                                        <div className="flex items-center gap-1">
-                                                            <Building className="h-3 w-3" />
-                                                            <span>{destination.city}</span>
-                                                        </div>
-                                                    </>
-                                                )}
-                                            </div>
-
-                                            {/* Explore Button */}
-                                            <Link href={`/destinations/${destination._id}`} className="w-full">
-                                                <Button
-                                                    variant="secondary"
-                                                    className="w-full text-foreground backdrop-blur-sm"
-                                                >
-                                                    Explore Destination
-                                                </Button>
-                                            </Link>
                                         </div>
+                                        <Link
+                                            href={`/destinations/${uiDestinations[activeIndex]?.id ?? uiDestinations[activeIndex]?.id}`}
+                                            className="shrink-0"
+                                        >
+                                            <Button variant="secondary" className="backdrop-blur-sm">
+                                                Explore
+                                            </Button>
+                                        </Link>
                                     </div>
-                                </Card>
-                            </CarouselItem>
-                        ))}
-                    </CarouselContent>
-                </Carousel>
+                                </div>
+                            </div>
+                        </Card>
+                    </div>
+                )}
             </ContentContainer>
         </div>
     );

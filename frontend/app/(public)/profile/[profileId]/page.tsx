@@ -1,13 +1,35 @@
 'use client';
 
 import { useParams } from 'next/navigation';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useAuth } from '@/lib/hooks/useAuth';
+import { getUserById, updateUser } from '@/lib/api/users';
+import { useToast } from '@/components/ui/use-toast';
+
+interface ProfileUser {
+    id?: string;
+    _id?: string;
+    name?: string;
+    email?: string;
+    phone?: string;
+    address?: string;
+    city?: string;
+    country?: string;
+    bio?: string;
+    createdAt?: string;
+}
 
 export default function ProfilePage() {
     const params = useParams();
-    const profileId = params.profileId;
+    const profileId = typeof params.profileId === 'string' ? params.profileId : '';
+    const { user: currentUser } = useAuth();
+    const { toast } = useToast();
 
+    const [profile, setProfile] = useState<ProfileUser | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const [isEditing, setIsEditing] = useState(false);
+    const [saving, setSaving] = useState(false);
     const [formData, setFormData] = useState({
         name: '',
         email: '',
@@ -18,12 +40,60 @@ export default function ProfilePage() {
         bio: '',
     });
 
-    // TODO: Fetch user profile from API
+    const isOwnProfile = !!currentUser?.id && (currentUser.id === profileId || currentUser.id === (profile as { _id?: string })?._id);
 
-    const handleSubmit = (e: React.FormEvent) => {
+    useEffect(() => {
+        if (!profileId) {
+            setLoading(false);
+            return;
+        }
+        let cancelled = false;
+        getUserById(profileId)
+            .then((data: ProfileUser) => {
+                if (cancelled) return;
+                setProfile(data);
+                const u = data as Record<string, unknown>;
+                setFormData({
+                    name: (u.name as string) ?? '',
+                    email: (u.email as string) ?? '',
+                    phone: (u.phone as string) ?? '',
+                    address: (u.address as string) ?? '',
+                    city: (u.city as string) ?? '',
+                    country: (u.country as string) ?? '',
+                    bio: (u.bio as string) ?? '',
+                });
+            })
+            .catch(() => {
+                if (!cancelled) setError('Profile not found');
+            })
+            .finally(() => {
+                if (!cancelled) setLoading(false);
+            });
+        return () => { cancelled = true; };
+    }, [profileId]);
+
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        // TODO: Update profile via API
-        setIsEditing(false);
+        if (!profileId || !isOwnProfile) return;
+        setSaving(true);
+        try {
+            const form = new FormData();
+            form.append('name', formData.name);
+            form.append('email', formData.email);
+            if (formData.phone) form.append('phone', formData.phone);
+            if (formData.address) form.append('address', formData.address);
+            if (formData.city) form.append('city', formData.city);
+            if (formData.country) form.append('country', formData.country);
+            if (formData.bio) form.append('bio', formData.bio);
+            await updateUser(profileId, form);
+            setProfile((prev) => (prev ? { ...prev, ...formData } : null));
+            setIsEditing(false);
+            toast({ title: 'Profile updated' });
+        } catch (err: unknown) {
+            toast({ variant: 'destructive', title: 'Error', description: (err as Error)?.message ?? 'Failed to update profile' });
+        } finally {
+            setSaving(false);
+        }
     };
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -33,20 +103,44 @@ export default function ProfilePage() {
         });
     };
 
+    if (loading) {
+        return (
+            <div className="w-full mx-auto px-4 py-16">
+                <div className="max-w-4xl mx-auto text-center text-muted-foreground">Loading...</div>
+            </div>
+        );
+    }
+    if (error || !profile) {
+        return (
+            <div className="w-full mx-auto px-4 py-16">
+                <div className="max-w-4xl mx-auto text-center">
+                    <p className="text-muted-foreground">{error ?? 'Profile not found'}</p>
+                </div>
+            </div>
+        );
+    }
+
+    const displayName = profile.name ?? 'User';
+    const displayEmail = profile.email ?? '';
+    const memberYear = profile.createdAt ? new Date(profile.createdAt).getFullYear() : '';
+
     return (
         <div className="w-full mx-auto px-4 py-16 transition-all duration-300">
             <div className="max-w-4xl mx-auto">
                 <div className="mb-8 flex justify-between items-center">
                     <div>
                         <h1 className="text-4xl font-bold mb-2">Profile</h1>
-                        <p className="text-muted-foreground">Profile ID: {profileId}</p>
+                        <p className="text-muted-foreground">{displayEmail || profileId}</p>
                     </div>
-                    <button
-                        onClick={() => setIsEditing(!isEditing)}
-                        className="px-6 py-2 border border-primary text-primary rounded-lg hover:bg-accent transition"
-                    >
-                        {isEditing ? 'Cancel' : 'Edit Profile'}
-                    </button>
+                    {isOwnProfile && (
+                        <button
+                            type="button"
+                            onClick={() => setIsEditing(!isEditing)}
+                            className="px-6 py-2 border border-primary text-primary rounded-lg hover:bg-accent transition"
+                        >
+                            {isEditing ? 'Cancel' : 'Edit Profile'}
+                        </button>
+                    )}
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -56,17 +150,15 @@ export default function ProfilePage() {
                             <div className="w-32 h-32 mx-auto mb-4 bg-primary/20 rounded-full flex items-center justify-center">
                                 <span className="text-4xl text-primary">👤</span>
                             </div>
-                            <h2 className="text-xl font-semibold mb-2">User Name</h2>
-                            <p className="text-sm text-muted-foreground mb-4">user@example.com</p>
+                            <h2 className="text-xl font-semibold mb-2">{displayName}</h2>
+                            <p className="text-sm text-muted-foreground mb-4">{displayEmail}</p>
                             <div className="space-y-2 text-sm">
-                                <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Member Since:</span>
-                                    <span className="font-medium">2024</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Bookings:</span>
-                                    <span className="font-medium">0</span>
-                                </div>
+                                {memberYear && (
+                                    <div className="flex justify-between">
+                                        <span className="text-muted-foreground">Member Since:</span>
+                                        <span className="font-medium">{memberYear}</span>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -155,9 +247,10 @@ export default function ProfilePage() {
                                     </div>
                                     <button
                                         type="submit"
-                                        className="w-full bg-primary text-primary-foreground py-3 rounded-lg hover:bg-primary/90 transition font-medium"
+                                        disabled={saving}
+                                        className="w-full bg-primary text-primary-foreground py-3 rounded-lg hover:bg-primary/90 transition font-medium disabled:opacity-70"
                                     >
-                                        Save Changes
+                                        {saving ? 'Saving...' : 'Save Changes'}
                                     </button>
                                 </div>
                             </form>
@@ -167,23 +260,23 @@ export default function ProfilePage() {
                                 <div className="space-y-4">
                                     <div>
                                         <p className="text-sm text-muted-foreground mb-1">Full Name</p>
-                                        <p className="font-medium">-</p>
+                                        <p className="font-medium">{profile.name ?? '-'}</p>
                                     </div>
                                     <div>
                                         <p className="text-sm text-muted-foreground mb-1">Email</p>
-                                        <p className="font-medium">-</p>
+                                        <p className="font-medium">{profile.email ?? '-'}</p>
                                     </div>
                                     <div>
                                         <p className="text-sm text-muted-foreground mb-1">Phone</p>
-                                        <p className="font-medium">-</p>
+                                        <p className="font-medium">{profile.phone ?? '-'}</p>
                                     </div>
                                     <div>
                                         <p className="text-sm text-muted-foreground mb-1">Address</p>
-                                        <p className="font-medium">-</p>
+                                        <p className="font-medium">{profile.address ?? '-'}</p>
                                     </div>
                                     <div>
                                         <p className="text-sm text-muted-foreground mb-1">Bio</p>
-                                        <p className="font-medium">-</p>
+                                        <p className="font-medium">{profile.bio ?? '-'}</p>
                                     </div>
                                 </div>
                             </div>

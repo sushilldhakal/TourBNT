@@ -59,7 +59,7 @@ export default function ToursPage() {
     };
 
     // Extract tours array from paginated response
-    const tableData = data?.items || data || []; // Handle both paginated response and direct array
+    const tableData = data?.data ?? (Array.isArray(data) ? data : []); // Standard list format: data
 
     const columns: ColumnDef<Tour>[] = [
         {

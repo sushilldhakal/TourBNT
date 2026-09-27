@@ -18,9 +18,11 @@ import { CheckCircle2, XCircle } from 'lucide-react';
 interface TourTabsProps {
     tour: Tour;
     onBookNow?: (departure: any) => void;
+    /** Destination list from relatedData for resolving itinerary destination IDs to names */
+    destinations?: { id: string; name: string }[];
 }
 
-export function TourTabs({ tour, onBookNow }: TourTabsProps) {
+export function TourTabs({ tour, onBookNow, destinations }: TourTabsProps) {
     return (
         <Tabs defaultValue="description" className="w-full">
             <TabsList className="w-full grid grid-cols-4 h-auto gap-1 p-1" role="tablist" aria-label="Tour information tabs">
@@ -83,6 +85,7 @@ export function TourTabs({ tour, onBookNow }: TourTabsProps) {
                         <ItineraryAccordion
                             itinerary={tour.itinerary}
                             outline={tour.outline}
+                            destinations={destinations}
                         />
                     ) : (
                         <div className="text-center py-8 text-muted-foreground text-sm sm:text-base" role="status">
@@ -104,8 +107,8 @@ export function TourTabs({ tour, onBookNow }: TourTabsProps) {
                 />
 
                 {/* Advanced Pricing Options */}
-                {tour.pricingOptionsEnabled && tour.pricingGroups && (
-                    <PricingOptions pricingGroups={tour.pricingGroups} />
+                {tour.pricingOptionsEnabled && tour.pricingOptions && tour.pricingOptions.length > 0 && (
+                    <PricingOptions pricingOptions={tour.pricingOptions} />
                 )}
 
                 {/* Departure Dates */}
@@ -118,7 +121,6 @@ export function TourTabs({ tour, onBookNow }: TourTabsProps) {
                             salePrice={tour.salePrice}
                             saleEnabled={tour.saleEnabled}
                             pricingOptions={tour.pricingOptions}
-                            pricingGroups={tour.pricingGroups}
                             pricePerPerson={tour.pricePerPerson}
                             onBookNow={onBookNow}
                         />

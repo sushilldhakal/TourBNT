@@ -52,7 +52,8 @@ export function TourFacts() {
     const [currentFactIndex, setCurrentFactIndex] = useState<number | null>(null);
     const [openPopovers, setOpenPopovers] = useState<Record<number, boolean>>({});
 
-    const { data: masterFacts } = useFacts(userId, !!userId);
+    const { data: masterFacts } = useFacts(userId, !!userId) as { data: { data: FactData[] } };
+    const masterFactsData = (masterFacts as { data?: FactData[] })?.data || [];
 
     const hasManuallyAddedFacts = useMemo(() => {
         return Array.isArray(factsFields) && factsFields.length > 0;
@@ -105,7 +106,7 @@ export function TourFacts() {
     useEffect(() => {
         if (
             Array.isArray(factsFields) && factsFields.length > 0 &&
-            Array.isArray(masterFacts) && masterFacts.length > 0
+            Array.isArray(masterFactsData) && masterFactsData.length > 0
         ) {
             factsFields.forEach((field, index: number) => {
                 // Access fields from useFieldArray - they have optional properties
@@ -113,7 +114,7 @@ export function TourFacts() {
                 const fieldName = 'name' in field ? field.name : undefined;
 
                 if (fieldId) {
-                    const matchedFact = masterFacts.find((f: FactData) => f.id === fieldId);
+                    const matchedFact = masterFactsData.find((f: FactData) => f.id === fieldId);
                     if (matchedFact) {
                         setValue(`facts.${index}.factId`, matchedFact.id, { shouldDirty: false });
                         setValue(`facts.${index}.name`, matchedFact.name, { shouldDirty: false });
@@ -121,7 +122,7 @@ export function TourFacts() {
                         setValue(`facts.${index}.icon`, matchedFact.icon, { shouldDirty: false });
                     }
                 } else if (fieldName) {
-                    const matchedFact = masterFacts.find((f: FactData) =>
+                    const matchedFact = masterFactsData.find((f: FactData) =>
                         f.name === fieldName || f.name?.trim() === fieldName?.trim()
                     );
                     if (matchedFact) {
@@ -133,7 +134,7 @@ export function TourFacts() {
                 }
             });
         }
-    }, [factsFields, masterFacts, setValue]);
+    }, [factsFields, masterFactsData, setValue]);
 
     const handleDragStart = (e: React.DragEvent, index: number) => {
         e.dataTransfer.effectAllowed = 'move';
@@ -155,8 +156,8 @@ export function TourFacts() {
 
     // ✅ HELPER: Get master fact options
     const getMasterFactOptions = (factId?: string): string[] => {
-        if (!factId || !masterFacts) return [];
-        const masterFact = Array.isArray(masterFacts) ? masterFacts.find((f: FactData) => f.id === factId) : undefined;
+        if (!factId || !masterFactsData) return [];
+        const masterFact = Array.isArray(masterFactsData) ? masterFactsData.find((f: FactData) => f.id === factId) : undefined;
         return masterFact?.value || [];
     };
 
@@ -277,7 +278,7 @@ export function TourFacts() {
                                         }}
                                         placeholder="Select options"
                                         className="w-full"
-                                        maxDisplayValues={10}
+                                        maxdisplayvalues={10}
                                     />
                                 </FormControl>
                                 <FormMessage />
@@ -403,7 +404,7 @@ export function TourFacts() {
                                                                                     <CommandList>
                                                                                         <CommandEmpty>No facts found.</CommandEmpty>
                                                                                         <CommandGroup>
-                                                                                            {Array.isArray(masterFacts) && masterFacts.map((factItem: FactData) => (
+                                                                                            {Array.isArray(masterFactsData) && masterFactsData.map((factItem: FactData) => (
                                                                                                 <CommandItem
                                                                                                     key={factItem.id}
                                                                                                     value={`${factItem.name} ${factItem.field_type || ''}`}
@@ -509,7 +510,7 @@ export function TourFacts() {
                                                                         <CommandList>
                                                                             <CommandEmpty>No facts found.</CommandEmpty>
                                                                             <CommandGroup>
-                                                                                {Array.isArray(masterFacts) && masterFacts.map((factItem: FactData) => (
+                                                                                {Array.isArray(masterFactsData) && masterFactsData.map((factItem: FactData) => (
                                                                                     <CommandItem
                                                                                         key={factItem.id}
                                                                                         value={`${factItem.name} ${factItem.field_type || ''}`}

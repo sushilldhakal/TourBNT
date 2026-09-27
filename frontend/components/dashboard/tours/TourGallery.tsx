@@ -126,7 +126,7 @@ export function TourGallery() {
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
-                        <ImageIcon className="h-5 w-5" />
+                        <ImageIcon className="h-5 w-5" aria-hidden="true" />
                         Tour Gallery
                     </CardTitle>
                     <CardDescription>
@@ -143,7 +143,7 @@ export function TourGallery() {
                             size="sm"
                             onClick={handleOpenGalleryPicker}
                         >
-                            <ImageIcon className="h-4 w-4 mr-2" />
+                            <ImageIcon className="h-4 w-4 mr-2" aria-hidden="true" />
                             Select from Gallery
                         </Button>
                     </div>
@@ -172,17 +172,17 @@ export function TourGallery() {
                     ) : (
                         <div className="flex flex-col items-center justify-center p-12 rounded-lg border-2 border-dashed border-border text-center bg-secondary/20">
                             <div className="bg-primary/10 p-4 rounded-full mb-4">
-                                <ImageIcon className="h-8 w-8 text-primary" />
+                                <ImageIcon className="h-8 w-8 text-primary" aria-hidden="true" />
                             </div>
-                            <h3 className="font-medium text-lg mb-2">No images added yet</h3>
-                            <p className="text-muted-foreground mb-6 max-w-md">
+                            <h3 className="font-semibold text-lg mb-2">No images added yet</h3>
+                            <p className="text-sm text-muted-foreground mb-6 max-w-md">
                                 Add beautiful images to showcase your tour and attract potential customers
                             </p>
                             <Button
                                 type="button"
                                 onClick={handleOpenGalleryPicker}
                             >
-                                <ImageIcon className="h-4 w-4 mr-2" />
+                                <ImageIcon className="h-4 w-4 mr-2" aria-hidden="true" />
                                 Select from Gallery
                             </Button>
                         </div>
@@ -202,7 +202,9 @@ export function TourGallery() {
                             <Image
                                 src={gallery[selectedIndex].image}
                                 alt={`Gallery ${selectedIndex + 1}`}
-                                className="max-h-full max-w-full object-contain"
+                                fill
+                                sizes="(max-width: 768px) 100vw, 80vw"
+                                className="h-auto w-auto max-h-full max-w-full object-contain"
                             />
                         ) : (
                             <ImageIcon className="h-12 w-12 text-muted-foreground" />
@@ -216,16 +218,18 @@ export function TourGallery() {
                                     size="icon"
                                     className="absolute left-2 top-1/2 -translate-y-1/2 bg-background/80 hover:bg-background"
                                     onClick={goPrev}
+                                    aria-label="Previous image"
                                 >
-                                    <ChevronLeft className="h-6 w-6" />
+                                    <ChevronLeft className="h-6 w-6" aria-hidden="true" />
                                 </Button>
                                 <Button
                                     variant="ghost"
                                     size="icon"
                                     className="absolute right-2 top-1/2 -translate-y-1/2 bg-background/80 hover:bg-background"
                                     onClick={goNext}
+                                    aria-label="Next image"
                                 >
-                                    <ChevronRight className="h-6 w-6" />
+                                    <ChevronRight className="h-6 w-6" aria-hidden="true" />
                                 </Button>
                             </>
                         )}
@@ -255,7 +259,7 @@ export function TourGallery() {
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
-                            <AlertTriangle className="h-5 w-5 text-destructive" />
+                            <AlertTriangle className="h-5 w-5 text-destructive" aria-hidden="true" />
                             Delete Image?
                         </DialogTitle>
                         <DialogDescription>
@@ -363,7 +367,8 @@ function GalleryImageItem({
                     <Image
                         src={item.image}
                         alt={item.alt || `Gallery ${index + 1}`}
-                        fill
+                        width={100}
+                        height={100}
                         className="w-full h-full object-cover"
                         onError={() => setImageError(true)}
                     />

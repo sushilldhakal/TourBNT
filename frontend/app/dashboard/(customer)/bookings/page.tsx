@@ -28,7 +28,7 @@ export default function MyBookingsPage() {
     const [sortBy, setSortBy] = useState<'date' | 'price' | 'created'>('date');
 
     const { data: bookingsData, isLoading, error, refetch } = useUserBookings();
-    const rawBookings = Array.isArray(bookingsData) ? bookingsData : (bookingsData as { bookings?: MyBooking[]; items?: MyBooking[] })?.bookings ?? (bookingsData as { bookings?: MyBooking[]; items?: MyBooking[] })?.items ?? [];
+    const rawBookings = Array.isArray(bookingsData) ? bookingsData : (bookingsData as { bookings?: MyBooking[]; data?: MyBooking[] })?.bookings ?? (bookingsData as { data?: MyBooking[] })?.data ?? [];
     const bookings = useMemo(() => rawBookings.filter((b: MyBooking) => (b as MyBooking & { status?: string }).status === activeTab), [rawBookings, activeTab]);
 
     const filteredBookings = bookings

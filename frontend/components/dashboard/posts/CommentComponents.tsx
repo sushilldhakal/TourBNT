@@ -411,28 +411,28 @@ const CommentComponent = ({ comment: initialComment, depth = 0, onRemove, onRefr
                         onClick={handleLike}
                         disabled={likeMutation.isPending}
                     >
-                        <ThumbsUp className={`mr-2 h-4 w-4 ${isLiked ? 'fill-current' : ''}`} />
+                        <ThumbsUp className={`mr-2 h-4 w-4 ${isLiked ? 'fill-current' : ''}`} aria-hidden="true" />
                         {displayComment.likes ?? 0}
                     </Button>
                     {/* Only show Reply button if canReply is not explicitly false */}
                     {displayComment.canReply !== false && (
                         <Button variant="ghost" size="sm" onClick={handleReply}>
-                            <MessageCircle className="mr-2 h-4 w-4" />
+                            <MessageCircle className="mr-2 h-4 w-4" aria-hidden="true" />
                             Reply
                         </Button>
                     )}
                     <Button variant="ghost" size="sm" onClick={handleShare}>
-                        <Share2 className="mr-2 h-4 w-4" />
+                        <Share2 className="mr-2 h-4 w-4" aria-hidden="true" />
                         Share
                     </Button>
                     <div className="flex items-center text-muted-foreground">
-                        <Eye className="mr-1 h-4 w-4" />
+                        <Eye className="mr-1 h-4 w-4" aria-hidden="true" />
                         <span className="text-sm">{displayComment.views ?? 0}</span>
                     </div>
                 </div>
                 {isAdmin && (
                     <Button variant="ghost" size="sm" onClick={handleRemove}>
-                        <Trash2 className="mr-2 h-4 w-4" />
+                        <Trash2 className="mr-2 h-4 w-4" aria-hidden="true" />
                         Remove
                     </Button>
                 )}
@@ -562,11 +562,11 @@ export function CommentsSection({ postId }: CommentsSectionProps) {
     }
 
     // Handle the response structure
-    // extractResponseData returns { items: [...], pagination: {...} } from sendPaginatedResponse
+    // extractResponseData returns { data: [...], pagination: {...} } from sendPaginatedResponse
     const comments: PostComment[] = Array.isArray(commentsData)
         ? commentsData
-        : (commentsData as { items?: PostComment[]; comments?: PostComment[] })?.items
-        || (commentsData as { items?: PostComment[]; comments?: PostComment[] })?.comments
+        : (commentsData as { data?: PostComment[]; comments?: PostComment[] })?.data
+        || (commentsData as { comments?: PostComment[] })?.comments
         || [];
 
 

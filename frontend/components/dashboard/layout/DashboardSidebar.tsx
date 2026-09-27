@@ -30,6 +30,7 @@ import { Megaphone, Building2 } from 'lucide-react';
 interface DashboardSidebarProps {
     isCollapsed: boolean;
     onToggle: () => void;
+    mobileMenuOpen?: boolean;
 }
 
 interface NavigationItem {
@@ -120,7 +121,7 @@ const baseNavigationItems: NavigationItem[] = [
     },
 ];
 
-export function DashboardSidebar({ isCollapsed, onToggle }: DashboardSidebarProps) {
+export function DashboardSidebar({ isCollapsed, onToggle, mobileMenuOpen = false }: DashboardSidebarProps) {
     const pathname = usePathname();
     const [expandedItems, setExpandedItems] = useState<string[]>([]);
     const { userRole, isHydrated, user } = useAuth();
@@ -200,7 +201,8 @@ export function DashboardSidebar({ isCollapsed, onToggle }: DashboardSidebarProp
         );
     };
 
-    const renderNavItem = (item: NavigationItem, isChild = false) => {
+    const renderNavItem = (item: NavigationItem, isChild = false, forceExpand = false) => {
+        const collapsed = forceExpand ? false : isCollapsed;
         const Icon = item.icon;
         const hasChildren = item.children && item.children.length > 0;
         const isExpanded = expandedItems.includes(item.label);
@@ -214,11 +216,11 @@ export function DashboardSidebar({ isCollapsed, onToggle }: DashboardSidebarProp
                         'w-full flex items-center gap-3 rounded-lg px-3 py-2 transition-all',
                         'hover:bg-blue-100 dark:hover:bg-slate-800',
                         'text-slate-700 dark:text-slate-300',
-                        isCollapsed && 'justify-center'
+                        collapsed && 'justify-center'
                     )}
                 >
                     <Icon className="h-5 w-5 flex-shrink-0" />
-                    {!isCollapsed && (
+                    {!collapsed && (
                         <>
                             <span className="flex-1 text-left">{item.label}</span>
                             {isExpanded ? (
@@ -233,7 +235,7 @@ export function DashboardSidebar({ isCollapsed, onToggle }: DashboardSidebarProp
 
             return (
                 <div key={item.label} className="space-y-1">
-                    {isCollapsed ? (
+                    {collapsed ? (
                         <Tooltip>
                             <TooltipTrigger asChild>
                                 {button}
@@ -245,9 +247,9 @@ export function DashboardSidebar({ isCollapsed, onToggle }: DashboardSidebarProp
                     ) : (
                         button
                     )}
-                    {!isCollapsed && isExpanded && (
+                    {!collapsed && isExpanded && (
                         <div className="ml-4 space-y-1 border-l-2 border-blue-200 dark:border-slate-700 pl-2">
-                            {item.children!.map((child) => renderNavItem(child, true))}
+                            {item.children!.map((child) => renderNavItem(child, true, forceExpand))}
                         </div>
                     )}
                 </div>
@@ -263,16 +265,16 @@ export function DashboardSidebar({ isCollapsed, onToggle }: DashboardSidebarProp
                     isActive
                         ? 'bg-blue-200 dark:bg-slate-700 text-blue-900 dark:text-blue-100'
                         : 'text-slate-700 dark:text-slate-300',
-                    isCollapsed && 'justify-center',
+                    collapsed && 'justify-center',
                     isChild && 'text-sm'
                 )}
             >
                 <Icon className="h-4 w-4 flex-shrink-0" />
-                {!isCollapsed && <span>{item.label}</span>}
+                {!collapsed && <span>{item.label}</span>}
             </Link>
         );
 
-        if (isCollapsed && !isChild) {
+        if (collapsed && !isChild) {
             return (
                 <Tooltip key={item.href || item.label}>
                     <TooltipTrigger asChild>
@@ -290,6 +292,53 @@ export function DashboardSidebar({ isCollapsed, onToggle }: DashboardSidebarProp
 
     return (
         <TooltipProvider delayDuration={300}>
+            {/* Mobile Sidebar */}
+            <div
+                className={cn(
+                    'fixed inset-y-0 left-0 z-50 flex flex-col transition-transform duration-300 overflow-hidden md:hidden',
+                    'bg-gradient-to-b from-blue-50 via-blue-100 to-blue-50 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900',
+                    'border-r border-blue-200 dark:border-slate-700/50 shadow-2xl backdrop-blur-xl w-[280px]',
+                    mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
+                )}
+                style={{ height: '100vh' }}
+            >
+                {/* Mobile Header */}
+                <div className="flex items-center justify-between border-b border-slate-700/50 bg-gradient-to-r from-blue-600/10 to-purple-600/10 backdrop-blur-xs h-[80px] p-4">
+                    <Link
+                        href="/dashboard"
+                        className="flex items-center gap-3 group transition-all duration-300 hover:scale-105"
+                        onClick={onToggle}
+                    >
+                        <div className="relative">
+                            <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg blur-sm opacity-75 group-hover:opacity-100 transition-opacity"></div>
+                            <div className="relative bg-gradient-to-r from-blue-500 to-purple-600 p-2 rounded-lg">
+                                <Package2 className="h-6 w-6 text-white" aria-hidden="true" />
+                            </div>
+                        </div>
+                        <div>
+                            <span className="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+                                TourBNT
+                            </span>
+                            <div className="text-xs text-slate-400 font-medium tracking-wide">Dashboard</div>
+                        </div>
+                    </Link>
+                </div>
+
+                {/* Mobile Navigation - always show labels (forceExpand) */}
+                <nav className="flex-1 overflow-y-auto p-4 space-y-2">
+                    {navigationItems.map((item) => renderNavItem(item, false, true))}
+                </nav>
+
+                {/* Mobile Footer */}
+                <div className="border-t border-slate-700/50 bg-slate-900/50 backdrop-blur-xs p-4">
+                    <div className="flex items-center gap-3 text-xs text-slate-400">
+                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                        <span>System Online</span>
+                    </div>
+                </div>
+            </div>
+
+            {/* Desktop Sidebar */}
             <div
                 className={cn(
                     'hidden md:fixed md:inset-y-0 md:left-0 md:z-40 md:flex flex-col transition-all duration-300 overflow-hidden',
@@ -318,7 +367,7 @@ export function DashboardSidebar({ isCollapsed, onToggle }: DashboardSidebarProp
                         <div className="relative">
                             <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg blur-sm opacity-75 group-hover:opacity-100 transition-opacity"></div>
                             <div className="relative bg-gradient-to-r from-blue-500 to-purple-600 p-2 rounded-lg">
-                                <Package2 className="h-6 w-6 text-white" />
+                                <Package2 className="h-6 w-6 text-white" aria-hidden="true" />
                             </div>
                         </div>
                         <div

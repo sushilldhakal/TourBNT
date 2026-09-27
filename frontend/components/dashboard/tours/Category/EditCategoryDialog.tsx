@@ -170,27 +170,27 @@ export const EditCategoryDialog = ({ categoryId, open, onOpenChange, onSuccess }
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="!max-w-4xl p-0 gap-0 overflow-hidden">
+            <DialogContent className="!max-w-4xl p-0 gap-0 overflow-hidden" aria-describedby="edit-category-description">
                 {/* Header with subtle background */}
-                <div className="bg-muted/50 px-6 py-5 border-b">
+                <div className="bg-muted/50 px-6 py-6 border-b">
                     <DialogHeader>
                         <DialogTitle className="text-xl font-semibold">Edit Category</DialogTitle>
-                        <DialogDescription className="text-muted-foreground">
+                        <DialogDescription id="edit-category-description" className="text-sm text-muted-foreground">
                             Update the category details below
                         </DialogDescription>
                     </DialogHeader>
                 </div>
 
                 <Form {...form}>
-                    <form onSubmit={form.handleSubmit(handleSubmit)} className="flex flex-col">
+                    <form onSubmit={form.handleSubmit(handleSubmit)} className="flex flex-col" aria-label="Edit category form">
                         <div className="max-h-[65vh] overflow-y-auto px-6 py-6">
                             <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
                                 {/* Left Column - Form Fields */}
-                                <div className="lg:col-span-3 space-y-5">
+                                <div className="lg:col-span-3 space-y-6">
                                     {/* Category Details Card */}
-                                    <div className="rounded-lg border bg-card p-5 space-y-4">
-                                        <h3 className="text-sm font-medium text-foreground flex items-center gap-2">
-                                            <FolderOpen className="h-4 w-4 text-primary" />
+                                    <div className="rounded-lg border bg-card p-6 space-y-4">
+                                        <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                                            <FolderOpen className="h-4 w-4 text-primary" aria-hidden="true" />
                                             Category Details
                                         </h3>
 
@@ -199,12 +199,13 @@ export const EditCategoryDialog = ({ categoryId, open, onOpenChange, onSuccess }
                                             name="name"
                                             render={({ field }) => (
                                                 <FormItem>
-                                                    <FormLabel className="text-xs font-medium text-muted-foreground">Name</FormLabel>
+                                                    <FormLabel className="text-sm font-medium">Name</FormLabel>
                                                     <FormControl>
                                                         <Input
                                                             placeholder="e.g. Adventure Tours"
                                                             className="h-10"
                                                             {...field}
+                                                            aria-required="true"
                                                         />
                                                     </FormControl>
                                                     <FormMessage />
@@ -220,7 +221,7 @@ export const EditCategoryDialog = ({ categoryId, open, onOpenChange, onSuccess }
                                                 const isRequired = !isAdmin && category?.approvalStatus === 'approved' || category?.approvalStatus === 'rejected';
                                                 return (
                                                     <FormItem>
-                                                        <FormLabel className="text-xs font-medium text-muted-foreground">
+                                                        <FormLabel className="text-sm font-medium">
                                                             {isRequired
                                                                 ? 'Reason for Change Request *'
                                                                 : 'Reason for Adding Category'}
@@ -234,11 +235,12 @@ export const EditCategoryDialog = ({ categoryId, open, onOpenChange, onSuccess }
                                                                 }
                                                                 className="h-10"
                                                                 {...field}
+                                                                aria-required={isRequired}
                                                             />
                                                         </FormControl>
                                                         <FormMessage />
                                                         {isRequired && (
-                                                            <p className="text-xs text-muted-foreground mt-1.5">
+                                                            <p className="text-xs text-muted-foreground mt-2">
                                                                 Required when requesting changes to an approved category (minimum 10 characters)
                                                             </p>
                                                         )}
@@ -250,11 +252,11 @@ export const EditCategoryDialog = ({ categoryId, open, onOpenChange, onSuccess }
                                 </div>
 
                                 {/* Right Column - Image */}
-                                <div className="lg:col-span-2 space-y-5">
+                                <div className="lg:col-span-2 space-y-6">
                                     {/* Cover Image Card */}
-                                    <div className="rounded-lg border bg-card p-5 space-y-4">
-                                        <h3 className="text-sm font-medium text-foreground flex items-center gap-2">
-                                            <ImageIcon className="h-4 w-4 text-primary" />
+                                    <div className="rounded-lg border bg-card p-6 space-y-4">
+                                        <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                                            <ImageIcon className="h-4 w-4 text-primary" aria-hidden="true" />
                                             Cover Image
                                         </h3>
 
@@ -279,8 +281,9 @@ export const EditCategoryDialog = ({ categoryId, open, onOpenChange, onSuccess }
                                                                     variant="secondary"
                                                                     className="h-9"
                                                                     onClick={() => setDialogOpen(true)}
+                                                                    aria-label="Change cover image"
                                                                 >
-                                                                    <ImageIcon className="h-4 w-4 mr-2" />
+                                                                    <ImageIcon className="h-4 w-4 mr-2" aria-hidden="true" />
                                                                     Change
                                                                 </Button>
                                                                 <Button
@@ -289,19 +292,21 @@ export const EditCategoryDialog = ({ categoryId, open, onOpenChange, onSuccess }
                                                                     variant="destructive"
                                                                     className="h-9"
                                                                     onClick={() => handleRemoveImage(field.onChange)}
+                                                                    aria-label="Remove cover image"
                                                                 >
-                                                                    <Trash2 className="h-4 w-4" />
+                                                                    <Trash2 className="h-4 w-4" aria-hidden="true" />
                                                                 </Button>
                                                             </div>
                                                         </div>
                                                     ) : (
                                                         <button
                                                             type="button"
-                                                            className="w-full aspect-[4/3] rounded-lg border-2 border-dashed border-muted-foreground/25 hover:border-primary/50 hover:bg-muted/50 transition-colors flex flex-col items-center justify-center gap-3 cursor-pointer"
+                                                            className="w-full aspect-[4/3] rounded-lg border-2 border-dashed border-muted-foreground/25 hover:border-primary/50 hover:bg-muted/50 transition-colors flex flex-col items-center justify-center gap-3 cursor-pointer focus:ring-2 focus:ring-primary focus:ring-offset-2"
                                                             onClick={() => setDialogOpen(true)}
+                                                            aria-label="Upload cover image"
                                                         >
                                                             <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center">
-                                                                <ImageIcon className="h-6 w-6 text-muted-foreground" />
+                                                                <ImageIcon className="h-6 w-6 text-muted-foreground" aria-hidden="true" />
                                                             </div>
                                                             <div className="text-center">
                                                                 <p className="text-sm font-medium text-foreground">Upload cover image</p>
@@ -338,9 +343,9 @@ export const EditCategoryDialog = ({ categoryId, open, onOpenChange, onSuccess }
 
                                     {/* Featured Tours (Admin only) */}
                                     {isAdmin && (
-                                        <div className="rounded-lg border bg-card p-5 space-y-4">
-                                            <h3 className="text-sm font-medium text-foreground flex items-center gap-2">
-                                                <FolderOpen className="h-4 w-4 text-primary" />
+                                        <div className="rounded-lg border bg-card p-6 space-y-4">
+                                            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                                                <FolderOpen className="h-4 w-4 text-primary" aria-hidden="true" />
                                                 Featured Tours
                                             </h3>
 
@@ -357,7 +362,7 @@ export const EditCategoryDialog = ({ categoryId, open, onOpenChange, onSuccess }
                                                                     return val;
                                                                 } else if (val && typeof val === 'object') {
                                                                     // Handle TourObject or SelectValue objects
-                                                                    return (val as TourObject)._id || (val as TourObject).id || '';
+                                                                    return (val as TourObject).id ||  '';
                                                                 }
                                                                 return '';
                                                             })
@@ -369,7 +374,7 @@ export const EditCategoryDialog = ({ categoryId, open, onOpenChange, onSuccess }
                                                             <FormControl>
                                                                 <MultiSelect
                                                                     options={(tourTitles as TourTitle[] || []).map((item: TourTitle) => ({
-                                                                        value: item._id,
+                                                                        value: item.id,
                                                                         label: item.code ? `${item.title} (${item.code})` : item.title,
                                                                     }))}
                                                                     defaultValue={normalizedValue}
@@ -392,19 +397,23 @@ export const EditCategoryDialog = ({ categoryId, open, onOpenChange, onSuccess }
                             </div>
 
                             {/* Full width Description */}
-                            <div className="mt-5">
-                                <div className="rounded-lg border bg-card p-5 space-y-4">
+                            <div className="mt-6">
+                                <div className="rounded-lg border bg-card p-6 space-y-4">
                                     <FormField
                                         control={form.control}
                                         name="description"
                                         render={({ field }) => (
                                             <FormItem>
-                                                <div className="flex items-center justify-between mb-2">
-                                                    <FormLabel className="text-sm font-medium flex items-center gap-2">
-                                                        <FileText className="h-4 w-4 text-primary" />
+                                                <div className="flex items-center justify-between mb-3">
+                                                    <FormLabel className="text-sm font-semibold flex items-center gap-2">
+                                                        <FileText className="h-4 w-4 text-primary" aria-hidden="true" />
                                                         Description
                                                     </FormLabel>
-                                                    <span className={`text-xs ${remainingChars < 0 ? 'text-destructive font-semibold' : remainingChars < 50 ? 'text-orange-500' : 'text-muted-foreground'}`}>
+                                                    <span 
+                                                        className={`text-xs font-medium ${remainingChars < 0 ? 'text-destructive' : remainingChars < 50 ? 'text-orange-500' : 'text-muted-foreground'}`}
+                                                        role="status"
+                                                        aria-live="polite"
+                                                    >
                                                         {descriptionLength} / {maxDescriptionLength} characters
                                                         {remainingChars < 0 && ' (exceeds limit)'}
                                                     </span>
@@ -449,6 +458,7 @@ export const EditCategoryDialog = ({ categoryId, open, onOpenChange, onSuccess }
                                 type="button"
                                 variant="ghost"
                                 onClick={() => onOpenChange(false)}
+                                aria-label="Cancel editing"
                             >
                                 Cancel
                             </Button>
@@ -456,15 +466,16 @@ export const EditCategoryDialog = ({ categoryId, open, onOpenChange, onSuccess }
                                 type="submit"
                                 disabled={updateMutation.isPending}
                                 className="min-w-[120px]"
+                                aria-label="Save category changes"
                             >
                                 {updateMutation.isPending ? (
                                     <>
-                                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                        <Loader2 className="h-4 w-4 mr-2 animate-spin" aria-hidden="true" />
                                         Saving...
                                     </>
                                 ) : (
                                     <>
-                                        <Save className="h-4 w-4 mr-2" />
+                                        <Save className="h-4 w-4 mr-2" aria-hidden="true" />
                                         Save Changes
                                     </>
                                 )}

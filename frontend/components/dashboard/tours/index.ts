@@ -4,6 +4,7 @@
  */
 
 export { TourEditorLayout } from './TourEditorLayout';
+export { ApplyPresetsBar } from './ApplyPresetsBar';
 export { TourBasicInfo } from './TourBasicInfo';
 export { TourPricingDates } from './TourPricingDates';
 export { TourItinerary } from './TourItinerary';

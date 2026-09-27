@@ -1,43 +1,40 @@
 'use client';
 
 import { formatPrice } from '@/lib/tourUtils';
-import { PricingGroup, PricingOption } from '@/types/types';
+import { PricingOption } from '@/types/types';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Users, Calendar } from 'lucide-react';
 
 interface PricingOptionsProps {
-    pricingGroups?: PricingGroup[];
+    pricingOptions?: PricingOption[];
     currency?: string;
 }
 
-export function PricingOptions({ pricingGroups, currency = '$' }: PricingOptionsProps) {
-    if (!pricingGroups || pricingGroups.length === 0) {
+export function PricingOptions({ pricingOptions, currency = '$' }: PricingOptionsProps) {
+    if (!pricingOptions || pricingOptions.length === 0) {
         return null;
     }
 
     return (
         <section className="space-y-4 sm:space-y-6" aria-labelledby="pricing-options-heading">
             <h3 id="pricing-options-heading" className="text-lg sm:text-xl font-semibold">Pricing Options</h3>
-
-            {pricingGroups.map((group, groupIndex) => (
-                <Card key={groupIndex}>
-                    <CardHeader className="p-4 sm:p-6">
-                        <CardTitle className="text-base sm:text-lg">{group.label}</CardTitle>
-                    </CardHeader>
-                    <CardContent className="p-4 sm:p-6 pt-0">
-                        <div className="space-y-3 sm:space-y-4" role="list" aria-label={`${group.label} options`}>
-                            {group.options.map((option, optionIndex) => (
-                                <PricingOptionCard
-                                    key={optionIndex}
-                                    option={option}
-                                    currency={currency}
-                                />
-                            ))}
-                        </div>
-                    </CardContent>
-                </Card>
-            ))}
+            <Card>
+                <CardHeader className="p-4 sm:p-6">
+                    <CardTitle className="text-base sm:text-lg">Options</CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 sm:p-6 pt-0">
+                    <div className="space-y-3 sm:space-y-4" role="list" aria-label="Pricing options">
+                        {pricingOptions.map((option, optionIndex) => (
+                            <PricingOptionCard
+                                key={option.id || optionIndex}
+                                option={option}
+                                currency={currency}
+                            />
+                        ))}
+                    </div>
+                </CardContent>
+            </Card>
         </section>
     );
 }
@@ -89,7 +86,9 @@ function PricingOptionCard({ option, currency }: PricingOptionCardProps) {
     const categoryDisplay =
         option.category === 'custom' && option.customCategory
             ? option.customCategory
-            : option.category.charAt(0).toUpperCase() + option.category.slice(1);
+            : option.category?.charAt(0).toUpperCase() + option.category?.slice(1) || '';
+
+    const paxRange = option.paxRange || { min: 1, max: 99 };
 
     return (
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between p-3 sm:p-4 border rounded-lg hover:bg-accent/50 transition-colors gap-3" role="listitem">
@@ -107,9 +106,9 @@ function PricingOptionCard({ option, currency }: PricingOptionCardProps) {
                     <div className="flex items-center gap-1">
                         <Users className="h-3 w-3 sm:h-4 sm:w-4" aria-hidden="true" />
                         <span>
-                            {option.minPax === option.maxPax
-                                ? `${option.minPax} pax`
-                                : `${option.minPax}-${option.maxPax} pax`}
+                            {paxRange.min === paxRange.max
+                                ? `${paxRange.min} pax`
+                                : `${paxRange.min}-${paxRange.max} pax`}
                         </span>
                     </div>
 

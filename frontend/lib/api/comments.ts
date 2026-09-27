@@ -53,6 +53,9 @@ export const editComment = async (commentData: FormData, commentId: string) => {
  * Get all comments for a specific post
  */
 export const getCommentsByPost = async (postId: string) => {
+    if (!postId || postId === 'undefined') {
+        throw new Error('Post ID is required');
+    }
     try {
         const response = await api.get(`/posts/${postId}/comments`);
         return extractResponseData(response);
@@ -96,7 +99,7 @@ export const addReply = async (
     commentId: string
 ) => {
     try {
-        const response = await api.post(`/comments/reply/${commentId}`, data);
+        const response = await api.post(`/comments/${commentId}/replies`, data);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'adding reply');
@@ -108,7 +111,7 @@ export const addReply = async (
  */
 export const likeComment = async (commentId: string, userId: string) => {
     try {
-        const response = await api.patch(`/comments/like/${commentId}`, { userId });
+        const response = await api.post(`/comments/${commentId}/likes`, { userId });
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'liking comment');

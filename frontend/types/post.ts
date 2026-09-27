@@ -41,7 +41,10 @@ export interface PostListItem {
 };
 
 export interface PostsListResponse {
-    items: PostListItem[];
+    /** Standard API list key (prefer over items) */
+    data?: PostListItem[];
+    /** @deprecated Use data. Kept for backward compatibility. */
+    items?: PostListItem[];
     pagination?: {
         page: number;
         limit: number;
@@ -49,4 +52,4 @@ export interface PostsListResponse {
         totalPages: number;
     };
     message?: string;
-};
+}

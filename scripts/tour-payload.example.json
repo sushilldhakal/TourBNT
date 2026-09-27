@@ -1,0 +1,333 @@
+{
+  "title": "Tour JSON",
+  "code": "JSON-XXXX-XXXX",
+  "excerpt": "A tour created via script with JSON payload (no web UI).",
+  "description": {
+    "type": "doc",
+    "content": [
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "This tour was created by posting a JSON payload to the API without using the web UI. "
+          },
+          {
+            "type": "text",
+            "text": "The description must be at least 10 characters.",
+            "marks": [{ "type": "bold" }]
+          },
+          {
+            "type": "text",
+            "text": " Add more content here as needed."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "This is a second paragraph to show how the server saves rich text as-is."
+          }
+        ]
+      }
+    ]
+  },
+  "tourStatus": "Published",
+  "coverImage": "",
+  "file": "",
+  "map": "",
+  "destination": "69786c32ce32e5e5508a1ba2",
+  "price": 99,
+  "originalPrice": 129,
+  "pricePerPerson": true,
+  "groupSize": 1,
+  "minSize": 1,
+  "maxSize": 30,
+  "pricingOptionsEnabled": true,
+  "pricingOptions": [
+    {
+      "id": "opt-adult",
+      "name": "Adult",
+      "price": 99,
+      "category": "adult",
+      "customCategory": "",
+      "paxRange": { "min": 1, "max": 10 },
+      "discountEnabled": true,
+      "discount": { "type": "percentage", "value": 10, "dateRange": { "from": "2026-01-01", "to": "2026-12-31" } },
+      "isActive": true
+    },
+    {
+      "id": "opt-child",
+      "name": "Child",
+      "price": 49,
+      "category": "child",
+      "customCategory": "",
+      "paxRange": { "min": 1, "max": 10 },
+      "discountEnabled": true,
+      "discount": { "type": "percentage", "value": 20, "dateRange": { "from": "2026-01-01", "to": "2026-06-30" } },
+      "isActive": true
+    }
+  ],
+  "discountEnabled": true,
+  "discount": {
+    "type": "percentage",
+    "value": 15,
+    "dateRange": { "from": "2026-01-01", "to": "2026-12-31" }
+  },
+  "priceLockDate": "2026-06-01T00:00:00.000Z",
+  "tourDates": {
+    "type": "multiple",
+    "days": 3,
+    "nights": 2,
+    "dateRange": { "from": "2026-03-01", "to": "2026-04-30" },
+    "departures": [
+      {
+        "id": "dep-1",
+        "label": "March 2026",
+        "dateRange": { "from": "2026-03-01", "to": "2026-03-03" },
+        "selectedPricingOptions": ["opt-adult", "opt-child"],
+        "recurrence": { "enabled": false, "pattern": "weekly", "endDate": null },
+        "capacity": 20
+      },
+      {
+        "id": "dep-2",
+        "label": "April 2026",
+        "dateRange": { "from": "2026-04-15", "to": "2026-04-17" },
+        "selectedPricingOptions": ["opt-adult", "opt-child"],
+        "recurrence": { "enabled": false, "pattern": "weekly", "endDate": null },
+        "capacity": 15
+      }
+    ],
+    "recurrence": { "enabled": false, "pattern": "weekly", "endDate": null },
+    "selectedPricingOptions": ["opt-adult", "opt-child"],
+    "capacity": 20
+  },
+  "category": [
+    "69786924ce32e5e5508a1b31"
+  ],
+  "itinerary": [
+    {
+      "day": "Day 1",
+      "title": "Arrival",
+      "description": "Welcome and orientation at the meeting point.",
+      "destination": "69786c32ce32e5e5508a1ba2"
+    },
+    {
+      "day": "Day 2",
+      "title": "Main activity",
+      "description": "Full day tour and activities.",
+      "destination": "69786c32ce32e5e5508a1ba2"
+    },
+    {
+      "day": "Day 3",
+      "title": "Departure",
+      "description": "Check-out and transfer to departure point.",
+      "destination": "69786c32ce32e5e5508a1ba2"
+    }
+  ],
+  "outline": {
+    "type": "doc",
+    "content": [
+      {
+        "type": "paragraph",
+        "content": [
+          { "type": "text", "text": "Day 1: Arrival." }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          { "type": "text", "text": "Day 2: Main activity." }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          { "type": "text", "text": "Day 3: Departure." }
+        ]
+      }
+    ]
+  },
+  "include": {
+    "type": "doc",
+    "content": [
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "This tour was created by posting a JSON payload to the API without using the web UI. "
+          },
+          {
+            "type": "text",
+            "text": "The description must be at least 10 characters.",
+            "marks": [{ "type": "bold" }]
+          },
+          {
+            "type": "text",
+            "text": " Add more content here as needed."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "This is a second paragraph to show how the server saves rich text as-is."
+          }
+        ]
+      }
+    ]
+  },
+  "exclude": {
+    "type": "doc",
+    "content": [
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "This tour was created by posting a JSON payload to the API without using the web UI. "
+          },
+          {
+            "type": "text",
+            "text": "The description must be at least 10 characters.",
+            "marks": [{ "type": "bold" }]
+          },
+          {
+            "type": "text",
+            "text": " Add more content here as needed."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "This is a second paragraph to show how the server saves rich text as-is."
+          }
+        ]
+      }
+    ]
+  },
+  "facts": [
+    {
+      "factId": "696a29ece3f1b5e9121abda7",
+      "name": "Sushil Dhakal",
+      "field_type": "Single Select",
+      "value": ["dafaf"],
+      "icon": "fa/FaAmazonPay"
+    },
+    {
+      "factId": "696a29f5e3f1b5e9121abdaa",
+      "name": "rafting",
+      "field_type": "Plain Text",
+      "value": [],
+      "icon": "fa/FaAngry"
+    },
+    {
+      "factId": "696a2a02e3f1b5e9121abdad",
+      "name": "sheela paudel",
+      "field_type": "Multi Select",
+      "value": ["daf", "adf", "rewtwetw"],
+      "icon": "fa/FaArchway"
+    },
+    {
+      "factId": "697a26039eb194c20d5bc805",
+      "name": "raja mani poudel",
+      "field_type": "Single Select",
+      "value": ["adf a fa", "dasf ", "adsf ads f"],
+      "icon": "fa/FaAffiliatetheme"
+    },
+    {
+      "factId": "697a27c39eb194c20d5bc8c4",
+      "name": "tyghbjk",
+      "field_type": "Multi Select",
+      "value": ["lkmrfewa ", "fa a", "adf ", "adsf a"],
+      "icon": "fa/FaHospital"
+    }
+  ],
+  "faqs": [
+    {
+      "faqId": "67f9de4477be409e2531ab02",
+      "question": "this is a unique faq for edit ",
+      "answer": "this is a unique faq for admin this is a unique faq for admin this is a unique faq for admin this is a unique faq for admin this is a unique faq for admin this is a unique faq for admin "
+    },
+    {
+      "faqId": "691c47c1761e680d7b7b188e",
+      "question": "modified",
+      "answer": " need to add the same transformation for FAQs."
+    },
+    {
+      "faqId": "696a0930faf825531763be28",
+      "question": "this is a test",
+      "answer": "this is a test "
+    },
+    {
+      "faqId": "696a09effaf825531763be39",
+      "question": "hellow there ",
+      "answer": "this is the ans "
+    },
+    {
+      "faqId": "696a0a19faf825531763be3e",
+      "question": "this is just a normal test",
+      "answer": "this is also a normal test "
+    },
+    {
+      "faqId": "696a0bacfaf825531763be43",
+      "question": "this is validation ",
+      "answer": "just a test"
+    },
+    {
+      "faqId": "696a0e88faf825531763be46",
+      "question": "this is jut ",
+      "answer": "dafasfasfa"
+    },
+    {
+      "faqId": "696a0f60faf825531763be4b",
+      "question": "hwllo there ",
+      "answer": "this is just"
+    },
+    {
+      "faqId": "696a10a1faf825531763be4e",
+      "question": "hadfa ",
+      "answer": "asdfdajsfnasf fads "
+    },
+    {
+      "faqId": "696a11aafaf825531763be58",
+      "question": "heafda dasf ",
+      "answer": "alfjhadfkjnadf"
+    }
+  ],
+  "gallery": [
+    {
+      "image": "https://example.com/image1.jpg",
+      "alt": "Tour highlight 1",
+      "sortOrder": 0,
+      "isFeatured": true
+    },
+    {
+      "image": "https://example.com/image2.jpg",
+      "alt": "Tour highlight 2",
+      "sortOrder": 1,
+      "isFeatured": false
+    }
+  ],
+  "location": {
+    "street": "123 Example St",
+    "city": "Melbourne",
+    "state": "VIC",
+    "country": "Australia",
+    "lat": -37.8136,
+    "lng": 144.9631
+  },
+  "enquiry": true,
+  "isSpecialOffer": false,
+  "paxPresetId": "",
+  "discountPresetId": "",
+  "pricingPresetIds": []
+}

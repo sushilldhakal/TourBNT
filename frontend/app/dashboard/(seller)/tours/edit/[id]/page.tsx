@@ -8,6 +8,7 @@ import { ArrowLeft, Save, Loader2, Trash2, AlertTriangle } from 'lucide-react';
 import { TourProvider, useTourContext } from '@/providers/TourProvider';
 import { TourEditorLayout } from '@/components/dashboard/tours/TourEditorLayout';
 import {
+    ApplyPresetsBar,
     TourBasicInfo,
     TourPricingDates,
     TourItinerary,
@@ -101,11 +102,23 @@ function TourForm() {
         },
     });
 
+    const submitWithLog = React.useCallback(
+        (values: Parameters<typeof onSubmit>[0]) => {
+            console.log('[Edit Tour] Payload sent to server (format):', JSON.stringify(values, null, 2));
+            console.log('[Edit Tour] Payload (object):', values);
+            return onSubmit(values);
+        },
+        [onSubmit]
+    );
+
     const handleSave = async () => {
+        const current = form.getValues();
+        console.log('[Edit Tour] Save clicked – current form values (format):', JSON.stringify(current, null, 2));
+        console.log('[Edit Tour] Save clicked – current form values (object):', current);
         try {
-            await handleSubmit(onSubmit)();
+            await handleSubmit(submitWithLog)();
         } catch (error: any) {
-            console.error('Failed to create tour:', error);
+            console.error('Failed to update tour:', error);
         }
     };
 
@@ -133,12 +146,19 @@ function TourForm() {
                 }}
                 actions={
                     <>
-                        <Button variant="destructive">Delete</Button>
+                        <Button variant="destructive" onClick={() => setShowDeleteDialog(true)}>Delete</Button>
                         <Button>Update Tour</Button>
                     </>
                 }
             />
 
+            <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Delete Tour</DialogTitle>
+                    </DialogHeader>
+                </DialogContent>
+            </Dialog>
             {submitError && (
                 <Alert variant="destructive">
                     <AlertCircle className="h-4 w-4" />
@@ -157,7 +177,8 @@ function TourForm() {
                 </Alert>
             )}
 
-            <form onSubmit={handleSubmit(onSubmit)}>
+            <form onSubmit={handleSubmit(submitWithLog)}>
+                <ApplyPresetsBar />
                 <TourEditorLayout onSave={handleSave} saveLabel="Update Tour">
                     <TabsContent value="overview" className="mt-0">
                         <TourBasicInfo />

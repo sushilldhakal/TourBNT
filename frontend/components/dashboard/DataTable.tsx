@@ -143,7 +143,7 @@ export function DataTable<TData = unknown>({
                 <div className="flex items-center justify-between gap-4">
                     <div className="flex items-center gap-4 flex-1">
                         <div className="relative max-w-sm">
-                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" aria-hidden="true" />
                             <Input
                                 placeholder={place}
                                 value={(table.getColumn(column)?.getFilterValue() as string) ?? ""}
@@ -154,7 +154,7 @@ export function DataTable<TData = unknown>({
                             />
                         </div>
                         <Badge variant="secondary" className="flex items-center gap-1">
-                            <Filter className="h-3 w-3" />
+                            <Filter className="h-3 w-3" aria-hidden="true" />
                             {table.getFilteredRowModel().rows.length} rows
                         </Badge>
                     </div>
@@ -163,9 +163,9 @@ export function DataTable<TData = unknown>({
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button variant="outline" size="sm">
-                                    <Filter className="h-4 w-4 mr-2" />
+                                    <Filter className="h-4 w-4 mr-2" aria-hidden="true" />
                                     Columns
-                                    <ChevronDown className="ml-2 h-4 w-4" />
+                                    <ChevronDown className="ml-2 h-4 w-4" aria-hidden="true" />
                                 </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-48">
@@ -186,7 +186,7 @@ export function DataTable<TData = unknown>({
                                             >
                                                 {column.id === 'actions' ? (
                                                     <div className="flex items-center gap-2">
-                                                        <MoreHorizontal className="h-3 w-3" />
+                                                        <MoreHorizontal className="h-3 w-3" aria-hidden="true" />
                                                         Actions
                                                     </div>
                                                 ) : (
@@ -225,12 +225,12 @@ export function DataTable<TData = unknown>({
                                                     {canSort && (
                                                         <div className="flex flex-col">
                                                             {header.column.getIsSorted() === 'asc' ? (
-                                                                <SortAsc className="h-3 w-3 text-primary" />
+                                                                <SortAsc className="h-3 w-3 text-primary" aria-hidden="true" />
                                                             ) : header.column.getIsSorted() === 'desc' ? (
-                                                                <SortDesc className="h-3 w-3 text-primary" />
+                                                                <SortDesc className="h-3 w-3 text-primary" aria-hidden="true" />
                                                             ) : (
                                                                 <div className="h-3 w-3 opacity-50">
-                                                                    <SortAsc className="h-3 w-3" />
+                                                                    <SortAsc className="h-3 w-3" aria-hidden="true" />
                                                                 </div>
                                                             )}
                                                         </div>
@@ -338,8 +338,9 @@ export function DataTable<TData = unknown>({
                                     onClick={() => table.firstPage()}
                                     disabled={!table.getCanPreviousPage()}
                                     className="h-8 w-8 p-0"
+                                    aria-label="Go to first page"
                                 >
-                                    <ChevronsLeft className="h-4 w-4" />
+                                    <ChevronsLeft className="h-4 w-4" aria-hidden="true" />
                                 </Button>
                                 <Button
                                     variant="outline"
@@ -347,8 +348,9 @@ export function DataTable<TData = unknown>({
                                     onClick={() => table.previousPage()}
                                     disabled={!table.getCanPreviousPage()}
                                     className="h-8 w-8 p-0"
+                                    aria-label="Go to previous page"
                                 >
-                                    <ChevronLeft className="h-4 w-4" />
+                                    <ChevronLeft className="h-4 w-4" aria-hidden="true" />
                                 </Button>
                                 <Button
                                     variant="outline"
@@ -356,8 +358,9 @@ export function DataTable<TData = unknown>({
                                     onClick={() => table.nextPage()}
                                     disabled={!table.getCanNextPage()}
                                     className="h-8 w-8 p-0"
+                                    aria-label="Go to next page"
                                 >
-                                    <ChevronRight className="h-4 w-4" />
+                                    <ChevronRight className="h-4 w-4" aria-hidden="true" />
                                 </Button>
                                 <Button
                                     variant="outline"
@@ -365,8 +368,9 @@ export function DataTable<TData = unknown>({
                                     onClick={() => table.lastPage()}
                                     disabled={!table.getCanNextPage()}
                                     className="h-8 w-8 p-0"
+                                    aria-label="Go to last page"
                                 >
-                                    <ChevronsRight className="h-4 w-4" />
+                                    <ChevronsRight className="h-4 w-4" aria-hidden="true" />
                                 </Button>
                             </div>
                         </div>

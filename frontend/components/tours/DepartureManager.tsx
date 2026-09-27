@@ -23,7 +23,6 @@ interface DepartureManagerProps {
     salePrice?: number;
     saleEnabled?: boolean;
     pricingOptions?: PricingOption[];
-    pricingGroups?: { label: string; options: PricingOption[] }[];
     pricePerPerson?: boolean;
     onBookNow?: (departure: Departure) => void;
 }
@@ -34,7 +33,6 @@ export function DepartureManager({
     salePrice,
     saleEnabled,
     pricingOptions,
-    pricingGroups,
     pricePerPerson = true,
     onBookNow,
 }: DepartureManagerProps) {
@@ -199,7 +197,6 @@ export function DepartureManager({
                             salePrice={salePrice}
                             saleEnabled={saleEnabled}
                             pricingOptions={pricingOptions}
-                            pricingGroups={pricingGroups}
                             pricePerPerson={pricePerPerson}
                             onBookNow={() => handleBookNow(departure)}
                         />
@@ -261,7 +258,6 @@ interface DepartureCardProps {
     salePrice?: number;
     saleEnabled?: boolean;
     pricingOptions?: PricingOption[];
-    pricingGroups?: { label: string; options: PricingOption[] }[];
     pricePerPerson?: boolean;
     onBookNow: () => void;
 }
@@ -272,7 +268,6 @@ function DepartureCard({
     salePrice,
     saleEnabled,
     pricingOptions,
-    pricingGroups,
     pricePerPerson,
     onBookNow,
 }: DepartureCardProps) {
@@ -280,40 +275,17 @@ function DepartureCard({
     const pricing = calculateDeparturePrice(
         departure,
         basePrice,
-        salePrice,
-        saleEnabled,
-        pricingOptions,
-        pricingGroups
+        pricingOptions
     );
 
     // Get selected pricing options details
     const selectedOptions = useMemo(() => {
-        if (!departure.selectedPricingOptions) return [];
+        if (!departure.selectedPricingOptions || !pricingOptions) return [];
 
-        const options: PricingOption[] = [];
-
-        // Search in flat pricingOptions array
-        if (pricingOptions) {
-            const found = pricingOptions.filter(option =>
-                departure.selectedPricingOptions?.includes(option.id || option._id || '')
-            );
-            options.push(...found);
-        }
-
-        // Search in pricingGroups if not found
-        if (options.length === 0 && pricingGroups) {
-            for (const group of pricingGroups) {
-                if (group.options) {
-                    const found = group.options.filter(option =>
-                        departure.selectedPricingOptions?.includes(option.id || option._id || '')
-                    );
-                    options.push(...found);
-                }
-            }
-        }
-
-        return options;
-    }, [departure.selectedPricingOptions, pricingOptions, pricingGroups]);
+        return pricingOptions.filter(option =>
+            departure.selectedPricingOptions?.includes(option.id || option._id || '')
+        );
+    }, [departure.selectedPricingOptions, pricingOptions]);
 
     // Format date range
     const fromDate = new Date(departure.dateRange.from);

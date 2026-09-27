@@ -4,7 +4,7 @@ export type { User } from './user';
 
 // Review types
 export interface Reply {
-    _id: string;
+    id: string;
     comment: string;
     user: User;
     createdAt: string;
@@ -14,7 +14,7 @@ export interface Reply {
 }
 
 export interface Review {
-    _id: string;
+    id: string;
     rating: number;
     title: string;
     comment: string;
@@ -31,7 +31,7 @@ export interface Review {
 }
 
 export interface Author {
-    _id: string;
+    id: string;
     name: string;
     email?: string;
     profilePicture?: string;
@@ -66,7 +66,7 @@ export interface Comment {
     post: Post;
     createdAt: string;
     status: "pending" | "approved" | "rejected";
-    _id: string;
+    id: string;
     approve: boolean;
     created_at: string;
 }
@@ -81,7 +81,7 @@ export interface PostResponse {
 
 // Category types
 export interface Category {
-    _id: string;
+    id: string;
     name: string;
     description?: string;
     image?: string;
@@ -91,7 +91,7 @@ export interface Category {
 }
 
 export interface CategoryData {
-    _id: string;
+    id: string;
     id?: string | null;
     name: string;
     description: string;
@@ -149,7 +149,7 @@ export interface DestinationTypes {
 
 // Destination component types
 export interface TourTitle {
-    _id: string;
+    id: string;
     title: string;
     code?: string;
 }
@@ -312,11 +312,6 @@ export interface PricingOption {
     discount?: Discount;
 }
 
-export interface PricingGroup {
-    label: string;
-    options: PricingOption[];
-}
-
 // Location types
 export interface Location {
     name?: string;
@@ -338,7 +333,7 @@ export interface Location {
 
 // Tour types
 export interface Tour {
-    _id: string;
+    id: string;
     id?: string; // Alias for _id in some API responses
     title: string;
     code: string;
@@ -388,9 +383,8 @@ export interface Tour {
     maxSize: number; // ADD THIS (replaces paxRange.max)
     // REMOVE paxRange?: PaxRange;
 
-    pricingOptionsEnabled?: boolean; // MAKE OPTIONAL (add ?)
+    pricingOptionsEnabled?: boolean;
     pricingOptions?: PricingOption[];
-    pricingGroups?: PricingGroup[]; // Grouped pricing for display
     saleEnabled?: boolean;
     salePrice?: number;
 

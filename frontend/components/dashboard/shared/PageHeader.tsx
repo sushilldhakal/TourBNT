@@ -19,7 +19,7 @@ export function PageHeader({ icon, title, description, action, badge }: PageHead
                                 </Badge>
                             )}
                         </CardTitle>
-                        <CardDescription className="text-base">
+                        <CardDescription className="text-sm text-muted-foreground">
                             {description}
                         </CardDescription>
                     </div>

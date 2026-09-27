@@ -12,13 +12,22 @@ import { useState } from "react";
 import type { DateRange } from "@/components/ui/calendar-lazy";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ui/use-toast";
+import { useApprovedCategories, useApprovedDestinations } from "@/lib/queries";
+
+const ALL_FILTER_VALUE = "__all__";
 
 const TourSearch = () => {
     const router = useRouter();
     const { toast } = useToast();
+    const { data: categoriesData } = useApprovedCategories({ limit: 100 });
+    const { data: destinationsData } = useApprovedDestinations({ limit: 100 });
+
+    const categories = Array.isArray(categoriesData) ? categoriesData : (categoriesData as { data?: unknown[] })?.data ?? [];
+    const destinations = Array.isArray(destinationsData) ? destinationsData : (destinationsData as { data?: unknown[] })?.data ?? [];
+
     const [keyword, setKeyword] = useState("");
-    const [destination, setDestination] = useState("");
-    const [tourType, setTourType] = useState("");
+    const [destination, setDestination] = useState(ALL_FILTER_VALUE);
+    const [tourType, setTourType] = useState(ALL_FILTER_VALUE);
     const [date, setDate] = useState<DateRange | undefined>({
         from: undefined,
         to: undefined,
@@ -35,8 +44,8 @@ const TourSearch = () => {
         const params = new URLSearchParams();
 
         if (keyword) params.append("keyword", keyword);
-        if (destination) params.append("destination", destination);
-        if (tourType) params.append("type", tourType);
+        if (destination && destination !== ALL_FILTER_VALUE) params.append("destination", destination);
+        if (tourType && tourType !== ALL_FILTER_VALUE) params.append("type", tourType);
         if (date?.from) params.append("startDate", date.from.toISOString());
         if (date?.to) params.append("endDate", date.to.toISOString());
         params.append("minPrice", priceRange[0].toString());
@@ -74,16 +83,21 @@ const TourSearch = () => {
                             <SelectValue placeholder="Select destination" />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="nepal">Nepal</SelectItem>
-                            <SelectItem value="india">India</SelectItem>
-                            <SelectItem value="bhutan">Bhutan</SelectItem>
-                            <SelectItem value="tibet">Tibet</SelectItem>
-                            <SelectItem value="peru">Peru</SelectItem>
+                            <SelectItem value={ALL_FILTER_VALUE}>All destinations</SelectItem>
+                            {destinations.map((dest: { _id?: string; id?: string; name?: string }, index: number) => {
+                                const id = dest._id ?? dest.id ?? `dest-${index}`;
+                                const name = dest.name ?? "Destination";
+                                return (
+                                    <SelectItem key={id} value={id}>
+                                        {name}
+                                    </SelectItem>
+                                );
+                            })}
                         </SelectContent>
                     </Select>
                 </div>
 
-                {/* Choose Trip Type */}
+                {/* Choose Category (Trip Type) */}
                 <div className="form-group">
                     <label className="block text-sm font-medium mb-2">Choose Trip Type</label>
                     <Select value={tourType} onValueChange={setTourType}>
@@ -91,11 +105,16 @@ const TourSearch = () => {
                             <SelectValue placeholder="Select trip type" />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="adventure">Adventure</SelectItem>
-                            <SelectItem value="cultural">Cultural</SelectItem>
-                            <SelectItem value="historical">Historical</SelectItem>
-                            <SelectItem value="nature">Nature</SelectItem>
-                            <SelectItem value="wildlife">Wildlife</SelectItem>
+                            <SelectItem value={ALL_FILTER_VALUE}>All types</SelectItem>
+                            {categories.map((cat: { _id?: string; id?: string; name?: string }, index: number) => {
+                                const id = cat._id ?? cat.id ?? `cat-${index}`;
+                                const name = cat.name ?? "Category";
+                                return (
+                                    <SelectItem key={id} value={id}>
+                                        {name}
+                                    </SelectItem>
+                                );
+                            })}
                         </SelectContent>
                     </Select>
                 </div>

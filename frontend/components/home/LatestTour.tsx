@@ -64,12 +64,13 @@ const LatestTour = () => {
     };
 
     // API returns array directly, or { data: { tours } } depending on backend
-    const toursList = Array.isArray(data) ? data : [];
+    const toursList = Array.isArray(data?.data) ? data?.data : [];
     const sortedTours = toursList.length
         ? [...toursList]
             .sort((a: Tour, b: Tour) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
             .slice(0, 10)
         : [];
+
 
     return (
         <div className="relative w-full">
@@ -112,8 +113,8 @@ const LatestTour = () => {
                     {sortedTours?.map((tour: Tour, index: number) => (
                         <CarouselItem key={index} className="pl-4 md:basis-1/2 lg:basis-1/3">
                             <div className="bg-secondary rounded-md overflow-hidden shadow-xs border" >
-                                <Link href={`/tours/${tour._id}`}>
-                                    <div className="relative h-[420px] overflow-hidden">
+                                <Link href={`/tours/${tour.id}`}>
+                                    <div className="relative max-h-[320px] overflow-hidden">
                                         <Image
                                             width={60}
                                             height={60}

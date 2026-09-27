@@ -25,9 +25,18 @@ const PARTNER_ROLE_LABEL: Record<string, string> = {
 interface ItineraryAccordionProps {
     itinerary: Itinerary[];
     outline?: string;
+    /** Resolve itinerary destination ID to name (from relatedData.destinations) */
+    destinations?: { id: string; name: string }[];
 }
 
-export function ItineraryAccordion({ itinerary, outline }: ItineraryAccordionProps) {
+export function ItineraryAccordion({ itinerary, outline, destinations }: ItineraryAccordionProps) {
+    const getDestinationDisplay = (destinationIdOrName: string | undefined): string => {
+        const raw = destinationIdOrName != null ? String(destinationIdOrName).trim() : '';
+        if (!raw) return '';
+        const found = destinations?.find((d) => d.id === raw);
+        const name = found?.name ?? raw;
+        return name || raw;
+    };
     const [activeDay, setActiveDay] = useState<string[]>(['day-0']);
 
     if (!itinerary || itinerary.length === 0) {
@@ -120,11 +129,11 @@ export function ItineraryAccordion({ itinerary, outline }: ItineraryAccordionPro
                                                 </div>
                                             )}
 
-                                            {/* Destination if available */}
-                                            {day.destination && (
+                                            {/* Destination if available (show name from relatedData.destinations when ID) */}
+                                            {(day.destination != null && day.destination !== '') && (
                                                 <div className="text-xs sm:text-sm">
                                                     <span className="font-medium text-muted-foreground">Destination: </span>
-                                                    <span className="text-foreground">{day.destination}</span>
+                                                    <span className="text-foreground">{getDestinationDisplay(day.destination)}</span>
                                                 </div>
                                             )}
 

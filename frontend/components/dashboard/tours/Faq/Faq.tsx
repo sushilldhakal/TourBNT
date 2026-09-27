@@ -99,7 +99,7 @@ const TourFaqs = () => {
         }
     };
 
-    const filteredFaqs = faqs?.filter((faq: { question: string; answer: string }) =>
+    const filteredFaqs = faqs?.data?.filter((faq: { question: string; answer: string }) =>
         faq.question.toLowerCase().includes(searchQuery.toLowerCase()) ||
         faq.answer.toLowerCase().includes(searchQuery.toLowerCase())
     );

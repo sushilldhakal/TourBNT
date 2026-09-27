@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Mail, UserPlus, Loader2, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
+import { Mail, UserPlus, Loader2, CheckCircle2, XCircle } from 'lucide-react';
 import { subscribeEmail } from '@/lib/api/subscribers';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from "sonner"
@@ -111,7 +111,7 @@ export function AddSubscriber() {
         <Card>
             <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                    <UserPlus className="h-5 w-5" />
+                    <UserPlus className="h-5 w-5" aria-hidden="true" />
                     Add Subscriber
                 </CardTitle>
                 <CardDescription>
@@ -132,11 +132,12 @@ export function AddSubscriber() {
                                 <div className="flex gap-2">
                                     <Input
                                         id="single-email"
-                                        type="text"
+                                        type="email"
                                         placeholder="user@example.com or user1@example.com, user2@example.com"
                                         value={singleEmail}
                                         onChange={(e) => setSingleEmail(e.target.value)}
                                         disabled={subscribeMutation.isPending}
+                                        aria-label="Subscriber email address"
                                     />
                                     <Button
                                         type="submit"
@@ -144,12 +145,12 @@ export function AddSubscriber() {
                                     >
                                         {subscribeMutation.isPending ? (
                                             <>
-                                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                                <Loader2 className="h-4 w-4 mr-2 animate-spin" aria-hidden="true" />
                                                 Adding...
                                             </>
                                         ) : (
                                             <>
-                                                <Mail className="h-4 w-4 mr-2" />
+                                                <Mail className="h-4 w-4 mr-2" aria-hidden="true" />
                                                 Add
                                             </>
                                         )}
@@ -185,12 +186,12 @@ export function AddSubscriber() {
                             >
                                 {subscribeMutation.isPending ? (
                                     <>
-                                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                        <Loader2 className="h-4 w-4 mr-2 animate-spin" aria-hidden="true" />
                                         Adding Subscribers...
                                     </>
                                 ) : (
                                     <>
-                                        <UserPlus className="h-4 w-4 mr-2" />
+                                        <UserPlus className="h-4 w-4 mr-2" aria-hidden="true" />
                                         Add All Subscribers
                                     </>
                                 )}
@@ -201,7 +202,7 @@ export function AddSubscriber() {
                             <div className="space-y-2 mt-4">
                                 {results.successful.length > 0 && (
                                     <Alert>
-                                        <CheckCircle2 className="h-4 w-4 text-green-600" />
+                                        <CheckCircle2 className="h-4 w-4 text-green-600" aria-hidden="true" />
                                         <AlertDescription>
                                             <strong>Successfully added:</strong> {results.successful.length} subscriber(s)
                                         </AlertDescription>
@@ -209,7 +210,7 @@ export function AddSubscriber() {
                                 )}
                                 {results.failed.length > 0 && (
                                     <Alert variant="destructive">
-                                        <XCircle className="h-4 w-4" />
+                                        <XCircle className="h-4 w-4" aria-hidden="true" />
                                         <AlertDescription>
                                             <strong>Failed to add:</strong> {results.failed.length} subscriber(s)
                                             <ul className="mt-2 list-disc list-inside text-sm">

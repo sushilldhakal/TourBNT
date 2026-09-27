@@ -46,11 +46,12 @@ export default function TourBanner({ tour }: TourBannerProps) {
             <header className="relative w-full h-[300px] md:h-[400px] bg-muted" role="banner">
                 {/* Cover image */}
                 <Image
-                    src={tour.coverImage}
+                    src={tour.coverImage ?? ''}
                     alt={`${tour.title} cover image`}
                     fill
                     className="object-cover"
                     priority
+                    loading="eager"
                 />
 
                 {/* Overlay pattern */}

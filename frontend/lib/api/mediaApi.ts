@@ -88,9 +88,9 @@ export async function getAllMedia(
         });
 
         // Get the full response data directly - don't use extractResponseData for this endpoint
-        // since we need both items and pagination info
+        // since we need both data (list) and pagination info. Standard: { success, data, message, pagination }
         const fullResponse = response.data;
-        const rawResources = fullResponse.items || [];
+        const rawResources = fullResponse.data ?? [];
         // Transform each item to match frontend MediaItem interface
         const resources = rawResources.map((item: any) => transformMediaItem(item, mediaType));
 
@@ -105,7 +105,7 @@ export async function getAllMedia(
 
         return {
             success: fullResponse.success !== false,
-            items: resources,
+            data: resources,
             message: fullResponse.message || '',
             pagination: {
                 page: currentPage,
@@ -191,7 +191,7 @@ export async function uploadMedia(
             console.log('📤 Upload - Found items in direct gallery arrays:', allItems.length);
         } else {
             // Fallback for other response structures
-            resources = data.resources || data.items || [];
+            resources = data.resources ?? data.data ?? [];
             urls = data.urls || data.secureUrls || [];
 
             // If we have resources but no URLs, extract URLs from resources

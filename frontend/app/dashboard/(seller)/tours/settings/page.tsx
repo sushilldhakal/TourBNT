@@ -4,8 +4,8 @@ import React, { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { PricingPresets, PaxPresets, DiscountPresets } from '@/components/dashboard/tours/Setting';
-import { Settings2, DollarSign, Users, Percent, Info, CheckCircle2, Lightbulb } from 'lucide-react';
+import { PricingPresets, DatePresets, PaxPresets, DiscountPresets, ContentPresets, ItineraryPresets, TourTemplatePresets } from '@/components/dashboard/tours/Setting';
+import { Settings2, DollarSign, Calendar, Users, Percent, FileText, Route, LayoutTemplate, Info, CheckCircle2, Lightbulb } from 'lucide-react';
 import { DashboardCardHeader } from '@/components/dashboard/layout/CardHeader';
 
 export default function TourSettingsPage() {
@@ -35,6 +35,13 @@ export default function TourSettingsPage() {
                                         <span>Pricing Options</span>
                                     </TabsTrigger>
                                     <TabsTrigger
+                                        value="date"
+                                        className="w-full justify-start gap-2 data-[state=active]:bg-primary/10 data-[state=active]:text-primary"
+                                    >
+                                        <Calendar className="h-4 w-4" />
+                                        <span>Dates & Departures</span>
+                                    </TabsTrigger>
+                                    <TabsTrigger
                                         value="pax"
                                         className="w-full justify-start gap-2 data-[state=active]:bg-primary/10 data-[state=active]:text-primary"
                                     >
@@ -47,6 +54,27 @@ export default function TourSettingsPage() {
                                     >
                                         <Percent className="h-4 w-4" />
                                         <span>Discounts</span>
+                                    </TabsTrigger>
+                                    <TabsTrigger
+                                        value="content"
+                                        className="w-full justify-start gap-2 data-[state=active]:bg-primary/10 data-[state=active]:text-primary"
+                                    >
+                                        <FileText className="h-4 w-4" />
+                                        <span>Content</span>
+                                    </TabsTrigger>
+                                    <TabsTrigger
+                                        value="itinerary"
+                                        className="w-full justify-start gap-2 data-[state=active]:bg-primary/10 data-[state=active]:text-primary"
+                                    >
+                                        <Route className="h-4 w-4" />
+                                        <span>Itinerary</span>
+                                    </TabsTrigger>
+                                    <TabsTrigger
+                                        value="tour-template"
+                                        className="w-full justify-start gap-2 data-[state=active]:bg-primary/10 data-[state=active]:text-primary"
+                                    >
+                                        <LayoutTemplate className="h-4 w-4" />
+                                        <span>Tour Template</span>
                                     </TabsTrigger>
                                 </TabsList>
                             </CardContent>
@@ -113,6 +141,37 @@ export default function TourSettingsPage() {
                             </Card>
                         </TabsContent>
 
+                        <TabsContent value="date" className="mt-0 space-y-6">
+                            <Card className="pt-0">
+                                <CardHeader className="bg-gradient-to-r from-primary/5 to-primary/10 border-b pt-4 rounded-t-xl">
+                                    <div className="flex items-center gap-2">
+                                        <div className="bg-primary/10 p-2 rounded-full">
+                                            <Calendar className="h-5 w-5 text-primary" />
+                                        </div>
+                                        <div>
+                                            <CardTitle>Date & Departure Presets</CardTitle>
+                                            <CardDescription>
+                                                Create reusable date templates for flexible, fixed, or multiple-departure tours
+                                            </CardDescription>
+                                        </div>
+                                    </div>
+                                </CardHeader>
+                                <CardContent className="p-6">
+                                    <div className="bg-primary/5 p-4 rounded-lg border border-primary/10 mb-6">
+                                        <div className="flex gap-3">
+                                            <Info className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                                            <div>
+                                                <p className="text-sm text-primary-foreground dark:text-primary">
+                                                    Define date structures: flexible (days/nights), fixed (single date range), or multiple departures. Apply these presets when creating tours to pre-fill the date configuration.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <DatePresets />
+                                </CardContent>
+                            </Card>
+                        </TabsContent>
+
                         <TabsContent value="pax" className="mt-0 space-y-6">
                             <Card className="pt-0">
                                 <CardHeader className="bg-gradient-to-r from-primary/5 to-primary/10 border-b pt-4 rounded-t-xl">
@@ -171,6 +230,99 @@ export default function TourSettingsPage() {
                                         </div>
                                     </div>
                                     <DiscountPresets />
+                                </CardContent>
+                            </Card>
+                        </TabsContent>
+
+                        <TabsContent value="content" className="mt-0 space-y-6">
+                            <Card className="pt-0">
+                                <CardHeader className="bg-gradient-to-r from-primary/5 to-primary/10 border-b pt-4 rounded-t-xl">
+                                    <div className="flex items-center gap-2">
+                                        <div className="bg-primary/10 p-2 rounded-full">
+                                            <FileText className="h-5 w-5 text-primary" />
+                                        </div>
+                                        <div>
+                                            <CardTitle>Content Presets</CardTitle>
+                                            <CardDescription>
+                                                Reusable description, include, exclude, or outline templates
+                                            </CardDescription>
+                                        </div>
+                                    </div>
+                                </CardHeader>
+                                <CardContent className="p-6">
+                                    <div className="bg-primary/5 p-4 rounded-lg border border-primary/10 mb-6">
+                                        <div className="flex gap-3">
+                                            <Info className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                                            <div>
+                                                <p className="text-sm text-primary-foreground dark:text-primary">
+                                                    Create reusable content templates for tour descriptions, includes, excludes, or outlines. Apply these when creating tours to pre-fill content fields.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <ContentPresets />
+                                </CardContent>
+                            </Card>
+                        </TabsContent>
+
+                        <TabsContent value="itinerary" className="mt-0 space-y-6">
+                            <Card className="pt-0">
+                                <CardHeader className="bg-gradient-to-r from-primary/5 to-primary/10 border-b pt-4 rounded-t-xl">
+                                    <div className="flex items-center gap-2">
+                                        <div className="bg-primary/10 p-2 rounded-full">
+                                            <Route className="h-5 w-5 text-primary" />
+                                        </div>
+                                        <div>
+                                            <CardTitle>Itinerary Presets</CardTitle>
+                                            <CardDescription>
+                                                Reusable day-by-day itinerary templates
+                                            </CardDescription>
+                                        </div>
+                                    </div>
+                                </CardHeader>
+                                <CardContent className="p-6">
+                                    <div className="bg-primary/5 p-4 rounded-lg border border-primary/10 mb-6">
+                                        <div className="flex gap-3">
+                                            <Info className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                                            <div>
+                                                <p className="text-sm text-primary-foreground dark:text-primary">
+                                                    Define day-by-day itineraries (days, nights, titles, descriptions). Apply these presets when creating tours to quickly populate itinerary sections.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <ItineraryPresets />
+                                </CardContent>
+                            </Card>
+                        </TabsContent>
+
+                        <TabsContent value="tour-template" className="mt-0 space-y-6">
+                            <Card className="pt-0">
+                                <CardHeader className="bg-gradient-to-r from-primary/5 to-primary/10 border-b pt-4 rounded-t-xl">
+                                    <div className="flex items-center gap-2">
+                                        <div className="bg-primary/10 p-2 rounded-full">
+                                            <LayoutTemplate className="h-5 w-5 text-primary" />
+                                        </div>
+                                        <div>
+                                            <CardTitle>Tour Template Presets</CardTitle>
+                                            <CardDescription>
+                                                Bundle multiple presets for quick tour creation
+                                            </CardDescription>
+                                        </div>
+                                    </div>
+                                </CardHeader>
+                                <CardContent className="p-6">
+                                    <div className="bg-primary/5 p-4 rounded-lg border border-primary/10 mb-6">
+                                        <div className="flex gap-3">
+                                            <Info className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                                            <div>
+                                                <p className="text-sm text-primary-foreground dark:text-primary">
+                                                    Create tour templates that bundle pricing, dates, pax, discount, itinerary, and content presets. Apply a template to pre-populate an entire tour in one step.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <TourTemplatePresets />
                                 </CardContent>
                             </Card>
                         </TabsContent>

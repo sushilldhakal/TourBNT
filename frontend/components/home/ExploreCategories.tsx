@@ -3,22 +3,16 @@
 import { useApprovedCategories } from "@/lib/queries";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, Folder, FolderOpen } from "lucide-react";
+import { Folder, FolderOpen } from "lucide-react";
 import { useEffect, useState, useMemo } from "react";
-import {
-    Carousel,
-    CarouselContent,
-    CarouselItem,
-    type CarouselApi
-} from "@/components/ui/carousel-lazy";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { getApprovedCategories } from "@/lib/api/globalApi";
 import { ContentContainer } from "@/components/layout/PublicLayoutClient";
 import type { CategoryData } from "@/types/types";
 
 export default function ExploreCategories() {
-    const [api, setApi] = useState<CarouselApi | null>(null);
+    const [activeIndex, setActiveIndex] = useState(0);
+    const [animationKey, setAnimationKey] = useState(0);
 
     const { data, isLoading } = useApprovedCategories();
     const categories: CategoryData[] = useMemo(() => {
@@ -30,13 +24,14 @@ export default function ExploreCategories() {
     }, [data]);
 
     useEffect(() => {
-        if (!api) return;
-        const handleSelect = () => { };
-        api.on("select", handleSelect);
-        return () => {
-            api.off("select", handleSelect);
-        };
-    }, [api]);
+        if (!categories.length) return;
+        const interval = setInterval(() => {
+            setActiveIndex((prev) => (prev + 1) % categories.length);
+            setAnimationKey((prev) => prev + 1);
+        }, 5000);
+
+        return () => clearInterval(interval);
+    }, [categories.length]);
 
     if (isLoading) {
         return (
@@ -74,98 +69,124 @@ export default function ExploreCategories() {
                                 View All Categories
                             </Button>
                         </Link>
-                        <div className="flex items-center gap-2">
-                            <Button
-                                variant="outline"
-                                size="icon"
-                                className="h-8 w-8 rounded-full"
-                                onClick={() => api?.scrollPrev()}
-                            >
-                                <ChevronLeft className="h-4 w-4" />
-                            </Button>
-                            <Button
-                                variant="outline"
-                                size="icon"
-                                className="h-8 w-8 rounded-full"
-                                onClick={() => api?.scrollNext()}
-                            >
-                                <ChevronRight className="h-4 w-4" />
-                            </Button>
-                        </div>
                     </div>
                 </div>
 
-                <Carousel
-                    setApi={setApi}
-                    className="w-full"
-                    opts={{
-                        align: "start",
-                        loop: true,
-                    }}
-                >
-                    <CarouselContent className="-ml-2 md:-ml-4">
-                        {categories.map((category) => (
-                            <CarouselItem
-                                key={category._id}
-                                className="pl-2 md:pl-4 md:basis-1/2 lg:basis-1/4"
-                            >
-                                <Card className="overflow-hidden p-0 h-full border-0 shadow-lg hover:shadow-xl transition-all duration-300 group">
-                                    <div className="relative h-80 overflow-hidden">
-                                        {/* Background Image or Fallback */}
-                                        {category.imageUrl ? (
-                                            <img
-                                                src={category.imageUrl}
-                                                alt={category.name}
-                                                className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
-                                            />
-                                        ) : (
-                                            <div className="h-full w-full bg-gradient-to-br from-primary/20 via-primary/10 to-secondary/20 flex items-center justify-center">
-                                                <Folder className="h-24 w-24 text-primary/30" />
+                {categories.length > 0 && (
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        {/* Column 1: list (3) */}
+                        <div className="space-y-3">
+                            {categories.slice(0, 3).map((category, idx) => {
+                                const index = idx;
+                                const isActive = index === activeIndex;
+                                return (
+                                    <button
+                                        key={category.id ?? `${category.name}-${idx}`}
+                                        type="button"
+                                        onClick={() => {
+                                            setActiveIndex(index);
+                                            setAnimationKey((prev) => prev + 1);
+                                        }}
+                                        className={`w-full text-left rounded-xl border bg-background p-4 transition-all ${isActive ? "ring-2 ring-primary/50 shadow-sm" : "hover:shadow-sm"}`}
+                                    >
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <div className="font-semibold text-foreground line-clamp-1">
+                                                    {category.name}
+                                                </div>
+                                                <div className="mt-1 text-sm text-muted-foreground line-clamp-2">
+                                                    {category.description}
+                                                </div>
                                             </div>
-                                        )}
-
-                                        {/* Gradient Overlay */}
-                                        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-black/20"></div>
-
-                                        {/* Tours Count Badge */}
-                                        <Badge className="absolute top-3 right-3 bg-primary/90 hover:bg-primary backdrop-blur-sm">
-                                            {category.usageCount || 0} Tours
-                                        </Badge>
-
-                                        {/* Content Overlay */}
-                                        <div className="absolute inset-0 p-4 flex flex-col justify-end">
-                                            {/* Category Icon */}
-                                            <div className="mb-3">
-                                                <FolderOpen className="h-8 w-8 text-white/90 drop-shadow-lg" />
-                                            </div>
-
-                                            {/* Category Name */}
-                                            <h3 className="font-bold text-xl text-white mb-2 line-clamp-2 drop-shadow-lg">
-                                                {category.name}
-                                            </h3>
-
-                                            {/* Description */}
-                                            <p className="text-white/90 text-sm mb-4 line-clamp-3 drop-shadow-md">
-                                                {category.description}
-                                            </p>
-
-                                            {/* View Button */}
-                                            <Link href={`/categories/${category._id}`} className="w-full">
-                                                <Button
-                                                    variant="secondary"
-                                                    className="w-full text-foreground backdrop-blur-sm flex items-center justify-center gap-2"
-                                                >
-                                                    <FolderOpen className="h-4 w-4" />
-                                                    View Category
-                                                </Button>
-                                            </Link>
+                                            <Badge variant="secondary" className="shrink-0">
+                                                {category.usageCount || 0} tours
+                                            </Badge>
                                         </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        {/* Column 2: list (3) */}
+                        <div className="space-y-3">
+                            {categories.slice(3, 6).map((category, idx) => {
+                                const index = idx + 3;
+                                const isActive = index === activeIndex;
+                                return (
+                                    <button
+                                        key={category.id ?? `${category.name}-${idx}-b`}
+                                        type="button"
+                                        onClick={() => {
+                                            setActiveIndex(index);
+                                            setAnimationKey((prev) => prev + 1);
+                                        }}
+                                        className={`w-full text-left rounded-xl border bg-background p-4 transition-all ${isActive ? "ring-2 ring-primary/50 shadow-sm" : "hover:shadow-sm"}`}
+                                    >
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <div className="font-semibold text-foreground line-clamp-1">
+                                                    {category.name}
+                                                </div>
+                                                <div className="mt-1 text-sm text-muted-foreground line-clamp-2">
+                                                    {category.description}
+                                                </div>
+                                            </div>
+                                            <Badge variant="secondary" className="shrink-0">
+                                                {category.usageCount || 0} tours
+                                            </Badge>
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        {/* Column 3: image slider */}
+                        <Card className="overflow-hidden p-0 border-0 shadow-lg">
+                            <div className="relative h-[360px] lg:h-full min-h-[360px]">
+                                <div
+                                    key={animationKey}
+                                    className="absolute inset-0 transition-opacity duration-500"
+                                >
+                                    {categories[activeIndex]?.imageUrl ? (
+                                        // eslint-disable-next-line @next/next/no-img-element
+                                        <img
+                                            src={categories[activeIndex].imageUrl}
+                                            alt={categories[activeIndex].name}
+                                            className="h-full w-full object-cover"
+                                        />
+                                    ) : (
+                                        <div className="h-full w-full bg-gradient-to-br from-primary/20 via-primary/10 to-secondary/20 flex items-center justify-center">
+                                            <Folder className="h-24 w-24 text-primary/30" />
+                                        </div>
+                                    )}
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-black/10" />
+                                </div>
+
+                                <div className="absolute inset-x-0 bottom-0 p-5">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <div className="text-white font-semibold text-lg line-clamp-1">
+                                                {categories[activeIndex]?.name}
+                                            </div>
+                                            <div className="mt-1 text-white/80 text-sm line-clamp-2">
+                                                {categories[activeIndex]?.description}
+                                            </div>
+                                        </div>
+                                        <Link
+                                            href={`/categories/${categories[activeIndex]?.id}`}
+                                            className="shrink-0"
+                                        >
+                                            <Button variant="secondary" className="backdrop-blur-sm flex items-center gap-2">
+                                                <FolderOpen className="h-4 w-4" />
+                                                View
+                                            </Button>
+                                        </Link>
                                     </div>
-                                </Card>
-                            </CarouselItem>
-                        ))}
-                    </CarouselContent>
-                </Carousel>
+                                </div>
+                            </div>
+                        </Card>
+                    </div>
+                )}
             </ContentContainer>
         </div>
     );

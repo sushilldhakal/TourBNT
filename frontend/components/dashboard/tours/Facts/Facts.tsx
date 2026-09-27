@@ -25,6 +25,7 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { FactData } from "@/types/facts";
 
 const TourFacts = () => {
     const { userId } = useAuth();
@@ -100,7 +101,7 @@ const TourFacts = () => {
         }
     };
 
-    const filteredFacts = facts?.filter(fact =>
+    const filteredFacts = facts?.data?.filter((fact: FactData) =>
         fact.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (fact.field_type?.toLowerCase().includes(searchQuery.toLowerCase()) || false) ||
         (Array.isArray(fact.value) && fact.value.some((val: string) =>
@@ -109,7 +110,7 @@ const TourFacts = () => {
     );
 
     return (
-        <div className="container mx-auto px-4 py-8 max-w-6xl">
+        <div className="container mx-auto px-4 md:px-6 lg:px-8 py-8 max-w-6xl">
             <div className="flex flex-col space-y-6">
                 <DashboardCardHeader
                     variant="compact"
@@ -120,12 +121,13 @@ const TourFacts = () => {
                     actions={
                         <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
                             <div className="relative flex-1 sm:flex-initial">
-                                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
                                 <Input
                                     placeholder="Search facts..."
                                     className="pl-9 w-full sm:w-[300px]"
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
+                                    aria-label="Search facts"
                                 />
                             </div>
                             <ViewToggle view={view} onViewChange={handleViewChange} />
@@ -134,17 +136,19 @@ const TourFacts = () => {
                                     variant="destructive"
                                     onClick={() => setBulkDeleteDialogOpen(true)}
                                     className="flex items-center gap-2"
+                                    aria-label={`Delete ${selectedFacts.size} selected facts`}
                                 >
-                                    <Trash2 className="h-4 w-4" />
+                                    <Trash2 className="h-4 w-4" aria-hidden="true" />
                                     Delete ({selectedFacts.size})
                                 </Button>
                             )}
                             <Button
                                 onClick={() => setIsAddFactOpen(!isAddFactOpen)}
                                 className="flex items-center gap-2"
+                                aria-label={isAddFactOpen ? "Close add fact form" : "Add new fact"}
                             >
                                 {isAddFactOpen ? "Close Form" : "Add New Fact"}
-                                <Plus className="h-4 w-4" />
+                                <Plus className="h-4 w-4" aria-hidden="true" />
                             </Button>
                         </div>
                     }
@@ -165,12 +169,10 @@ const TourFacts = () => {
                 )}
 
                 {/* Facts List */}
-                <Card className="shadow-xs border-border py-0">
-                    <CardHeader className="bg-secondary/50 border-b pb-4">
-                        <div className="flex items-center gap-2">
-                            <CardTitle className="text-xl pt-4">Tour Facts</CardTitle>
-                        </div>
-                        <CardDescription>
+                <Card className="shadow-sm border">
+                    <CardHeader className="bg-secondary/50 border-b px-6 py-6">
+                        <CardTitle className="text-xl font-semibold">Tour Facts</CardTitle>
+                        <CardDescription className="text-muted-foreground">
                             Manage important facts about your tours
                         </CardDescription>
                     </CardHeader>
@@ -198,9 +200,9 @@ const TourFacts = () => {
                                 </div>
                             )
                         ) : isError ? (
-                            <div className="bg-destructive/10 text-destructive rounded-md p-4">
-                                <p className="font-medium">Failed to load facts</p>
-                                <p className="text-sm">Please try refreshing the page or check your connection.</p>
+                            <div className="bg-destructive/10 text-destructive rounded-lg p-6" role="alert" aria-live="polite">
+                                <p className="font-semibold text-base mb-2">Failed to load facts</p>
+                                <p className="text-sm text-destructive/90">Please try refreshing the page or check your connection.</p>
                             </div>
                         ) : filteredFacts?.length ? (
                             view === 'grid' ? (
@@ -214,20 +216,21 @@ const TourFacts = () => {
                                     ))}
                                 </div>
                             ) : (
-                                <div className="rounded-md border">
-                                    <table className="w-full">
+                                <div className="rounded-lg border">
+                                    <table className="w-full" role="table" aria-label="Facts table">
                                         <thead>
                                             <tr className="border-b bg-muted/50">
-                                                <th className="p-4 w-12">
+                                                <th className="px-4 py-3 w-12" scope="col">
                                                     <Checkbox
                                                         checked={filteredFacts.length > 0 && selectedFacts.size === filteredFacts.length}
                                                         onCheckedChange={handleSelectAll}
+                                                        aria-label="Select all facts"
                                                     />
                                                 </th>
-                                                <th className="p-4 text-left font-medium">Name</th>
-                                                <th className="p-4 text-left font-medium">Type</th>
-                                                <th className="p-4 text-left font-medium">Values</th>
-                                                <th className="p-4 text-right font-medium">Actions</th>
+                                                <th className="px-4 py-3 text-left font-semibold text-sm" scope="col">Name</th>
+                                                <th className="px-4 py-3 text-left font-semibold text-sm" scope="col">Type</th>
+                                                <th className="px-4 py-3 text-left font-semibold text-sm" scope="col">Values</th>
+                                                <th className="px-4 py-3 text-right font-semibold text-sm" scope="col">Actions</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -248,23 +251,25 @@ const TourFacts = () => {
                                 </div>
                             )
                         ) : facts?.length ? (
-                            <div className="text-center py-8">
-                                <Search className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                                <h3 className="font-medium text-lg mb-1">No matching facts found</h3>
-                                <p className="text-muted-foreground">Try adjusting your search query</p>
+                            <div className="text-center py-12" role="status" aria-live="polite">
+                                <Search className="h-12 w-12 text-muted-foreground mx-auto mb-4" aria-hidden="true" />
+                                <h3 className="font-semibold text-lg mb-2">No matching facts found</h3>
+                                <p className="text-sm text-muted-foreground">Try adjusting your search query</p>
                             </div>
                         ) : (
-                            <div className="text-center py-12">
-                                <FileText className="h-16 w-16 text-muted-foreground mx-auto mb-4 opacity-30" />
-                                <h3 className="font-medium text-lg mb-2">No facts added yet</h3>
-                                <p className="text-muted-foreground max-w-md mx-auto mb-6">
+                            <div className="text-center py-16">
+                                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted mb-4">
+                                    <FileText className="h-8 w-8 text-muted-foreground" aria-hidden="true" />
+                                </div>
+                                <h3 className="font-semibold text-lg mb-2">No facts added yet</h3>
+                                <p className="text-sm text-muted-foreground max-w-md mx-auto mb-6">
                                     Facts provide important information about your tours.
                                     They'll appear here once added.
                                 </p>
                                 <Button
                                     onClick={() => setIsAddFactOpen(true)}
                                     variant="outline"
-                                    className="mx-auto"
+                                    aria-label="Create your first fact"
                                 >
                                     Create your first fact
                                 </Button>
@@ -276,19 +281,27 @@ const TourFacts = () => {
 
             {/* Bulk Delete Confirmation Dialog */}
             <Dialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
-                <DialogContent className="max-w-md">
+                <DialogContent className="max-w-md" role="alertdialog">
                     <DialogHeader>
-                        <DialogTitle>Confirm Bulk Deletion</DialogTitle>
-                        <DialogDescription>
+                        <DialogTitle className="text-lg font-semibold">Confirm Bulk Deletion</DialogTitle>
+                        <DialogDescription className="text-sm text-muted-foreground">
                             Are you sure you want to delete {selectedFacts.size} fact(s)? This action cannot be undone.
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="flex justify-end gap-3 mt-4">
-                        <Button variant="outline" onClick={() => setBulkDeleteDialogOpen(false)}>
+                    <div className="flex justify-end gap-3 mt-6">
+                        <Button 
+                            variant="outline" 
+                            onClick={() => setBulkDeleteDialogOpen(false)}
+                            aria-label="Cancel deletion"
+                        >
                             Cancel
                         </Button>
-                        <Button variant="destructive" onClick={handleBulkDelete}>
-                            <Trash2 className="h-3.5 w-3.5 mr-2" />
+                        <Button 
+                            variant="destructive" 
+                            onClick={handleBulkDelete}
+                            aria-label={`Delete ${selectedFacts.size} facts`}
+                        >
+                            <Trash2 className="h-4 w-4 mr-2" aria-hidden="true" />
                             Delete {selectedFacts.size} Fact(s)
                         </Button>
                     </div>

@@ -52,8 +52,9 @@ const ToggleActiveButton = ({
             onClick={handleToggle}
             disabled={toggleMutation.isPending}
             title={isActive ? 'Deactivate destination' : 'Activate destination'}
+            aria-label={isActive ? 'Deactivate destination' : 'Activate destination'}
         >
-            <Power className={`h-4 w-4 ${isActive ? 'text-green-600' : 'text-gray-400'}`} />
+            <Power className={`h-4 w-4 ${isActive ? 'text-green-600' : 'text-gray-400'}`} aria-hidden="true" />
         </Button>
     );
 };
@@ -119,7 +120,7 @@ const DestinationTableView = ({ destinations, isLoading, onRefresh }: Destinatio
                             {destination.coverImage ? (
                                 <Image
                                     src={destination.coverImage}
-                                    alt={destination.name}
+                                    alt={`${destination.name} destination cover`}
                                     fill
                                     className="object-cover rounded"
                                     sizes="48px"
@@ -182,17 +183,17 @@ const DestinationTableView = ({ destinations, isLoading, onRefresh }: Destinatio
                             >
                                 {destination.approvalStatus === 'approved' ? (
                                     <>
-                                        <Check className="h-3 w-3 mr-1" />
+                                        <Check className="h-3 w-3 mr-1" aria-hidden="true" />
                                         Approved
                                     </>
                                 ) : destination.approvalStatus === 'pending' ? (
                                     <>
-                                        <Clock className="h-3 w-3 mr-1" />
+                                        <Clock className="h-3 w-3 mr-1" aria-hidden="true" />
                                         Pending
                                     </>
                                 ) : (
                                     <>
-                                        <XIcon className="h-3 w-3 mr-1" />
+                                        <XIcon className="h-3 w-3 mr-1" aria-hidden="true" />
                                         Rejected
                                     </>
                                 )}
@@ -200,7 +201,7 @@ const DestinationTableView = ({ destinations, isLoading, onRefresh }: Destinatio
                         )}
                         {featuredCount > 0 && (
                             <Badge variant="outline" className="status-pill status-pill--featured w-fit">
-                                <Star className="h-3 w-3 mr-1" />
+                                <Star className="h-3 w-3 mr-1" aria-hidden="true" />
                                 Featured ({featuredCount})
                             </Badge>
                         )}
@@ -247,8 +248,9 @@ const DestinationTableView = ({ destinations, isLoading, onRefresh }: Destinatio
                                 setEditDialogOpen(true);
                             }}
                             title="Edit destination"
+                            aria-label="Edit destination"
                         >
-                            <Edit className="h-4 w-4" />
+                            <Edit className="h-4 w-4" aria-hidden="true" />
                         </Button>
                         <ToggleActiveButton
                             destinationId={globalDestinationId}
@@ -264,8 +266,9 @@ const DestinationTableView = ({ destinations, isLoading, onRefresh }: Destinatio
                                 setDeleteDialogOpen(true);
                             }}
                             title="Delete destination"
+                            aria-label="Delete destination"
                         >
-                            <Trash2 className="h-4 w-4 text-destructive" />
+                            <Trash2 className="h-4 w-4 text-destructive" aria-hidden="true" />
                         </Button>
                     </div>
                 );

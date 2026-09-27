@@ -69,7 +69,7 @@ api.interceptors.response.use(
 
         if (status === 401 && originalRequest) {
             const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
-            const isAuthEndpoint = /\/users\/(login|logout|register)/.test(url);
+            const isAuthEndpoint = /\/auth\/(login|register)|\/users\/logout/.test(url);
             const isBootstrapEndpoint = url.includes('/users/me');
             const isOnProtectedRoute = currentPath.startsWith('/dashboard');
 
@@ -171,17 +171,16 @@ export const createFormData = (data: Record<string, any>): FormData => {
 
 /**
  * Helper to extract data from server response
- * Server responses follow format: { success: boolean, data: any, message?: string }
- * OR: { success: boolean, items: any[], pagination: {...}, message?: string }
+ * Standard list format: { success, data: [...], message, pagination: { page, limit, totalItems, totalPages } }
+ * Single resource: { success, data: {...}, message }
  */
 export const extractResponseData = <T>(response: any): T => {
-    // Handle paginated response: { success, items: [...], pagination: {...} }
-    // Return the full data object including items and pagination
-    if (response.data?.items && response.data?.pagination) {
+    // Handle paginated/list response: { success, data: [...], pagination: {...}, message }
+    if (response.data?.pagination != null) {
         return response.data as T;
     }
-    // Handle nested response: { success, message, data: {...} }
-    if (response.data?.data) {
+    // Handle nested single-resource: { success, message, data: {...} }
+    if (response.data?.data !== undefined && !Array.isArray(response.data?.data)) {
         return response.data.data as T;
     }
     // Handle direct data response

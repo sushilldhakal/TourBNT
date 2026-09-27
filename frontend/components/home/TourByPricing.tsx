@@ -34,7 +34,7 @@ const TourByPricing = () => {
         };
     }, [api]);
 
-    const toursList = Array.isArray(data) ? data : (data as { data?: { tours?: Tour[] }; tours?: Tour[] })?.data?.tours ?? (data as { tours?: Tour[] })?.tours ?? [];
+    const toursList = Array.isArray(data?.data) ? data?.data : (data as { data?: { tours?: Tour[] }; tours?: Tour[] })?.data?.tours ?? (data as { tours?: Tour[] })?.tours ?? [];
     const sortedTours = toursList.length
         ? [...toursList].sort((a: Tour, b: Tour) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 10)
         : [];
@@ -51,6 +51,8 @@ const TourByPricing = () => {
                         opts={{
                             align: "start",
                             loop: true,
+                            axis: 'y',
+                            dragFree: true,
                         }}
                         autoplayConfig={{ playOnInit: true, delay: 2000 }}
                         autoScrollConfig={{
@@ -64,8 +66,8 @@ const TourByPricing = () => {
                     >
                         <CarouselContent className="-mt-1 h-[600px]">
                             {sortedTours?.map((tour: Tour, index: number) => (
-                                <CarouselItem key={index} className="pt-1 basis-auto">
-                                    <Link href={`/tours/${tour._id}`}>
+                                <CarouselItem key={index} className="pt-1 basis-auto !h-[100px] !max-h-[100px]">
+                                    <Link href={`/tours/${tour.id}`}>
                                         <div className="flex items-center gap-3 p-3 hover:bg-muted/50 transition rounded-md">
                                             <div className="relative flex-shrink-0">
                                                 <Image

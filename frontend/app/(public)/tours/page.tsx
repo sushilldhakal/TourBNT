@@ -7,6 +7,7 @@ import TourCard from '@/components/tours/TourCard';
 import TourSearch from '@/components/tours/TourSearch';
 import { useToursInfinite, useApprovedCategories, useApprovedDestinations } from '@/lib/queries';
 import { useRef, useCallback, useEffect, useState, useMemo } from 'react';
+import { Tour } from '@/types';
 
 export default function ToursPage() {
     // Filter state management
@@ -34,7 +35,7 @@ export default function ToursPage() {
     const { data: categoriesData } = useApprovedCategories();
     const { data: destinationsData } = useApprovedDestinations();
     const categories = Array.isArray(categoriesData) ? categoriesData : [];
-    const destinations = Array.isArray(destinationsData) ? destinationsData : (destinationsData as { items?: unknown[] })?.items ?? [];
+    const destinations = Array.isArray(destinationsData) ? destinationsData : (destinationsData as { data?: unknown[] })?.data ?? [];
 
     // Intersection observer callback for infinite scroll
     const handleObserver = useCallback(
@@ -66,7 +67,7 @@ export default function ToursPage() {
     }, [handleObserver]);
 
     // Flatten all pages of tours
-    const allTours = toursData?.pages.flatMap((page) => page?.items ?? []) ?? [];
+    const allTours = toursData?.pages.flatMap((page) => page?.data ?? []) ?? [];
 
 
     // Dynamic price range generation
@@ -143,7 +144,7 @@ export default function ToursPage() {
 
         // Filter by category
         if (selectedCategory !== 'all') {
-            filtered = filtered.filter((tour) => {
+            filtered = filtered.filter((tour: Tour) => {
                 if (!tour.category) return false;
 
                 // Handle category as array
@@ -152,7 +153,7 @@ export default function ToursPage() {
                         if (typeof cat === 'string') {
                             return cat === selectedCategory;
                         }
-                        return (cat as any)._id === selectedCategory;
+                        return (cat as any).id === selectedCategory;
                     });
                 }
 
@@ -162,13 +163,13 @@ export default function ToursPage() {
                 }
 
                 // Handle category as object
-                return (tour.category as any)._id === selectedCategory;
+                return (tour.category as any).id === selectedCategory;
             });
         }
 
         // Filter by destination
         if (selectedDestination !== 'all') {
-            filtered = filtered.filter((tour) => {
+            filtered = filtered.filter((tour: Tour) => {
                 if (!tour.destination) return false;
 
                 // Handle destination as string
@@ -177,7 +178,7 @@ export default function ToursPage() {
                 }
 
                 // Handle destination as object
-                return tour.destination._id === selectedDestination;
+                return tour.destination.id === selectedDestination;
             });
         }
 
@@ -224,7 +225,6 @@ export default function ToursPage() {
         setSortOption('featured');
     }, []);
 
-    // TODO: Implement view mode toggle in task 6
 
     return (
         <>
@@ -361,8 +361,12 @@ export default function ToursPage() {
                                                 : 'grid-cols-1'
                                                 }`}
                                         >
-                                            {filteredTours.map((tour) => (
-                                                <TourCard key={tour._id} tour={tour} viewMode={viewMode} />
+                                            {filteredTours.map((tour, index) => (
+                                                <TourCard
+                                                    key={(tour as { id?: string }).id ?? (tour as { id?: string }).id ?? `tour-${index}`}
+                                                    tour={tour as Tour}
+                                                    viewMode={viewMode}
+                                                />
                                             ))}
                                         </div>
                                     )}

@@ -30,6 +30,19 @@ frontend/docs/
 **/lib/**/README.md
 
 # ============================================
+# Documentation (exclude internal docs)
+# ============================================
+**/docs/**
+!**/docs/README.md
+!**/docs/QUICK_START.md
+!**/docs/CONTRIBUTING.md
+!**/docs/CHANGELOG.md
+!**/docs/LICENSE
+
+.cursorrules
+
+
+# ============================================
 # Environment Variables (NEVER COMMIT)
 # ============================================
 .env

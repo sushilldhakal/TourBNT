@@ -12,7 +12,7 @@ export function ErrorState({
         <Card className="border-destructive/50">
             <CardContent className="flex flex-col items-center justify-center py-12">
                 <div className="mx-auto w-fit rounded-full bg-destructive/10 p-3 mb-4">
-                    <AlertCircle className="h-12 w-12 text-destructive" />
+                    <AlertCircle className="h-12 w-12 text-destructive" aria-hidden="true" />
                 </div>
                 <h3 className="text-lg font-semibold text-foreground mb-2">{title}</h3>
                 <p className="text-sm text-muted-foreground text-center mb-6 max-w-sm mx-auto">
@@ -24,7 +24,7 @@ export function ErrorState({
                         onClick={onRetry}
                         className="flex items-center gap-2"
                     >
-                        <RefreshCw className="h-4 w-4" />
+                        <RefreshCw className="h-4 w-4" aria-hidden="true" />
                         Try Again
                     </Button>
                 )}

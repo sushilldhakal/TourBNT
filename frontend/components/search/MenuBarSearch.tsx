@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { Search, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -14,8 +14,12 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ContentContainer } from '@/components/layout/PublicLayoutClient';
+import { getApprovedCategories } from '@/lib/api/globalApi';
+import { getLatestTours, getTourSearch } from '@/lib/api/tours';
 import './MenuBarSearch.css';
 import type { Tour, Category } from '@/types/types';
+
+const DEBOUNCE_MS = 350;
 
 interface MenuBarSearchProps {
     headerSearch: boolean;
@@ -38,8 +42,35 @@ export function MenuBarSearch({ handleSearch, headerSearch }: MenuBarSearchProps
     const [isHeaderFixed, setIsHeaderFixed] = useState(false);
     const [isSearching, setIsSearching] = useState(false);
     const [searchResults, setSearchResults] = useState<Tour[]>([]);
-    const [categories] = useState<Category[]>([]); // TODO: Fetch from API
-    const [latestTours] = useState<Tour[]>([]); // TODO: Fetch from API
+    const [categories, setCategories] = useState<Category[]>([]);
+    const [latestTours, setLatestTours] = useState<Tour[]>([]);
+    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // Fetch categories and latest tours on mount
+    useEffect(() => {
+        let cancelled = false;
+        getApprovedCategories()
+            .then((res: unknown) => {
+                if (cancelled) return;
+                const raw = res as { data?: Category[]; items?: Category[] } | Category[] | undefined;
+                const list = Array.isArray(raw) ? raw : raw?.data ?? raw?.items ?? [];
+                setCategories(Array.isArray(list) ? list : []);
+            })
+            .catch(() => {
+                if (!cancelled) setCategories([]);
+            });
+        getLatestTours()
+            .then((res: unknown) => {
+                if (cancelled) return;
+                const raw = res as { data?: Tour[] } | Tour[] | undefined;
+                const list = Array.isArray(raw) ? raw : raw?.data ?? [];
+                setLatestTours(Array.isArray(list) ? list : []);
+            })
+            .catch(() => {
+                if (!cancelled) setLatestTours([]);
+            });
+        return () => { cancelled = true; };
+    }, []);
 
     useEffect(() => {
         const checkHeaderFixed = () => {
@@ -57,23 +88,58 @@ export function MenuBarSearch({ handleSearch, headerSearch }: MenuBarSearchProps
         };
     }, []);
 
+    const runSearch = useCallback(async (keyword: string, categoryId: string) => {
+        setIsSearching(true);
+        try {
+            const categoryName = categoryId && categories.length
+                ? (categories.find((c) => (c as { _id?: string })._id === categoryId || (c as { id?: string }).id === categoryId) as { name?: string } | undefined)?.name
+                : undefined;
+            const { items } = await getTourSearch({
+                keyword: keyword.trim() || undefined,
+                category: categoryName,
+                page: 1,
+                limit: 12,
+            });
+            setSearchResults(Array.isArray(items) ? (items as Tour[]) : []);
+        } catch {
+            setSearchResults([]);
+        } finally {
+            setIsSearching(false);
+        }
+    }, [categories]);
+
+    // Debounced search when title or category changes
+    useEffect(() => {
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        const hasFilter = title.trim() || selectedCategory;
+        if (!hasFilter) {
+            setSearchResults([]);
+            return;
+        }
+        debounceRef.current = setTimeout(() => {
+            debounceRef.current = null;
+            runSearch(title, selectedCategory);
+        }, DEBOUNCE_MS);
+        return () => {
+            if (debounceRef.current) clearTimeout(debounceRef.current);
+        };
+    }, [title, selectedCategory, runSearch]);
+
     const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const newTitle = e.target.value;
-        setTitle(newTitle);
-        // TODO: Implement debounced search
+        setTitle(e.target.value);
     };
 
     const handleCategorySelect = (category: string) => {
-        const selectedCat = category === 'all' ? '' : category;
-        setSelectedCategory(selectedCat);
-        // TODO: Trigger search with category
+        setSelectedCategory(category === 'all' ? '' : category);
     };
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        setIsSearching(true);
-        // TODO: Implement search API call
-        setTimeout(() => setIsSearching(false), 1000);
+        if (debounceRef.current) {
+            clearTimeout(debounceRef.current);
+            debounceRef.current = null;
+        }
+        await runSearch(title, selectedCategory);
     };
 
     const clearSearch = () => {
@@ -123,7 +189,7 @@ export function MenuBarSearch({ handleSearch, headerSearch }: MenuBarSearchProps
                     </div>
                     <div className="cd-select flex z-10 absolute md:right-3 md:top-[50%] md:bottom-auto md:translate-y-[-50%] max-md:pl-[70px]">
                         <span className="mt-2 mr-3">in</span>
-                        <Select onValueChange={handleCategorySelect}>
+                        <Select value={selectedCategory || 'all'} onValueChange={handleCategorySelect}>
                             <SelectTrigger className="w-[180px]">
                                 <SelectValue placeholder="All Categories" />
                             </SelectTrigger>
@@ -131,11 +197,14 @@ export function MenuBarSearch({ handleSearch, headerSearch }: MenuBarSearchProps
                                 <SelectGroup>
                                     <SelectItem value="all">Select all Category</SelectItem>
                                     {categories.length > 0 ? (
-                                        categories.map((category) => (
-                                            <SelectItem key={category._id} value={category._id}>
-                                                {category.name}
-                                            </SelectItem>
-                                        ))
+                                        categories.map((category) => {
+                                            const catId = (category as { _id?: string })._id ?? (category as { id?: string }).id ?? '';
+                                            return (
+                                                <SelectItem key={catId} value={catId}>
+                                                    {category.name}
+                                                </SelectItem>
+                                            );
+                                        })
                                     ) : (
                                         <SelectItem value="loading" disabled>
                                             No categories available
@@ -180,31 +249,36 @@ export function MenuBarSearch({ handleSearch, headerSearch }: MenuBarSearchProps
                         <ul>
                             {displayTours.length === 0 && !isSearching && <p>No tours found</p>}
 
-                            {displayTours.map((tour) => (
-                                <li
-                                    className="flex relative flex-col pl-[100px] mb-5 items-start"
-                                    key={tour._id}
-                                >
-                                    <Link
-                                        className="image-wrapper pr-5 absolute left-0 top-0"
-                                        href={`/tours/${tour._id}`}
+                            {displayTours.map((tour) => {
+                                const tourId = (tour as { _id?: string })._id ?? (tour as { id?: string }).id ?? '';
+                                return (
+                                    <li
+                                        key={tourId}
+                                        className="flex relative flex-col pl-[100px] mb-5 items-start"
                                     >
-                                        <img
-                                            className="w-20 h-15"
-                                            src={tour.coverImage}
-                                            alt={tour.title}
-                                        />
-                                    </Link>
-                                    <h4>
-                                        <Link className="cd-nowrap" href={`/tours/${tour._id}`}>
-                                            {tour.title}
+                                        <Link
+                                            className="image-wrapper pr-5 absolute left-0 top-0"
+                                            href={`/tours/${tourId}`}
+                                        >
+                                            <img
+                                                className="w-20 h-15"
+                                                src={(tour as { coverImage?: string }).coverImage ?? ''}
+                                                alt={tour.title}
+                                            />
                                         </Link>
-                                    </h4>
-                                    <time dateTime={tour.updatedAt} className="text-xs mt-1">
-                                        {formatDate(tour.updatedAt)}
-                                    </time>
-                                </li>
-                            ))}
+                                        <h4>
+                                            <Link className="cd-nowrap" href={`/tours/${tourId}`}>
+                                                {tour.title}
+                                            </Link>
+                                        </h4>
+                                        <time dateTime={(tour as { updatedAt?: string }).updatedAt ?? ''} className="text-xs mt-1">
+                                            {(tour as { updatedAt?: string }).updatedAt
+                                                ? formatDate((tour as { updatedAt: string }).updatedAt)
+                                                : ''}
+                                        </time>
+                                    </li>
+                                );
+                            })}
                         </ul>
                     </div>
 

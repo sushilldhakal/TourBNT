@@ -64,13 +64,15 @@ const BookingWidget = dynamic(
 
 interface TourDetailClientProps {
     tour: Tour;
+    /** Destination list from relatedData for resolving itinerary destination IDs to names */
+    destinations?: { id: string; name: string }[];
 }
 
 /**
  * Client-side wrapper for tour detail components
  * Uses dynamic imports to optimize bundle size
  */
-export function TourDetailClient({ tour }: TourDetailClientProps) {
+export function TourDetailClient({ tour, destinations }: TourDetailClientProps) {
     return (
         <>
             {/* Tour Gallery */}
@@ -81,7 +83,7 @@ export function TourDetailClient({ tour }: TourDetailClientProps) {
             />
 
             {/* Tour Tabs with all content */}
-            <TourTabs tour={tour} />
+            <TourTabs tour={tour} destinations={destinations} />
 
             {/* Review System */}
             <ReviewSystem tourId={tour._id} />

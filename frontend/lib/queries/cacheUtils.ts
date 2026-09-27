@@ -186,6 +186,10 @@ export function useCacheManager() {
             queryClient.invalidateQueries({ queryKey: queryKeys.presets.discount(userId) });
             queryClient.invalidateQueries({ queryKey: queryKeys.presets.pax(userId) });
             queryClient.invalidateQueries({ queryKey: queryKeys.presets.pricing(userId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.presets.date(userId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.presets.content(userId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.presets.itinerary(userId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.presets.tourTemplate(userId) });
         }
     }
 

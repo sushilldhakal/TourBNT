@@ -14,8 +14,8 @@ const HomeSlider = () => {
     const { data } = useLatestTours();
 
     // Backend returns { success, message, data: tours[] } → extractResponseData gives the array
-    const toursList = Array.isArray(data)
-        ? data
+    const toursList = Array.isArray(data?.data)
+        ? data?.data
         : (data as any)?.data?.tours ?? (data as any)?.tours ?? [];
 
     const [current, setCurrent] = useState(0);
@@ -151,16 +151,19 @@ const HomeSlider = () => {
         >
             <div className="relative max-h-[90vh] w-full aspect-video">
                 {sortedTours.map((tour: Tour, index: number) => {
-                    const description = tour.description || "No description available.";
-                    let truncatedDescription = description;
-
-                    if (typeof description === 'string' && description.length > 400) {
-                        truncatedDescription = description.substring(0, 400) + "...Read More";
-                    }
+                    const excerpt = tour.excerpt;
+                    const description = tour.description;
+                    const hasExcerpt = typeof excerpt === "string" && excerpt.trim().length > 0;
+                    const maxExcerptLen = 300;
+                    const excerptDisplay = hasExcerpt
+                        ? (excerpt!.length > maxExcerptLen ? excerpt!.slice(0, maxExcerptLen).trim() + "…" : excerpt)
+                        : null;
+                    const descriptionContent =
+                        excerptDisplay != null ? null : (description ?? "No description available.");
 
                     return (
                         <div
-                            key={tour._id || index}
+                            key={tour.id || index}
                             className={cn(
                                 "absolute inset-0 h-full transition-opacity duration-1000 ease-in-out",
                                 current === index ? "opacity-100 z-10" : "opacity-0 z-0",
@@ -184,17 +187,21 @@ const HomeSlider = () => {
                                 <ContentContainer className="px-4 sm:px-6 lg:px-8 relative flex items-center h-full">
                                     <div className="relative z-10 p-5 text-white w-full md:w-1/2 text-center md:text-left">
                                         <h2 className="text-2xl md:text-3xl capitalize [text-shadow:3px_3px_3px_rgb(0_0_0/100%)]">{tour.title}</h2>
-                                        <div className="text-base md:text-lg mt-4 mb-4 [text-shadow:1px_1px_2px_rgb(0_0_0/100%)] tracking-wide">
-                                            <RichTextRenderer
-                                                content={truncatedDescription}
-                                                className="text-white prose-headings:text-white prose-strong:text-white"
-                                            />
+                                        <div className="text-base md:text-lg mt-4 mb-4 [text-shadow:1px_1px_2px_rgb(0_0_0/100%)] tracking-wide line-clamp-3">
+                                            {excerptDisplay != null ? (
+                                                <p className="m-0">{excerptDisplay}</p>
+                                            ) : (
+                                                <RichTextRenderer
+                                                    content={descriptionContent}
+                                                    className="text-white prose-headings:text-white prose-strong:text-white prose-p:my-1"
+                                                />
+                                            )}
                                         </div>
                                         <div className="mt-5 relative z-10 flex flex-col sm:flex-row justify-center md:justify-start gap-4 sm:gap-5">
-                                            <Link href={`/tours/${tour._id}`} className="btn btn-primary">
+                                            <Link href={`/tours/${tour.id}`} className="btn btn-primary">
                                                 <Button className="w-full sm:w-auto">View Tour</Button>
                                             </Link>
-                                            <Link href={`/tours/${tour._id}`} className="btn btn-primary">
+                                            <Link href={`/tours/${tour.id}`} className="btn btn-primary">
                                                 <Button className="w-full sm:w-auto">Book Tour</Button>
                                             </Link>
                                         </div>
@@ -210,7 +217,7 @@ const HomeSlider = () => {
             <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col gap-3 z-20">
                 {sortedTours.map((tour: Tour, index: number) => (
                     <button
-                        key={tour._id || index}
+                        key={tour.id || index}
                         className={cn(
                             "relative flex items-center justify-center transition-all duration-500 ease-in-out",
                             current === index ? "scale-110" : "hover:scale-105"

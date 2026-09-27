@@ -22,7 +22,7 @@ body {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
 
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-nunito-sans);
   --font-mono: var(--font-geist-mono);
 
   /* ShadCN semantic colors */
@@ -92,7 +92,8 @@ body {
    LIGHT MODE — MULTI-COMPANY TRAVEL THEME
    ====================================================== */
 :root {
-  --radius: 0.625rem;
+  /* shadcn preset: radius=medium */
+  --radius: 0.5rem;
 
   /* Core - Clean White Base */
   --background: oklch(0.99 0.01 227);

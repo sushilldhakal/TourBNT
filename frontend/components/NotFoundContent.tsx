@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import NotFoundSVG from '@/public/404';
+import NotFoundSVG from '@/components/icons/NotFoundSVG';
 import { motion } from 'motion/react';
 
 export function NotFoundContent() {

@@ -112,6 +112,10 @@ export const queryKeys = {
         discount: (userId: string | undefined) => ['discount-presets', userId] as const,
         pax: (userId: string | undefined) => ['pax-presets', userId] as const,
         pricing: (userId: string | undefined) => ['pricing-presets', userId] as const,
+        date: (userId: string | undefined) => ['date-presets', userId] as const,
+        content: (userId: string | undefined) => ['content-presets', userId] as const,
+        itinerary: (userId: string | undefined) => ['itinerary-presets', userId] as const,
+        tourTemplate: (userId: string | undefined) => ['tour-template-presets', userId] as const,
     },
 
     // Company (footer, public)

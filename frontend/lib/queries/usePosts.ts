@@ -24,10 +24,11 @@ export function useUserPosts(params?: { page?: number; limit?: number }) {
 }
 
 export function usePostById(postId: string | undefined, enabled = true) {
+    const hasValidId = !!postId && postId !== 'undefined';
     return useQuery({
         queryKey: queryKeys.posts.detail(postId ?? ''),
         queryFn: () => getSinglePost(postId!),
-        enabled: !!postId && enabled,
+        enabled: hasValidId && enabled,
         staleTime: 1000 * 60 * 2,
     });
 }

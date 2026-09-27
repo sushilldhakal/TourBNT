@@ -6,6 +6,7 @@ import { ArrowLeft, Save, Loader2, AlertCircle, MapPin } from 'lucide-react';
 import { TourProvider, useTourContext } from '@/providers/TourProvider';
 import { TourEditorLayout } from '@/components/dashboard/tours/TourEditorLayout';
 import {
+    ApplyPresetsBar,
     TourBasicInfo,
     TourPricingDates,
     TourItinerary,
@@ -17,17 +18,19 @@ import {
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { TabsContent } from '@/components/ui/tabs';
-import { Card } from '@/components/ui';
 import { DashboardCardHeader } from '@/components/dashboard/layout/CardHeader';
 
 function TourForm() {
     const router = useRouter();
     const { form, onSubmit, isSaving } = useTourContext();
-    const { handleSubmit, formState: { errors } } = form;
+    const { handleSubmit, watch, formState: { errors } } = form;
     const [submitError] = React.useState<string | null>(null);
 
-
+  
     const handleSave = async () => {
+        const current = form.getValues();
+        console.log('[Add Tour] Save clicked – current form values (format):', JSON.stringify(current, null, 2));
+        console.log('[Add Tour] Save clicked – current form values (object):', current);
         try {
             await handleSubmit(onSubmit)();
         } catch (error: any) {
@@ -93,6 +96,7 @@ function TourForm() {
             )}
 
             <form onSubmit={handleSubmit(onSubmit)}>
+                <ApplyPresetsBar />
                 <TourEditorLayout onSave={handleSave} saveLabel="Create Tour">
                     <TabsContent value="overview" className="mt-0">
                         <TourBasicInfo />

@@ -15,10 +15,11 @@ export function useAllComments() {
 }
 
 export function useCommentsByPost(postId: string | undefined, enabled = true) {
+    const hasValidId = !!postId && postId !== 'undefined';
     return useQuery({
         queryKey: queryKeys.comments.list(postId ?? ''),
         queryFn: () => getCommentsByPost(postId!),
-        enabled: !!postId && enabled,
+        enabled: hasValidId && enabled,
         staleTime: 1000 * 60 * 2,
     });
 }

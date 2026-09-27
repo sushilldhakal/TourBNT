@@ -58,13 +58,14 @@ export function Breadcrumbs() {
             <Link
                 href="/dashboard"
                 className="flex items-center hover:text-slate-900 dark:hover:text-slate-100 transition-colors"
+                aria-label="Dashboard home"
             >
-                <Home className="h-4 w-4" />
+                <Home className="h-4 w-4" aria-hidden="true" />
             </Link>
 
             {displayBreadcrumbs.map((crumb, index) => (
                 <div key={crumb.href || index} className="flex items-center space-x-2">
-                    <ChevronRight className="h-4 w-4" />
+                    <ChevronRight className="h-4 w-4" aria-hidden="true" />
                     {index === displayBreadcrumbs.length - 1 ? (
                         <span className="font-medium text-slate-900 dark:text-slate-100">
                             {crumb.label}

@@ -41,7 +41,7 @@ export interface UploadResponse {
 
 export interface MediaQueryResponse {
     success: boolean;
-    items: MediaItem[];
+    data: MediaItem[];
     message: string;
     pagination: {
         page: number;

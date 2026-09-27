@@ -5,7 +5,7 @@ import { api, handleApiError, extractResponseData } from './apiClient';
  */
 export const login = async (data: { email: string; password: string; keepMeSignedIn: boolean }) => {
     try {
-        const response = await api.post('/users/login', data, {
+        const response = await api.post('/auth/login', data, {
             timeout: 15000,
         });
         return extractResponseData(response);

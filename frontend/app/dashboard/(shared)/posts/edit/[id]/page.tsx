@@ -59,6 +59,9 @@ export default function EditPostPage() {
     const params = useParams<{ id: string }>();
     const { setBreadcrumbs } = useBreadcrumbs();
 
+    const postId = params?.id;
+    const hasValidId = !!postId && postId !== 'undefined';
+
     const form = useForm<PostFormData>({
         resolver: zodResolver(postSchema),
         defaultValues: {
@@ -73,16 +76,16 @@ export default function EditPostPage() {
         shouldUnregister: false,
         reValidateMode: 'onChange', // Only re-validate after first submit
     });
-    const { data: post, isLoading, error } = usePostById(params?.id, !!params?.id);
+    const { data: post, isLoading, error } = usePostById(postId, hasValidId);
     // Update post mutation
     const updatePostMutation = useMutation({
-        mutationFn: (data: FormData) => updatePost(data, params.id),
+        mutationFn: (data: FormData) => updatePost(data, postId!),
         onSuccess: () => {
             toast({
                 title: 'Success',
                 description: 'Post updated successfully',
             });
-            invalidatePosts({ detailId: params.id });
+            invalidatePosts({ detailId: postId! });
             // Don't navigate away - let user see the updated data
             // router.push('/dashboard/posts');
         },
@@ -97,7 +100,7 @@ export default function EditPostPage() {
 
     // Delete post mutation
     const deletePostMutation = useMutation({
-        mutationFn: () => deletePost(params.id),
+        mutationFn: () => deletePost(postId!),
         onSuccess: () => {
             toast({
                 title: 'Post deleted successfully',
@@ -186,12 +189,12 @@ export default function EditPostPage() {
             if (postData.title) {
                 setBreadcrumbs([
                     { label: 'Posts', href: '/dashboard/posts' },
-                    { label: 'Edit', href: `/dashboard/posts/edit/${params.id}` },
+                    { label: 'Edit', href: `/dashboard/posts/edit/${postId}` },
                     { label: postData.title },
                 ]);
             }
         }
-    }, [post, form, setBreadcrumbs, params.id]);
+    }, [post, form, setBreadcrumbs, postId]);
 
     const onSubmit = (values: PostFormData) => {
         const formData = new FormData();
@@ -230,6 +233,23 @@ export default function EditPostPage() {
             deletePostMutation.mutate();
         }
     };
+
+    if (!hasValidId) {
+        return (
+            <div className="container mx-auto py-8">
+                <div className="text-center">
+                    <h1 className="text-2xl font-bold text-destructive mb-4">Invalid post</h1>
+                    <p className="text-muted-foreground mb-4">The post ID in the URL is missing or invalid.</p>
+                    <Link href="/dashboard/posts">
+                        <Button>
+                            <ArrowLeft className="h-4 w-4 mr-2" />
+                            Back to Posts
+                        </Button>
+                    </Link>
+                </div>
+            </div>
+        );
+    }
 
     if (isLoading) {
         return (
@@ -285,7 +305,7 @@ export default function EditPostPage() {
                     actions={
                         <div className="flex items-center gap-2">
                             <Button size="sm" variant="outline" disabled={deletePostMutation.isPending} asChild>
-                                <Link href={`/blog/${params.id}`} target="_blank">
+                                <Link href={`/blog/${postId}`} target="_blank">
                                     <ExternalLink className="h-4 w-4 mr-2" />
                                     View Post
                                 </Link>
@@ -378,7 +398,7 @@ export default function EditPostPage() {
                                                 <FormLabel>Content</FormLabel>
                                                 <FormControl>
                                                     <NovelEditor
-                                                        key={post?._id ? String(post._id) : 'empty'}
+                                                        key={String((post as { id?: string; _id?: string })?.id ?? (post as { _id?: string })?._id ?? 'empty')}
                                                         initialValue={editorContent ?? initialEditorValue}
                                                         onContentChange={(content: JSONContent) => {
                                                             setEditorContent(content);
@@ -602,7 +622,7 @@ export default function EditPostPage() {
             {/* Comments Section - Only show if comments are enabled */}
             {post.enableComments && (
                 <div className="mx-auto w-full max-w-6xl mt-6">
-                    <CommentsSection postId={params.id} />
+                    <CommentsSection postId={postId} />
                 </div>
             )}
         </div>

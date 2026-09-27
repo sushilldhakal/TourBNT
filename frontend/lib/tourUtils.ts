@@ -174,6 +174,10 @@ export function calculateBookingPricingPreview(
 }
 
 /**
+ * Tour display and departure helpers (formatting, recurrence). Not used for payload parsing; payload shape is in tour-payload.example.json.
+ */
+
+/**
  * Format price with currency symbol
  * @param price - The price to format
  * @param currency - Currency symbol (default: '$')

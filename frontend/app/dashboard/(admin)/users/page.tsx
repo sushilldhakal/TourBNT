@@ -87,23 +87,18 @@ export default function UsersPage() {
         return infiniteData.pages.flatMap((page: unknown) => {
             if (Array.isArray(page)) return page;
             if (typeof page === 'object' && page !== null) {
-                // Check for 'items' field (current API format)
-                if ('items' in page && Array.isArray(page.items)) {
-                    return page.items;
+                // Standard list format: data array
+                if ('data' in page && Array.isArray(page.data)) {
+                    return page.data;
                 }
-                // Fallback: check for 'users' field
                 if ('users' in page && Array.isArray(page.users)) {
                     return page.users;
                 }
-                // Fallback: check for nested 'data' structure
+                // Nested data
                 if ('data' in page && typeof page.data === 'object' && page.data !== null) {
-                    const data = page.data as { items?: DashboardUser[]; users?: DashboardUser[] };
-                    if (data.items && Array.isArray(data.items)) {
-                        return data.items;
-                    }
-                    if (data.users && Array.isArray(data.users)) {
-                        return data.users;
-                    }
+                    const inner = page.data as { data?: DashboardUser[]; users?: DashboardUser[] };
+                    if (inner.data && Array.isArray(inner.data)) return inner.data;
+                    if (inner.users && Array.isArray(inner.users)) return inner.users;
                 }
             }
             return [];

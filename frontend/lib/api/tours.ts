@@ -17,7 +17,7 @@ export interface TourPagination {
 }
 
 export interface ToursResponse {
-    items: any[];
+    data: unknown[];
     nextCursor?: number;
     pagination: TourPagination;
     currentPage: number;
@@ -48,11 +48,39 @@ export const getTours = async ({
             throw new Error('Invalid response format: No data received');
         }
 
+        // Standard sendPaginatedResponse: { data: [...], pagination: { page, limit, totalItems, totalPages } }
+        const raw = data as { data?: unknown[]; pagination?: { page: number; limit: number; totalItems: number; totalPages: number } };
+        if (Array.isArray(raw?.data) && raw?.pagination) {
+            const toursData = raw.data;
+            const p = raw.pagination;
+            const currentPage = p.page ?? 1;
+            const totalPages = p.totalPages ?? 1;
+            const totalItems = p.totalItems ?? toursData.length;
+            const hasNextPage = currentPage < totalPages;
+            return {
+                data: toursData,
+                nextCursor: hasNextPage ? currentPage + 1 : undefined,
+                pagination: {
+                    currentPage,
+                    totalPages,
+                    totalTours: totalItems,
+                    hasNextPage,
+                    hasPrevPage: currentPage > 1,
+                    limit: p.limit ?? limit,
+                },
+                currentPage,
+                totalPages,
+                totalTours: totalItems,
+                hasNextPage,
+                hasPrevPage: currentPage > 1,
+            };
+        }
+
         // Handle nested data structure (data.data.tours) - after extractResponseData
         if ((data as any)?.data?.tours) {
             const { tours: toursData, pagination } = (data as any).data;
             return {
-                items: toursData,
+                data: toursData,
                 nextCursor: pagination.hasNextPage ? pagination.currentPage : undefined,
                 pagination,
                 currentPage: pagination.currentPage,
@@ -68,7 +96,7 @@ export const getTours = async ({
             const toursData = (data as any).tours;
             const pagination = (data as any).pagination;
             return {
-                items: toursData,
+                data: toursData,
                 nextCursor: pagination?.hasNextPage ? pagination.currentPage : undefined,
                 pagination: pagination || {},
                 currentPage: pagination?.currentPage || pageParam + 1,
@@ -83,7 +111,7 @@ export const getTours = async ({
         if (Array.isArray(data)) {
             const tours = data;
             return {
-                items: tours,
+                data: tours,
                 nextCursor: pageParam + 1,
                 pagination: {
                     currentPage: pageParam,
@@ -131,13 +159,13 @@ export const getMyTours = async ({
             throw new Error('Invalid response format: No data received');
         }
 
-        // Standard format from sendPaginatedResponse: { data: T[], pagination: {...} }
-        const responseData = data as { items?: unknown[]; data?: unknown[]; pagination?: any; tours?: unknown[] };
+        // Standard format from sendPaginatedResponse: { data: T[], message, pagination: { page, limit, totalItems, totalPages } }
+        const responseData = data as { data?: unknown[]; pagination?: any; tours?: unknown[] };
         if (responseData.pagination) {
-            const tours = (responseData.items || responseData.data || responseData.tours || []) as unknown[];
+            const tours = (responseData.data ?? responseData.tours ?? []) as unknown[];
             const pagination = responseData.pagination;
             return {
-                items: tours,
+                data: tours,
                 nextCursor: pagination.currentPage < pagination.totalPages ? pagination.currentPage : undefined,
                 pagination: {
                     currentPage: pagination.currentPage - 1, // Convert to 0-indexed
@@ -145,7 +173,7 @@ export const getMyTours = async ({
                     totalTours: pagination.totalItems,
                     hasNextPage: pagination.currentPage < pagination.totalPages,
                     hasPrevPage: pagination.currentPage > 1,
-                    limit: pagination.itemsPerPage
+                    limit: pagination.limit ?? pagination.itemsPerPage
                 },
                 currentPage: pagination.currentPage - 1, // Convert to 0-indexed
                 totalPages: pagination.totalPages,
@@ -159,7 +187,7 @@ export const getMyTours = async ({
         if (Array.isArray(data)) {
             const tours = data as unknown[];
             return {
-                items: tours,
+                data: tours,
                 nextCursor: undefined,
                 pagination: {
                     currentPage: pageParam,
@@ -222,18 +250,36 @@ export const getLatestTours = async () => {
 };
 
 /**
- * Get single tour by ID
+ * Get single tour by ID.
+ * Options.include: request relatedData sections (author, destination, categories, similarTours, pricingInsights, availability).
+ * When omitted, server returns default relatedData for edit (author, destination, categories).
+ * Returns data in shape { tour, relatedData?, breadcrumbs?, meta? }.
  */
-export const getSingleTour = async (tourId: string) => {
+export const getSingleTour = async (
+    tourId: string,
+    options?: { include?: string[] }
+): Promise<{ tour: any; relatedData?: any; breadcrumbs?: { label: string; url: string }[]; meta?: any }> => {
     try {
-        const response = await api.get(`/tours/${tourId}`);
-        const data = extractResponseData(response);
-        const tourData = (data as any).tour || data;
-        const breadcrumbs = (data as any).breadcrumbs || [];
-
+        const query =
+            options?.include && options.include.length > 0
+                ? `?include=${options.include.join(',')}`
+                : '';
+        const response = await api.get(`/tours/${tourId}${query}`);
+        const raw = extractResponseData(response) as { data?: any; tour?: any; breadcrumbs?: any[] };
+        const data = raw?.data ?? raw;
+        if (data?.tour) {
+            return {
+                tour: data.tour,
+                relatedData: data.relatedData,
+                breadcrumbs: data.breadcrumbs,
+                meta: data.meta,
+            };
+        }
         return {
-            ...tourData,
-            breadcrumbs,
+            tour: data?.tour ?? data,
+            breadcrumbs: data?.breadcrumbs ?? [],
+            relatedData: data?.relatedData,
+            meta: data?.meta,
         };
     } catch (error) {
         throw handleApiError(error, 'fetching tour');
@@ -243,8 +289,11 @@ export const getSingleTour = async (tourId: string) => {
 /**
  * Get single tour by ID (alias for getSingleTour)
  */
-export const getTourById = async (tourId: string) => {
-    return getSingleTour(tourId);
+export const getTourById = async (
+    tourId: string,
+    options?: { include?: string[] }
+) => {
+    return getSingleTour(tourId, options);
 };
 
 /**
@@ -297,12 +346,33 @@ export const deleteTour = async (tourId: string) => {
 };
 
 /**
- * Search tours with filters
+ * Search tours with filters (query string form - for backward compatibility)
  */
 export const searchTours = async (query: string) => {
     try {
-        const response = await api.get(`/api/tour-search?${query}`);
+        const response = await api.get(`/tour-search?${query}`);
         return extractResponseData(response);
+    } catch (error) {
+        throw handleApiError(error, 'searching tours');
+    }
+};
+
+/**
+ * Search tours with params (keyword, category, etc.)
+ * Backend: GET /tour-search?keyword=...&category=...&page=1&limit=10
+ */
+export const getTourSearch = async (params: {
+    keyword?: string;
+    category?: string;
+    page?: number;
+    limit?: number;
+}) => {
+    try {
+        const response = await api.get('/tour-search', { params });
+        const data = extractResponseData(response);
+        const items = Array.isArray(data) ? data : (data as { data?: unknown[] })?.data ?? [];
+        const pagination = (data as { pagination?: { totalItems?: number; totalPages?: number } })?.pagination;
+        return { items, pagination };
     } catch (error) {
         throw handleApiError(error, 'searching tours');
     }

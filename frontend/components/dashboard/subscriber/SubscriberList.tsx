@@ -72,11 +72,10 @@ export function SubscriberList() {
     const allSubscribers: Subscriber[] = useMemo(() => {
         if (!infiniteData) return [];
         return infiniteData.pages.flatMap((page: SubscribersResponse) => {
-            // API returns { items: Subscriber[], pagination: {...} }
-            if (page.items && Array.isArray(page.items)) {
-                return page.items;
+            // API returns { data: Subscriber[], pagination: {...} }
+            if (page.data && Array.isArray(page.data)) {
+                return page.data;
             }
-            // If page itself is an array (direct response)
             if (Array.isArray(page)) {
                 return page;
             }
@@ -141,7 +140,7 @@ export function SubscriberList() {
                     const subscriber = row.original;
                     return (
                         <div className="flex items-center gap-2">
-                            <Mail className="h-4 w-4 text-muted-foreground" />
+                            <Mail className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                             <span className="font-medium">{subscriber.email}</span>
                         </div>
                     );
@@ -171,8 +170,9 @@ export function SubscriberList() {
                             size="sm"
                             onClick={() => setDeleteEmail(subscriber.email)}
                             className="text-destructive hover:text-destructive"
+                            aria-label={`Delete subscriber ${subscriber.email}`}
                         >
-                            <Trash2 className="h-4 w-4 mr-2" />
+                            <Trash2 className="h-4 w-4 mr-2" aria-hidden="true" />
                             Delete
                         </Button>
                     );
@@ -234,7 +234,7 @@ export function SubscriberList() {
                     <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
                         <div>
                             <CardTitle className="flex items-center gap-2 text-2xl">
-                                <Mail className="h-6 w-6 text-primary" />
+                                <Mail className="h-6 w-6 text-primary" aria-hidden="true" />
                                 Subscribers ({filteredSubscribers.length})
                             </CardTitle>
                             <CardDescription className="mt-1">
@@ -243,12 +243,13 @@ export function SubscriberList() {
                         </div>
                         <div className="flex gap-2">
                             <div className="relative">
-                                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" aria-hidden="true" />
                                 <Input
                                     placeholder="Search by email..."
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                     className="pl-8 w-full md:w-[300px]"
+                                    aria-label="Search subscribers by email"
                                 />
                             </div>
                         </div>
@@ -263,6 +264,7 @@ export function SubscriberList() {
                                     <button
                                         onClick={() => fetchNextPage()}
                                         className="underline font-medium hover:text-yellow-900 dark:hover:text-yellow-100"
+                                        aria-label="Load more subscribers"
                                     >
                                         Load more
                                     </button>

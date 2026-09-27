@@ -10,6 +10,8 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { getConversations } from '@/lib/api/conversations';
+import type { Conversation } from '@/lib/api/conversations';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useRouter } from 'next/navigation';
 import { getUserEmail, getUserRole } from '@/lib/utils/auth';
@@ -25,7 +27,7 @@ import {
     CommandGroup,
     CommandItem,
 } from '@/components/ui/command';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { isAdmin } from '@/lib/utils/roles';
 import { baseNavigationItems, getFlatNavigationForSearch } from './dashboardNavigation';
 import type { DashboardHeaderProps } from '@/types/dashboard';
@@ -43,7 +45,22 @@ export function DashboardHeader({ onToggleSidebar, onLogout }: DashboardHeaderPr
     const { isFullWidth, toggleLayout } = useLayout();
     const [searchOpen, setSearchOpen] = useState(false);
     const [showLayoutToggle, setShowLayoutToggle] = useState(false);
+    const [recentConversations, setRecentConversations] = useState<Conversation[]>([]);
+    const [messagesOpen, setMessagesOpen] = useState(false);
+    const [messagesLoading, setMessagesLoading] = useState(false);
     const isUserAdmin = isAdmin(userRole ?? displayRole);
+
+    const loadRecentMessages = useCallback(() => {
+        setMessagesLoading(true);
+        getConversations({ limit: 5 })
+            .then(({ items }) => setRecentConversations(items))
+            .catch(() => setRecentConversations([]))
+            .finally(() => setMessagesLoading(false));
+    }, []);
+
+    useEffect(() => {
+        if (messagesOpen) loadRecentMessages();
+    }, [messagesOpen, loadRecentMessages]);
 
     // Only show layout toggle when screen is wider than 1600px
     useEffect(() => {
@@ -92,7 +109,7 @@ export function DashboardHeader({ onToggleSidebar, onLogout }: DashboardHeaderPr
                     className="md:hidden"
                     onClick={onToggleSidebar}
                 >
-                    <Menu className="h-5 w-5" />
+                    <Menu className="h-5 w-5" aria-hidden="true" />
                     <span className="sr-only">Toggle menu</span>
                 </Button>
 
@@ -103,7 +120,7 @@ export function DashboardHeader({ onToggleSidebar, onLogout }: DashboardHeaderPr
                     className="hidden md:flex"
                     onClick={onToggleSidebar}
                 >
-                    <Menu className="h-5 w-5" />
+                    <Menu className="h-5 w-5" aria-hidden="true" />
                     <span className="sr-only">Toggle sidebar</span>
                 </Button>
 
@@ -120,8 +137,9 @@ export function DashboardHeader({ onToggleSidebar, onLogout }: DashboardHeaderPr
                         onClick={() => setSearchOpen(true)}
                         className="relative hidden lg:flex h-8 w-40 max-w-[180px] min-w-0 items-center gap-1.5 rounded-md border border-input bg-muted/30 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                         title="Search (⌘K)"
+                        aria-label="Search (⌘K)"
                     >
-                        <Search className="h-3.5 w-3.5 shrink-0" />
+                        <Search className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                         <span className="flex-1 truncate text-left">Search...</span>
                         <kbd className="pointer-events-none hidden shrink-0 items-center rounded border bg-background/80 px-1 font-mono text-[10px] font-medium opacity-70 lg:inline-flex">
                             ⌘K
@@ -135,23 +153,95 @@ export function DashboardHeader({ onToggleSidebar, onLogout }: DashboardHeaderPr
                         onClick={() => setSearchOpen(true)}
                         className="h-9 w-9 shrink-0 lg:hidden gap-1"
                         title="Search (⌘K)"
+                        aria-label="Search (⌘K)"
                     >
-                        <Search className="h-4 w-4" />
+                        <Search className="h-4 w-4" aria-hidden="true" />
                     </Button>
 
-                    {/* Messages Button */}
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="relative h-9 w-9 gap-1"
-                        title="Messages"
-                    >
-                        <MessageSquare className="h-4 w-4" />
-                        <span className="absolute right-1 top-1 flex h-2 w-2">
-                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75"></span>
-                            <span className="relative inline-flex h-2 w-2 rounded-full bg-primary"></span>
-                        </span>
-                    </Button>
+                    {/* Messages dropdown */}
+                    <DropdownMenu open={messagesOpen} onOpenChange={setMessagesOpen}>
+                        <DropdownMenuTrigger asChild>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="relative h-9 w-9 gap-1"
+                                title="Messages"
+                                aria-label="Messages"
+                            >
+                                <MessageSquare className="h-4 w-4" aria-hidden="true" />
+                                {recentConversations.length > 0 && (
+                                    <span className="absolute right-1 top-1 flex h-2 w-2">
+                                        <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+                                    </span>
+                                )}
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-72">
+                            <DropdownMenuLabel className="flex items-center justify-between">
+                                <span>Recent messages</span>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-auto py-1 text-xs text-primary"
+                                    onClick={() => {
+                                        setMessagesOpen(false);
+                                        router.push('/dashboard/message');
+                                    }}
+                                >
+                                    View all
+                                </Button>
+                            </DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            {messagesLoading ? (
+                                <div className="py-4 text-center text-sm text-muted-foreground">
+                                    Loading...
+                                </div>
+                            ) : recentConversations.length === 0 ? (
+                                <div className="py-4 text-center text-sm text-muted-foreground">
+                                    No conversations yet
+                                </div>
+                            ) : (
+                                recentConversations.map((c) => {
+                                    const id = (c as { id?: string }).id ?? (c as { _id?: string })._id ?? '';
+                                    const name =
+                                        c.guestName ||
+                                        (c.fromUserId && typeof c.fromUserId === 'object' && 'name' in c.fromUserId
+                                            ? (c.fromUserId as { name?: string }).name
+                                            : undefined) ||
+                                        c.subject ||
+                                        'Unknown';
+                                    return (
+                                        <DropdownMenuItem
+                                            key={id}
+                                            onClick={() => {
+                                                setMessagesOpen(false);
+                                                router.push(`/dashboard/message?conversationId=${encodeURIComponent(id)}`);
+                                            }}
+                                            className="flex flex-col items-start gap-0.5 py-2"
+                                        >
+                                            <span className="font-medium truncate w-full text-left">{name}</span>
+                                            <span className="text-xs text-muted-foreground truncate w-full text-left">
+                                                {c.subject}
+                                            </span>
+                                            <span className="text-xs text-muted-foreground">
+                                                {new Date(c.updatedAt).toLocaleDateString()}
+                                            </span>
+                                        </DropdownMenuItem>
+                                    );
+                                })
+                            )}
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                                onClick={() => {
+                                    setMessagesOpen(false);
+                                    router.push('/dashboard/message');
+                                }}
+                            >
+                                <MessageSquare className="mr-2 h-4 w-4" aria-hidden="true" />
+                                Open messages
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
 
                     {/* Notifications Button */}
                     <Button
@@ -159,8 +249,9 @@ export function DashboardHeader({ onToggleSidebar, onLogout }: DashboardHeaderPr
                         size="icon"
                         className="relative h-9 w-9 gap-1"
                         title="Notifications"
+                        aria-label="Notifications"
                     >
-                        <Bell className="h-4 w-4" />
+                        <Bell className="h-4 w-4" aria-hidden="true" />
                         <span className="absolute right-1 top-1 flex h-2 w-2">
                             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75"></span>
                             <span className="relative inline-flex h-2 w-2 rounded-full bg-primary"></span>
@@ -175,11 +266,12 @@ export function DashboardHeader({ onToggleSidebar, onLogout }: DashboardHeaderPr
                             onClick={toggleLayout}
                             className="h-7 w-7 hover:bg-secondary-foreground/10 gap-1"
                             title={isFullWidth ? 'Switch to Boxed Layout' : 'Switch to Full Width Layout'}
+                            aria-label={isFullWidth ? 'Switch to boxed layout' : 'Switch to full width layout'}
                         >
                             {isFullWidth ? (
-                                <Minimize2 size={16} className="text-secondary-foreground" />
+                                <Minimize2 size={16} className="text-secondary-foreground" aria-hidden="true" />
                             ) : (
-                                <Maximize2 size={16} className="text-secondary-foreground" />
+                                <Maximize2 size={16} className="text-secondary-foreground" aria-hidden="true" />
                             )}
                         </Button>
                     )}
@@ -215,20 +307,20 @@ export function DashboardHeader({ onToggleSidebar, onLogout }: DashboardHeaderPr
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={handleHomeClick}>
-                        <User className="mr-2 h-4 w-4" />
+                        <User className="mr-2 h-4 w-4" aria-hidden="true" />
                         <span>HomePage</span>
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={handleProfileClick}>
-                        <User className="mr-2 h-4 w-4" />
+                        <User className="mr-2 h-4 w-4" aria-hidden="true" />
                         <span>Profile</span>
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => router.push('/dashboard/settings')}>
-                        <Settings className="mr-2 h-4 w-4" />
+                        <Settings className="mr-2 h-4 w-4" aria-hidden="true" />
                         <span>Settings</span>
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={onLogout} className="text-red-600 dark:text-red-400">
-                        <LogOut className="mr-2 h-4 w-4" />
+                        <LogOut className="mr-2 h-4 w-4" aria-hidden="true" />
                         <span>Log out</span>
                     </DropdownMenuItem>
                 </DropdownMenuContent>
@@ -261,7 +353,7 @@ export function DashboardHeader({ onToggleSidebar, onLogout }: DashboardHeaderPr
                                                 setSearchOpen(false);
                                             }}
                                         >
-                                            <Icon className="mr-2 h-4 w-4" />
+                                            <Icon className="mr-2 h-4 w-4" aria-hidden="true" />
                                             <span>{item.label}</span>
                                         </CommandItem>
                                     );

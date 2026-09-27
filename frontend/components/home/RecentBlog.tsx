@@ -26,8 +26,9 @@ export default function RecentBlog() {
 
     const { data: response, isLoading, error } = usePublicPosts();
     useEffect(() => {
-        if (response?.items) {
-            const updatedPosts = response.items.map((post: Post) => ({
+        const list = response?.data ?? [];
+        if (list) {
+            const updatedPosts = list.map((post: Post) => ({
                 ...post,
                 liked: false,
                 likes: post.likes || 0,
@@ -221,7 +222,7 @@ export default function RecentBlog() {
                                             </div>
                                         </CardContent>
                                         <CardFooter className="p-4 pt-0">
-                                            <Link href={`/blog/${post._id}`} className="w-full">
+                                            <Link href={`/blog/${post.id}`} className="w-full">
                                                 <Button variant="outline" className="w-full">
                                                     Read Article
                                                 </Button>

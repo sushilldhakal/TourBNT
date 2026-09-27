@@ -31,9 +31,9 @@ export const tourEditorTabs: TourTab[] = [
     },
     {
         id: 'itinerary',
-        title: 'Itinerary and Destination',
+        title: 'Itinerary',
         icon: MapPin,
-        description: 'Day-by-day itinerary and location details',
+        description: 'Day-by-day itinerary',
     },
     {
         id: 'inc-exc',

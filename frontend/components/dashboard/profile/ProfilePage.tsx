@@ -489,8 +489,19 @@ export function ProfilePage() {
                                                     <FormControl>
                                                         <div className="relative">
                                                             <Input type={showCurrentPassword ? 'text' : 'password'} placeholder="Enter current password" {...field} />
-                                                            <Button type="button" variant="ghost" size="icon" className="absolute right-0 top-0 h-full px-3" onClick={() => setShowCurrentPassword(!showCurrentPassword)}>
-                                                                {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                                            <Button
+                                                                type="button"
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="absolute right-0 top-0 h-full px-3"
+                                                                onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                                                                aria-label={showCurrentPassword ? 'Hide current password' : 'Show current password'}
+                                                            >
+                                                                {showCurrentPassword ? (
+                                                                    <EyeOff className="h-4 w-4" aria-hidden="true" />
+                                                                ) : (
+                                                                    <Eye className="h-4 w-4" aria-hidden="true" />
+                                                                )}
                                                             </Button>
                                                         </div>
                                                     </FormControl>
@@ -503,8 +514,19 @@ export function ProfilePage() {
                                                     <FormControl>
                                                         <div className="relative">
                                                             <Input type={showPassword ? 'text' : 'password'} placeholder="Enter new password" {...field} />
-                                                            <Button type="button" variant="ghost" size="icon" className="absolute right-0 top-0 h-full px-3" onClick={() => setShowPassword(!showPassword)}>
-                                                                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                                            <Button
+                                                                type="button"
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="absolute right-0 top-0 h-full px-3"
+                                                                onClick={() => setShowPassword(!showPassword)}
+                                                                aria-label={showPassword ? 'Hide new password' : 'Show new password'}
+                                                            >
+                                                                {showPassword ? (
+                                                                    <EyeOff className="h-4 w-4" aria-hidden="true" />
+                                                                ) : (
+                                                                    <Eye className="h-4 w-4" aria-hidden="true" />
+                                                                )}
                                                             </Button>
                                                         </div>
                                                     </FormControl>
@@ -519,7 +541,17 @@ export function ProfilePage() {
                                                 </FormItem>
                                             )} />
                                             <Button type="submit" disabled={changePasswordMutation.isPending} className="w-full" size="lg">
-                                                {changePasswordMutation.isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Changing...</> : <><Lock className="mr-2 h-4 w-4" />Change Password</>}
+                                                {changePasswordMutation.isPending ? (
+                                                    <>
+                                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                                                        Changing...
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Lock className="mr-2 h-4 w-4" aria-hidden="true" />
+                                                        Change Password
+                                                    </>
+                                                )}
                                             </Button>
                                         </form>
                                     </Form>
