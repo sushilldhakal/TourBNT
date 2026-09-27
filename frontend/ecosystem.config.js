@@ -1,7 +1,20 @@
+// require.resolve walks up from this file's directory, so it finds Next's
+// CLI entry point whether npm's workspace install hoisted it to the repo
+// root's node_modules or kept it local to frontend/ — a hardcoded relative
+// path would silently break depending on which one npm chose. PM2 cluster
+// mode also needs this to be a real .js file it loads directly (not a
+// `npm`/`npx` wrapper process), or the 2 instances would each try to bind
+// port 3000 themselves instead of load-balancing across one.
+const nextBin = require.resolve('next/dist/bin/next');
+
 module.exports = {
   apps: [{
     name: 'tourbnt-frontend',
-    script: './server.js',
+    // Runs the standard Next.js production server (not the Docker-only
+    // "standalone" build output, which nests server.js in a way that only
+    // makes sense inside that isolated build context).
+    script: nextBin,
+    args: 'start -p 3000 -H 0.0.0.0',
     instances: 2,  // Run 2 instances for load balancing
     exec_mode: 'cluster',
     env: {

@@ -1,86 +1,62 @@
-name: Build and deploy to Oracle Cloud
+name: Deploy to Oracle Cloud
 
-# Fully automatic: every push to main builds both images and deploys them to
-# the production Oracle Cloud server. There is no manual approval step — a
-# broken commit on main goes live immediately.
+# Fully automatic: every push to main syncs the source to the production
+# Oracle Cloud server and builds it there natively (no Docker, no cross-arch
+# emulation). There is no manual approval step — a broken commit on main
+# goes live immediately.
+#
+# Why native instead of Docker: the Oracle VM is ARM64 (Ampere A1) but
+# GitHub's runners are x86_64, so a Docker build had to cross-compile under
+# QEMU emulation — that's what made deploys take 20-30+ minutes. Building
+# directly on the target server has no emulation and uses its own 12GB RAM,
+# so `npm install`/`next build`/`tsc` all run at native speed.
 on:
   push:
     branches: [main]
   workflow_dispatch: {} # allows a manual re-run/redeploy from the Actions tab
 
 env:
-  DOCKERHUB_USERNAME: sushilldhakal
-  IMAGE_SERVER: sushilldhakal/tourbnt-server
-  IMAGE_FRONTEND: sushilldhakal/tourbnt-frontend
-  # Oracle Cloud VM.Standard.A1.Flex is Ampere ARM64, not x86 — images must be
-  # built for this platform or the containers won't start on the server.
-  TARGET_PLATFORM: linux/arm64
   ORACLE_HOST: 161.118.228.58
   ORACLE_USER: ubuntu
   APP_DIR: /var/www/tourbnt
 
 jobs:
-  build-and-push:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
-
-      - uses: docker/login-action@v3
-        with:
-          username: ${{ env.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      # Root context — server/Dockerfile needs packages/db as a sibling.
-      - name: Build and push server image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: server/Dockerfile
-          platforms: ${{ env.TARGET_PLATFORM }}
-          push: true
-          tags: |
-            ${{ env.IMAGE_SERVER }}:latest
-            ${{ env.IMAGE_SERVER }}:${{ github.sha }}
-          cache-from: type=gha,scope=server
-          cache-to: type=gha,mode=max,scope=server
-
-      - name: Build and push frontend image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./frontend
-          file: frontend/Dockerfile
-          platforms: ${{ env.TARGET_PLATFORM }}
-          push: true
-          build-args: |
-            NEXT_PUBLIC_BACKEND_URL=https://tourbnt.com
-          tags: |
-            ${{ env.IMAGE_FRONTEND }}:latest
-            ${{ env.IMAGE_FRONTEND }}:${{ github.sha }}
-          cache-from: type=gha,scope=frontend
-          cache-to: type=gha,mode=max,scope=frontend
-
   deploy:
-    needs: build-and-push
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      # Keep the server's copy of docker-compose.prod.yml in sync with git —
-      # never touches .env.production, which is managed only on the server.
-      - name: Sync docker-compose.prod.yml to server
-        uses: appleboy/scp-action@v0.1.7
+      - uses: webfactory/ssh-agent@v0.9.0
         with:
-          host: ${{ env.ORACLE_HOST }}
-          username: ${{ env.ORACLE_USER }}
-          key: ${{ secrets.ORACLE_SSH_KEY }}
-          source: docker-compose.prod.yml
-          target: ${{ env.APP_DIR }}
-          strip_components: 0
+          ssh-private-key: ${{ secrets.ORACLE_SSH_KEY }}
 
-      - name: Pull new images and restart containers
+      - name: Trust the server's host key
+        run: ssh-keyscan -H ${{ env.ORACLE_HOST }} >> ~/.ssh/known_hosts
+
+      # Excludes matter twice here: they keep the sync fast (skip
+      # node_modules/build output, which the server rebuilds itself) and,
+      # since rsync --delete mirrors deletions too, they keep it from
+      # wiping the server-only .env files and PM2 logs that never exist in
+      # this checkout to begin with.
+      - name: Sync source to the server
+        run: |
+          rsync -az --delete \
+            --exclude='.git' \
+            --exclude='node_modules' \
+            --exclude='**/node_modules' \
+            --exclude='.next' \
+            --exclude='**/.next' \
+            --exclude='dist' \
+            --exclude='**/dist' \
+            --exclude='logs' \
+            --exclude='**/logs' \
+            --exclude='.env' \
+            --exclude='.env.*' \
+            --exclude='**/.env' \
+            --exclude='**/.env.*' \
+            ./ ${{ env.ORACLE_USER }}@${{ env.ORACLE_HOST }}:${{ env.APP_DIR }}/
+
+      - name: Install, build, and reload on the server
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ env.ORACLE_HOST }}
@@ -90,20 +66,37 @@ jobs:
             set -e
             cd ${{ env.APP_DIR }}
 
-            if [ ! -f .env.production ]; then
-              echo "❌ .env.production missing on server — aborting deploy."
+            # dotenv.config() in server/src/config/config.ts loads from cwd,
+            # and PM2 runs server/ecosystem.config.js with cwd=server/, so
+            # this is the one file that actually has to exist — not the old
+            # Docker-era root .env.production.
+            if [ ! -f server/.env ]; then
+              echo "❌ server/.env missing on the server — aborting deploy."
               exit 1
             fi
 
-            docker pull ${{ env.IMAGE_SERVER }}:latest
-            docker pull ${{ env.IMAGE_FRONTEND }}:latest
+            echo "📦 Installing dependencies (all workspaces)..."
+            npm install --legacy-peer-deps
 
-            docker compose -f docker-compose.prod.yml down
-            docker compose -f docker-compose.prod.yml up -d
+            echo "🔨 Building shared db package..."
+            npm run build --prefix packages/db
 
-            echo "⏳ Waiting for health checks..."
-            sleep 10
-            docker ps
+            echo "🔨 Building server..."
+            npm run build --prefix server
 
-            echo "🧹 Pruning old images..."
-            docker image prune -af
+            echo "🔨 Building frontend..."
+            # NEXT_PUBLIC_* vars are inlined at build time, so this can't
+            # come from a runtime env file the way server/.env does — it
+            # has to be exported right here, same value the old Docker
+            # build-arg used.
+            export NEXT_PUBLIC_BACKEND_URL=https://tourbnt.com
+            npm run build --prefix frontend
+
+            echo "♻️  Reloading PM2 processes (zero-downtime)..."
+            pm2 startOrReload server/ecosystem.config.js --update-env
+            pm2 startOrReload frontend/ecosystem.config.js --update-env
+            pm2 save
+
+            echo "⏳ Settling..."
+            sleep 5
+            pm2 list
