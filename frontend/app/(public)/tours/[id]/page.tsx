@@ -24,7 +24,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     try {
         const { id } = await params;
         const response = await getTourById(id);
-        const tour: Tour = response?.data?.tour || response?.data || response;
+        const tour: Tour = response?.tour;
 
         if (!tour) {
             return {
@@ -113,9 +113,9 @@ export default async function SingleTourPage({ params }: PageProps) {
 
         // Handle tour data
         if (tourResponse.status === 'fulfilled') {
-            tour = tourResponse.value?.data?.tour || tourResponse.value?.data || tourResponse.value;
+            tour = tourResponse.value?.tour;
 
-            if (!tour || !tour._id) {
+            if (!tour || !tour.id) {
                 console.error('Tour not found or invalid response:', id);
                 notFound();
             }
@@ -142,7 +142,7 @@ export default async function SingleTourPage({ params }: PageProps) {
                 // Filter out current tour and limit to 3
                 if (Array.isArray(relatedTours)) {
                     relatedTours = relatedTours
-                        .filter((t: Tour) => t._id !== tour?._id)
+                        .filter((t: Tour) => t.id !== tour?.id)
                         .slice(0, 3);
                 } else {
                     relatedTours = [];
@@ -216,7 +216,7 @@ export default async function SingleTourPage({ params }: PageProps) {
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                             {relatedTours.map((relatedTour) => (
                                 <TourCard
-                                    key={relatedTour._id}
+                                    key={relatedTour.id}
                                     tour={relatedTour}
                                     viewMode="grid"
                                 />

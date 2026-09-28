@@ -86,7 +86,7 @@ export function TourDetailClient({ tour, destinations }: TourDetailClientProps) 
             <TourTabs tour={tour} destinations={destinations} />
 
             {/* Review System */}
-            <ReviewSystem tourId={tour._id} />
+            <ReviewSystem tourId={tour.id} />
         </>
     );
 }

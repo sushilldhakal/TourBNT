@@ -26,7 +26,9 @@ export default function RecentBlog() {
 
     const { data: response, isLoading, error } = usePublicPosts();
     useEffect(() => {
-        const list = response?.data ?? [];
+        // sendPaginatedResponse serializes the array under `items`, not `data`.
+        const raw = response as { items?: Post[]; data?: Post[] } | undefined;
+        const list = raw?.items ?? raw?.data ?? [];
         if (list) {
             const updatedPosts = list.map((post: Post) => ({
                 ...post,

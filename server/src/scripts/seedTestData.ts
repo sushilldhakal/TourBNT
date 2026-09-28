@@ -353,7 +353,9 @@ async function seed() {
         excerpt: t.excerpt,
         tourStatus: 'Published',
         coverImage: t.coverImage,
-        outline: JSON.stringify(richDoc(t.itineraryDays.map((d, i) => `Day ${i + 1}: ${d.title}`).join(' '))),
+        // `outline` is a raw HTML map-embed snippet (see ItineraryAccordion's
+        // dangerouslySetInnerHTML), not a text summary — leave it unset; the
+        // real itinerary content lives in the `itinerary` array below.
         destinationId: t.destinationId,
         itinerary: t.itineraryDays.map((d, i) => ({
           id: `day-${i + 1}`,
@@ -503,8 +505,14 @@ async function seed() {
     .values([
       {
         title: '10 Tips for Trekking to Everest Base Camp',
-        content:
-          'Trekking to Everest Base Camp is a bucket-list adventure for hikers around the world. Here are our top 10 tips: 1) Train your cardio for at least 8 weeks before departure. 2) Pack layers — temperatures swing wildly between day and night. 3) Budget extra days for acclimatization. 4) Break in your boots well before the trip. 5) Bring a good sleeping bag rated for sub-zero temperatures. 6) Stay hydrated to help combat altitude sickness. 7) Consider travel insurance that covers high-altitude trekking. 8) Bring cash — there are no ATMs above Namche Bazaar. 9) Respect local customs at monasteries and villages. 10) Go slow and listen to your body — this isn’t a race.',
+        // Post content is rendered through the same rich-text parser as tour
+        // description/outline — it must be a JSON-stringified doc, not plain
+        // text, or the blog cards show "Content unavailable".
+        content: JSON.stringify(
+          richDoc(
+            'Trekking to Everest Base Camp is a bucket-list adventure for hikers around the world. Here are our top 10 tips: 1) Train your cardio for at least 8 weeks before departure. 2) Pack layers — temperatures swing wildly between day and night. 3) Budget extra days for acclimatization. 4) Break in your boots well before the trip. 5) Bring a good sleeping bag rated for sub-zero temperatures. 6) Stay hydrated to help combat altitude sickness. 7) Consider travel insurance that covers high-altitude trekking. 8) Bring cash — there are no ATMs above Namche Bazaar. 9) Respect local customs at monasteries and villages. 10) Go slow and listen to your body — this isn’t a race.'
+          )
+        ),
         authorId: sellerAlpine.id,
         tags: ['trekking', 'everest', 'tips'],
         image: 'https://images.unsplash.com/photo-1516481350927-9e0d1cf95cf2?w=1200&h=800&fit=crop',
@@ -513,8 +521,11 @@ async function seed() {
       },
       {
         title: 'A Food Lover’s Guide to Kathmandu',
-        content:
-          'Kathmandu’s food scene is as rich as its history. Start your morning with a cup of Nepali chiya from a street stall, then head to Newari restaurant for a traditional feast of yomari and choila. Don’t miss momos — Nepal’s beloved dumplings — available steamed, fried, or in a spicy soup called jhol momo. For dinner, try a set thakali meal with dal bhat, seasonal vegetables, and pickles. Finish with sel roti, a sweet rice donut, from a local bakery.',
+        content: JSON.stringify(
+          richDoc(
+            'Kathmandu’s food scene is as rich as its history. Start your morning with a cup of Nepali chiya from a street stall, then head to Newari restaurant for a traditional feast of yomari and choila. Don’t miss momos — Nepal’s beloved dumplings — available steamed, fried, or in a spicy soup called jhol momo. For dinner, try a set thakali meal with dal bhat, seasonal vegetables, and pickles. Finish with sel roti, a sweet rice donut, from a local bakery.'
+          )
+        ),
         authorId: sellerHimalaya.id,
         tags: ['food', 'kathmandu', 'culture'],
         image: 'https://images.unsplash.com/photo-1567337710282-00832b415979?w=1200&h=800&fit=crop',

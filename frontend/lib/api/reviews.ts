@@ -112,9 +112,11 @@ export const getAllReviews = async () => {
  */
 export const getApprovedReviews = async (limit?: number) => {
     try {
-        const url = limit
-            ? `/reviews/approved/all?limit=${limit}`
-            : `/reviews/approved/all`;
+        // The registered route is GET /reviews (root) — getAllApprovedReviews
+        // already defaults to status=approved. /reviews/approved/all was
+        // never a real endpoint, hence the permanent "Unable to load
+        // reviews" on the homepage.
+        const url = limit ? `/reviews?limit=${limit}` : `/reviews`;
         const response = await api.get(url);
         return extractResponseData(response);
     } catch (error) {

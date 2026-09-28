@@ -334,7 +334,6 @@ export interface Location {
 // Tour types
 export interface Tour {
     id: string;
-    id?: string; // Alias for _id in some API responses
     title: string;
     code: string;
     description: string; // MAKE REQUIRED (remove ?)

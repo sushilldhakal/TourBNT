@@ -45,7 +45,9 @@ export const updateAdCampaign = async (adId: string, formData: FormData) => {
 export const getMyAdCampaigns = async () => {
     try {
         const response = await api.get('/ads/me');
-        return extractResponseData<Advertisement[]>(response);
+        // Same array-unwrapping issue as getAdsForPlacement above.
+        const raw = response.data as { data?: Advertisement[] } | Advertisement[];
+        return Array.isArray(raw) ? raw : Array.isArray(raw?.data) ? raw.data : [];
     } catch (error) {
         throw handleApiError(error, 'fetching your ad campaigns');
     }
@@ -108,7 +110,12 @@ export const getAdStats = async (adId: string) => {
 export const getAdsForPlacement = async (params: { placementSlot: AdPlacementSlot; categoryId?: string; destinationId?: string; limit?: number }) => {
     try {
         const response = await api.get('/ads/placements', { params });
-        return extractResponseData<Advertisement[]>(response);
+        // extractResponseData only unwraps `data.data` when it isn't itself
+        // an array (see its `!Array.isArray` guard), so a plain array
+        // payload like this one comes back as the raw {success,message,data}
+        // envelope instead of the array — unwrap it explicitly here.
+        const raw = response.data as { data?: Advertisement[] } | Advertisement[];
+        return Array.isArray(raw) ? raw : Array.isArray(raw?.data) ? raw.data : [];
     } catch (error) {
         throw handleApiError(error, 'fetching ads');
     }

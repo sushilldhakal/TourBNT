@@ -51,7 +51,7 @@ export function ReviewSystem({ tourId, initialReviews }: ReviewSystemProps) {
                 ) : (
                     reviews.map((review: Review) => (
                         <ReviewCard
-                            key={review._id}
+                            key={review.id}
                             review={review}
                             tourId={tourId}
                             onUpdate={refetch}
@@ -178,14 +178,14 @@ function ReviewCard({ review, tourId, onUpdate }: ReviewCardProps) {
     const [showReplyForm, setShowReplyForm] = useState(false);
 
     const likeReviewMutation = useMutation({
-        mutationFn: () => likeReview(tourId, review._id),
+        mutationFn: () => likeReview(tourId, review.id),
         onSuccess: () => {
             onUpdate();
         },
     });
 
     const incrementViewMutation = useMutation({
-        mutationFn: () => incrementReviewView(tourId, review._id),
+        mutationFn: () => incrementReviewView(tourId, review.id),
         onSuccess: () => {
             onUpdate();
         },
@@ -295,7 +295,7 @@ function ReviewCard({ review, tourId, onUpdate }: ReviewCardProps) {
                     {showReplyForm && (
                         <ReplyForm
                             tourId={tourId}
-                            reviewId={review._id}
+                            reviewId={review.id}
                             onSuccess={() => {
                                 setShowReplyForm(false);
                                 onUpdate();
@@ -309,10 +309,10 @@ function ReviewCard({ review, tourId, onUpdate }: ReviewCardProps) {
                         <div className="mt-3 sm:mt-4 space-y-3 sm:space-y-4 pl-3 sm:pl-4 border-l-2" role="list" aria-label="Replies to this review">
                             {review.replies.map((reply) => (
                                 <ReplyCard
-                                    key={reply._id}
+                                    key={reply.id}
                                     reply={reply}
                                     tourId={tourId}
-                                    reviewId={review._id}
+                                    reviewId={review.id}
                                     onUpdate={onUpdate}
                                 />
                             ))}
@@ -410,14 +410,14 @@ interface ReplyCardProps {
 
 function ReplyCard({ reply, tourId, reviewId, onUpdate }: ReplyCardProps) {
     const likeReplyMutation = useMutation({
-        mutationFn: () => likeReply(tourId, reviewId, reply._id),
+        mutationFn: () => likeReply(tourId, reviewId, reply.id),
         onSuccess: () => {
             onUpdate();
         },
     });
 
     const incrementViewMutation = useMutation({
-        mutationFn: () => incrementReplyView(tourId, reviewId, reply._id),
+        mutationFn: () => incrementReplyView(tourId, reviewId, reply.id),
         onSuccess: () => {
             onUpdate();
         },

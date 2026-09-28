@@ -48,10 +48,13 @@ export const getTours = async ({
             throw new Error('Invalid response format: No data received');
         }
 
-        // Standard sendPaginatedResponse: { data: [...], pagination: { page, limit, totalItems, totalPages } }
-        const raw = data as { data?: unknown[]; pagination?: { page: number; limit: number; totalItems: number; totalPages: number } };
-        if (Array.isArray(raw?.data) && raw?.pagination) {
-            const toursData = raw.data;
+        // Standard sendPaginatedResponse: { items: [...], pagination: { page, limit, totalItems, totalPages } }
+        // (server/src/utils/apiResponse.ts serializes the array under `items`,
+        // not `data` — check that first; keep `data` as a defensive fallback
+        // in case a caller changes shape later.)
+        const raw = data as { items?: unknown[]; data?: unknown[]; pagination?: { page: number; limit: number; totalItems: number; totalPages: number } };
+        if ((Array.isArray(raw?.items) || Array.isArray(raw?.data)) && raw?.pagination) {
+            const toursData = (Array.isArray(raw.items) ? raw.items : raw.data) as unknown[];
             const p = raw.pagination;
             const currentPage = p.page ?? 1;
             const totalPages = p.totalPages ?? 1;
@@ -159,10 +162,10 @@ export const getMyTours = async ({
             throw new Error('Invalid response format: No data received');
         }
 
-        // Standard format from sendPaginatedResponse: { data: T[], message, pagination: { page, limit, totalItems, totalPages } }
-        const responseData = data as { data?: unknown[]; pagination?: any; tours?: unknown[] };
+        // Standard format from sendPaginatedResponse: { items: T[], message, pagination: { page, limit, totalItems, totalPages } }
+        const responseData = data as { items?: unknown[]; data?: unknown[]; pagination?: any; tours?: unknown[] };
         if (responseData.pagination) {
-            const tours = (responseData.data ?? responseData.tours ?? []) as unknown[];
+            const tours = (responseData.items ?? responseData.data ?? responseData.tours ?? []) as unknown[];
             const pagination = responseData.pagination;
             return {
                 data: tours,

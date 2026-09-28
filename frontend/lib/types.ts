@@ -288,6 +288,7 @@ export interface Location {
 // Tour types
 export interface Tour {
     _id: string;
+    id: string;
     title: string;
     code: string;
     description?: string;

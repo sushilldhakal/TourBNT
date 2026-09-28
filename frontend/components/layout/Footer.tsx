@@ -187,34 +187,6 @@ export function Footer() {
                                         </a>
                                     ))}
                                 </div>
-
-                                {/* Newsletter */}
-                                <form onSubmit={handleSubscribe} className="w-full">
-                                    <h4 className="mb-3 text-lg font-semibold text-foreground">
-                                        Newsletter
-                                    </h4>
-                                    <p className="mb-4 text-base text-muted-foreground">
-                                        Subscribe to receive travel tips and exclusive offers.
-                                    </p>
-                                    <div className="flex flex-col sm:flex-row gap-2">
-                                        <Input
-                                            type="email"
-                                            placeholder="Your email"
-                                            className="flex-1 rounded-md bg-background border-border"
-                                            value={email}
-                                            onChange={(e) => setEmail(e.target.value)}
-                                            required
-                                        />
-                                        <Button
-                                            type="submit"
-                                            variant="default"
-                                            disabled={mutation.isPending}
-                                            className="bg-primary text-primary-foreground hover:bg-primary/90"
-                                        >
-                                            {mutation.isPending ? 'Subscribing...' : 'Subscribe'}
-                                        </Button>
-                                    </div>
-                                </form>
                             </div>
                         </div>
                     </div>
