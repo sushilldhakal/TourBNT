@@ -1,7 +1,7 @@
 import {
     Home, FileText, Users, Image, Settings, Mail, LayoutDashboard,
     List, MapPin, FolderTree, Lightbulb, HelpCircle, Calendar, Star, Wrench,
-    MessageSquare, Plus, Briefcase, UserCog, CalendarCheck
+    MessageSquare, Plus, Briefcase, UserCog, CalendarCheck, Building2, Megaphone
 } from 'lucide-react';
 import type { NavigationItem, FlatNavItem } from '@/types/dashboard';
 
@@ -66,6 +66,21 @@ export const baseNavigationItems: NavigationItem[] = [
         icon: UserCog,
     },
     {
+        label: 'Business Partners',
+        icon: Building2,
+        adminOnly: true,
+        children: [
+            { href: '/dashboard/business-partners', label: 'Applications', icon: List, adminOnly: true },
+            { href: '/dashboard/ads', label: 'Ad Campaigns', icon: Megaphone, adminOnly: true },
+        ],
+    },
+    {
+        href: '/dashboard/business',
+        label: 'My Business',
+        icon: Building2,
+        partnerOnly: true,
+    },
+    {
         href: '/dashboard/settings',
         label: 'Settings',
         icon: Settings,
@@ -89,12 +104,14 @@ export const baseNavigationItems: NavigationItem[] = [
 export function getFlatNavigationForSearch(
     items: NavigationItem[],
     isAdmin: boolean,
-    userId?: string
+    userId?: string,
+    isPartner: boolean = false
 ): FlatNavItem[] {
     const result: FlatNavItem[] = [];
 
     for (const item of items) {
         if (item.adminOnly && !isAdmin) continue;
+        if (item.partnerOnly && !isPartner) continue;
 
         if (item.href) {
             let href = item.href;
@@ -112,6 +129,7 @@ export function getFlatNavigationForSearch(
         if (item.children) {
             for (const child of item.children) {
                 if (child.adminOnly && !isAdmin) continue;
+                if (child.partnerOnly && !isPartner) continue;
                 if (!child.href) continue;
                 let href = child.href;
                 if (href === '/dashboard/users/edit/:id' && userId) {

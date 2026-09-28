@@ -5,7 +5,7 @@ export interface Conversation {
   fromUserId?: { id: string; name?: string; email?: string };
   guestName?: string;
   guestEmail?: string;
-  type: 'contact' | 'enquiry' | 'broadcast';
+  type: 'contact' | 'enquiry' | 'broadcast' | 'direct' | 'group';
   tourId?: {
     id: string;
     title?: string;
@@ -102,6 +102,50 @@ export async function createDirectConversation(
     return single as Conversation;
   } catch (error) {
     throw handleApiError(error, 'creating direct conversation');
+  }
+}
+
+export interface CreateGroupConversationPayload {
+  subject: string;
+  message: string;
+  participantIds: string[];
+  groupName?: string;
+}
+
+/**
+ * Create a group conversation from admin to a hand-picked list of specific
+ * people (as opposed to createBroadcastConversation's role-based audience).
+ * Only admins can call this; the server enforces role checks.
+ */
+export async function createGroupConversation(
+  payload: CreateGroupConversationPayload
+): Promise<Conversation> {
+  try {
+    const response = await api.post('/conversations/group', payload);
+    const data = extractResponseData(response) as Conversation | { data?: Conversation };
+    const single = (data as { data?: Conversation }).data ?? data;
+    return single as Conversation;
+  } catch (error) {
+    throw handleApiError(error, 'creating group conversation');
+  }
+}
+
+/**
+ * Admin-only: add one or more additional people to an existing conversation.
+ * Nobody but admin can ever add a participant — sellers/end users have no
+ * equivalent call.
+ */
+export async function addConversationParticipants(
+  id: string,
+  userIds: string[]
+): Promise<Conversation> {
+  try {
+    const response = await api.post(`/conversations/${id}/participants`, { userIds });
+    const data = extractResponseData(response) as Conversation | { data?: Conversation };
+    const single = (data as { data?: Conversation }).data ?? data;
+    return single as Conversation;
+  } catch (error) {
+    throw handleApiError(error, 'adding participants');
   }
 }
 

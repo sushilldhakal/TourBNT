@@ -7,7 +7,7 @@ import {
     ChevronDown, ChevronRight, Plus, List, MapPin, FolderTree, Lightbulb,
     HelpCircle, Calendar, Star, Wrench, MessageSquare, UserPlus, Briefcase,
     PanelLeftClose, PanelLeft,
-    UserCog
+    UserCog, CalendarCheck
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState, useMemo } from 'react';
@@ -104,6 +104,11 @@ const baseNavigationItems: NavigationItem[] = [
         icon: UserCog
     },
     {
+        href: '/dashboard/bookings',
+        label: 'My Bookings',
+        icon: CalendarCheck
+    },
+    {
         href: '/dashboard/gallery',
         label: 'Gallery',
         icon: Image
@@ -113,6 +118,11 @@ const baseNavigationItems: NavigationItem[] = [
         label: 'Subscribers',
         icon: Mail,
         adminOnly: true
+    },
+    {
+        href: '/dashboard/message',
+        label: 'Message',
+        icon: MessageSquare
     },
     {
         href: '/dashboard/settings',

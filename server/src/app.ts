@@ -21,6 +21,7 @@ import monitoringRouter from "./api/monitoring/monitoringRoutes";
 import businessPartnerRouter from "./api/businessPartners/businessPartnerRoutes";
 import businessReviewRouter from "./api/businessReviews/businessReviewRoutes";
 import adRouter from "./api/ads/adRoutes";
+import conversationRouter from "./api/conversations/conversationRoutes";
 import cors from "cors";
 import { config } from "./config/config";
 import { metricsMiddleware } from "./middlewares/metricsMiddleware";
@@ -109,6 +110,7 @@ app.use('/api/v1/monitoring', monitoringRouter);
 app.use('/api/v1/business-partners', businessPartnerRouter);
 app.use('/api/v1/business-reviews', businessReviewRouter);
 app.use('/api/v1/ads', adRouter);
+app.use('/api/v1/conversations', conversationRouter);
 
 // API v2 routes - selective endpoint upgrades
 app.use('/api/v2/tours', tourRouterV2);

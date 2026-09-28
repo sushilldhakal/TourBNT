@@ -81,6 +81,23 @@ export const notificationTypeEnum = pgEnum('notification_type', [
 ]);
 export const mediaKindEnum = pgEnum('media_kind', ['image', 'video', 'pdf']);
 
+// Messaging (see the "Conversations / Messaging" table block below).
+// 'enquiry' = submitted from a specific tour's page, routed straight to that
+// tour's seller(s). 'contact' = submitted from the general contact page,
+// routed to admin (who may reassign it). 'broadcast' = admin -> an
+// audience (sellers/users/all), one shared thread. 'direct' = admin -> one
+// specific person. 'group' = admin -> a hand-picked list of specific
+// people (internal team chat, or internal+external mixed) — only admin can
+// ever add members to a conversation, at creation or afterward.
+export const conversationTypeEnum = pgEnum('conversation_type', ['enquiry', 'contact', 'broadcast', 'direct', 'group']);
+export const conversationStatusEnum = pgEnum('conversation_status', ['open', 'replied', 'closed']);
+// A message's side in the two-pane UI: 'customer' is always the
+// conversation's originator (the enquiring/contacting end user, or — for
+// admin-initiated broadcast/direct — the admin), 'support' is everyone else
+// replying on the internal side.
+export const messageRoleEnum = pgEnum('message_role', ['customer', 'support']);
+export const broadcastAudienceEnum = pgEnum('broadcast_audience', ['sellers', 'users', 'all']);
+
 // Business-partner domain enums (guides, hotels, guesthouses, restaurants,
 // transport/logistics providers, and general advertisers).
 export const businessPartnerTypeEnum = pgEnum('business_partner_type', [
@@ -478,6 +495,76 @@ export const notifications = pgTable('notifications', {
 }, (table) => ({
   recipientIdx: index('notifications_recipient_idx').on(table.recipientId, table.createdAt),
   recipientReadIdx: index('notifications_recipient_read_idx').on(table.recipientId, table.isRead),
+}));
+
+// ---------------------------------------------------------------------------
+// Conversations / Messaging (Express-owned)
+//
+// One conversation = one thread. The "customer" side is either a logged-in
+// user (fromUserId) or a guest (guestName/guestEmail) — never both, and
+// never a participant row. The internal/business side (admin, seller, or
+// any business-partner-flavored role — guide/hotel/guesthouse/restaurant/
+// transport/advertiser) is tracked via conversationParticipants, so a
+// thread can involve more than one internal person at once (e.g. admin
+// loops in a hotel alongside the assigned seller). assignedTo is just the
+// primary owner shown in the UI; admins can always see every conversation
+// regardless of participant rows.
+// ---------------------------------------------------------------------------
+
+export const conversations = pgTable('conversations', {
+  id: id(),
+  type: conversationTypeEnum('type').notNull(),
+  subject: text('subject').notNull(),
+  status: conversationStatusEnum('status').notNull().default('open'),
+  // The customer side — exactly one of fromUserId or guestName/guestEmail is set.
+  fromUserId: text('from_user_id').references(() => users.id, { onDelete: 'set null' }),
+  guestName: text('guest_name'),
+  guestEmail: text('guest_email'),
+  // Set only for type = 'enquiry'.
+  tourId: text('tour_id').references(() => tours.id, { onDelete: 'set null' }),
+  // Primary internal owner: the tour's seller for an enquiry, null (admin
+  // handles it) for a fresh contact message until reassigned, the admin
+  // for broadcast/direct.
+  assignedTo: text('assigned_to').references(() => users.id, { onDelete: 'set null' }),
+  isBroadcast: boolean('is_broadcast').notNull().default(false),
+  broadcastAudience: broadcastAudienceEnum('broadcast_audience'),
+  allowParticipantReplies: boolean('allow_participant_replies').notNull().default(true),
+  groupName: text('group_name'),
+  lastMessageAt: timestamp('last_message_at', { withTimezone: true }).defaultNow().notNull(),
+  ...timestamps,
+}, (table) => ({
+  fromUserIdx: index('conversations_from_user_idx').on(table.fromUserId),
+  tourIdx: index('conversations_tour_idx').on(table.tourId),
+  assignedIdx: index('conversations_assigned_idx').on(table.assignedTo),
+  lastMessageIdx: index('conversations_last_message_idx').on(table.lastMessageAt),
+}));
+
+// Internal-side membership. Not used for the customer side (see fromUserId/
+// guest fields on conversations above) — only for admin/seller/business
+// participants, so an enquiry or broadcast can involve more than one of them.
+export const conversationParticipants = pgTable('conversation_participants', {
+  id: id(),
+  conversationId: text('conversation_id').notNull().references(() => conversations.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  isArchived: boolean('is_archived').notNull().default(false),
+  lastReadAt: timestamp('last_read_at', { withTimezone: true }),
+  joinedAt: timestamp('joined_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  uniqueMember: uniqueIndex('conversation_participants_unique_idx').on(table.conversationId, table.userId),
+  userIdx: index('conversation_participants_user_idx').on(table.userId),
+}));
+
+export const conversationMessages = pgTable('conversation_messages', {
+  id: id(),
+  conversationId: text('conversation_id').notNull().references(() => conversations.id, { onDelete: 'cascade' }),
+  // Null for a guest's own message; a guest's identity lives on the parent
+  // conversation's guestName/guestEmail instead.
+  senderId: text('sender_id').references(() => users.id, { onDelete: 'set null' }),
+  role: messageRoleEnum('role').notNull(),
+  content: text('content').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  conversationIdx: index('conversation_messages_conversation_idx').on(table.conversationId, table.createdAt),
 }));
 
 // ---------------------------------------------------------------------------
@@ -969,6 +1056,24 @@ export const bookingsRelations = relations(bookings, ({ one }) => ({
 export const notificationsRelations = relations(notifications, ({ one }) => ({
   recipient: one(users, { fields: [notifications.recipientId], references: [users.id] }),
   sender: one(users, { fields: [notifications.senderId], references: [users.id] }),
+}));
+
+export const conversationsRelations = relations(conversations, ({ one, many }) => ({
+  fromUser: one(users, { fields: [conversations.fromUserId], references: [users.id] }),
+  tour: one(tours, { fields: [conversations.tourId], references: [tours.id] }),
+  assignee: one(users, { fields: [conversations.assignedTo], references: [users.id] }),
+  participants: many(conversationParticipants),
+  messages: many(conversationMessages),
+}));
+
+export const conversationParticipantsRelations = relations(conversationParticipants, ({ one }) => ({
+  conversation: one(conversations, { fields: [conversationParticipants.conversationId], references: [conversations.id] }),
+  user: one(users, { fields: [conversationParticipants.userId], references: [users.id] }),
+}));
+
+export const conversationMessagesRelations = relations(conversationMessages, ({ one }) => ({
+  conversation: one(conversations, { fields: [conversationMessages.conversationId], references: [conversations.id] }),
+  sender: one(users, { fields: [conversationMessages.senderId], references: [users.id] }),
 }));
 
 export const mediaAssetsRelations = relations(mediaAssets, ({ one }) => ({

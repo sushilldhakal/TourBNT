@@ -30,7 +30,7 @@ async function withReplies(reviewIds: string[]) {
     .select({ reply: businessReviewReplies, user: USER_COLUMNS })
     .from(businessReviewReplies)
     .leftJoin(users, eq(businessReviewReplies.userId, users.id))
-    .where(sql`${businessReviewReplies.reviewId} = ANY(${reviewIds})`);
+    .where(inArray(businessReviewReplies.reviewId, reviewIds));
 
   const byReview = new Map<string, unknown[]>();
   for (const { reply, user } of rows) {
@@ -143,13 +143,13 @@ export const getBusinessReviews = async (req: Request, res: Response) => {
     const requesterId = req.user?.id;
     let likedByRequester = new Set<string>();
     if (requesterId && rows.length > 0) {
-      const likeRows = await db.select({ reviewId: businessReviewLikes.reviewId }).from(businessReviewLikes).where(and(eq(businessReviewLikes.userId, requesterId), sql`${businessReviewLikes.reviewId} = ANY(${rows.map((r) => r.review.id)})`));
+      const likeRows = await db.select({ reviewId: businessReviewLikes.reviewId }).from(businessReviewLikes).where(and(eq(businessReviewLikes.userId, requesterId), inArray(businessReviewLikes.reviewId, rows.map((r) => r.review.id))));
       likedByRequester = new Set(likeRows.map((l) => l.reviewId));
     }
     const paginatedReviews = rows.map(({ review, user }) => ({ ...review, user, replies: repliesByReview.get(review.id) || [], isLiked: likedByRequester.has(review.id) }));
 
     if (paginatedReviews.length > 0) {
-      await db.update(businessReviews).set({ views: sql`${businessReviews.views} + 1` }).where(sql`${businessReviews.id} = ANY(${paginatedReviews.map((r) => r.id)})`);
+      await db.update(businessReviews).set({ views: sql`${businessReviews.views} + 1` }).where(inArray(businessReviews.id, paginatedReviews.map((r) => r.id)));
     }
 
     res.status(200).json({

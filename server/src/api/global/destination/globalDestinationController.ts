@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { db, globalDestinations, sellerDestinationPreferences, sellerSettings, users } from '@tourbnt/db';
-import { eq, and, or, ilike, ne, desc, isNull, isNotNull, sql } from 'drizzle-orm';
+import { eq, and, or, ilike, ne, desc, isNull, isNotNull, inArray, sql } from 'drizzle-orm';
 import type { SellerInfo } from '../../user/userTypes';
 import * as notifications from '../../notifications/notificationController';
 
@@ -68,7 +68,7 @@ export const getSellerDestinations = async (req: Request, res: Response) => {
     const visibleSellerCreated = sellerCreated.filter((d) => !hiddenIds.has(d.id));
 
     const enabledDestinations = enabledIds.length
-      ? await db.select().from(globalDestinations).where(and(sql`${globalDestinations.id} = ANY(${enabledIds})`, eq(globalDestinations.isActive, true), eq(globalDestinations.isApproved, true), eq(globalDestinations.approvalStatus, 'approved')))
+      ? await db.select().from(globalDestinations).where(and(inArray(globalDestinations.id, enabledIds), eq(globalDestinations.isActive, true), eq(globalDestinations.isApproved, true), eq(globalDestinations.approvalStatus, 'approved')))
       : [];
 
     const combined = [...visibleSellerCreated];
@@ -704,7 +704,7 @@ export const getUserDestinations = async (req: Request, res: Response) => {
     }
 
     const ids = destinationList.map((d) => d.destinationId);
-    const globalRows = await db.select().from(globalDestinations).where(and(sql`${globalDestinations.id} = ANY(${ids})`, eq(globalDestinations.approvalStatus, 'approved')));
+    const globalRows = await db.select().from(globalDestinations).where(and(inArray(globalDestinations.id, ids), eq(globalDestinations.approvalStatus, 'approved')));
     const byId = new Map(globalRows.map((d) => [d.id, d]));
 
     const userDestinations = destinationList

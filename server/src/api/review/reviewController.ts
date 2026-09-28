@@ -30,7 +30,7 @@ async function withReplies(reviewIds: string[]) {
     .select({ reply: reviewReplies, user: USER_COLUMNS })
     .from(reviewReplies)
     .leftJoin(users, eq(reviewReplies.userId, users.id))
-    .where(sql`${reviewReplies.reviewId} = ANY(${reviewIds})`);
+    .where(inArray(reviewReplies.reviewId, reviewIds));
 
   const byReview = new Map<string, unknown[]>();
   for (const { reply, user } of rows) {
@@ -184,7 +184,7 @@ export const getTourReviews = async (req: Request, res: Response) => {
 
     // Track a view per review being displayed on this page.
     if (paginatedReviews.length > 0) {
-      await db.update(reviews).set({ views: sql`${reviews.views} + 1` }).where(sql`${reviews.id} = ANY(${paginatedReviews.map((r) => r.id)})`);
+      await db.update(reviews).set({ views: sql`${reviews.views} + 1` }).where(inArray(reviews.id, paginatedReviews.map((r) => r.id)));
     }
 
     res.status(200).json({

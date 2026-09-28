@@ -2,7 +2,8 @@ import { Response } from 'express';
 import { db, notifications, users } from '@tourbnt/db';
 import { eq, and, desc, count } from 'drizzle-orm';
 import { Request } from '../../middlewares/authenticate';
-import { HTTP_STATUS, sendSuccess, sendPaginatedResponse } from '../../utils/apiResponse';
+import { HTTP_STATUS, sendSuccess } from '../../utils/apiResponse';
+import { normalizeDoc } from '../../utils/normalizeDoc';
 
 // Get notifications for authenticated user
 export const getUserNotifications = async (req: Request, res: Response) => {
@@ -37,12 +38,21 @@ export const getUserNotifications = async (req: Request, res: Response) => {
 
     const items = rows.map(({ notification, sender }) => ({ ...notification, sender }));
 
-    return sendPaginatedResponse(res, items, {
-      page,
-      limit: pageLimit,
-      totalItems: total,
-      totalPages: Math.ceil(total / pageLimit),
-    }, `Notifications retrieved successfully. Unread: ${unreadCount}`);
+    // sendPaginatedResponse doesn't carry a message/extra-fields slot, and
+    // unreadCount needs to reach the client (for the header bell's badge)
+    // rather than just being computed and discarded — build the envelope
+    // directly instead.
+    return res.status(HTTP_STATUS.OK).json({
+      success: true,
+      items: normalizeDoc(items),
+      pagination: {
+        page,
+        limit: pageLimit,
+        totalItems: total,
+        totalPages: Math.ceil(total / pageLimit),
+      },
+      unreadCount,
+    });
   } catch (error) {
     res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       error: {

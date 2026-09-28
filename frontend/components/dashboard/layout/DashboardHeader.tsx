@@ -1,6 +1,6 @@
 'use client';
 
-import { Menu, LogOut, User, Settings, Minimize2, Maximize2, MessageSquare, Bell, Search } from 'lucide-react';
+import { Menu, LogOut, User, Settings, Minimize2, Maximize2, MessageSquare, Bell, Search, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -12,6 +12,9 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { getConversations } from '@/lib/api/conversations';
 import type { Conversation } from '@/lib/api/conversations';
+import { getNotifications, markNotificationAsRead, deleteNotification } from '@/lib/api/notifications';
+import type { Notification } from '@/lib/api/notifications';
+import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useRouter } from 'next/navigation';
 import { getUserEmail, getUserRole } from '@/lib/utils/auth';
@@ -28,7 +31,7 @@ import {
     CommandItem,
 } from '@/components/ui/command';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { isAdmin } from '@/lib/utils/roles';
+import { isAdmin, RoleGroups } from '@/lib/utils/roles';
 import { baseNavigationItems, getFlatNavigationForSearch } from './dashboardNavigation';
 import type { DashboardHeaderProps } from '@/types/dashboard';
 
@@ -48,7 +51,12 @@ export function DashboardHeader({ onToggleSidebar, onLogout }: DashboardHeaderPr
     const [recentConversations, setRecentConversations] = useState<Conversation[]>([]);
     const [messagesOpen, setMessagesOpen] = useState(false);
     const [messagesLoading, setMessagesLoading] = useState(false);
+    const [recentNotifications, setRecentNotifications] = useState<Notification[]>([]);
+    const [notificationsOpen, setNotificationsOpen] = useState(false);
+    const [notificationsLoading, setNotificationsLoading] = useState(false);
+    const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
     const isUserAdmin = isAdmin(userRole ?? displayRole);
+    const isUserPartner = !!userRole && (RoleGroups.BUSINESS_PARTNER as readonly string[]).includes(userRole);
 
     const loadRecentMessages = useCallback(() => {
         setMessagesLoading(true);
@@ -61,6 +69,52 @@ export function DashboardHeader({ onToggleSidebar, onLogout }: DashboardHeaderPr
     useEffect(() => {
         if (messagesOpen) loadRecentMessages();
     }, [messagesOpen, loadRecentMessages]);
+
+    const loadRecentNotifications = useCallback(() => {
+        setNotificationsLoading(true);
+        getNotifications({ limit: 5 })
+            .then(({ items, unreadCount }) => {
+                setRecentNotifications(items);
+                setUnreadNotificationCount(unreadCount);
+            })
+            .catch(() => setRecentNotifications([]))
+            .finally(() => setNotificationsLoading(false));
+    }, []);
+
+    // Fetch the unread count on mount so the badge is accurate before the
+    // dropdown is ever opened, not just a decorative always-on dot.
+    useEffect(() => {
+        if (!isHydrated || !user?.id) return;
+        getNotifications({ limit: 1, unreadOnly: true })
+            .then(({ unreadCount }) => setUnreadNotificationCount(unreadCount))
+            .catch(() => {});
+    }, [isHydrated, user?.id]);
+
+    useEffect(() => {
+        if (notificationsOpen) loadRecentNotifications();
+    }, [notificationsOpen, loadRecentNotifications]);
+
+    const handleNotificationClick = (notification: Notification) => {
+        setNotificationsOpen(false);
+        if (!notification.isRead) {
+            markNotificationAsRead(notification.id)
+                .then(() => setUnreadNotificationCount((n) => Math.max(0, n - 1)))
+                .catch(() => {});
+        }
+        const data = notification.data as { destinationId?: string; businessPartnerId?: string; adId?: string } | null;
+        if (data?.destinationId) router.push('/dashboard/tours/destination');
+        else if (data?.businessPartnerId) router.push('/dashboard/business-partners');
+        else if (data?.adId) router.push('/dashboard/ads');
+    };
+
+    const handleNotificationDelete = (id: string, wasUnread: boolean) => {
+        deleteNotification(id)
+            .then(() => {
+                setRecentNotifications((prev) => prev.filter((n) => n.id !== id));
+                if (wasUnread) setUnreadNotificationCount((n) => Math.max(0, n - 1));
+            })
+            .catch(() => {});
+    };
 
     // Only show layout toggle when screen is wider than 1600px
     useEffect(() => {
@@ -82,8 +136,8 @@ export function DashboardHeader({ onToggleSidebar, onLogout }: DashboardHeaderPr
     // Same navigation as sidebar, flattened for search; admin-only items filtered by role
     const searchItems = useMemo(() => {
         if (!isHydrated) return [];
-        return getFlatNavigationForSearch(baseNavigationItems, isUserAdmin, user?.id ?? undefined);
-    }, [isHydrated, isUserAdmin, user?.id]);
+        return getFlatNavigationForSearch(baseNavigationItems, isUserAdmin, user?.id ?? undefined, isUserPartner);
+    }, [isHydrated, isUserAdmin, user?.id, isUserPartner]);
 
     // Command+K keyboard shortcut
     useEffect(() => {
@@ -243,20 +297,71 @@ export function DashboardHeader({ onToggleSidebar, onLogout }: DashboardHeaderPr
                         </DropdownMenuContent>
                     </DropdownMenu>
 
-                    {/* Notifications Button */}
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="relative h-9 w-9 gap-1"
-                        title="Notifications"
-                        aria-label="Notifications"
-                    >
-                        <Bell className="h-4 w-4" aria-hidden="true" />
-                        <span className="absolute right-1 top-1 flex h-2 w-2">
-                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75"></span>
-                            <span className="relative inline-flex h-2 w-2 rounded-full bg-primary"></span>
-                        </span>
-                    </Button>
+                    {/* Notifications dropdown */}
+                    <DropdownMenu open={notificationsOpen} onOpenChange={setNotificationsOpen}>
+                        <DropdownMenuTrigger asChild>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="relative h-9 w-9 gap-1"
+                                title="Notifications"
+                                aria-label="Notifications"
+                            >
+                                <Bell className="h-4 w-4" aria-hidden="true" />
+                                {unreadNotificationCount > 0 && (
+                                    <span className="absolute right-1 top-1 flex h-2 w-2">
+                                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75"></span>
+                                        <span className="relative inline-flex h-2 w-2 rounded-full bg-primary"></span>
+                                    </span>
+                                )}
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-80">
+                            <DropdownMenuLabel className="flex items-center justify-between">
+                                <span>
+                                    Notifications
+                                    {unreadNotificationCount > 0 && (
+                                        <span className="ml-1.5 text-xs text-muted-foreground">({unreadNotificationCount} unread)</span>
+                                    )}
+                                </span>
+                            </DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            {notificationsLoading ? (
+                                <div className="py-4 text-center text-sm text-muted-foreground">Loading...</div>
+                            ) : recentNotifications.length === 0 ? (
+                                <div className="py-4 text-center text-sm text-muted-foreground">No notifications yet</div>
+                            ) : (
+                                recentNotifications.map((n) => (
+                                    <div
+                                        key={n.id}
+                                        className={cn(
+                                            'group flex items-start gap-2 rounded-sm px-2 py-2 text-sm hover:bg-accent cursor-pointer',
+                                            !n.isRead && 'bg-primary/5'
+                                        )}
+                                        onClick={() => handleNotificationClick(n)}
+                                    >
+                                        <span className={cn('mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full', n.isRead ? 'bg-transparent' : 'bg-primary')} />
+                                        <div className="flex-1 min-w-0">
+                                            <p className={cn('truncate', !n.isRead && 'font-medium')}>{n.title}</p>
+                                            <p className="text-xs text-muted-foreground line-clamp-2">{n.message}</p>
+                                            <p className="text-xs text-muted-foreground mt-0.5">{new Date(n.createdAt).toLocaleDateString()}</p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            className="shrink-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"
+                                            aria-label="Delete notification"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleNotificationDelete(n.id, !n.isRead);
+                                            }}
+                                        >
+                                            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                                        </button>
+                                    </div>
+                                ))
+                            )}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
 
                     <ModeToggle />
                     {showLayoutToggle && (

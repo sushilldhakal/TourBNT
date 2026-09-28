@@ -13,6 +13,7 @@ export interface NavigationItem {
     icon: ComponentType<{ className?: string }>;
     children?: NavigationItem[];
     adminOnly?: boolean;
+    partnerOnly?: boolean;
 }
 
 export interface FlatNavItem {
