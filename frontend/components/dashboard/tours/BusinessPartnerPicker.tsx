@@ -1,12 +1,12 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useFormContext } from 'react-hook-form';
 import { Search, Link2, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { searchBusinessPartners, BusinessPartner, BusinessPartnerType } from '@/lib/api/businessPartners';
+import { useTourContext } from '@/providers/TourProvider';
 
 export type ItineraryPartnerRole = 'transport' | 'accommodation' | 'guide' | 'meals' | 'other';
 
@@ -40,7 +40,8 @@ interface BusinessPartnerPickerProps {
  * when the provider isn't on the platform.
  */
 export function BusinessPartnerPicker({ basePath, role, label, placeholder }: BusinessPartnerPickerProps) {
-    const { getValues, setValue, watch } = useFormContext();
+    const { form } = useTourContext();
+    const { getValues, setValue, watch } = form;
     const partnersPath = `${basePath}.partners`;
     const partners: ItineraryPartner[] = watch(partnersPath) || [];
     const current = partners.find((p) => p?.role === role);

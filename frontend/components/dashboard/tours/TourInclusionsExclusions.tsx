@@ -1,6 +1,6 @@
 'use client';
 
-import { FieldError, useFormContext } from 'react-hook-form';
+import { FieldError } from 'react-hook-form';
 import { CheckCircle, XCircle } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,8 +16,8 @@ const NovelEditor = dynamic(() => import('@/components/dashboard/editor/NovelEdi
 
 
 export function TourInclusionsExclusions() {
-    const { setValue, watch, formState: { errors } } = useFormContext();
-    const { inclusionsContent, exclusionsContent } = useTourContext();
+    const { inclusionsContent, exclusionsContent, form } = useTourContext();
+    const { setValue, watch, formState: { errors } } = form;
 
     // Get current form values to use as fallback if memoized content is null
     const currentInclude = watch('include');

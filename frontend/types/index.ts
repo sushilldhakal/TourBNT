@@ -13,6 +13,10 @@
  * @module types
  */
 
+import { UserRole } from '@/lib/utils/roles';
+
+export { UserRole };
+
 // ============================================================================
 // UTILITY TYPES (Foundation)
 // ============================================================================
@@ -23,9 +27,10 @@ export interface Timestamps {
     updatedAt: string;
   }
   
-  /** MongoDB document base fields */
+  /** Persisted row. `id` is the Postgres key. `_id` is only present on older payloads. */
   export interface MongoDocument {
-    _id: string;
+    id?: string;
+    _id?: string;
     createdAt: string;
     updatedAt: string;
   }
@@ -85,17 +90,6 @@ export interface Timestamps {
   // ============================================================================
   // ENUMS (Fixed Value Sets)
   // ============================================================================
-  
-  /** User roles in the system */
-  export enum UserRole {
-    ADMIN = 'admin',
-    SELLER = 'seller',
-    ADVERTISER = 'advertiser',
-    GUIDE = 'guide',
-    VENUE = 'venue',
-    USER = 'user',
-    SUBSCRIBER = 'subscriber',
-  }
   
   /** Tour status lifecycle */
   export enum TourStatus {

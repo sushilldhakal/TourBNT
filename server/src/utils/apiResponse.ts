@@ -64,6 +64,14 @@ const normalizeNested = (obj: any): any => {
         return obj;
     }
 
+    // Dates (and other non-plain objects) have no own enumerable properties,
+    // so recursing into them with Object.entries below would silently turn
+    // them into {}. Return them as-is; JSON.stringify serializes Dates via
+    // their own toJSON() when the response is sent.
+    if (obj instanceof Date) {
+        return obj;
+    }
+
     if (Array.isArray(obj)) {
         return obj.map(item => normalizeNested(item));
     }

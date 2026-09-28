@@ -6,6 +6,7 @@ import {
     ChevronDown,
     XIcon,
     WandSparkles,
+    Plus,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -196,6 +197,15 @@ interface MultiSelectProps
     emptyIndicator?: React.ReactNode;
 
     /**
+     * Extra row at the bottom of the menu, such as "Add category".
+     * Closes the menu and runs `onSelect`.
+     */
+    createAction?: {
+        label: string;
+        onSelect: () => void;
+    };
+
+    /**
      * If true, allows the component to grow and shrink with its content.
      * If false, uses fixed width behavior.
      * Optional, defaults to false.
@@ -330,6 +340,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
             hideSelectAll = false,
             searchable = true,
             emptyIndicator,
+            createAction,
             autoSize = false,
             singleLine = false,
             popoverClassName,
@@ -1068,7 +1079,23 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                                 <CommandEmpty>
                                     {emptyIndicator || "No results found."}
                                 </CommandEmpty>{" "}
-                                {!hideSelectAll && !searchValue && (
+                                {createAction && (
+                                    <CommandGroup>
+                                        <CommandItem
+                                            key="__create__"
+                                            value={createAction.label}
+                                            onSelect={() => {
+                                                setIsPopoverOpen(false);
+                                                createAction.onSelect();
+                                            }}
+                                            className="cursor-pointer text-primary font-medium"
+                                        >
+                                            <Plus className="mr-2 h-4 w-4" />
+                                            {createAction.label}
+                                        </CommandItem>
+                                    </CommandGroup>
+                                )}
+                                {!hideSelectAll && !searchValue && getAllOptions().length > 0 && (
                                     <CommandGroup>
                                         <CommandItem
                                             key="all"

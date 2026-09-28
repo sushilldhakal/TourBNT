@@ -49,7 +49,7 @@ const OptionImageIcon = ({ imageUrl, alt }: { imageUrl?: string; alt?: string })
 };
 
 interface AddDestinationProps {
-    onDestinationAdded: () => void;
+    onDestinationAdded: (created?: unknown) => void;
 }
 
 const AddDestination = ({ onDestinationAdded }: AddDestinationProps) => {
@@ -100,14 +100,14 @@ const AddDestination = ({ onDestinationAdded }: AddDestinationProps) => {
     // Destination mutation for creating new destinations
     const destinationMutation = useMutation({
         mutationFn: (data: FormData) => addDestination(data),
-        onSuccess: () => {
+        onSuccess: (created) => {
             toast({
                 title: "Destination submitted",
                 description: "The destination has been submitted successfully.",
             });
             form.reset();
             invalidateDestinations({ my: true, admin: true, pending: true, approved: true });
-            onDestinationAdded();
+            onDestinationAdded(created);
         },
         onError: (error) => {
             toast({
@@ -135,14 +135,14 @@ const AddDestination = ({ onDestinationAdded }: AddDestinationProps) => {
     // Mutation for adding existing destination to seller's list
     const addExistingDestinationMutation = useMutation({
         mutationFn: (destinationId: string) => addExistingDestinationToSeller(destinationId),
-        onSuccess: () => {
+        onSuccess: (_data, destinationId) => {
             toast({
                 title: "Destination added to your list",
                 description: "The existing destination has been added to your destinations.",
             });
             setAddingDestinationId(null);
             invalidateDestinations({ my: true, admin: true, approved: true });
-            onDestinationAdded();
+            onDestinationAdded({ id: destinationId });
         },
         onError: () => {
             toast({

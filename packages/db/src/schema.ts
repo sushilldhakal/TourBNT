@@ -19,11 +19,9 @@ import {
 /**
  * TourBNT Postgres schema — the single source of truth for data access.
  *
- * Both the Next.js app (for "simple" resources: subscribers, facts, faqs,
- * comments) and the Express API (for "heavy" resources: auth, tours,
- * bookings, gallery, notifications, posts) read/write through this schema
- * via the shared `@tourbnt/db` package. There is exactly one Postgres
- * database and one schema definition — no duplicate models.
+ * The Express API is the only writer. The Next.js app calls that API.
+ * Both sides share this schema via `@tourbnt/db`. There is one Postgres
+ * database and one schema definition.
  *
  * IDs: stored as `text` (not native uuid) so that documents migrated from
  * the existing MongoDB deployment can keep their original ObjectId strings
@@ -128,9 +126,8 @@ export const users = pgTable('users', {
   // stored under (e.g. "acme-tours"), assigned once at onboarding approval —
   // see mediaFolderService.ensureMediaFolder. Null until they onboard.
   mediaFolder: text('media_folder'),
-  paymentMethods: jsonb('payment_methods').$type<
-    Array<{ cardNumber?: string; expirationDate?: string; cardholderName?: string }>
-  >().default([]),
+  // Unused legacy column. Do not store card numbers, expiry, or CVV here.
+  paymentMethods: jsonb('payment_methods').$type<unknown[]>().default([]),
   // Seller application/profile info (was `sellerInfo` embedded doc in Mongo).
   sellerInfo: jsonb('seller_info').$type<Record<string, unknown> | null>(),
   ...timestamps,

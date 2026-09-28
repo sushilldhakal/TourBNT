@@ -693,12 +693,12 @@ export const getUserDestinations = async (req: Request, res: Response) => {
     }
 
     const [user] = await db.select().from(users).where(eq(users.id, sellerId)).limit(1);
-    const sellerInfo = user?.sellerInfo as SellerInfo | null;
-    if (!user || !sellerInfo) {
-      return res.status(404).json({ success: false, message: 'Seller not found' });
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
     }
+    const sellerInfo = user.sellerInfo as SellerInfo | null;
 
-    const destinationList = sellerInfo.destination || [];
+    const destinationList = sellerInfo?.destination || [];
     if (destinationList.length === 0) {
       return res.json({ success: true, data: [], count: 0, message: 'User destinations retrieved successfully' });
     }

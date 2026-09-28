@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { CreditCard, Lock } from 'lucide-react';
+import { Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -14,7 +14,7 @@ import { getCartBookings, clearCart, CartBooking } from '@/lib/cartUtils';
 
 export default function CheckoutClient() {
     const router = useRouter();
-    const [paymentMethod, setPaymentMethod] = useState<'card' | 'paypal'>('card');
+    const [paymentMethod] = useState<'card' | 'paypal'>('card');
     const [cartBookings, setCartBookings] = useState<CartBooking[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -23,12 +23,6 @@ export default function CheckoutClient() {
         lastName: '',
         email: '',
         phone: '',
-    });
-
-    const [cardInfo, setCardInfo] = useState({
-        cardNumber: '',
-        expiry: '',
-        cvv: '',
     });
 
     const processPaymentMutation = useProcessPayment();
@@ -57,23 +51,11 @@ export default function CheckoutClient() {
             return;
         }
 
-        // Validate card info if card payment
-        if (paymentMethod === 'card' && (!cardInfo.cardNumber || !cardInfo.expiry || !cardInfo.cvv)) {
-            toast({
-                title: 'Missing card information',
-                description: 'Please fill in all card details',
-                variant: 'destructive',
-            });
-            return;
-        }
-
-        // Process payment using API
         processPaymentMutation.mutate(
             {
                 bookings: cartBookings,
                 paymentMethod,
                 contactInfo,
-                ...(paymentMethod === 'card' && { cardInfo }),
             },
             {
                 onSuccess: () => {
@@ -178,71 +160,10 @@ export default function CheckoutClient() {
                                 <CardHeader>
                                     <CardTitle>Payment Method</CardTitle>
                                 </CardHeader>
-                                <CardContent className="space-y-4">
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <Button
-                                            type="button"
-                                            variant={paymentMethod === 'card' ? 'default' : 'outline'}
-                                            onClick={() => setPaymentMethod('card')}
-                                            className="h-20"
-                                        >
-                                            <CreditCard className="h-6 w-6 mr-2" />
-                                            Credit Card
-                                        </Button>
-                                        <Button
-                                            type="button"
-                                            variant={paymentMethod === 'paypal' ? 'default' : 'outline'}
-                                            onClick={() => setPaymentMethod('paypal')}
-                                            className="h-20"
-                                        >
-                                            PayPal
-                                        </Button>
-                                    </div>
-
-                                    {paymentMethod === 'card' && (
-                                        <div className="space-y-4 pt-4">
-                                            <div>
-                                                <Label htmlFor="cardNumber">Card Number</Label>
-                                                <Input
-                                                    id="cardNumber"
-                                                    placeholder="1234 5678 9012 3456"
-                                                    required
-                                                    value={cardInfo.cardNumber}
-                                                    onChange={(e) => setCardInfo({ ...cardInfo, cardNumber: e.target.value })}
-                                                />
-                                            </div>
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div>
-                                                    <Label htmlFor="expiry">Expiry Date</Label>
-                                                    <Input
-                                                        id="expiry"
-                                                        placeholder="MM/YY"
-                                                        required
-                                                        value={cardInfo.expiry}
-                                                        onChange={(e) => setCardInfo({ ...cardInfo, expiry: e.target.value })}
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <Label htmlFor="cvv">CVV</Label>
-                                                    <Input
-                                                        id="cvv"
-                                                        placeholder="123"
-                                                        required
-                                                        value={cardInfo.cvv}
-                                                        onChange={(e) => setCardInfo({ ...cardInfo, cvv: e.target.value })}
-                                                    />
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {paymentMethod === 'paypal' && (
-                                        <div className="pt-4 text-center">
-                                            <p className="text-muted-foreground mb-4">
-                                                You will be redirected to PayPal to complete your payment
-                                            </p>
-                                        </div>
-                                    )}
+                                <CardContent>
+                                    <p className="text-sm text-muted-foreground">
+                                        Card numbers are not collected. This booking stays unpaid until a payment provider is connected.
+                                    </p>
                                 </CardContent>
                             </Card>
                         </div>

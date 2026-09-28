@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState, useCallback } from 'react';
-import { useFormContext } from 'react-hook-form';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { useTourContext } from '@/providers/TourProvider';
 import {
   applyPricingPreset,
   applyDatePreset,
@@ -24,7 +24,6 @@ import {
 import { toast } from '@/components/ui/use-toast';
 import { LayoutTemplate, FileText, Route, Loader2, Sparkles, Settings2 } from 'lucide-react';
 import type { JSONContent } from 'novel';
-import type { TourFormData } from '@/lib/schemas/tourEditor';
 
 /** API itinerary item may include _id, destination/destinationId */
 type ItineraryPresetItem = {
@@ -72,7 +71,7 @@ function parseContent(value: unknown): JSONContent | null {
 type SetValueForm = (name: string, value: unknown, options?: { shouldDirty?: boolean }) => void;
 
 export function ApplyPresetsBar() {
-  const form = useFormContext<TourFormData>();
+  const { form } = useTourContext();
   const setValue = form.setValue as unknown as SetValueForm;
   const { user } = useAuth();
   const userId = user?.id ?? '';

@@ -31,6 +31,9 @@ import { MultiSelect } from '@/components/ui/MultiSelect';
 
 import { Gallery } from '@/components/dashboard/gallery/Gallery';
 import { useTourContext } from '@/providers/TourProvider';
+import { GoogleMapsProvider } from '@/providers/GoogleMapsProvider';
+import AddDestination from './Destination/AddDestination';
+import AddCategory from './Category/AddCategory';
 import Image from 'next/image';
 import type { JSONContent } from 'novel';
 import dynamic from 'next/dynamic';
@@ -43,6 +46,16 @@ const NovelEditor = dynamic(() => import('@/components/dashboard/editor/NovelEdi
     ssr: false,
     loading: () => <p>Loading Editor...</p>, // Optional loading state
 });
+
+const ADD_DESTINATION = '__add_destination__';
+
+function createdId(payload: unknown): string | undefined {
+    if (!payload || typeof payload !== 'object') return undefined;
+    const root = payload as Record<string, unknown>;
+    const data = root.data && typeof root.data === 'object' ? root.data as Record<string, unknown> : root;
+    const id = data.id ?? data._id ?? root.id ?? root._id;
+    return id != null && String(id) !== '' ? String(id) : undefined;
+}
 
 
 
@@ -94,6 +107,8 @@ export function TourBasicInfo() {
 
 
     const [imageDialogOpen, setImageDialogOpen] = useState(false);
+    const [addDestinationOpen, setAddDestinationOpen] = useState(false);
+    const [addCategoryOpen, setAddCategoryOpen] = useState(false);
     const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
     const [numPages, setNumPages] = useState<number>(1);
     const [pageNumber, setPageNumber] = useState<number>(1);
@@ -317,16 +332,20 @@ export function TourBasicInfo() {
                     <Label>Category</Label>
                     {categoriesLoading ? (
                         <p className="text-sm text-muted-foreground">Loading categories...</p>
-                    ) : categoryOptionsForSelect.length > 0 ? (
+                    ) : (
                         <MultiSelect
                             defaultValue={categoryValueForSelect}
                             onValueChange={handleCategoryChange}
                             options={categoryOptionsForSelect.map((o) => ({ label: o.label, value: o.value, disabled: o.disable }))}
-                            placeholder="Select categories..."
+                            placeholder={categoryOptionsForSelect.length > 0 ? 'Select categories...' : 'No categories yet'}
                             resetOnDefaultValueChange={true}
+                            hideSelectAll={categoryOptionsForSelect.length === 0}
+                            emptyIndicator="No categories yet"
+                            createAction={{
+                                label: 'Add category',
+                                onSelect: () => setAddCategoryOpen(true),
+                            }}
                         />
-                    ) : (
-                        <p className="text-sm text-muted-foreground">No categories available</p>
                     )}
                     {errors.category && (
                         <p className="text-sm text-destructive">{errors.category.message as string}</p>
@@ -377,7 +396,13 @@ export function TourBasicInfo() {
                                 return (
                                     <Select
                                         key={destKey}
-                                        onValueChange={(v) => field.onChange(v || '')}
+                                        onValueChange={(v) => {
+                                            if (v === ADD_DESTINATION) {
+                                                setAddDestinationOpen(true);
+                                                return;
+                                            }
+                                            field.onChange(v || '');
+                                        }}
                                         value={valueStr}
                                     >
                                         <SelectTrigger className="w-full" id="destination">
@@ -400,15 +425,22 @@ export function TourBasicInfo() {
                                                         </SelectItem>
                                                     );
                                                 })
-                                            ) : (
-                                                <div className="px-2 py-3 text-center text-sm text-muted-foreground">No destinations available</div>
+                                            ) : null}
+                                            {!destinationsLoading && (
+                                                <SelectItem value={ADD_DESTINATION}>
+                                                    Add destination
+                                                </SelectItem>
                                             )}
                                         </SelectContent>
                                     </Select>
                                 );
                             }}
                         />
-                        <p className="text-sm text-muted-foreground">Manage destinations in your settings</p>
+                        <p className="text-sm text-muted-foreground">
+                            {Array.isArray(destinations) && destinations.length > 0
+                                ? 'Choose a destination, or add one from the list.'
+                                : 'Open the list and choose Add destination.'}
+                        </p>
                     </div>
                 </div>
 
@@ -637,6 +669,46 @@ export function TourBasicInfo() {
                     </div>
                 </div>
             </CardContent>
+            <Dialog open={addDestinationOpen} onOpenChange={setAddDestinationOpen}>
+                <DialogContent className="!w-[92vw] !max-w-[92vw] sm:!max-w-[92vw] left-1/2 -translate-x-1/2 max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle>Add destination</DialogTitle>
+                        <DialogDescription>
+                            Create a destination here. It is saved to your destination list.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <GoogleMapsProvider>
+                        <AddDestination
+                            onDestinationAdded={(created) => {
+                                setAddDestinationOpen(false);
+                                const id = createdId(created);
+                                if (id) setValue('destination', id, { shouldDirty: true, shouldValidate: true });
+                            }}
+                        />
+                    </GoogleMapsProvider>
+                </DialogContent>
+            </Dialog>
+            <Dialog open={addCategoryOpen} onOpenChange={setAddCategoryOpen}>
+                <DialogContent className="!w-[92vw] !max-w-[92vw] sm:!max-w-[92vw] left-1/2 -translate-x-1/2 max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle>Add category</DialogTitle>
+                        <DialogDescription>
+                            Create a category here. It is saved to your category list.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <AddCategory
+                        onCategoryAdded={(created) => {
+                            setAddCategoryOpen(false);
+                            const id = createdId(created);
+                            if (!id) return;
+                            const nextIds = categoryValueForSelect.includes(id)
+                                ? categoryValueForSelect
+                                : [...categoryValueForSelect, id];
+                            handleCategoryChange(nextIds);
+                        }}
+                    />
+                </DialogContent>
+            </Dialog>
         </Card >
     );
 }

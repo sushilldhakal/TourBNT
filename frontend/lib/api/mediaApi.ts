@@ -35,26 +35,26 @@ function transformMediaItem(item: any, mediaType: MediaTab): MediaItem {
 
     // Determine resource type
     let resourceType: ResourceType = 'image';
-    if (item.resource_type === 'video') {
+    if (item.resourceType === 'video') {
         resourceType = 'video';
-    } else if (item.resource_type === 'raw' || type === 'pdf') {
+    } else if (item.resourceType === 'raw' || type === 'pdf') {
         resourceType = 'raw';
     }
 
     return {
-        id: item._id || item.asset_id || item.public_id,
-        publicId: item.public_id || '',
+        id: item.id,
+        publicId: item.publicId || '',
         url: item.url || '',
-        secureUrl: item.url || '', // Use url since secure_url might not be present
+        secureUrl: item.secureUrl || item.url || '',
         mediaType: type,
         format: item.format || '',
         width: item.width,
         height: item.height,
         bytes: item.bytes || 0,
-        createdAt: item.created_at || item.uploadedAt || new Date().toISOString(),
+        createdAt: item.uploadedAt || new Date().toISOString(),
         resourceType,
         thumbnailUrl: item.thumbnailUrl,
-        originalFilename: item.original_filename || item.display_name || item.title || 'Untitled',
+        originalFilename: item.originalFilename || item.displayName || item.title || 'Untitled',
         // Editable metadata
         title: item.title || '',
         description: item.description || '',
@@ -88,9 +88,10 @@ export async function getAllMedia(
         });
 
         // Get the full response data directly - don't use extractResponseData for this endpoint
-        // since we need both data (list) and pagination info. Standard: { success, data, message, pagination }
+        // since we need both data (list) and pagination info. This endpoint (getMedia) returns
+        // paginated lists under `items`, not `data` — fall back to `data` for resilience only.
         const fullResponse = response.data;
-        const rawResources = fullResponse.data ?? [];
+        const rawResources = fullResponse.items ?? fullResponse.data ?? [];
         // Transform each item to match frontend MediaItem interface
         const resources = rawResources.map((item: any) => transformMediaItem(item, mediaType));
 
@@ -380,21 +381,14 @@ export function extractPublicId(url: string): string | undefined {
 /**
  * Helper function to generate a thumbnail URL.
  *
- * R2 has no on-the-fly image transformation, so this is a passthrough for
- * R2-hosted media — it only rewrites URLs still served from the legacy
- * Cloudinary account (kept during migration for previously-uploaded assets).
+ * R2 has no on-the-fly image transformation, so this returns the original URL.
  *
  * @param url - Original media URL
  * @param width - Desired thumbnail width (default: 300px)
  * @returns Transformed URL with thumbnail parameters, or the original URL as-is
  */
-export function getThumbnailUrl(url: string, width: number = 300): string {
-    if (!url || !url.includes('cloudinary.com')) {
-        return url;
-    }
-
-    // Transform Cloudinary URL to use thumbnail with fill crop mode
-    return url.replace('/upload/', `/upload/w_${width},c_fill,q_auto,f_auto/`);
+export function getThumbnailUrl(url: string, _width: number = 300): string {
+    return url;
 }
 
 /**

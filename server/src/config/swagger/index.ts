@@ -79,13 +79,11 @@ All API responses follow a consistent structure with automatic document normaliz
 }
 \`\`\`
 
-### Document Normalization
-All Mongoose documents are automatically normalized before being sent in responses:
-- **_id** field is converted to **id** (string format)
-- **__v** version field is removed
-- Nested documents are recursively normalized
-- Consistent key ordering is maintained
-- Performance optimized with LRU caching
+### Response shape
+Postgres rows are normalized before they are sent:
+- A legacy **_id** field is exposed as **id**
+- Leftover **__v** fields from older documents are removed
+- Nested objects are normalized the same way
 
 ## Pagination
 

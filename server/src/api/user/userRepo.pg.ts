@@ -25,6 +25,23 @@ export async function createUser(data: NewPgUser): Promise<PgUser> {
   return user;
 }
 
+export async function updateUser(
+  id: string,
+  patch: Partial<Omit<NewPgUser, 'id' | 'createdAt'>>
+): Promise<PgUser | undefined> {
+  const [user] = await db
+    .update(users)
+    .set({ ...patch, updatedAt: new Date() })
+    .where(eq(users.id, id))
+    .returning();
+  return user;
+}
+
+export async function removeUser(id: string): Promise<PgUser | undefined> {
+  const [user] = await db.delete(users).where(eq(users.id, id)).returning();
+  return user;
+}
+
 export function computeSellerStatus(sellerInfo: SellerInfo | null | undefined): 'none' | 'approved' | 'rejected' | 'pending' {
   if (!sellerInfo) return 'none';
   if (sellerInfo.isApproved) return 'approved';

@@ -1,7 +1,8 @@
 'use client';
 
 import React from 'react';
-import { useFormContext, useFieldArray } from 'react-hook-form';
+import { useFieldArray } from 'react-hook-form';
+import { useTourContext } from '@/providers/TourProvider';
 import { GripVertical, Plus, Trash2, Calendar, AlertTriangle } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -26,7 +27,8 @@ import { BusinessPartnerPicker } from './BusinessPartnerPicker';
  */
 
 export function TourItinerary() {
-    const { register, setValue, watch, control, formState: { errors } } = useFormContext();
+    const { form } = useTourContext();
+    const { register, setValue, watch, control, formState: { errors } } = form;
     const [outlineContent, setOutlineContent] = React.useState<any>(null);
     const [isInitialized, setIsInitialized] = React.useState(false);
     const [deleteIndex, setDeleteIndex] = React.useState<number | null>(null);
@@ -210,7 +212,8 @@ interface ItineraryItemProps {
 }
 
 function ItineraryItem({ index, onRemove, onDragStart, onDragOver, onDrop }: ItineraryItemProps) {
-    const { register, formState: { errors } } = useFormContext();
+    const { form } = useTourContext();
+    const { register, formState: { errors } } = form;
 
     return (
         <Card

@@ -1,7 +1,6 @@
 'use client';
 
 import { useMemo, useEffect, useState } from 'react';
-import { useFormContext } from 'react-hook-form';
 import { useQueryClient } from '@tanstack/react-query';
 import { useFaq } from '@/lib/queries';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -39,8 +38,8 @@ import AddFaq from './Faq/AddFaq';
 import { getAllFaqs, getUserFaq } from '@/lib/api/faqApi';
 
 export function TourFAQs() {
-    const { control, setValue, watch } = useFormContext();
-    const { faqFields, appendFaq, faqRemove, faqMove } = useTourContext();
+    const { faqFields, appendFaq, faqRemove, faqMove, form } = useTourContext();
+    const { control, setValue, watch } = form;
     const queryClient = useQueryClient();
 
     const faqs = watch('faqs'); // Watch entire array, not individual
@@ -64,6 +63,13 @@ export function TourFAQs() {
 
     const handleAddFaq = () => {
         appendFaq({ question: '', answer: '' });
+    };
+
+    const handleAddFirstFaq = () => {
+        const index = Array.isArray(faqFields) ? faqFields.length : 0;
+        handleAddFaq();
+        setCurrentFaqIndex(index);
+        setIsAddFaqDialogOpen(true);
     };
 
     const handleFaqSelect = (faqData: FaqData | undefined, index: number) => {
@@ -300,8 +306,8 @@ export function TourFAQs() {
                                                                                                     setPopoverOpen(index, false);
                                                                                                 }}
                                                                                             >
-                                                                                                <Plus className="mr-2 h-4 w-4" />
-                                                                                                Add Custom FAQ
+                                                                                    <Plus className="mr-2 h-4 w-4" />
+                                                                                    Add FAQ
                                                                                             </CommandItem>
                                                                                         </CommandGroup>
                                                                                     </CommandList>
@@ -412,11 +418,7 @@ export function TourFAQs() {
                                                                                             {faqItem.question}
                                                                                         </CommandItem>
                                                                                     );
-                                                                                }) : (
-                                                                                    <CommandItem disabled value="no-faqs">
-                                                                                        No FAQs available
-                                                                                    </CommandItem>
-                                                                                )}
+                                                                                }) : null}
                                                                                 <CommandItem
                                                                                     value="add-custom-faq"
                                                                                     onSelect={() => {
@@ -434,7 +436,7 @@ export function TourFAQs() {
                                                                                     className="text-primary font-medium"
                                                                                 >
                                                                                     <Plus className="mr-2 h-4 w-4" />
-                                                                                    Add Custom FAQ
+                                                                                    Add FAQ
                                                                                 </CommandItem>
                                                                             </CommandGroup>
                                                                         </CommandList>
@@ -482,10 +484,10 @@ export function TourFAQs() {
                         </p>
                         <Button
                             type="button"
-                            onClick={handleAddFaq}
+                            onClick={handleAddFirstFaq}
                         >
                             <Plus className="h-4 w-4 mr-2" />
-                            <span>Add First FAQ</span>
+                            <span>Add FAQ</span>
                         </Button>
                     </div>
                 )}

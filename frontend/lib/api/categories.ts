@@ -23,7 +23,7 @@ export const categoryApi = {
     getMyCreated: () =>
         api.get('/global/categories/my-created'),
     getMyCategories: (filters?: { isActive?: boolean; isFavorite?: boolean }) =>
-        api.get('/global/categories/my-categories', { params: filters }),
+        api.get('/global/categories/user-categories', { params: filters }),
     getMyActive: () =>
         api.get('/global/categories/my-active'),
     getMyFavorites: () =>

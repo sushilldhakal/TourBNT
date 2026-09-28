@@ -5,6 +5,7 @@ import { config } from "../config/config";
 import { HTTP_STATUS } from "../utils/apiResponse";
 import { AuthUser } from "../types/express";
 import { COOKIE_NAMES, COOKIE_DURATIONS, getAuthCookieOptions } from "../utils/cookieUtils";
+import { findUserById } from "../api/user/userRepo.pg";
 
 /**
  * Authentication middleware with sliding session
@@ -12,7 +13,7 @@ import { COOKIE_NAMES, COOKIE_DURATIONS, getAuthCookieOptions } from "../utils/c
  * Automatically extends session tokens for active users
  * Handles expired tokens with grace period for active users
  */
-const authenticate = (req: Request, res: Response, next: NextFunction) => {
+const authenticate = async (req: Request, res: Response, next: NextFunction) => {
   const token = req.cookies?.[COOKIE_NAMES.AUTH_TOKEN]; // <-- Read HTTP-only cookie
   if (!token) {
     return next(createHttpError(401, 'Authorization token is required.'));
@@ -81,38 +82,67 @@ const authenticate = (req: Request, res: Response, next: NextFunction) => {
     // 2. It's expired but within grace period (user is active)
     const shouldExtend = (timeUntilExpiry > 0 && timeUntilExpiry <= extensionThreshold) || isWithinGracePeriod;
 
+    if (isExpired && !isWithinGracePeriod) {
+      return next(createHttpError(401, 'Token expired. Please log in again.'));
+    }
+
+    // Role changes must come from Postgres. A connection failure is not an
+    // invalid token — fall back to the role already signed into this cookie.
+    let account: Awaited<ReturnType<typeof findUserById>>;
+    let roleLookupFailed = false;
+    try {
+      account = await findUserById(decoded.sub as string);
+    } catch (dbError) {
+      roleLookupFailed = true;
+      account = undefined;
+      console.error('Auth role lookup failed; keeping the existing session.', dbError);
+    }
+
+    if (!roleLookupFailed && !account) {
+      return next(createHttpError(401, 'Token expired or invalid.'));
+    }
+
+    const tokenRoles = Array.isArray(decoded.roles)
+      ? decoded.roles.map(String)
+      : decoded.roles
+        ? [String(decoded.roles)]
+        : [];
+    const sessionRoles = account ? [account.role] : tokenRoles;
+    const sessionUserId = account?.id ?? (decoded.sub as string);
+
+    if (sessionRoles.length === 0) {
+      return next(createHttpError(401, 'Token expired or invalid.'));
+    }
+
     if (shouldExtend) {
       const expiresIn = keepMeSignedIn ? '30d' : '2h';
       const maxAge = keepMeSignedIn ? COOKIE_DURATIONS.LONG_SESSION : COOKIE_DURATIONS.SHORT_SESSION;
+      const refreshedRole = account?.role ?? sessionRoles[0];
 
-      // Create new token with extended expiration
       const newToken = sign(
         {
-          sub: decoded.sub,
-          roles: decoded.roles || [],
+          sub: sessionUserId,
+          roles: refreshedRole,
           keepMeSignedIn: keepMeSignedIn,
         },
         config.jwtSecret,
         { expiresIn }
       );
 
-      // Set the new token with extended expiration
       const cookieOptions = getAuthCookieOptions(maxAge);
       res.cookie(COOKIE_NAMES.AUTH_TOKEN, newToken, cookieOptions);
-    } else if (isExpired) {
-      // Token is expired and beyond grace period
-      return next(createHttpError(401, 'Token expired. Please log in again.'));
     }
 
     // Attach user info to request
     req.user = {
-      id: decoded.sub as string,
-      roles: Array.isArray(decoded.roles) ? decoded.roles : [decoded.roles as string],
-      keepMeSignedIn: keepMeSignedIn, // Preserve keepMeSignedIn from JWT
+      id: sessionUserId,
+      roles: sessionRoles,
+      keepMeSignedIn: keepMeSignedIn,
     };
 
     next();
   } catch (err) {
+    console.error('Authentication failed', err);
     return next(createHttpError(401, 'Token expired or invalid.'));
   }
 

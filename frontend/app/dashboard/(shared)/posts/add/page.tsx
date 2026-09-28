@@ -219,7 +219,6 @@ export default function AddPostPage() {
                                                 <FormLabel>Content</FormLabel>
                                                 <FormControl>
                                                     <NovelEditor
-                                                        key={editorContent ? `${JSON.stringify(editorContent).length}` : 'empty'}
                                                         initialValue={editorContent}
                                                         onContentChange={(content: JSONContent) => {
                                                             setEditorContent(content);

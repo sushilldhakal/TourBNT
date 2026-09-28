@@ -24,6 +24,7 @@ import cors from "cors";
 import { config } from "./config/config";
 import breadcrumbsMiddleware from "./middlewares/breadcrumbsMiddleware";
 import { metricsMiddleware } from "./middlewares/metricsMiddleware";
+import { generalLimiter } from "./middlewares/rateLimiter";
 import swaggerUi from 'swagger-ui-express';
 import { getSwaggerSpec } from './config/swagger';
 import { logger } from './utils/logger';
@@ -59,10 +60,9 @@ app.use(
 
 
 
-app.use(express.json());
-
 // Apply metrics middleware to track all requests
 app.use(metricsMiddleware);
+app.use('/api', generalLimiter);
 
 // Apply breadcrumbsMiddleware before specific routes
 app.use(breadcrumbsMiddleware);
@@ -115,7 +115,8 @@ app.use('/api/v1/ads', adRouter);
 // API v2 routes - selective endpoint upgrades
 app.use('/api/v2/tours', tourRouterV2);
 
-// Debug endpoint to show all registered routes
+// Local-only route list. Production does not expose the API surface.
+if (config.env !== 'production') {
 app.get('/debug/routes', (req, res) => {
   const routes: any[] = [];
 
@@ -149,6 +150,7 @@ app.get('/debug/routes', (req, res) => {
 
   res.json(routes);
 });
+}
 
 // 404 Not Found handler (must be before error handler)
 app.use(notFoundHandler);

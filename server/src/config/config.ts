@@ -30,7 +30,7 @@ const _config = {
   // Postgres — single source of truth (see packages/db for the shared Drizzle schema).
   postgresUrl: process.env.DATABASE_URL!,
   env: process.env.NODE_ENV || 'development',
-  jwtSecret: process.env.JWT_SECRET || 'secret',
+  jwtSecret: process.env.JWT_SECRET ?? '',
 
   // Cloudflare R2 configuration (S3-compatible object storage)
   r2: {

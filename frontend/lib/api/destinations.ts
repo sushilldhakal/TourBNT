@@ -28,7 +28,7 @@ export const destinationApi = {
     getMyCreated: () =>
         api.get('/global/destinations/my-created'),
     getMyDestinations: (filters?: { isActive?: boolean; isFavorite?: boolean }) =>
-        api.get('/global/destinations/my-destinations', { params: filters }),
+        api.get('/global/destinations/user-destinations', { params: filters }),
     getMyActive: () =>
         api.get('/global/destinations/my-active'),
     getMyFavorites: () =>

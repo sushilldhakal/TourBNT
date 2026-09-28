@@ -342,7 +342,7 @@ export interface Tour {
     duration?: number; // Days (booking/summary display)
     
     // Author - ADD THIS
-    author: string | User | string[]; // mongoose.Types.ObjectId | ObjectId[] | User
+    author: string | User | string[];
     
     coverImage?: string; // MAKE OPTIONAL (server has it optional)
     

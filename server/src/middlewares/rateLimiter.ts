@@ -52,14 +52,15 @@ export const authLimiter = rateLimit({
     }
 });
 
+const GENERAL_LIMIT = process.env.NODE_ENV === 'development' ? 2000 : 300;
+
 /**
- * Rate limiter for general API endpoints
- * Limits: 100 requests per 15 minutes per IP address
- * Applied to: General API endpoints
+ * Rate limiter for general API endpoints.
+ * Development stays high so the dashboard can load. Production is 300 per 15 minutes per IP.
  */
 export const generalLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // 100 requests per window
+    max: GENERAL_LIMIT,
     message: 'Too many requests, please try again later',
     standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
     legacyHeaders: false, // Disable `X-RateLimit-*` headers
@@ -69,7 +70,7 @@ export const generalLimiter = rateLimit({
             endpoint: req.path,
             clientIp: getClientIp(req),
             timestamp: new Date().toISOString(),
-            limit: 100,
+            limit: GENERAL_LIMIT,
             windowMs: 900000
         });
 
@@ -79,7 +80,7 @@ export const generalLimiter = rateLimit({
                 message: 'Too many requests, please try again later',
                 details: {
                     retryAfter: 900, // 15 minutes in seconds
-                    limit: 100,
+                    limit: GENERAL_LIMIT,
                     windowMs: 900000
                 },
                 timestamp: new Date().toISOString(),

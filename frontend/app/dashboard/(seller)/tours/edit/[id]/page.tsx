@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { useRouter } from 'next/navigation';
+import { FormProvider } from 'react-hook-form';
 import { useMutation } from '@tanstack/react-query';
 import { useCacheManager } from '@/lib/queries/cacheUtils';
 import { ArrowLeft, Save, Loader2, Trash2, AlertTriangle } from 'lucide-react';
@@ -177,32 +178,34 @@ function TourForm() {
                 </Alert>
             )}
 
-            <form onSubmit={handleSubmit(submitWithLog)}>
-                <ApplyPresetsBar />
-                <TourEditorLayout onSave={handleSave} saveLabel="Update Tour">
-                    <TabsContent value="overview" className="mt-0">
-                        <TourBasicInfo />
-                    </TabsContent>
-                    <TabsContent value="pricing" className="mt-0">
-                        <TourPricingDates />
-                    </TabsContent>
-                    <TabsContent value="itinerary" className="mt-0">
-                        <TourItinerary />
-                    </TabsContent>
-                    <TabsContent value="inc-exc" className="mt-0">
-                        <TourInclusionsExclusions />
-                    </TabsContent>
-                    <TabsContent value="facts" className="mt-0">
-                        <TourFacts />
-                    </TabsContent>
-                    <TabsContent value="gallery" className="mt-0">
-                        <TourGallery />
-                    </TabsContent>
-                    <TabsContent value="faqs" className="mt-0">
-                        <TourFAQs />
-                    </TabsContent>
-                </TourEditorLayout>
-            </form>
+            <FormProvider {...form}>
+                <form onSubmit={handleSubmit(submitWithLog)}>
+                    <ApplyPresetsBar />
+                    <TourEditorLayout onSave={handleSave} saveLabel="Update Tour">
+                        <TabsContent value="overview" className="mt-0">
+                            <TourBasicInfo />
+                        </TabsContent>
+                        <TabsContent value="pricing" className="mt-0">
+                            <TourPricingDates />
+                        </TabsContent>
+                        <TabsContent value="itinerary" className="mt-0">
+                            <TourItinerary />
+                        </TabsContent>
+                        <TabsContent value="inc-exc" className="mt-0">
+                            <TourInclusionsExclusions />
+                        </TabsContent>
+                        <TabsContent value="facts" className="mt-0">
+                            <TourFacts />
+                        </TabsContent>
+                        <TabsContent value="gallery" className="mt-0">
+                            <TourGallery />
+                        </TabsContent>
+                        <TabsContent value="faqs" className="mt-0">
+                            <TourFAQs />
+                        </TabsContent>
+                    </TourEditorLayout>
+                </form>
+            </FormProvider>
         </div>
     );
 }

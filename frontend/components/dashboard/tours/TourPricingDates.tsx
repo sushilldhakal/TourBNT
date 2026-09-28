@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useFormContext, useFieldArray } from 'react-hook-form';
+import { useFieldArray } from 'react-hook-form';
 import { format } from 'date-fns';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { useTourContext } from '@/providers/TourProvider';
 import { usePricingPresets, usePaxPresets, useDiscountPresets } from '@/lib/queries';
 import type { DateRange } from 'react-day-picker';
 import {
@@ -40,7 +41,7 @@ import {
 } from '@/lib/utils/defaultTourValues';
 
 export function TourPricingDates() {
-    const { setValue, watch, control, formState: { errors } } = useFormContext();
+    const { setValue, watch, control, formState: { errors } } = useTourContext().form;
     const { user } = useAuth();
 
     // Watch pricing values
@@ -944,7 +945,7 @@ interface PricingOptionItemProps {
 }
 
 function PricingOptionItem({ index, onRemove }: PricingOptionItemProps) {
-    const { register, setValue, watch } = useFormContext();
+    const { register, setValue, watch } = useTourContext().form;
     const { user } = useAuth();
     const option = watch(`pricing.pricingOptions.${index}`) || {};
     const discountEnabled = option.discountEnabled || false;
@@ -1261,7 +1262,7 @@ function PricingOptionItem({ index, onRemove }: PricingOptionItemProps) {
  * Single date picker for recurrence end date
  */
 function RecurrenceEndDatePicker() {
-    const { setValue, watch } = useFormContext();
+    const { setValue, watch } = useTourContext().form;
     const recurrenceEndDate = watch('dates.recurrenceEndDate');
     const [date, setDate] = useState<Date | undefined>(
         recurrenceEndDate ? new Date(recurrenceEndDate) : undefined
@@ -1335,7 +1336,7 @@ function RecurrenceEndDatePicker() {
  * Single date picker for price lock date
  */
 function PriceLockDatePicker() {
-    const { setValue, watch } = useFormContext();
+    const { setValue, watch } = useTourContext().form;
     const priceLockDate = watch('pricing.priceLockDate');
     const [date, setDate] = useState<Date | undefined>(
         priceLockDate ? new Date(priceLockDate) : undefined
@@ -1409,7 +1410,7 @@ function PriceLockDatePicker() {
  * Date range picker for discount validity
  */
 function DiscountDateRange() {
-    const { setValue, watch } = useFormContext();
+    const { setValue, watch } = useTourContext().form;
     const dateRange = watch('pricing.discount.dateRange') || {};
     const [date, setDate] = useState<DateRange | undefined>({
         from: dateRange.from ? new Date(dateRange.from) : undefined,
@@ -1505,7 +1506,7 @@ interface PricingOptionDiscountDateRangeProps {
 }
 
 function PricingOptionDiscountDateRange({ index }: PricingOptionDiscountDateRangeProps) {
-    const { setValue, watch } = useFormContext();
+    const { setValue, watch } = useTourContext().form;
     const dateRange = watch(`pricing.pricingOptions.${index}.discount.dateRange`) || {};
     const [date, setDate] = useState<DateRange | undefined>({
         from: dateRange.from ? new Date(dateRange.from) : undefined,
@@ -1598,7 +1599,7 @@ function PricingOptionDiscountDateRange({ index }: PricingOptionDiscountDateRang
  * Single date range for fixed schedule tours
  */
 function FixedDateRange() {
-    const { setValue, watch } = useFormContext();
+    const { setValue, watch } = useTourContext().form;
     const dateRange = watch('dates.dateRange') || {};
     const [date, setDate] = useState<DateRange | undefined>({
         from: dateRange.from ? new Date(dateRange.from) : undefined,
@@ -1701,7 +1702,7 @@ interface DepartureItemProps {
 }
 
 function DepartureItem({ index, onRemove }: DepartureItemProps) {
-    const { register, setValue, watch } = useFormContext();
+    const { register, setValue, watch } = useTourContext().form;
     const departure = watch(`dates.departures.${index}`) || {};
     const [date, setDate] = useState<DateRange | undefined>({
         from: departure.dateRange?.from ? new Date(departure.dateRange.from) : undefined,

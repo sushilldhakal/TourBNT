@@ -2,7 +2,7 @@ import express from 'express';
 import { authenticate, authorizeRoles } from '../../middlewares/authenticate';
 import { validateObjectId } from './middleware/validation';
 import { upload } from '../../middlewares';
-import { updateTourV2 } from './controllers/tourControllerV2';
+import { updateTour } from './controllers/tourController';
 
 const tourRouterV2 = express.Router();
 
@@ -44,7 +44,7 @@ tourRouterV2.patch(
             { name: 'file', maxCount: 10 }
         ])(req, res, next);
     },
-    updateTourV2  // Your new v2 controller with enhanced logic
+    updateTour
 );
 
 export default tourRouterV2;

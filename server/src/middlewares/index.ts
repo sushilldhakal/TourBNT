@@ -15,14 +15,8 @@ export { filterSortMiddleware } from './filterSort';
 export type { FilterParams, SortParams } from './filterSort';
 
 // View tracking
-export {
-    viewTrackingMiddleware,
-    simpleViewTracking
-} from './viewTracking';
-export type {
-    ViewTrackableResource,
-    ViewTrackingService
-} from './viewTracking';
+export { simpleViewTracking } from './viewTracking';
+export type { ViewTrackableResource } from './viewTracking';
 
 // Authentication (existing)
 export { authenticate, authorizeRoles } from './authenticate';

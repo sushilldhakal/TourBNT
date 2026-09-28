@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useFormContext } from 'react-hook-form';
 import {
     X,
     ImageIcon,
@@ -35,8 +34,8 @@ import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 
 export function TourGallery() {
 
-    const { galleryFields, appendGallery, galleryRemove, galleryMove } = useTourContext();
-    const { watch } = useFormContext();
+    const { galleryFields, appendGallery, galleryRemove, galleryMove, form } = useTourContext();
+    const { watch } = form;
 
 
     const [viewerOpen, setViewerOpen] = useState(false);

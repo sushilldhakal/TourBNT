@@ -181,11 +181,6 @@ export const processPayment = async (paymentData: {
         email: string;
         phone: string;
     };
-    cardInfo?: {
-        cardNumber: string;
-        expiry: string;
-        cvv: string;
-    };
 }) => {
     try {
         const response = await api.post('/bookings/payment', paymentData, {

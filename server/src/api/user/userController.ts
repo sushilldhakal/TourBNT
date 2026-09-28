@@ -13,6 +13,7 @@ import { HTTP_STATUS, sendSuccess, sendPaginatedResponse } from "../../utils/api
 import { getAuthCookieOptions, getClearCookieOptions, COOKIE_NAMES, COOKIE_DURATIONS } from "../../utils/cookieUtils";
 import * as pgUsers from "./userRepo.pg";
 import type { SellerInfo } from "./userTypes";
+import { coerceUserRole, isUserRole } from "../../utils/roles";
 
 const SORTABLE = new Set(['createdAt', 'name', 'email']);
 
@@ -298,7 +299,10 @@ export const updateUser = async (req: Request, res: Response, next: NextFunction
         reapplicationCount: existingSellerInfo?.reapplicationCount ? existingSellerInfo.reapplicationCount + 1 : 1,
       };
 
-      const [updatedUser] = await db.update(users).set({ sellerInfo, updatedAt: new Date() }).where(eq(users.id, userId)).returning();
+      const updatedUser = await pgUsers.updateUser(userId, { sellerInfo });
+      if (!updatedUser) {
+        return next(createHttpError(404, "User not found"));
+      }
 
       return sendSuccess(res, {
         user: pgUsers.withoutPassword(updatedUser),
@@ -310,16 +314,18 @@ export const updateUser = async (req: Request, res: Response, next: NextFunction
       const updateData: Partial<typeof users.$inferInsert> = {
         name: name || user.name,
         email: email || user.email,
-        role: roles || user.role,
+        role: coerceUserRole(roles, user.role),
         phone: phone || user.phone,
-        updatedAt: new Date(),
       };
 
       if (password) {
         updateData.password = await bcrypt.hash(password, 10);
       }
 
-      const [updatedUser] = await db.update(users).set(updateData).where(eq(users.id, userId)).returning();
+      const updatedUser = await pgUsers.updateUser(userId, updateData);
+      if (!updatedUser) {
+        return next(createHttpError(404, "User not found"));
+      }
       return sendSuccess(res, pgUsers.withoutPassword(updatedUser), 'User updated successfully');
     }
   } catch (err) {
@@ -474,7 +480,7 @@ export const deleteUser = async (req: Request, res: Response, next: NextFunction
       return next(createHttpError(401, 'Not authenticated'));
     }
 
-    const [deleted] = await db.delete(users).where(eq(users.id, userId)).returning();
+    const deleted = await pgUsers.removeUser(userId);
     if (!deleted) {
       return next(createHttpError(404, 'User not found'));
     }
@@ -486,7 +492,19 @@ export const deleteUser = async (req: Request, res: Response, next: NextFunction
 
 // Change user roles (admin only)
 export const changeUserRole = async (req: Request, res: Response, next: NextFunction) => {
-  const { adminUserId, targetUserId, newRoles } = req.body;
+  const adminUserId = req.user?.id;
+  const targetUserId = req.params.userId;
+  const newRole = req.body.role;
+
+  if (!adminUserId) {
+    return next(createHttpError(HTTP_STATUS.UNAUTHORIZED, 'Not authenticated'));
+  }
+  if (!targetUserId || newRole === undefined) {
+    return next(createHttpError(HTTP_STATUS.BAD_REQUEST, 'User id and role are required'));
+  }
+  if (!isUserRole(newRole)) {
+    return next(createHttpError(HTTP_STATUS.BAD_REQUEST, 'Invalid role'));
+  }
 
   try {
     const adminUser = await pgUsers.findUserById(adminUserId);
@@ -499,7 +517,10 @@ export const changeUserRole = async (req: Request, res: Response, next: NextFunc
       return res.status(HTTP_STATUS.NOT_FOUND).json({ message: 'Target user not found' });
     }
 
-    const [updatedUser] = await db.update(users).set({ role: newRoles, updatedAt: new Date() }).where(eq(users.id, targetUserId)).returning();
+    const updatedUser = await pgUsers.updateUser(targetUserId, { role: newRole });
+    if (!updatedUser) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({ message: 'Target user not found' });
+    }
     res.json(pgUsers.withoutPassword(updatedUser));
   } catch (err) {
     return next(createHttpError(500, "Error while changing user role"));
@@ -519,7 +540,7 @@ export const verifyUser = async (req: Request, res: Response, next: NextFunction
       return next(createHttpError(400, "Invalid token"));
     }
 
-    await db.update(users).set({ verified: true, updatedAt: new Date() }).where(eq(users.id, user.id));
+    await pgUsers.updateUser(user.id, { verified: true });
     res.status(HTTP_STATUS.OK).json({ message: 'Email verified successfully' });
   } catch (err) {
     return next(createHttpError(400, "Invalid or expired token"));
@@ -586,7 +607,7 @@ export const resetPassword = async (req: Request, res: Response, next: NextFunct
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    await db.update(users).set({ password: hashedPassword, updatedAt: new Date() }).where(eq(users.id, user.id));
+    await pgUsers.updateUser(user.id, { password: hashedPassword });
 
     res.status(HTTP_STATUS.OK).json({ message: 'Password reset successful' });
   } catch (err) {
@@ -614,7 +635,7 @@ export const deleteSellerApplication = async (req: Request, res: Response, next:
       return next(createHttpError(400, "User is not a seller applicant"));
     }
 
-    await db.update(users).set({ sellerInfo: null, role: 'user', updatedAt: new Date() }).where(eq(users.id, userId));
+    await pgUsers.updateUser(userId, { sellerInfo: null, role: 'user' });
 
     res.status(HTTP_STATUS.OK).json({
       message: "Seller application deleted successfully. User converted to normal user."
@@ -665,7 +686,10 @@ export const updateMyProfile = async (req: Request, res: Response, next: NextFun
       };
     }
 
-    const [updatedUser] = await db.update(users).set(updateData).where(eq(users.id, userId)).returning();
+    const updatedUser = await pgUsers.updateUser(userId, updateData);
+    if (!updatedUser) {
+      return next(createHttpError(404, "User not found"));
+    }
     res.json(pgUsers.withoutPassword(updatedUser));
   } catch (err) {
     console.error('Error while updating profile:', err);
@@ -697,7 +721,7 @@ export const changeMyPassword = async (req: Request, res: Response, next: NextFu
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-    await db.update(users).set({ password: hashedPassword, updatedAt: new Date() }).where(eq(users.id, userId));
+    await pgUsers.updateUser(userId, { password: hashedPassword });
 
     res.json({ message: "Password changed successfully" });
   } catch (err) {
@@ -729,16 +753,18 @@ export const updateUserById = async (req: Request, res: Response, next: NextFunc
     const updateData: Partial<typeof users.$inferInsert> = {
       name: name || user.name,
       email: email || user.email,
-      role: roles || user.role,
+      role: coerceUserRole(roles, user.role),
       phone: phone || user.phone,
-      updatedAt: new Date(),
     };
 
     if (password) {
       updateData.password = await bcrypt.hash(password, 10);
     }
 
-    const [updatedUser] = await db.update(users).set(updateData).where(eq(users.id, userId)).returning();
+    const updatedUser = await pgUsers.updateUser(userId, updateData);
+    if (!updatedUser) {
+      return next(createHttpError(404, "User not found"));
+    }
     res.json(pgUsers.withoutPassword(updatedUser));
   } catch (err) {
     console.error('Error while updating user:', err);

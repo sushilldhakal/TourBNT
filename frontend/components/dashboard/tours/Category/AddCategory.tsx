@@ -47,7 +47,7 @@ const OptionImageIcon = ({ imageUrl, alt }: { imageUrl?: string; alt?: string })
     );
 };
 
-const AddCategory = ({ onCategoryAdded }: { onCategoryAdded: () => void }) => {
+const AddCategory = ({ onCategoryAdded }: { onCategoryAdded: (created?: unknown) => void }) => {
     const [dialogOpen, setDialogOpen] = useState(false);
 
     // Search functionality state
@@ -87,13 +87,13 @@ const AddCategory = ({ onCategoryAdded }: { onCategoryAdded: () => void }) => {
 
     const categoryMutation = useMutation({
         mutationFn: (data: FormData) => addCategory(data),
-        onSuccess: () => {
+        onSuccess: (created) => {
             toast({
                 title: 'Category added successfully',
                 description: 'Your category has been created.',
                 variant: 'default',
             });
-            onCategoryAdded();
+            onCategoryAdded(created);
             form.reset();
             // Reset description content
             setDescriptionContent({
@@ -114,13 +114,13 @@ const AddCategory = ({ onCategoryAdded }: { onCategoryAdded: () => void }) => {
     // Mutation for adding existing categories to seller's list
     const addExistingCategoryMutation = useMutation({
         mutationFn: (categoryId: string) => addExistingCategoryToSeller(categoryId),
-        onSuccess: () => {
+        onSuccess: (_data, categoryId) => {
             toast({
                 title: "Category added successfully",
                 description: "The category has been added to your list.",
                 variant: "default",
             });
-            onCategoryAdded();
+            onCategoryAdded({ id: categoryId });
         },
         onError: (error) => {
             toast({

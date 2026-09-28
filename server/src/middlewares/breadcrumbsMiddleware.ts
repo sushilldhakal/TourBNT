@@ -30,7 +30,7 @@ const breadcrumbsMiddleware = async (req: Request, res: Response, next: NextFunc
           console.error(`Error fetching tour title for ID ${label}:`, error);
         }
       }
-    } else if (i > 0 && parts[i - 1] === 'users') {
+    } else if (i > 0 && parts[i - 1] === 'users' && label !== 'me' && /^[0-9a-f-]{24,}$/i.test(label)) {
       try {
         const [user] = await db.select({ name: users.name }).from(users).where(eq(users.id, label)).limit(1);
         if (user) {

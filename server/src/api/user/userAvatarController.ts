@@ -1,8 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import fs from 'fs';
 import createHttpError from 'http-errors';
-import { db, users } from '@tourbnt/db';
-import { eq } from 'drizzle-orm';
 import { uploadFileToR2 } from '../../config/r2Config';
 import { sendSuccess } from '../../utils/apiResponse';
 import * as pgUsers from './userRepo.pg';
@@ -41,11 +39,10 @@ export const uploadAvatar = async (req: Request, res: Response, next: NextFuncti
       return next(createHttpError(400, 'No image file or URL provided'));
     }
 
-    const [updatedUser] = await db
-      .update(users)
-      .set({ avatar: avatarUrl, updatedAt: new Date() })
-      .where(eq(users.id, userId))
-      .returning();
+    const updatedUser = await pgUsers.updateUser(userId, { avatar: avatarUrl });
+    if (!updatedUser) {
+      return next(createHttpError(404, 'User not found'));
+    }
 
     sendSuccess(res, { user: pgUsers.withoutPassword(updatedUser), avatar: avatarUrl }, 'Avatar uploaded successfully');
   } catch (error) {

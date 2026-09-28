@@ -1,7 +1,6 @@
 'use client';
 
 import { useMemo, useEffect, useState } from 'react';
-import { useFormContext } from 'react-hook-form';
 import { useQueryClient } from '@tanstack/react-query';
 import { useFacts } from '@/lib/queries';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -41,8 +40,8 @@ import { getUserId } from '@/lib/utils/auth';
 import AddFact from './Facts/AddFacts';
 
 export function TourFacts() {
-    const { control, setValue, watch } = useFormContext();
-    const { factsFields, appendFacts, factsRemove, factsMove } = useTourContext();
+    const { factsFields, appendFacts, factsRemove, factsMove, form } = useTourContext();
+    const { control, setValue, watch } = form;
     const queryClient = useQueryClient();
 
     const facts = watch('facts');
@@ -66,6 +65,13 @@ export function TourFacts() {
             field_type: 'Plain Text',
             icon: ''
         });
+    };
+
+    const handleAddFirstFact = () => {
+        const index = Array.isArray(factsFields) ? factsFields.length : 0;
+        handleAddFact();
+        setCurrentFactIndex(index);
+        setIsAddFactDialogOpen(true);
     };
 
     const handleFactSelect = (factData: FactData | undefined, index: number) => {
@@ -429,8 +435,8 @@ export function TourFacts() {
                                                                                                 }}
                                                                                                 className="text-primary font-medium cursor-pointer"
                                                                                             >
-                                                                                                <Plus className="mr-2 h-4 w-4" />
-                                                                                                Add Custom Fact
+                                                                                    <Plus className="mr-2 h-4 w-4" />
+                                                                                    Add fact
                                                                                             </CommandItem>
                                                                                         </CommandGroup>
                                                                                     </CommandList>
@@ -536,7 +542,7 @@ export function TourFacts() {
                                                                                     className="text-primary font-medium cursor-pointer"
                                                                                 >
                                                                                     <Plus className="mr-2 h-4 w-4" />
-                                                                                    Add Custom Fact
+                                                                                    Add fact
                                                                                 </CommandItem>
                                                                             </CommandGroup>
                                                                         </CommandList>
@@ -581,9 +587,9 @@ export function TourFacts() {
                         <p className="text-muted-foreground mb-5 max-w-md">
                             Add important details about your tour such as duration, group size, accommodations, etc.
                         </p>
-                        <Button type="button" onClick={handleAddFact}>
+                        <Button type="button" onClick={handleAddFirstFact}>
                             <Plus className="h-4 w-4 mr-2" />
-                            <span>Add First Fact</span>
+                            <span>Add fact</span>
                         </Button>
                     </div>
                 )}
