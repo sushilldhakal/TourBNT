@@ -52,7 +52,7 @@ export const getSingleFaqs = async (req: Request, res: Response, next: NextFunct
   try {
     const [faq] = await db.select().from(faqs).where(eq(faqs.id, faqId)).limit(1);
     if (!faq) {
-      return handleResourceNotFound(res, 'FAQ not found');
+      return handleResourceNotFound(res, 'FAQ');
     }
 
     sendSuccess(res, { faq }, 'FAQ retrieved successfully');
@@ -94,7 +94,7 @@ export const updateFaqs = async (req: Request, res: Response, next: NextFunction
 
     const [existing] = await db.select().from(faqs).where(eq(faqs.id, faqId)).limit(1);
     if (!existing) {
-      return handleResourceNotFound(res, 'FAQ not found');
+      return handleResourceNotFound(res, 'FAQ');
     }
 
     if (existing.userId !== userId && !req.user?.roles.includes('admin')) {
@@ -143,7 +143,7 @@ export const deleteFaqs = async (req: Request, res: Response, next: NextFunction
 
     const [existing] = await db.select().from(faqs).where(eq(faqs.id, faqId)).limit(1);
     if (!existing) {
-      return handleResourceNotFound(res, 'FAQ not found');
+      return handleResourceNotFound(res, 'FAQ');
     }
 
     if (existing.userId !== userId && !req.user?.roles.includes('admin')) {

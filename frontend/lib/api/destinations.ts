@@ -33,14 +33,17 @@ export const destinationApi = {
         api.get('/global/destinations/my-active'),
     getMyFavorites: () =>
         api.get('/global/destinations/my-favorites'),
+    // These previously called paths/methods that don't exist on the server
+    // (POST .../add, DELETE .../remove, PATCH .../toggle-favorite) — aligned
+    // to the routes that are actually registered.
     addToMyList: (id: string, options?: { isFavorite?: boolean; customName?: string }) =>
-        api.post(`/global/destinations/${id}/add`, options),
+        api.post(`/global/destinations/${id}/add-to-list`, options),
     removeFromMyList: (id: string) =>
-        api.delete(`/global/destinations/${id}/remove`),
+        api.post(`/global/destinations/${id}/remove-from-list`),
     toggleActive: (id: string) =>
         api.patch(`/global/destinations/${id}/toggle-active`),
     toggleFavorite: (id: string) =>
-        api.patch(`/global/destinations/${id}/toggle-favorite`),
+        api.put(`/global/destinations/${id}/favorite`),
     updateSettings: (id: string, settings: { isActive?: boolean; isFavorite?: boolean; customName?: string; sortOrder?: number }) =>
         api.patch(`/global/destinations/${id}/settings`, settings),
     bulkUpdate: (updates: Array<{ destinationId: string; sortOrder?: number; isActive?: boolean; isFavorite?: boolean }>) =>

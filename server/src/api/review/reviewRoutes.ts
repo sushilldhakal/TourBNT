@@ -11,7 +11,9 @@ import {
     getReviewById,
     updateReviewStatus,
     addReviewReply,
-    likeReview
+    likeReview,
+    likeReviewReply,
+    incrementReplyView
 } from './reviewController';
 
 const router = express.Router({ mergeParams: true }); // mergeParams allows access to params from parent router
@@ -245,5 +247,15 @@ router.post('/:reviewId/replies', authenticate, addReviewReply);
  *         description: Review not found
  */
 router.post('/:reviewId/likes', authenticate, likeReview);
+
+/**
+ * POST /api/v1/reviews/:reviewId/replies/:replyId/likes
+ * Both likeReviewReply and incrementReplyView were fully implemented
+ * already but never routed — the frontend's ReplyCard like/view actions
+ * were either 404ing or (for likes) accidentally hitting the unrelated
+ * blog-comments endpoint.
+ */
+router.post('/:reviewId/replies/:replyId/likes', authenticate, likeReviewReply);
+router.post('/:reviewId/replies/:replyId/views', incrementReplyView);
 
 export default router;

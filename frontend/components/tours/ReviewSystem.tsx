@@ -16,7 +16,6 @@ import {
     addReviewReply,
     likeReview,
     likeReply,
-    incrementReviewView,
     incrementReplyView,
 } from '@/lib/api/reviews';
 import { Review, Reply } from '@/types/types';
@@ -184,19 +183,8 @@ function ReviewCard({ review, tourId, onUpdate }: ReviewCardProps) {
         },
     });
 
-    const incrementViewMutation = useMutation({
-        mutationFn: () => incrementReviewView(tourId, review.id),
-        onSuccess: () => {
-            onUpdate();
-        },
-    });
-
     const handleLike = () => {
         likeReviewMutation.mutate();
-    };
-
-    const handleIncrementView = () => {
-        incrementViewMutation.mutate();
     };
 
     const userName = review.user?.name || review.name || 'Anonymous';
@@ -266,17 +254,14 @@ function ReviewCard({ review, tourId, onUpdate }: ReviewCardProps) {
                             <span className="text-xs sm:text-sm" aria-hidden="true">{review.likes || 0}</span>
                         </Button>
 
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={handleIncrementView}
-                            disabled={incrementViewMutation.isPending}
-                            className="gap-1 h-8 sm:h-9 px-2 sm:px-3 min-h-[44px]"
+                        {/* View count is tracked automatically server-side on read, not by clicking — see reviewController's getAllApprovedReviews. */}
+                        <div
+                            className="flex items-center gap-1 h-8 sm:h-9 px-2 sm:px-3 text-muted-foreground"
                             aria-label={`View count: ${review.views || 0}`}
                         >
                             <Eye className="h-3 w-3 sm:h-4 sm:w-4" aria-hidden="true" />
                             <span className="text-xs sm:text-sm" aria-hidden="true">{review.views || 0}</span>
-                        </Button>
+                        </div>
 
                         <Button
                             variant="ghost"

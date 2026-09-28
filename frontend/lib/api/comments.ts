@@ -38,7 +38,9 @@ export const getAllComments = async () => {
  */
 export const editComment = async (commentData: FormData, commentId: string) => {
     try {
-        const response = await api.patch(`/comments/${commentId}`, commentData, {
+        // The registered route is /posts/comment/:commentId — /comments/:commentId
+        // was never mounted for this handler.
+        const response = await api.patch(`/posts/comment/${commentId}`, commentData, {
             headers: {
                 'Content-Type': 'multipart/form-data',
             },
@@ -72,7 +74,9 @@ export const deleteComment = async (commentId: string) => {
         throw new Error('Comment ID is required to delete a comment');
     }
     try {
-        const response = await api.delete(`/comments/${commentId}`);
+        // The registered route is /posts/comment/:commentId — /comments/:commentId
+        // was never mounted for this handler.
+        const response = await api.delete(`/posts/comment/${commentId}`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'deleting comment');

@@ -19,7 +19,7 @@ export const login = async (data: { email: string; password: string; keepMeSigne
  */
 export const register = async (data: { name: string; email: string; password: string; phone: string }) => {
     try {
-        const response = await api.post('/users/register', data, {
+        const response = await api.post('/auth/register', data, {
             timeout: 15000,
         });
         return extractResponseData(response);

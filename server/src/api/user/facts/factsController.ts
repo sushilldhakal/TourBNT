@@ -116,7 +116,7 @@ export const updateFacts = async (req: Request, res: Response, next: NextFunctio
 
     const [existing] = await db.select().from(facts).where(eq(facts.id, factId)).limit(1);
     if (!existing) {
-      return handleResourceNotFound(res, 'Fact not found');
+      return handleResourceNotFound(res, 'Fact');
     }
 
     if (existing.userId !== userId && !req.user.roles.includes('admin')) {
@@ -168,7 +168,7 @@ export const deleteFacts = async (req: Request, res: Response, next: NextFunctio
 
     const [existing] = await db.select().from(facts).where(eq(facts.id, factId)).limit(1);
     if (!existing) {
-      return handleResourceNotFound(res, 'Facts not found');
+      return handleResourceNotFound(res, 'Facts');
     }
 
     if (existing.userId !== userId && !req.user.roles.includes('admin')) {
@@ -198,7 +198,7 @@ export const deleteMultipleFacts = async (req: Request, res: Response, next: Nex
     const factsToDelete = await db.select().from(facts).where(inArray(facts.id, ids));
 
     if (factsToDelete.length === 0) {
-      return handleResourceNotFound(res, 'No facts found with provided IDs');
+      return sendNotFoundError(res, 'No facts found with provided IDs');
     }
 
     const success: string[] = [];

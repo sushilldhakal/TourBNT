@@ -148,7 +148,9 @@ export const updatePaymentStatus = async (
  */
 export const cancelBooking = async (bookingId: string, reason?: string) => {
     try {
-        const response = await api.post(`/bookings/${bookingId}/cancel`, { reason });
+        // The registered route is DELETE /bookings/:bookingId — POST .../cancel
+        // was replaced and never updated here.
+        const response = await api.delete(`/bookings/${bookingId}`, { data: { reason } });
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'cancelling booking');

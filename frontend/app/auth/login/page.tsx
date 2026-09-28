@@ -209,7 +209,7 @@ function LoginPageContent() {
 
         setIsRegistering(true);
         try {
-            await api.post('/users/register', { name, email, password, phone });
+            await api.post('/auth/register', { name, email, password, phone });
             toast({
                 title: 'Registration Successful',
                 description: 'Please check your email to verify your account.',

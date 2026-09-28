@@ -958,6 +958,87 @@ export const pricingOptionPresets = pgTable('pricing_option_presets', {
   userIdx: index('pricing_option_presets_user_idx').on(table.userId),
 }));
 
+export const datePresets = pgTable('date_presets', {
+  id: id(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  type: text('type', { enum: ['flexible', 'fixed', 'multiple'] }).notNull().default('flexible'),
+  config: jsonb('config').$type<Record<string, unknown>>().notNull().default({}),
+  recurrence: jsonb('recurrence').$type<{ enabled: boolean; pattern?: string } | null>(),
+  defaultSelectedPricingOptions: jsonb('default_selected_pricing_options').$type<string[]>().default([]),
+  tags: jsonb('tags').$type<string[]>().default([]),
+  isArchived: boolean('is_archived').notNull().default(false),
+  usageCount: integer('usage_count').notNull().default(0),
+  ...timestamps,
+}, (table) => ({
+  userIdx: index('date_presets_user_idx').on(table.userId),
+}));
+
+export const contentPresets = pgTable('content_presets', {
+  id: id(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  description: text('description'),
+  contentType: text('content_type', { enum: ['description', 'include', 'exclude', 'outline'] }).notNull().default('description'),
+  content: jsonb('content').$type<string | Record<string, unknown>>(),
+  tags: jsonb('tags').$type<string[]>().default([]),
+  isArchived: boolean('is_archived').notNull().default(false),
+  usageCount: integer('usage_count').notNull().default(0),
+  ...timestamps,
+}, (table) => ({
+  userIdx: index('content_presets_user_idx').on(table.userId),
+}));
+
+export const itineraryPresets = pgTable('itinerary_presets', {
+  id: id(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  description: text('description'),
+  days: integer('days').notNull().default(1),
+  nights: integer('nights').notNull().default(0),
+  itinerary: jsonb('itinerary').$type<Array<{
+    day: string;
+    title: string;
+    description?: string;
+    destinationId?: string;
+  }>>().notNull().default([]),
+  outline: jsonb('outline').$type<Record<string, unknown> | null>(),
+  tags: jsonb('tags').$type<string[]>().default([]),
+  isArchived: boolean('is_archived').notNull().default(false),
+  usageCount: integer('usage_count').notNull().default(0),
+  ...timestamps,
+}, (table) => ({
+  userIdx: index('itinerary_presets_user_idx').on(table.userId),
+}));
+
+export const tourTemplatePresets = pgTable('tour_template_presets', {
+  id: id(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  description: text('description'),
+  thumbnail: text('thumbnail'),
+  defaultCategoryId: text('default_category_id'),
+  defaultDestinationId: text('default_destination_id'),
+  pricingPresetId: text('pricing_preset_id'),
+  discountPresetId: text('discount_preset_id'),
+  paxPresetId: text('pax_preset_id'),
+  datePresetId: text('date_preset_id'),
+  itineraryPresetId: text('itinerary_preset_id'),
+  descriptionPresetId: text('description_preset_id'),
+  includePresetId: text('include_preset_id'),
+  excludePresetId: text('exclude_preset_id'),
+  defaultFactIds: jsonb('default_fact_ids').$type<string[]>().default([]),
+  defaultFaqIds: jsonb('default_faq_ids').$type<string[]>().default([]),
+  defaultGalleryIds: jsonb('default_gallery_ids').$type<string[]>().default([]),
+  tourDefaults: jsonb('tour_defaults').$type<Record<string, unknown> | null>(),
+  tags: jsonb('tags').$type<string[]>().default([]),
+  isArchived: boolean('is_archived').notNull().default(false),
+  usageCount: integer('usage_count').notNull().default(0),
+  ...timestamps,
+}, (table) => ({
+  userIdx: index('tour_template_presets_user_idx').on(table.userId),
+}));
+
 // ---------------------------------------------------------------------------
 // Relations (used for `db.query.*` joined reads)
 // ---------------------------------------------------------------------------

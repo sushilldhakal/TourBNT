@@ -100,7 +100,9 @@ export const addReview = async (tourId: string, rating: number, comment: string)
  */
 export const getAllReviews = async () => {
     try {
-        const response = await api.get('/reviews/all');
+        // The registered route is GET / (root) — /reviews/all never existed
+        // and was matching :reviewId="all" on the single-review route instead.
+        const response = await api.get('/reviews');
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching all reviews');
@@ -154,9 +156,10 @@ export const incrementReviewView = async (tourId: string, reviewId: string) => {
  */
 export const likeReplyReview = async (tourId: string, reviewId: string, replyId: string) => {
     try {
-        const response = await api.post(
-            `/comments/${replyId}/likes`
-        );
+        // This was calling /comments/:replyId/likes — the blog-comments
+        // endpoint, a different resource entirely — since replyId here is
+        // a reviewReplies.id, not a comments.id, this always failed.
+        const response = await api.post(`/reviews/${reviewId}/replies/${replyId}/likes`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'liking reply');
@@ -175,7 +178,7 @@ export const likeReply = async (tourId: string, reviewId: string, replyId: strin
  */
 export const incrementReplyView = async (tourId: string, reviewId: string, replyId: string) => {
     try {
-        const response = await api.post(`/reviews/tour/${tourId}/review/${reviewId}/reply/${replyId}/view`);
+        const response = await api.post(`/reviews/${reviewId}/replies/${replyId}/views`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'incrementing reply view');

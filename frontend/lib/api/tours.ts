@@ -219,7 +219,9 @@ export const getMyTours = async ({
  */
 export const getUserToursTitle = async (userId: string) => {
     try {
-        const response = await api.get(`/users/${userId}/tours/titles`);
+        // The registered route is GET /tours/user/:userId/titles (see
+        // tourRouter.ts) — this used to point at a path that never existed.
+        const response = await api.get(`/tours/user/${userId}/titles`);
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching user tour titles');

@@ -22,6 +22,34 @@ import {
   deletePricingPreset,
   duplicatePricingPreset,
   applyPricingPreset,
+  getDatePresets,
+  createDatePreset,
+  getDatePresetById,
+  updateDatePreset,
+  deleteDatePreset,
+  duplicateDatePreset,
+  applyDatePreset,
+  getContentPresets,
+  createContentPreset,
+  getContentPresetById,
+  updateContentPreset,
+  deleteContentPreset,
+  duplicateContentPreset,
+  applyContentPreset,
+  getItineraryPresets,
+  createItineraryPreset,
+  getItineraryPresetById,
+  updateItineraryPreset,
+  deleteItineraryPreset,
+  duplicateItineraryPreset,
+  applyItineraryPreset,
+  getTourTemplatePresets,
+  createTourTemplatePreset,
+  getTourTemplatePresetById,
+  updateTourTemplatePreset,
+  deleteTourTemplatePreset,
+  duplicateTourTemplatePreset,
+  applyTourTemplatePreset,
 } from './tourSettingsController';
 
 // Mounted at /api/v1/users, alongside userRouter — scoped under
@@ -56,5 +84,41 @@ tourSettingsRouter.put('/:userId/tour-settings/pricing-presets/:presetId', updat
 tourSettingsRouter.delete('/:userId/tour-settings/pricing-presets/:presetId', deletePricingPreset);
 tourSettingsRouter.post('/:userId/tour-settings/pricing-presets/:presetId/duplicate', duplicatePricingPreset);
 tourSettingsRouter.post('/:userId/tour-settings/pricing-presets/:presetId/apply', applyPricingPreset);
+
+// Date presets
+tourSettingsRouter.get('/:userId/tour-settings/date-presets', getDatePresets);
+tourSettingsRouter.post('/:userId/tour-settings/date-presets', createDatePreset);
+tourSettingsRouter.get('/:userId/tour-settings/date-presets/:presetId', getDatePresetById);
+tourSettingsRouter.put('/:userId/tour-settings/date-presets/:presetId', updateDatePreset);
+tourSettingsRouter.delete('/:userId/tour-settings/date-presets/:presetId', deleteDatePreset);
+tourSettingsRouter.post('/:userId/tour-settings/date-presets/:presetId/duplicate', duplicateDatePreset);
+tourSettingsRouter.post('/:userId/tour-settings/date-presets/:presetId/apply', applyDatePreset);
+
+// Content presets (description / include / exclude / outline)
+tourSettingsRouter.get('/:userId/tour-settings/content-presets', getContentPresets);
+tourSettingsRouter.post('/:userId/tour-settings/content-presets', createContentPreset);
+tourSettingsRouter.get('/:userId/tour-settings/content-presets/:presetId', getContentPresetById);
+tourSettingsRouter.put('/:userId/tour-settings/content-presets/:presetId', updateContentPreset);
+tourSettingsRouter.delete('/:userId/tour-settings/content-presets/:presetId', deleteContentPreset);
+tourSettingsRouter.post('/:userId/tour-settings/content-presets/:presetId/duplicate', duplicateContentPreset);
+tourSettingsRouter.post('/:userId/tour-settings/content-presets/:presetId/apply', applyContentPreset);
+
+// Itinerary presets
+tourSettingsRouter.get('/:userId/tour-settings/itinerary-presets', getItineraryPresets);
+tourSettingsRouter.post('/:userId/tour-settings/itinerary-presets', createItineraryPreset);
+tourSettingsRouter.get('/:userId/tour-settings/itinerary-presets/:presetId', getItineraryPresetById);
+tourSettingsRouter.put('/:userId/tour-settings/itinerary-presets/:presetId', updateItineraryPreset);
+tourSettingsRouter.delete('/:userId/tour-settings/itinerary-presets/:presetId', deleteItineraryPreset);
+tourSettingsRouter.post('/:userId/tour-settings/itinerary-presets/:presetId/duplicate', duplicateItineraryPreset);
+tourSettingsRouter.post('/:userId/tour-settings/itinerary-presets/:presetId/apply', applyItineraryPreset);
+
+// Tour template presets (bundles of the other preset types + defaults)
+tourSettingsRouter.get('/:userId/tour-settings/tour-template-presets', getTourTemplatePresets);
+tourSettingsRouter.post('/:userId/tour-settings/tour-template-presets', createTourTemplatePreset);
+tourSettingsRouter.get('/:userId/tour-settings/tour-template-presets/:presetId', getTourTemplatePresetById);
+tourSettingsRouter.put('/:userId/tour-settings/tour-template-presets/:presetId', updateTourTemplatePreset);
+tourSettingsRouter.delete('/:userId/tour-settings/tour-template-presets/:presetId', deleteTourTemplatePreset);
+tourSettingsRouter.post('/:userId/tour-settings/tour-template-presets/:presetId/duplicate', duplicateTourTemplatePreset);
+tourSettingsRouter.post('/:userId/tour-settings/tour-template-presets/:presetId/apply', applyTourTemplatePreset);
 
 export default tourSettingsRouter;

@@ -28,14 +28,17 @@ export const categoryApi = {
         api.get('/global/categories/my-active'),
     getMyFavorites: () =>
         api.get('/global/categories/my-favorites'),
+    // These three previously called paths/methods that don't exist on the
+    // server (POST .../add, DELETE .../remove, PATCH .../toggle-favorite) —
+    // aligned to the routes that are actually registered.
     addToMyList: (id: string, options?: { isFavorite?: boolean; customName?: string }) =>
-        api.post(`/global/categories/${id}/add`, options),
+        api.post(`/global/categories/${id}/add-to-list`, options),
     removeFromMyList: (id: string) =>
-        api.delete(`/global/categories/${id}/remove`),
+        api.post(`/global/categories/${id}/remove-from-list`),
     toggleActive: (id: string) =>
         api.patch(`/global/categories/${id}/toggle-active`),
     toggleFavorite: (id: string) =>
-        api.patch(`/global/categories/${id}/toggle-favorite`),
+        api.put(`/global/categories/${id}/favorite`),
     updateSettings: (id: string, settings: { isActive?: boolean; isFavorite?: boolean; customName?: string; sortOrder?: number }) =>
         api.patch(`/global/categories/${id}/settings`, settings),
     bulkUpdate: (updates: Array<{ categoryId: string; sortOrder?: number; isActive?: boolean; isFavorite?: boolean }>) =>
