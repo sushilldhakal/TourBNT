@@ -60,7 +60,8 @@ export default function CategoriesPage() {
                     {categories.map((cat) => {
                         const id = (cat as { id?: string }).id ?? (cat as { _id?: string })._id ?? '';
                         const name = (cat as { name?: string }).name ?? (cat as { title?: string }).title ?? 'Category';
-                        const img = (cat as { image?: string }).image ?? (cat as { coverImage?: string }).coverImage;
+                        // Real field on a category is imageUrl (globalCategories.imageUrl); image/coverImage never exist.
+                        const img = (cat as { imageUrl?: string }).imageUrl ?? (cat as { image?: string }).image ?? (cat as { coverImage?: string }).coverImage;
                         return (
                             <Link
                                 key={id}

@@ -286,6 +286,12 @@ router.get('/approved', cacheRoute('categories-approved', 120), getApprovedCateg
  */
 router.get('/type/:type', cacheRoute('categories-by-type', 120), getCategoriesByType);
 
+// The single-category public page called this exact path and always got a
+// 404 — the only GET-by-id route that existed (further down, bare
+// `/:categoryId`) was misplaced after the auth barrier below, and nothing
+// in the frontend actually calls that bare path anyway.
+router.get('/public/:categoryId', cacheRoute('category-by-id', 60), getCategoryById);
+
 // Authenticated routes
 router.use(authenticate);
 

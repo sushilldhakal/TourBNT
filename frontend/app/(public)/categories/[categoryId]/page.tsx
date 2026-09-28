@@ -13,6 +13,7 @@ interface CategoryDetail {
     title?: string;
     description?: string;
     image?: string;
+    imageUrl?: string;
     coverImage?: string;
     tours?: Array<{ _id?: string; id?: string; title?: string; slug?: string }>;
 }
@@ -72,9 +73,9 @@ export default function SingleCategoryPage() {
 
             <div className="mb-12">
                 <div className="aspect-[21/9] bg-muted rounded-lg overflow-hidden relative mb-6">
-                    {((category as { image?: string }).image ?? (category as { coverImage?: string }).coverImage) ? (
+                    {((category as { imageUrl?: string }).imageUrl ?? (category as { image?: string }).image ?? (category as { coverImage?: string }).coverImage) ? (
                         <Image
-                            src={(category as { image?: string }).image ?? (category as { coverImage?: string }).coverImage ?? ''}
+                            src={(category as { imageUrl?: string }).imageUrl ?? (category as { image?: string }).image ?? (category as { coverImage?: string }).coverImage ?? ''}
                             alt={name}
                             fill
                             className="object-cover"

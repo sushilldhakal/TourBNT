@@ -1,6 +1,7 @@
 import express from 'express';
 import {
   getApprovedDestinations,
+  getDestinationById,
   getDestinationsByCountry,
   searchDestinations,
   getSellerDestinations,
@@ -289,6 +290,13 @@ router.get('/approved', cacheRoute('destinations-approved', 120), getApprovedDes
  *                 $ref: '#/components/schemas/Destination'
  */
 router.get('/country/:country', cacheRoute('destinations-by-country', 120), getDestinationsByCountry);
+
+// The single-destination public page called this exact path and always
+// got a 404 — there was no route for it at all (only the equivalent
+// category route existed, and even that was misplaced after the auth
+// barrier below). Must stay public and ahead of `/:destinationId`-shaped
+// authenticated routes further down, same as the routes above.
+router.get('/public/:destinationId', cacheRoute('destination-by-id', 60), getDestinationById);
 
 // Authenticated routes
 router.use(authenticate);

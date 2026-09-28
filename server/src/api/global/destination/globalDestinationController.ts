@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { db, globalDestinations, sellerDestinationPreferences, sellerSettings, users } from '@tourbnt/db';
+import { db, globalDestinations, sellerDestinationPreferences, sellerSettings, users, tours } from '@tourbnt/db';
 import { eq, and, or, ilike, ne, desc, isNull, isNotNull, inArray, sql } from 'drizzle-orm';
 import type { SellerInfo } from '../../user/userTypes';
 import * as notifications from '../../notifications/notificationController';
@@ -23,6 +23,37 @@ export const getApprovedDestinations = async (req: Request, res: Response): Prom
     res.json({ success: true, message: 'Approved destinations retrieved successfully', data: destinations });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error fetching approved destinations' });
+  }
+};
+
+// Get a single destination by ID (public) — there was no route for this at
+// all before; the frontend's single-destination page called a URL that
+// simply didn't exist on the server.
+export const getDestinationById = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { destinationId } = req.params;
+    if (!destinationId) {
+      res.status(400).json({ success: false, message: 'Destination ID is required' });
+      return;
+    }
+
+    const [destination] = await db.select().from(globalDestinations).where(eq(globalDestinations.id, destinationId)).limit(1);
+    if (!destination) {
+      res.status(404).json({ success: false, message: 'Destination not found' });
+      return;
+    }
+
+    // Same as getCategoryById: the public destination page renders a
+    // "Tours in this Destination" list off this same response.
+    const destinationTours = await db
+      .select({ id: tours.id, title: tours.title, code: tours.code })
+      .from(tours)
+      .where(and(eq(tours.destinationId, destinationId), eq(tours.tourStatus, 'Published')));
+
+    res.json({ success: true, message: 'Destination retrieved successfully', data: { ...destination, tours: destinationTours } });
+  } catch (error) {
+    console.error('Error fetching destination by ID:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch destination' });
   }
 };
 

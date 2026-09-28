@@ -164,13 +164,19 @@ export default function RecentBlog() {
                                 <CarouselItem key={post.id} className="pl-2 md:pl-4 md:basis-1/2 lg:basis-1/3">
                                     <Card className="overflow-hidden pt-0 h-full border shadow-xs hover:shadow-md transition-all duration-300">
                                         <div className="relative h-48 overflow-hidden">
-                                            <Image
-                                                width={100}
-                                                height={100}
-                                                src={post.image}
-                                                alt={post.title}
-                                                className="h-full w-full object-cover transition-all hover:scale-105 duration-300"
-                                            />
+                                            {post.image ? (
+                                                <Image
+                                                    width={100}
+                                                    height={100}
+                                                    src={post.image}
+                                                    alt={post.title}
+                                                    className="h-full w-full object-cover transition-all hover:scale-105 duration-300"
+                                                />
+                                            ) : (
+                                                <div className="h-full w-full bg-muted flex items-center justify-center">
+                                                    <BookOpen className="h-10 w-10 text-muted-foreground/40" />
+                                                </div>
+                                            )}
                                             {post.comments && post.comments.length > 0 && (
                                                 <Badge className="absolute top-2 right-2 bg-primary/80 hover:bg-primary">
                                                     {post.comments.length} Comments

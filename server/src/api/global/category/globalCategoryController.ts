@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { db, globalCategories, sellerCategoryPreferences, sellerSettings, users } from '@tourbnt/db';
+import { db, globalCategories, sellerCategoryPreferences, sellerSettings, users, tours, tourCategories } from '@tourbnt/db';
 import { eq, and, or, ilike, desc, inArray, sql } from 'drizzle-orm';
 import type { SellerInfo } from '../../user/userTypes';
 
@@ -41,7 +41,16 @@ export const getCategoryById = async (req: Request, res: Response): Promise<void
       return;
     }
 
-    res.json({ success: true, message: 'Category retrieved successfully', data: await withCreator(category) });
+    // The public category page renders a "Tours in this Category" list off
+    // this same response — without it every category silently shows "No
+    // tours available" regardless of how many are actually linked.
+    const categoryTours = await db
+      .select({ id: tours.id, title: tours.title, code: tours.code })
+      .from(tourCategories)
+      .innerJoin(tours, eq(tourCategories.tourId, tours.id))
+      .where(and(eq(tourCategories.categoryId, categoryId), eq(tours.tourStatus, 'Published')));
+
+    res.json({ success: true, message: 'Category retrieved successfully', data: { ...(await withCreator(category)), tours: categoryTours } });
   } catch (error) {
     console.error('Error fetching category by ID:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch category' });
