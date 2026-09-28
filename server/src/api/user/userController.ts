@@ -173,6 +173,10 @@ export const getCurrentUser = async (req: Request, res: Response, next: NextFunc
       verified: user.verified,
       avatar: user.avatar,
       sellerStatus,
+      // The profile page's Banking/Company tabs read this straight off
+      // /users/me — without it they render blank on every fresh load
+      // (a PATCH response happens to include it, masking the gap until reload).
+      sellerInfo: user.sellerInfo,
     };
 
     return sendSuccess(res, userResponse, 'User data retrieved successfully');

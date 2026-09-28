@@ -482,9 +482,7 @@ const TourCategory = () => {
                                         <Button
                                             variant="outline"
                                             onClick={() => {
-                                                queryClient.invalidateQueries({
-                                                    queryKey: ['categories']
-                                                });
+                                                invalidateCategories({ my: true, admin: true, pending: true, approved: true });
                                             }}
                                             className="mt-2"
                                         >

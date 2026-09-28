@@ -371,6 +371,10 @@ export const tourCategories = pgTable('tour_categories', {
   categoryId: text('category_id').notNull().references(() => globalCategories.id, { onDelete: 'cascade' }),
 }, (table) => ({
   pk: primaryKey({ columns: [table.tourId, table.categoryId] }),
+  // The PK above only helps lookups led by tourId. Category pages and
+  // searches filter by categoryId alone (e.g. "tours in this category"),
+  // which without this index falls back to a full scan of the join table.
+  categoryIdx: index('tour_categories_category_idx').on(table.categoryId),
 }));
 
 // Tour <-> author (many-to-many; Mongo stored `author: ObjectId[]` on Tour).
@@ -379,6 +383,11 @@ export const tourAuthors = pgTable('tour_authors', {
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
 }, (table) => ({
   pk: primaryKey({ columns: [table.tourId, table.userId] }),
+  // The PK above only helps lookups led by tourId. "My tours" (the
+  // dashboard tours list) and the update/delete ownership check both
+  // filter by userId alone, which without this index falls back to a
+  // full scan of the join table on every request.
+  userIdx: index('tour_authors_user_idx').on(table.userId),
 }));
 
 // ---------------------------------------------------------------------------
