@@ -67,13 +67,14 @@ const normalizeCategoryResponse = (response: unknown): CategoryData[] => {
     return normalizeCategories(flattened as unknown as CategoryData[]);
 };
 
-export const useUserCategories = () => {
+export const useUserCategories = (enabled = true) => {
     return useQuery<CategoryData[]>({
         queryKey: categoryKeys.myCategories(),
         queryFn: async () => {
             const data = await getUserCategories();
             return normalizeCategoryResponse(data);
         },
+        enabled,
     });
 };
 
@@ -208,7 +209,7 @@ export const useCategoriesRoleBased = () => {
     const { userRole } = useAuth();
     const isAdmin = userRole === 'admin';
     const admin = useAllCategories();
-    const user = useUserCategories();
+    const user = useUserCategories(!isAdmin);
     return isAdmin ? admin : user;
 };
 
