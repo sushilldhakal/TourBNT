@@ -4,6 +4,7 @@ import { authenticate, authorizeRoles } from '../../middlewares/authenticate';
 import { paginationMiddleware } from '../../middlewares/pagination';
 import { filterSortMiddleware } from '../../middlewares/filterSort';
 import { simpleViewTracking } from '../../middlewares/viewTracking';
+import { cacheRoute } from '../../middlewares/cacheMiddleware';
 import {
   getAllTours,
   getTour,
@@ -122,6 +123,10 @@ const upload = multer({
  *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.get('/',
+  // getAllTours branches on req.user's admin role (admins see unpublished
+  // tours too) — vary the cache key so an admin's response never leaks to,
+  // or gets served from, a public visitor's cache entry.
+  cacheRoute('tours', 60, (req) => (req.user?.roles?.includes('admin') ? 'admin' : 'public')),
   paginationMiddleware(),
   filterSortMiddleware(['status', 'category', 'destination'], ['createdAt', 'price', 'title', 'views', 'rating']),
   getAllTours
@@ -177,7 +182,7 @@ router.get('/',
  *             schema:
  *               $ref: '#/components/schemas/PaginatedResponse'
  */
-router.get('/search', validateSearchParams, validatePagination, searchTours);
+router.get('/search', cacheRoute('tours-search', 60), validateSearchParams, validatePagination, searchTours);
 
 /**
  * @swagger
@@ -196,7 +201,7 @@ router.get('/search', validateSearchParams, validatePagination, searchTours);
  *               items:
  *                 $ref: '#/components/schemas/Tour'
  */
-router.get('/latest', getLatestTours);
+router.get('/latest', cacheRoute('tours-latest', 60), getLatestTours);
 
 /**
  * @swagger
@@ -215,7 +220,7 @@ router.get('/latest', getLatestTours);
  *               items:
  *                 $ref: '#/components/schemas/Tour'
  */
-router.get('/by-rating', getToursByRating);
+router.get('/by-rating', cacheRoute('tours-by-rating', 60), getToursByRating);
 
 /**
  * @swagger
@@ -234,7 +239,7 @@ router.get('/by-rating', getToursByRating);
  *               items:
  *                 $ref: '#/components/schemas/Tour'
  */
-router.get('/discounted', getDiscountedTours);
+router.get('/discounted', cacheRoute('tours-discounted', 60), getDiscountedTours);
 
 /**
  * @swagger
@@ -253,7 +258,7 @@ router.get('/discounted', getDiscountedTours);
  *               items:
  *                 $ref: '#/components/schemas/Tour'
  */
-router.get('/special-offers', getSpecialOfferTours);
+router.get('/special-offers', cacheRoute('tours-special-offers', 60), getSpecialOfferTours);
 
 /**
  * @swagger

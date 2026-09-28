@@ -58,10 +58,12 @@
     "express-validator": "^7.1.0",
     "googleapis": "^140.0.1",
     "http-errors": "^2.0.0",
+    "ioredis": "^6.0.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.0.2",
     "nodemailer": "^7.0.11",
     "openai": "^4.55.0",
+    "rate-limit-redis": "^4.2.0",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1"
   },

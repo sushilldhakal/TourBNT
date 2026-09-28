@@ -147,7 +147,7 @@ const TourSearch = () => {
                                     )}
                                 </Button>
                             </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0" align="start">
+                            <PopoverContent className="w-max !animate-none p-0" style={{ width: "max-content", padding: 0, animation: "none" }} align="start">
                                 <Calendar
                                     initialFocus
                                     mode="range"

@@ -23,6 +23,7 @@ import {
 import { authenticate, authorizeRoles } from '../../../middlewares/authenticate';
 import { uploadNone } from '../../../middlewares/multer';
 import { paginationMiddleware } from '../../../middlewares/pagination';
+import { cacheRoute } from '../../../middlewares/cacheMiddleware';
 
 const router = express.Router();
 
@@ -84,7 +85,7 @@ const deleteDestinationById = (req: any, res: any) => {
  *                     totalPages:
  *                       type: integer
  */
-router.get('/', paginationMiddleware(), getApprovedDestinations);
+router.get('/', cacheRoute('destinations', 120), paginationMiddleware(), getApprovedDestinations);
 
 // RESTful routes - ADMIN ONLY
 /**
@@ -261,7 +262,7 @@ router.delete('/:id', authenticate, authorizeRoles('admin'), deleteDestinationBy
  *               items:
  *                 $ref: '#/components/schemas/Destination'
  */
-router.get('/approved', getApprovedDestinations);
+router.get('/approved', cacheRoute('destinations-approved', 120), getApprovedDestinations);
 
 /**
  * @swagger
@@ -287,7 +288,7 @@ router.get('/approved', getApprovedDestinations);
  *               items:
  *                 $ref: '#/components/schemas/Destination'
  */
-router.get('/country/:country', getDestinationsByCountry);
+router.get('/country/:country', cacheRoute('destinations-by-country', 120), getDestinationsByCountry);
 
 // Authenticated routes
 router.use(authenticate);

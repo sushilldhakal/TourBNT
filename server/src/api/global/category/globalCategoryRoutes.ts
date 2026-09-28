@@ -23,6 +23,7 @@ import {
 import { authenticate, authorizeRoles } from '../../../middlewares/authenticate';
 import { uploadNone } from '../../../middlewares/multer';
 import { paginationMiddleware } from '../../../middlewares/pagination';
+import { cacheRoute } from '../../../middlewares/cacheMiddleware';
 
 const router = express.Router();
 
@@ -84,7 +85,7 @@ const deleteCategoryById = (req: any, res: any) => {
  *                     totalPages:
  *                       type: integer
  */
-router.get('/', paginationMiddleware(), getApprovedCategories);
+router.get('/', cacheRoute('categories', 120), paginationMiddleware(), getApprovedCategories);
 
 // RESTful routes - ADMIN ONLY
 /**
@@ -257,7 +258,7 @@ router.delete('/:id', authenticate, authorizeRoles('admin'), deleteCategoryById 
  *               items:
  *                 $ref: '#/components/schemas/Category'
  */
-router.get('/approved', getApprovedCategories);
+router.get('/approved', cacheRoute('categories-approved', 120), getApprovedCategories);
 
 /**
  * @swagger
@@ -283,7 +284,7 @@ router.get('/approved', getApprovedCategories);
  *               items:
  *                 $ref: '#/components/schemas/Category'
  */
-router.get('/type/:type', getCategoriesByType);
+router.get('/type/:type', cacheRoute('categories-by-type', 120), getCategoriesByType);
 
 // Authenticated routes
 router.use(authenticate);

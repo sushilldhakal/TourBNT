@@ -3,9 +3,13 @@
 import React, { useState } from 'react';
 import { useFieldArray } from 'react-hook-form';
 import { format } from 'date-fns';
+import { useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useTourContext } from '@/providers/TourProvider';
 import { usePricingPresets, usePaxPresets, useDiscountPresets } from '@/lib/queries';
+import { queryKeys } from '@/lib/queries/queryKeys';
+import { createPaxPreset, createDiscountPreset, createPricingPreset, type PaxPreset, type DiscountPreset, type PricingOptionPreset } from '@/lib/api/tourSettingsApi';
 import type { DateRange } from 'react-day-picker';
 import {
     Calendar as CalendarIcon,
@@ -28,7 +32,15 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Calendar } from '@/components/ui/calendar-lazy';
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+    DialogFooter,
+} from '@/components/ui/dialog';
+import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
@@ -40,16 +52,35 @@ import {
     calculateDaysNights,
 } from '@/lib/utils/defaultTourValues';
 
+/** API rows expose both `id` and `_id`. The selects key off `_id`. */
+function presetIdOf(preset: { _id?: string; id?: string } | null | undefined): string {
+    if (!preset) return '';
+    return String(preset._id || preset.id || '');
+}
+
+function cacheCreatedPreset<T extends { _id?: string; id?: string }>(
+    queryClient: QueryClient,
+    queryKey: readonly unknown[],
+    preset: T,
+) {
+    queryClient.setQueryData<T[]>(queryKey, (old) => {
+        const list = Array.isArray(old) ? old : [];
+        const id = presetIdOf(preset);
+        if (!id || list.some((item) => presetIdOf(item) === id)) return list;
+        return [preset, ...list];
+    });
+}
+
 export function TourPricingDates() {
     const { setValue, watch, control, formState: { errors } } = useTourContext().form;
     const { user } = useAuth();
 
     // Watch pricing values
     const pricing = watch('pricing') || {};
-    const price = pricing.price || 0;
+    const price = pricing.price ?? '';
     const pricePerPerson = pricing.pricePerPerson ?? true;
-    const minSize = pricing.minSize || 1;
-    const maxSize = pricing.maxSize || 10;
+    const minSize = pricing.minSize ?? '';
+    const maxSize = pricing.maxSize ?? '';
     const pricingOptionsEnabled = pricing.pricingOptionsEnabled || false;
     const discountEnabled = pricing.discount?.discountEnabled || false;
     const paymentOptions = pricing.paymentOptions || { fullPaymentEnabled: true, depositEnabled: false, depositPercentage: 20, payOnArrivalEnabled: false };
@@ -69,14 +100,26 @@ export function TourPricingDates() {
     // Local state for tracking selected preset values (to ensure Select updates)
     const [localPaxPresetId, setLocalPaxPresetId] = useState<string | undefined>(paxPresetId);
     const [localDiscountPresetId, setLocalDiscountPresetId] = useState<string | undefined>(discountPresetId);
+    // Presets created from the inline dialog, shown before the presets query refreshes.
+    const [extraPaxPresets, setExtraPaxPresets] = useState<PaxPreset[]>([]);
+    const [extraDiscountPresets, setExtraDiscountPresets] = useState<DiscountPreset[]>([]);
+    const [extraPricingPresets, setExtraPricingPresets] = useState<PricingOptionPreset[]>([]);
+    // While set, ignore Select onValueChange. The hidden native <select> Radix
+    // renders for form controls snaps to "Custom" (or a previous option) when the
+    // new id is not registered yet, which was clearing the selection and applying
+    // the wrong min/max.
+    const paxSelectGuard = React.useRef<string | null>(null);
+    const discountSelectGuard = React.useRef<string | null>(null);
 
-    // Sync local state with form state
+    // Sync local state with form state, but never clobber a selection we just made.
     React.useEffect(() => {
-        setLocalPaxPresetId(paxPresetId);
+        if (paxSelectGuard.current) return;
+        setLocalPaxPresetId(paxPresetId ? String(paxPresetId) : undefined);
     }, [paxPresetId]);
 
     React.useEffect(() => {
-        setLocalDiscountPresetId(discountPresetId);
+        if (discountSelectGuard.current) return;
+        setLocalDiscountPresetId(discountPresetId ? String(discountPresetId) : undefined);
     }, [discountPresetId]);
 
     // Local state for pricing preset selector (multi-select)
@@ -85,6 +128,55 @@ export function TourPricingDates() {
     const { data: pricingPresets = [], isLoading: isLoadingPricingPresets } = usePricingPresets(user?.id, !!user?.id);
     const { data: paxPresets = [], isLoading: isLoadingPaxPresets } = usePaxPresets(user?.id, !!user?.id);
     const { data: discountPresets = [], isLoading: isLoadingDiscountPresets } = useDiscountPresets(user?.id, !!user?.id);
+
+    const paxPresetOptions = React.useMemo(() => {
+        const extras = extraPaxPresets.filter((preset) => !paxPresets.some((item) => presetIdOf(item) === presetIdOf(preset)));
+        return [...extras, ...paxPresets].filter((preset) => presetIdOf(preset));
+    }, [extraPaxPresets, paxPresets]);
+    const discountPresetOptions = React.useMemo(() => {
+        const extras = extraDiscountPresets.filter((preset) => !discountPresets.some((item) => presetIdOf(item) === presetIdOf(preset)));
+        return [...extras, ...discountPresets].filter((preset) => presetIdOf(preset));
+    }, [extraDiscountPresets, discountPresets]);
+    const pricingPresetOptions = React.useMemo(() => {
+        const extras = extraPricingPresets.filter((preset) => !pricingPresets.some((item) => presetIdOf(item) === presetIdOf(preset)));
+        return [...extras, ...pricingPresets].filter((preset) => presetIdOf(preset));
+    }, [extraPricingPresets, pricingPresets]);
+
+    React.useEffect(() => {
+        if (!paxSelectGuard.current) return;
+        if (!paxPresetOptions.some((preset) => presetIdOf(preset) === paxSelectGuard.current)) return;
+        let cancelled = false;
+        const frame = requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                if (!cancelled) paxSelectGuard.current = null;
+            });
+        });
+        return () => {
+            cancelled = true;
+            cancelAnimationFrame(frame);
+        };
+    }, [paxPresetOptions]);
+
+    React.useEffect(() => {
+        if (!discountSelectGuard.current) return;
+        if (!discountPresetOptions.some((preset) => presetIdOf(preset) === discountSelectGuard.current)) return;
+        let cancelled = false;
+        const frame = requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                if (!cancelled) discountSelectGuard.current = null;
+            });
+        });
+        return () => {
+            cancelled = true;
+            cancelAnimationFrame(frame);
+        };
+    }, [discountPresetOptions]);
+
+    // Inline "create preset" dialog visibility — lets the seller add a
+    // preset without leaving the add/edit tour page.
+    const [showCreatePaxDialog, setShowCreatePaxDialog] = useState(false);
+    const [showCreateDiscountDialog, setShowCreateDiscountDialog] = useState(false);
+    const [showCreatePricingDialog, setShowCreatePricingDialog] = useState(false);
 
     // Field arrays for dynamic sections
     const { fields: pricingOptions, append: appendPricingOption, remove: removePricingOption } = useFieldArray({
@@ -98,7 +190,7 @@ export function TourPricingDates() {
     });
 
     // Get selected preset data for display
-    const selectedDiscountPreset = discountPresets.find(p => String(p._id) === String(localDiscountPresetId || discountPresetId));
+    const selectedDiscountPreset = discountPresetOptions.find(p => presetIdOf(p) === String(localDiscountPresetId || discountPresetId || ''));
 
     return (
         <div className="space-y-8">
@@ -153,7 +245,8 @@ export function TourPricingDates() {
                                 placeholder="0.00"
                                 className="pl-10"
                                 value={price}
-                                onChange={(e) => setValue('pricing.price', parseFloat(e.target.value) || 0)}
+                                onChange={(e) => setValue('pricing.price', e.target.value === '' ? '' : e.target.value)}
+                                onBlur={(e) => setValue('pricing.price', parseFloat(e.target.value) || 0)}
                             />
                         </div>
                         {errors.pricing &&
@@ -199,6 +292,7 @@ export function TourPricingDates() {
                                 <Select
                                     value={localPaxPresetId ? String(localPaxPresetId) : 'custom'}
                                     onValueChange={(value) => {
+                                        if (paxSelectGuard.current && value !== paxSelectGuard.current) return;
                                         if (value === 'custom') {
                                             setLocalPaxPresetId(undefined);
                                             setValue('paxPresetId', undefined, { shouldDirty: true, shouldValidate: false });
@@ -206,7 +300,7 @@ export function TourPricingDates() {
                                             const presetId = value;
                                             setLocalPaxPresetId(presetId);
                                             setValue('paxPresetId', presetId, { shouldDirty: true, shouldValidate: false });
-                                            const preset = paxPresets.find(p => String(p._id) === String(presetId));
+                                            const preset = paxPresetOptions.find(p => presetIdOf(p) === String(presetId));
                                             if (preset) {
                                                 setValue('pricing.minSize', preset.minSize, { shouldDirty: true });
                                                 setValue('pricing.maxSize', preset.maxSize, { shouldDirty: true });
@@ -220,24 +314,48 @@ export function TourPricingDates() {
                                     </SelectTrigger>
                                     <SelectContent className="z-[9999]">
                                         <SelectItem value="custom">Custom</SelectItem>
-                                        {isLoadingPaxPresets ? (
+                                        {isLoadingPaxPresets && paxPresetOptions.length === 0 ? (
                                             <SelectItem value="loading" disabled>Loading presets...</SelectItem>
-                                        ) : paxPresets.length > 0 ? (
-                                            paxPresets.map((preset) => (
+                                        ) : paxPresetOptions.length > 0 ? (
+                                            paxPresetOptions.map((preset) => (
                                                 <SelectItem
-                                                    key={preset._id}
-                                                    value={String(preset._id)}
+                                                    key={presetIdOf(preset)}
+                                                    value={presetIdOf(preset)}
                                                 >
                                                     {preset.name} ({preset.minSize}-{preset.maxSize} {preset.pricePerPerson ? 'per person' : 'per group'})
                                                 </SelectItem>
                                             ))
                                         ) : (
                                             <SelectItem value="none" disabled>
-                                                No presets available. <a href="/dashboard/tours/settings" className="text-primary underline ml-1">Create one</a>
+                                                No presets yet — use the button below to create one
                                             </SelectItem>
                                         )}
                                     </SelectContent>
                                 </Select>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="icon"
+                                    onClick={() => setShowCreatePaxDialog(true)}
+                                    title="Create a new group size preset"
+                                >
+                                    <Plus className="h-4 w-4" />
+                                </Button>
+                                <CreatePaxPresetDialog
+                                    open={showCreatePaxDialog}
+                                    onOpenChange={setShowCreatePaxDialog}
+                                    onCreated={(preset) => {
+                                        const id = presetIdOf(preset);
+                                        if (!id) return;
+                                        paxSelectGuard.current = id;
+                                        setExtraPaxPresets((current) => current.some((item) => presetIdOf(item) === id) ? current : [preset, ...current]);
+                                        setLocalPaxPresetId(id);
+                                        setValue('paxPresetId', id, { shouldDirty: true, shouldValidate: false });
+                                        setValue('pricing.minSize', preset.minSize, { shouldDirty: true });
+                                        setValue('pricing.maxSize', preset.maxSize, { shouldDirty: true });
+                                        setValue('pricing.pricePerPerson', preset.pricePerPerson, { shouldDirty: true });
+                                    }}
+                                />
                                 {localPaxPresetId && (
                                     <Button
                                         type="button"
@@ -268,7 +386,8 @@ export function TourPricingDates() {
                                         min="1"
                                         className="pl-10"
                                         value={minSize}
-                                        onChange={(e) => setValue('pricing.minSize', parseInt(e.target.value) || 1)}
+                                        onChange={(e) => setValue('pricing.minSize', e.target.value)}
+                                        onBlur={(e) => setValue('pricing.minSize', parseInt(e.target.value) || 1)}
                                     />
                                 </div>
                             </div>
@@ -284,7 +403,8 @@ export function TourPricingDates() {
                                         min="1"
                                         className="pl-10"
                                         value={maxSize}
-                                        onChange={(e) => setValue('pricing.maxSize', parseInt(e.target.value) || 1)}
+                                        onChange={(e) => setValue('pricing.maxSize', e.target.value)}
+                                        onBlur={(e) => setValue('pricing.maxSize', parseInt(e.target.value) || 1)}
                                     />
                                 </div>
                             </div>
@@ -334,6 +454,7 @@ export function TourPricingDates() {
                                     <Select
                                         value={localDiscountPresetId ? String(localDiscountPresetId) : 'custom'}
                                         onValueChange={(value) => {
+                                            if (discountSelectGuard.current && value !== discountSelectGuard.current) return;
                                             if (value === 'custom') {
                                                 setLocalDiscountPresetId(undefined);
                                                 setValue('discountPresetId', undefined, { shouldDirty: true, shouldValidate: false });
@@ -345,7 +466,7 @@ export function TourPricingDates() {
                                                 const presetId = value;
                                                 setLocalDiscountPresetId(presetId);
                                                 setValue('discountPresetId', presetId, { shouldDirty: true, shouldValidate: false });
-                                                const preset = discountPresets.find(p => String(p._id) === String(presetId));
+                                                const preset = discountPresetOptions.find(p => presetIdOf(p) === String(presetId));
                                                 if (preset) {
                                                     setValue('pricing.discount.type', preset.type, { shouldDirty: true });
                                                     setValue('pricing.discount.value', preset.value, { shouldDirty: true });
@@ -366,24 +487,53 @@ export function TourPricingDates() {
                                         </SelectTrigger>
                                         <SelectContent className="z-[9999]">
                                             <SelectItem value="custom">Custom Discount</SelectItem>
-                                            {isLoadingDiscountPresets ? (
+                                            {isLoadingDiscountPresets && discountPresetOptions.length === 0 ? (
                                                 <SelectItem value="loading" disabled>Loading presets...</SelectItem>
-                                            ) : discountPresets.length > 0 ? (
-                                                discountPresets.map((preset) => (
+                                            ) : discountPresetOptions.length > 0 ? (
+                                                discountPresetOptions.map((preset) => (
                                                     <SelectItem
-                                                        key={preset._id}
-                                                        value={String(preset._id)}
+                                                        key={presetIdOf(preset)}
+                                                        value={presetIdOf(preset)}
                                                     >
                                                         {preset.name} ({preset.type === 'percentage' ? `${preset.value}%` : `$${preset.value}`})
                                                     </SelectItem>
                                                 ))
                                             ) : (
                                                 <SelectItem value="none" disabled>
-                                                    No presets available. <a href="/dashboard/tours/settings" className="text-primary underline ml-1">Create one</a>
+                                                    No presets yet — use the button below to create one
                                                 </SelectItem>
                                             )}
                                         </SelectContent>
                                     </Select>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="icon"
+                                        onClick={() => setShowCreateDiscountDialog(true)}
+                                        title="Create a new discount preset"
+                                    >
+                                        <Plus className="h-4 w-4" />
+                                    </Button>
+                                    <CreateDiscountPresetDialog
+                                        open={showCreateDiscountDialog}
+                                        onOpenChange={setShowCreateDiscountDialog}
+                                        onCreated={(preset) => {
+                                            const id = presetIdOf(preset);
+                                            if (!id) return;
+                                            discountSelectGuard.current = id;
+                                            setExtraDiscountPresets((current) => current.some((item) => presetIdOf(item) === id) ? current : [preset, ...current]);
+                                            setLocalDiscountPresetId(id);
+                                            setValue('discountPresetId', id, { shouldDirty: true, shouldValidate: false });
+                                            setValue('pricing.discount.type', preset.type, { shouldDirty: true });
+                                            setValue('pricing.discount.value', preset.value, { shouldDirty: true });
+                                            if (preset.dateRange) {
+                                                setValue('pricing.discount.dateRange', {
+                                                    from: new Date(preset.dateRange.from),
+                                                    to: new Date(preset.dateRange.to),
+                                                }, { shouldDirty: true });
+                                            }
+                                        }}
+                                    />
                                     {localDiscountPresetId && (
                                         <Button
                                             type="button"
@@ -516,7 +666,7 @@ export function TourPricingDates() {
                                                     setValue('pricingPresetIds', [...currentIds, presetId]);
 
                                                     // Apply preset options to the form
-                                                    const selectedPreset = pricingPresets.find(p => String(p._id) === String(presetId));
+                                                    const selectedPreset = pricingPresetOptions.find(p => presetIdOf(p) === String(presetId));
                                                     if (selectedPreset && selectedPreset.options && Array.isArray(selectedPreset.options)) {
                                                         // Add each option from the preset to the form
                                                         selectedPreset.options.forEach((presetOption) => {
@@ -558,40 +708,84 @@ export function TourPricingDates() {
                                             <SelectValue placeholder="Select a preset to add" />
                                         </SelectTrigger>
                                         <SelectContent className="z-[9999]">
-                                            {isLoadingPricingPresets ? (
+                                            {isLoadingPricingPresets && pricingPresetOptions.length === 0 ? (
                                                 <SelectItem value="loading" disabled>Loading presets...</SelectItem>
-                                            ) : pricingPresets.length > 0 ? (
-                                                pricingPresets
-                                                    .filter(preset => !(Array.isArray(pricingPresetIds) && pricingPresetIds.some(id => String(id) === String(preset._id))))
+                                            ) : pricingPresetOptions.length > 0 ? (
+                                                pricingPresetOptions
+                                                    .filter(preset => !(Array.isArray(pricingPresetIds) && pricingPresetIds.some(id => String(id) === presetIdOf(preset))))
                                                     .map((preset) => (
                                                         <SelectItem
-                                                            key={preset._id}
-                                                            value={String(preset._id)}
+                                                            key={presetIdOf(preset)}
+                                                            value={presetIdOf(preset)}
                                                         >
                                                             {preset.name}
                                                         </SelectItem>
                                                     ))
                                             ) : (
                                                 <SelectItem value="none" disabled>
-                                                    No presets available. <a href="/dashboard/tours/settings" className="text-primary underline ml-1">Create one</a>
+                                                    No presets yet — use the button below to create one
                                                 </SelectItem>
                                             )}
-                                            {pricingPresets.length > 0 &&
+                                            {pricingPresetOptions.length > 0 &&
                                                 Array.isArray(pricingPresetIds) &&
-                                                pricingPresetIds.length === pricingPresets.length && (
+                                                pricingPresetIds.length === pricingPresetOptions.length && (
                                                     <SelectItem value="none" disabled>
                                                         All presets selected
                                                     </SelectItem>
                                                 )}
                                         </SelectContent>
                                     </Select>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="icon"
+                                        onClick={() => setShowCreatePricingDialog(true)}
+                                        title="Create a new pricing options preset"
+                                    >
+                                        <Plus className="h-4 w-4" />
+                                    </Button>
+                                    <CreatePricingPresetDialog
+                                        open={showCreatePricingDialog}
+                                        onOpenChange={setShowCreatePricingDialog}
+                                        onCreated={(preset) => {
+                                            const id = presetIdOf(preset);
+                                            if (!id) return;
+                                            setExtraPricingPresets((current) => current.some((item) => presetIdOf(item) === id) ? current : [preset, ...current]);
+                                            const currentIds = Array.isArray(pricingPresetIds) ? pricingPresetIds : [];
+                                            if (!currentIds.some((existing) => String(existing) === id)) {
+                                                setValue('pricingPresetIds', [...currentIds, id]);
+                                            }
+                                            (preset.options || []).forEach((presetOption) => {
+                                                appendPricingOption({
+                                                    name: presetOption.name || '',
+                                                    category: presetOption.category || 'adult',
+                                                    customCategory: presetOption.customCategory || '',
+                                                    price: presetOption.basePrice ?? 0,
+                                                    discountEnabled: presetOption.discountEnabled || false,
+                                                    discount: presetOption.discount ? {
+                                                        type: presetOption.discount.type || 'percentage',
+                                                        value: presetOption.discount.value || 0,
+                                                        dateRange: presetOption.discount.dateRange ? {
+                                                            from: presetOption.discount.dateRange.from ? new Date(presetOption.discount.dateRange.from) : undefined,
+                                                            to: presetOption.discount.dateRange.to ? new Date(presetOption.discount.dateRange.to) : undefined,
+                                                        } : undefined,
+                                                    } : undefined,
+                                                    paxRange: presetOption.paxRange ? {
+                                                        min: presetOption.paxRange.min || 1,
+                                                        max: presetOption.paxRange.max || 22,
+                                                    } : { min: 1, max: 22 },
+                                                    isActive: presetOption.isActive !== undefined ? presetOption.isActive : true,
+                                                });
+                                            });
+                                        }}
+                                    />
                                 </div>
 
                                 {/* Show selected presets */}
                                 {Array.isArray(pricingPresetIds) && pricingPresetIds.length > 0 && (
                                     <div className="flex flex-wrap gap-2 mt-2">
                                         {pricingPresetIds.map((presetId) => {
-                                            const preset = pricingPresets.find(p => p._id === presetId);
+                                            const preset = pricingPresetOptions.find(p => presetIdOf(p) === String(presetId));
                                             if (!preset) return null;
                                             return (
                                                 <Badge key={presetId} variant="secondary" className="flex items-center gap-1">
@@ -955,9 +1149,32 @@ function PricingOptionItem({ index, onRemove }: PricingOptionItemProps) {
 
     // Local state for discount preset selection
     const [localDiscountPresetId, setLocalDiscountPresetId] = useState<string | undefined>(undefined);
+    const [extraDiscountPresets, setExtraDiscountPresets] = useState<DiscountPreset[]>([]);
+    const [showCreateDiscountDialog, setShowCreateDiscountDialog] = useState(false);
+    const discountSelectGuard = React.useRef<string | null>(null);
+
+    const discountPresetOptions = React.useMemo(() => {
+        const extras = extraDiscountPresets.filter((preset) => !discountPresets.some((item) => presetIdOf(item) === presetIdOf(preset)));
+        return [...extras, ...discountPresets].filter((preset) => presetIdOf(preset));
+    }, [extraDiscountPresets, discountPresets]);
+
+    React.useEffect(() => {
+        if (!discountSelectGuard.current) return;
+        if (!discountPresetOptions.some((preset) => presetIdOf(preset) === discountSelectGuard.current)) return;
+        let cancelled = false;
+        const frame = requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                if (!cancelled) discountSelectGuard.current = null;
+            });
+        });
+        return () => {
+            cancelled = true;
+            cancelAnimationFrame(frame);
+        };
+    }, [discountPresetOptions]);
 
     // Get selected discount preset
-    const selectedDiscountPreset = discountPresets.find(p => String(p._id) === String(localDiscountPresetId));
+    const selectedDiscountPreset = discountPresetOptions.find(p => presetIdOf(p) === String(localDiscountPresetId || ''));
 
     return (
         <>
@@ -1112,6 +1329,7 @@ function PricingOptionItem({ index, onRemove }: PricingOptionItemProps) {
                                 <Select
                                     value={localDiscountPresetId ? String(localDiscountPresetId) : 'custom'}
                                     onValueChange={(value) => {
+                                        if (discountSelectGuard.current && value !== discountSelectGuard.current) return;
                                         if (value === 'custom') {
                                             setLocalDiscountPresetId(undefined);
                                             // Reset to default values
@@ -1121,7 +1339,7 @@ function PricingOptionItem({ index, onRemove }: PricingOptionItemProps) {
                                         } else if (value !== 'loading' && value !== 'none') {
                                             const presetId = value;
                                             setLocalDiscountPresetId(presetId);
-                                            const preset = discountPresets.find(p => String(p._id) === String(presetId));
+                                            const preset = discountPresetOptions.find(p => presetIdOf(p) === String(presetId));
                                             if (preset) {
                                                 setValue(`pricing.pricingOptions.${index}.discount.type`, preset.type);
                                                 setValue(`pricing.pricingOptions.${index}.discount.value`, preset.value);
@@ -1142,24 +1360,52 @@ function PricingOptionItem({ index, onRemove }: PricingOptionItemProps) {
                                     </SelectTrigger>
                                     <SelectContent className="z-[9999]">
                                         <SelectItem value="custom">Custom Discount</SelectItem>
-                                        {isLoadingDiscountPresets ? (
+                                        {isLoadingDiscountPresets && discountPresetOptions.length === 0 ? (
                                             <SelectItem value="loading" disabled>Loading presets...</SelectItem>
-                                        ) : discountPresets.length > 0 ? (
-                                            discountPresets.map((preset) => (
+                                        ) : discountPresetOptions.length > 0 ? (
+                                            discountPresetOptions.map((preset) => (
                                                 <SelectItem
-                                                    key={preset._id}
-                                                    value={String(preset._id)}
+                                                    key={presetIdOf(preset)}
+                                                    value={presetIdOf(preset)}
                                                 >
                                                     {preset.name} ({preset.type === 'percentage' ? `${preset.value}%` : `$${preset.value}`})
                                                 </SelectItem>
                                             ))
                                         ) : (
                                             <SelectItem value="none" disabled>
-                                                No presets available. <a href="/dashboard/tours/settings" className="text-primary underline ml-1">Create one</a>
+                                                No presets yet — use the button below to create one
                                             </SelectItem>
                                         )}
                                     </SelectContent>
                                 </Select>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="icon"
+                                    onClick={() => setShowCreateDiscountDialog(true)}
+                                    title="Create a new discount preset"
+                                >
+                                    <Plus className="h-4 w-4" />
+                                </Button>
+                                <CreateDiscountPresetDialog
+                                    open={showCreateDiscountDialog}
+                                    onOpenChange={setShowCreateDiscountDialog}
+                                    onCreated={(preset) => {
+                                        const id = presetIdOf(preset);
+                                        if (!id) return;
+                                        discountSelectGuard.current = id;
+                                        setExtraDiscountPresets((current) => current.some((item) => presetIdOf(item) === id) ? current : [preset, ...current]);
+                                        setLocalDiscountPresetId(id);
+                                        setValue(`pricing.pricingOptions.${index}.discount.type`, preset.type);
+                                        setValue(`pricing.pricingOptions.${index}.discount.value`, preset.value);
+                                        if (preset.dateRange) {
+                                            setValue(`pricing.pricingOptions.${index}.discount.dateRange`, {
+                                                from: new Date(preset.dateRange.from),
+                                                to: new Date(preset.dateRange.to),
+                                            });
+                                        }
+                                    }}
+                                />
                                 {localDiscountPresetId && (
                                     <Button
                                         type="button"
@@ -1307,9 +1553,10 @@ function RecurrenceEndDatePicker() {
                         )}
                     </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
+                <PopoverContent className="w-max !animate-none p-0" style={{ width: "max-content", padding: 0, animation: "none" }} align="start">
                     <Calendar
                         mode="single"
+                        captionLayout="dropdown"
                         selected={date}
                         onSelect={handleDateChange}
                         initialFocus
@@ -1381,9 +1628,10 @@ function PriceLockDatePicker() {
                         )}
                     </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
+                <PopoverContent className="w-max !animate-none p-0" style={{ width: "max-content", padding: 0, animation: "none" }} align="start">
                     <Calendar
                         mode="single"
+                        captionLayout="dropdown"
                         selected={date}
                         onSelect={handleDateChange}
                         initialFocus
@@ -1468,9 +1716,10 @@ function DiscountDateRange() {
                             )}
                         </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
+                    <PopoverContent className="w-max !animate-none p-0" style={{ width: "max-content", padding: 0, animation: "none" }} align="start">
                         <Calendar
                             mode="range"
+                            captionLayout="dropdown"
                             defaultMonth={date?.from}
                             selected={date}
                             onSelect={handleDateChange}
@@ -1565,9 +1814,10 @@ function PricingOptionDiscountDateRange({ index }: PricingOptionDiscountDateRang
                             )}
                         </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
+                    <PopoverContent className="w-max !animate-none p-0" style={{ width: "max-content", padding: 0, animation: "none" }} align="start">
                         <Calendar
                             mode="range"
+                            captionLayout="dropdown"
                             defaultMonth={date?.from}
                             selected={date}
                             onSelect={handleDateChange}
@@ -1666,9 +1916,10 @@ function FixedDateRange() {
                             )}
                         </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
+                    <PopoverContent className="w-max !animate-none p-0" style={{ width: "max-content", padding: 0, animation: "none" }} align="start">
                         <Calendar
                             mode="range"
+                            captionLayout="dropdown"
                             defaultMonth={date?.from}
                             selected={date}
                             onSelect={handleDateChange}
@@ -1790,9 +2041,10 @@ function DepartureItem({ index, onRemove }: DepartureItemProps) {
                                     )}
                                 </Button>
                             </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0" align="start">
+                            <PopoverContent className="w-max !animate-none p-0" style={{ width: "max-content", padding: 0, animation: "none" }} align="start">
                                 <Calendar
                                     mode="range"
+                                    captionLayout="dropdown"
                                     defaultMonth={date?.from}
                                     selected={date}
                                     onSelect={handleDateChange}
@@ -1838,5 +2090,315 @@ function DepartureItem({ index, onRemove }: DepartureItemProps) {
                 </div>
             </CardContent>
         </Card>
+    );
+}
+
+/**
+ * Inline "Create preset" dialogs
+ *
+ * Each manages its own open/close state and trigger, so a seller can create
+ * a Group Size, Discount, or Pricing Options preset without leaving the
+ * add/edit tour page — previously this only linked out to Tour Settings.
+ */
+
+interface CreatePaxPresetDialogProps {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    onCreated: (preset: PaxPreset) => void;
+}
+
+function CreatePaxPresetDialog({ open, onOpenChange, onCreated }: CreatePaxPresetDialogProps) {
+    const { user } = useAuth();
+    const queryClient = useQueryClient();
+    const [name, setName] = useState('');
+    const [minSize, setMinSize] = useState('1');
+    const [maxSize, setMaxSize] = useState('10');
+    const [pricePerPerson, setPricePerPerson] = useState(true);
+
+    const createMutation = useMutation({
+        mutationFn: (payload: { name: string; minSize: number; maxSize: number; pricePerPerson: boolean }) => {
+            if (!user?.id) throw new Error('User not authenticated');
+            return createPaxPreset(user.id, payload);
+        },
+        onSuccess: (preset, payload) => {
+            const normalized: PaxPreset = {
+                ...preset,
+                _id: presetIdOf(preset),
+                name: preset.name || payload.name,
+                minSize: Number(preset.minSize ?? payload.minSize),
+                maxSize: Number(preset.maxSize ?? payload.maxSize),
+                pricePerPerson: preset.pricePerPerson ?? payload.pricePerPerson,
+                userId: preset.userId || user?.id || '',
+            };
+            cacheCreatedPreset(queryClient, queryKeys.presets.pax(user?.id), normalized);
+            queryClient.invalidateQueries({ queryKey: queryKeys.presets.pax(user?.id ?? undefined) });
+            toast.success('Group size preset created');
+            onCreated(normalized);
+            onOpenChange(false);
+            setName('');
+            setMinSize('1');
+            setMaxSize('10');
+            setPricePerPerson(true);
+        },
+        onError: (error: any) => {
+            toast.error(error?.response?.data?.message || 'Failed to create preset');
+        },
+    });
+
+    const handleSave = () => {
+        if (!name.trim()) {
+            toast.error('Please enter a preset name');
+            return;
+        }
+        createMutation.mutate({
+            name: name.trim(),
+            minSize: parseInt(minSize) || 1,
+            maxSize: parseInt(maxSize) || 10,
+            pricePerPerson,
+        });
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Create Group Size Preset</DialogTitle>
+                    <DialogDescription>Set minimum and maximum group sizes</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                    <div className="space-y-2">
+                        <Label>Preset Name</Label>
+                        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g., Small Group, Large Group" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <Label>Minimum Size</Label>
+                            <Input type="number" min="1" value={minSize} onChange={(e) => setMinSize(e.target.value)} />
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Maximum Size</Label>
+                            <Input type="number" min="1" value={maxSize} onChange={(e) => setMaxSize(e.target.value)} />
+                        </div>
+                    </div>
+                    <div className="flex items-center justify-between p-3 border rounded-lg">
+                        <Label>Price Per Person</Label>
+                        <Switch checked={pricePerPerson} onCheckedChange={setPricePerPerson} />
+                    </div>
+                </div>
+                <DialogFooter>
+                    <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+                    <Button type="button" onClick={handleSave} disabled={createMutation.isPending}>Save</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+interface CreateDiscountPresetDialogProps {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    onCreated: (preset: DiscountPreset) => void;
+}
+
+function CreateDiscountPresetDialog({ open, onOpenChange, onCreated }: CreateDiscountPresetDialogProps) {
+    const { user } = useAuth();
+    const queryClient = useQueryClient();
+    const [name, setName] = useState('');
+    const [type, setType] = useState<'percentage' | 'price'>('percentage');
+    const [value, setValue] = useState('');
+
+    const createMutation = useMutation({
+        mutationFn: (payload: { name: string; type: 'percentage' | 'price'; value: number }) => {
+            if (!user?.id) throw new Error('User not authenticated');
+            return createDiscountPreset(user.id, payload);
+        },
+        onSuccess: (preset, payload) => {
+            const normalized: DiscountPreset = {
+                ...preset,
+                _id: presetIdOf(preset),
+                name: preset.name || payload.name,
+                type: preset.type || payload.type,
+                value: Number(preset.value ?? payload.value),
+                userId: preset.userId || user?.id || '',
+            };
+            cacheCreatedPreset(queryClient, queryKeys.presets.discount(user?.id), normalized);
+            queryClient.invalidateQueries({ queryKey: queryKeys.presets.discount(user?.id ?? undefined) });
+            toast.success('Discount preset created');
+            onCreated(normalized);
+            onOpenChange(false);
+            setName('');
+            setType('percentage');
+            setValue('');
+        },
+        onError: (error: any) => {
+            toast.error(error?.response?.data?.message || 'Failed to create preset');
+        },
+    });
+
+    const handleSave = () => {
+        if (!name.trim()) {
+            toast.error('Please enter a preset name');
+            return;
+        }
+        const numericValue = parseFloat(value) || 0;
+        if (numericValue <= 0) {
+            toast.error('Discount value must be greater than 0');
+            return;
+        }
+        if (type === 'percentage' && numericValue > 100) {
+            toast.error('Percentage discount cannot exceed 100%');
+            return;
+        }
+        createMutation.mutate({
+            name: name.trim(),
+            type,
+            value: parseFloat(value) || 0,
+        });
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Create Discount Preset</DialogTitle>
+                    <DialogDescription>Define a discount that can be applied to tours</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                    <div className="space-y-2">
+                        <Label>Preset Name</Label>
+                        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g., Early Bird 20%, Summer Sale" />
+                    </div>
+                    <div className="space-y-2">
+                        <Label>Discount Type</Label>
+                        <Select value={type} onValueChange={(v) => setType(v as 'percentage' | 'price')}>
+                            <SelectTrigger>
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="z-[9999]">
+                                <SelectItem value="percentage">Percentage (%)</SelectItem>
+                                <SelectItem value="price">Fixed Amount</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="space-y-2">
+                        <Label>{type === 'percentage' ? 'Percentage (%)' : 'Amount ($)'}</Label>
+                        <Input type="number" min="0" value={value} onChange={(e) => setValue(e.target.value)} placeholder="0" />
+                    </div>
+                </div>
+                <DialogFooter>
+                    <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+                    <Button type="button" onClick={handleSave} disabled={createMutation.isPending}>Save</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+interface CreatePricingPresetDialogProps {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    onCreated: (preset: PricingOptionPreset) => void;
+}
+
+function CreatePricingPresetDialog({ open, onOpenChange, onCreated }: CreatePricingPresetDialogProps) {
+    const { user } = useAuth();
+    const queryClient = useQueryClient();
+    const [name, setName] = useState('');
+    const [optionName, setOptionName] = useState('Adult');
+    const [basePrice, setBasePrice] = useState('');
+    const [minPax, setMinPax] = useState('1');
+    const [maxPax, setMaxPax] = useState('50');
+
+    const createMutation = useMutation({
+        mutationFn: (payload: { name: string; options: PricingOptionPreset['options'] }) => {
+            if (!user?.id) throw new Error('User not authenticated');
+            return createPricingPreset(user.id, payload);
+        },
+        onSuccess: (preset, payload) => {
+            const normalized: PricingOptionPreset = {
+                ...preset,
+                _id: presetIdOf(preset),
+                name: preset.name || payload.name,
+                options: preset.options?.length ? preset.options : payload.options,
+                userId: preset.userId || user?.id || '',
+            };
+            cacheCreatedPreset(queryClient, queryKeys.presets.pricing(user?.id), normalized);
+            queryClient.invalidateQueries({ queryKey: queryKeys.presets.pricing(user?.id ?? undefined) });
+            toast.success('Pricing preset created');
+            onCreated(normalized);
+            onOpenChange(false);
+            setName('');
+            setOptionName('Adult');
+            setBasePrice('');
+            setMinPax('1');
+            setMaxPax('50');
+        },
+        onError: (error: any) => {
+            toast.error(error?.response?.data?.message || 'Failed to create preset');
+        },
+    });
+
+    const handleSave = () => {
+        if (!name.trim()) {
+            toast.error('Please enter a preset name');
+            return;
+        }
+        createMutation.mutate({
+            name: name.trim(),
+            options: [{
+                name: optionName.trim() || 'Adult',
+                category: 'adult',
+                basePrice: parseFloat(basePrice) || 0,
+                discountEnabled: false,
+                paxRange: { min: parseInt(minPax) || 1, max: parseInt(maxPax) || 50 },
+                isActive: true,
+            }],
+        });
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Create Pricing Preset</DialogTitle>
+                    <DialogDescription>Define pricing options that you can reuse across multiple tours</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                    <div className="space-y-2">
+                        <Label>Preset Name</Label>
+                        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g., Age Groups, Seasonal Pricing" />
+                    </div>
+                    <div className="space-y-4 p-4 border rounded-lg">
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label>Option Name</Label>
+                                <Input value={optionName} onChange={(e) => setOptionName(e.target.value)} />
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Base Price (Optional)</Label>
+                                <Input type="number" min="0" step="0.01" value={basePrice} onChange={(e) => setBasePrice(e.target.value)} placeholder="0.00" />
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label>Min Pax</Label>
+                                <Input type="number" min="1" value={minPax} onChange={(e) => setMinPax(e.target.value)} />
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Max Pax</Label>
+                                <Input type="number" min="1" value={maxPax} onChange={(e) => setMaxPax(e.target.value)} />
+                            </div>
+                        </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                        You can add more options and edit this preset later from Tour Settings.
+                    </p>
+                </div>
+                <DialogFooter>
+                    <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+                    <Button type="button" onClick={handleSave} disabled={createMutation.isPending}>Save</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     );
 }

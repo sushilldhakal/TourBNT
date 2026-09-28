@@ -3,6 +3,7 @@ import { eq, and, or, ilike, gte, lte, gt, desc, asc, sql, inArray, count, type 
 import createHttpError from 'http-errors';
 import { Tour } from '../tourTypes';
 import { ITINERARY_ROLE_TO_PARTNER_TYPES } from '../../businessPartners/businessPartnerTypes';
+import { cacheGet, cacheSet, cacheDel, cacheDelPattern, getRedisClient } from '../../../config/redisClient';
 
 type TourRow = typeof tours.$inferSelect;
 
@@ -229,7 +230,22 @@ export class TourService {
     return { items, page, limit, totalItems, totalPages: Math.ceil(totalItems / limit) };
   }
 
+  private static tourCacheKey(tourId: string) {
+    return `tour:by-id:${tourId}`;
+  }
+
+  /** Invalidates a single cached tour plus every cached listing/search page — a tour edit can move it in or out of any of them. */
+  private static async invalidateTourCaches(tourId: string) {
+    await Promise.all([
+      cacheDel(TourService.tourCacheKey(tourId)),
+      cacheDelPattern('route:tour*'),
+    ]);
+  }
+
   static async getTourById(tourId: string) {
+    const cached = await cacheGet<any>(TourService.tourCacheKey(tourId));
+    if (cached) return cached;
+
     const [tour] = await db.select().from(tours).where(eq(tours.id, tourId)).limit(1);
     if (!tour) {
       throw createHttpError(404, 'Tour not found');
@@ -255,6 +271,7 @@ export class TourService {
 
     enriched.itinerary = await enrichItineraryPartners(enriched.itinerary);
 
+    await cacheSet(TourService.tourCacheKey(tourId), enriched, 60);
     return enriched;
   }
 
@@ -271,6 +288,7 @@ export class TourService {
     await syncTourItineraryPartners(newTour.id, columnData.itinerary as unknown[] | undefined);
 
     const [enriched] = await attachRelations([newTour]);
+    await cacheDelPattern('route:tour*');
     return enriched;
   }
 
@@ -295,6 +313,7 @@ export class TourService {
     await syncTourCategories(tourId, categoryIds);
 
     const [enriched] = await attachRelations([updatedTour]);
+    await TourService.invalidateTourCaches(tourId);
     return enriched;
   }
 
@@ -307,6 +326,7 @@ export class TourService {
     if (!deleted) {
       throw createHttpError(404, 'Tour not found or unauthorized');
     }
+    await TourService.invalidateTourCaches(tourId);
     return deleted;
   }
 
@@ -387,12 +407,24 @@ export class TourService {
       .orderBy(desc(tours.createdAt));
   }
 
+  /**
+   * Buffers a view in Redis instead of writing to Postgres on every single
+   * page view (this already runs fire-and-forget off the response path —
+   * see simpleViewTracking — so the win here is fewer writes hitting the
+   * tiny Neon compute under load, not response latency). A background
+   * flusher (viewCounterFlusher.ts) periodically applies the accumulated
+   * counts to Postgres. Falls back to writing straight to Postgres, as
+   * before, if Redis is unavailable — a view is never silently dropped.
+   */
   static async incrementTourViews(tourId: string) {
-    const [updated] = await db.update(tours).set({ views: sql`${tours.views} + 1` }).where(eq(tours.id, tourId)).returning({ views: tours.views });
-    if (!updated) {
-      throw createHttpError(404, 'Tour not found');
+    try {
+      const redis = getRedisClient();
+      await redis.incr(`tour:views:pending:${tourId}`);
+      await redis.sadd('tour:views:dirty', tourId);
+    } catch (err) {
+      console.error(`Buffering view for tour ${tourId} failed, writing straight to Postgres:`, (err as Error).message);
+      await db.update(tours).set({ views: sql`${tours.views} + 1` }).where(eq(tours.id, tourId));
     }
-    return updated.views;
   }
 
   static async incrementTourBookings(tourId: string) {

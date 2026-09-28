@@ -19,17 +19,31 @@ function Calendar({
   buttonVariant = "ghost",
   formatters,
   components,
+  startMonth,
+  endMonth,
   ...props
 }: React.ComponentProps<typeof DayPicker> & {
   buttonVariant?: React.ComponentProps<typeof Button>["variant"]
 }) {
   const defaultClassNames = getDefaultClassNames()
+  const usesYearDropdown =
+    captionLayout === "dropdown" ||
+    captionLayout === "dropdown-years" ||
+    captionLayout === "dropdown-months"
+  const thisYear = new Date().getFullYear()
+  // Dropdown captions otherwise end at the current year, so upcoming years never appear.
+  const resolvedStart = startMonth ?? (usesYearDropdown ? new Date(thisYear - 100, 0) : undefined)
+  const resolvedEnd = endMonth ?? (usesYearDropdown ? new Date(thisYear + 30, 11) : undefined)
+  const monthCount = props.numberOfMonths ?? 1
 
   return (
     <DayPicker
       showOutsideDays={showOutsideDays}
+      startMonth={resolvedStart}
+      endMonth={resolvedEnd}
       className={cn(
-        "p-3 [--cell-radius:var(--radius-md)] [--cell-size:--spacing(8)] bg-background group/calendar [[data-slot=card-content]_&]:bg-transparent [[data-slot=popover-content]_&]:bg-transparent",
+        monthCount > 1 ? "w-max" : "w-[248px]",
+        "p-3 [--cell-radius:var(--radius-md)] [--cell-size:2rem] bg-background group/calendar [[data-slot=card-content]_&]:bg-transparent [[data-slot=popover-content]_&]:bg-transparent",
         String.raw`rtl:**:[.rdp-button\_next>svg]:rotate-180`,
         String.raw`rtl:**:[.rdp-button\_previous>svg]:rotate-180`,
         className
@@ -41,12 +55,16 @@ function Calendar({
         ...formatters,
       }}
       classNames={{
-        root: cn("w-fit", defaultClassNames.root),
+        root: cn(monthCount > 1 ? "w-max" : "w-[248px]", defaultClassNames.root),
         months: cn(
-          "flex gap-4 flex-col md:flex-row relative",
+          "flex gap-4 flex-row relative",
           defaultClassNames.months
         ),
-        month: cn("flex flex-col w-full gap-4", defaultClassNames.month),
+        month: cn(
+          "flex flex-col gap-4",
+          monthCount > 1 ? "w-[248px] shrink-0" : "w-full",
+          defaultClassNames.month
+        ),
         nav: cn(
           "flex items-center gap-1 w-full absolute top-0 inset-x-0 justify-between",
           defaultClassNames.nav

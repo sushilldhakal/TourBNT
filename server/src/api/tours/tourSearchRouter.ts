@@ -1,6 +1,7 @@
 import express from 'express';
 import { getLatestTours, searchTours } from './controllers/tourController';
 import { sendError } from '../../utils/apiResponse';
+import { cacheRoute } from '../../middlewares/cacheMiddleware';
 
 const tourSearchRouter = express.Router();
 
@@ -40,7 +41,7 @@ const tourSearchRouter = express.Router();
  *                 error:
  *                   type: string
  */
-tourSearchRouter.get('/latest', (req, res, next) => {
+tourSearchRouter.get('/latest', cacheRoute('tour-search-latest', 60), (req, res, next) => {
   try {
     getLatestTours(req, res, next);
   } catch (err) {
@@ -153,7 +154,7 @@ tourSearchRouter.get('/latest', (req, res, next) => {
  *                 error:
  *                   type: string
  */
-tourSearchRouter.get('/', (req, res, next) => {
+tourSearchRouter.get('/', cacheRoute('tour-search', 60), (req, res, next) => {
   try {
     console.log('Search query:', req.query);
     searchTours(req, res, next);

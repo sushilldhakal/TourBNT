@@ -807,6 +807,71 @@ export const adDailyStats = pgTable('ad_daily_stats', {
 }));
 
 // ---------------------------------------------------------------------------
+// Tour settings presets (Express-owned) — seller-defined reusable templates
+// applied when creating/editing a tour, surfaced under
+// /users/:userId/tour-settings/* and the Tour Settings dashboard page.
+// ---------------------------------------------------------------------------
+
+export const paxPresets = pgTable('pax_presets', {
+  id: id(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  minSize: integer('min_size').notNull().default(1),
+  maxSize: integer('max_size').notNull().default(10),
+  pricePerPerson: boolean('price_per_person').notNull().default(true),
+  groupSize: integer('group_size'),
+  defaultPricingOptionId: text('default_pricing_option_id'),
+  tags: jsonb('tags').$type<string[]>().default([]),
+  isArchived: boolean('is_archived').notNull().default(false),
+  usageCount: integer('usage_count').notNull().default(0),
+  ...timestamps,
+}, (table) => ({
+  userIdx: index('pax_presets_user_idx').on(table.userId),
+}));
+
+export const discountPresets = pgTable('discount_presets', {
+  id: id(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  type: text('type', { enum: ['percentage', 'price'] }).notNull().default('percentage'),
+  value: doublePrecision('value').notNull().default(0),
+  dateRange: jsonb('date_range').$type<{ from: string; to: string } | null>(),
+  timezone: text('timezone'),
+  tags: jsonb('tags').$type<string[]>().default([]),
+  isArchived: boolean('is_archived').notNull().default(false),
+  usageCount: integer('usage_count').notNull().default(0),
+  ...timestamps,
+}, (table) => ({
+  userIdx: index('discount_presets_user_idx').on(table.userId),
+}));
+
+export const pricingOptionPresets = pgTable('pricing_option_presets', {
+  id: id(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  options: jsonb('options').$type<Array<{
+    name: string;
+    category: 'adult' | 'child' | 'senior' | 'student' | 'custom';
+    customCategory?: string;
+    basePrice?: number;
+    discountEnabled: boolean;
+    discount?: {
+      type: 'percentage' | 'price';
+      value: number;
+      dateRange?: { from: string; to: string };
+    };
+    paxRange: { min: number; max: number };
+    isActive: boolean;
+  }>>().notNull().default([]),
+  tags: jsonb('tags').$type<string[]>().default([]),
+  isArchived: boolean('is_archived').notNull().default(false),
+  usageCount: integer('usage_count').notNull().default(0),
+  ...timestamps,
+}, (table) => ({
+  userIdx: index('pricing_option_presets_user_idx').on(table.userId),
+}));
+
+// ---------------------------------------------------------------------------
 // Relations (used for `db.query.*` joined reads)
 // ---------------------------------------------------------------------------
 

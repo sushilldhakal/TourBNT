@@ -2,10 +2,12 @@ import { NextFunction, Request, Response } from "express";
 import createHttpError from "http-errors";
 import bcrypt from "bcrypt";
 import jwt, { sign } from "jsonwebtoken";
+import { createHash } from "crypto";
 import { validationResult } from "express-validator";
 import { db, users } from "@tourbnt/db";
 import { eq, desc, asc, count, sql, type SQL } from "drizzle-orm";
 import { config } from "../../config/config";
+import { claimOnce } from "../../config/redisClient";
 import { sendResetPasswordEmail as sendResetPasswordEmailMaileroo, sendVerificationEmail as sendVerificationEmailMaileroo } from "../../controller/maileroo";
 import { uploadSellerDocuments } from "../../services/sellerDocumentService";
 import { ensureMediaFolder } from "../../services/mediaFolderService";
@@ -16,6 +18,18 @@ import type { SellerInfo } from "./userTypes";
 import { coerceUserRole, isUserRole } from "../../utils/roles";
 
 const SORTABLE = new Set(['createdAt', 'name', 'email']);
+
+/**
+ * These are plain signed JWTs with no server-side record of issuance, so
+ * nothing stops the same link being used twice within its 1h expiry (e.g.
+ * if a reset email gets forwarded or sits in a shared inbox). Redis gives
+ * us cheap single-use enforcement without turning the token into a
+ * stateful session: claim the hash once, TTL matches the token's own
+ * expiry so the marker cleans itself up. Fails open (allows the request)
+ * if Redis is unavailable — see claimOnce.
+ */
+const tokenClaimKey = (kind: 'verify-email' | 'reset-password', token: string) =>
+  `used-token:${kind}:${createHash('sha256').update(token).digest('hex')}`;
 
 // create user
 export const createUser = async (req: Request, res: Response, next: NextFunction) => {
@@ -130,7 +144,7 @@ export const getCurrentUser = async (req: Request, res: Response, next: NextFunc
       return next(createHttpError(HTTP_STATUS.UNAUTHORIZED, "Not authenticated"));
     }
 
-    const user = await pgUsers.findUserById(req.user.id);
+    const user = req.authAccount ?? (await pgUsers.findUserById(req.user.id));
     if (!user) {
       return next(createHttpError(HTTP_STATUS.NOT_FOUND, "User not found"));
     }
@@ -535,6 +549,11 @@ export const verifyUser = async (req: Request, res: Response, next: NextFunction
 
   try {
     const decoded = jwt.verify(token as string, config.jwtSecret) as { sub: string };
+
+    if (!(await claimOnce(tokenClaimKey('verify-email', token as string), 60 * 60))) {
+      return next(createHttpError(400, "This verification link has already been used"));
+    }
+
     const user = await pgUsers.findUserById(decoded.sub);
     if (!user) {
       return next(createHttpError(400, "Invalid token"));
@@ -601,6 +620,11 @@ export const resetPassword = async (req: Request, res: Response, next: NextFunct
 
   try {
     const decoded = jwt.verify(token, config.jwtSecret) as { sub: string };
+
+    if (!(await claimOnce(tokenClaimKey('reset-password', token), 60 * 60))) {
+      return next(createHttpError(400, 'This reset link has already been used'));
+    }
+
     const user = await pgUsers.findUserById(decoded.sub);
     if (!user) {
       return next(createHttpError(404, 'User not found'));

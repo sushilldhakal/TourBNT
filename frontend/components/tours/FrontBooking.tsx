@@ -413,7 +413,7 @@ export function FrontBooking({ tourData, prefilledDate }: FrontBookingProps) {
                                     )}
                                 </Button>
                             </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0" align="start">
+                            <PopoverContent className="w-max !animate-none p-0" style={{ width: "max-content", padding: 0, animation: "none" }} align="start">
                                 <Calendar
                                     mode="single"
                                     defaultMonth={availableDates.length > 0 ? availableDates[0] : new Date()}

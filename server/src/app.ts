@@ -2,6 +2,7 @@ import express from "express";
 import { errorHandler, notFoundHandler } from "./utils/apiResponse";
 import authRouter from "./api/auth/authRouter";
 import userRouter from "./api/user/userRouter";
+import tourSettingsRouter from "./api/tourSettings/tourSettingsRoutes";
 import tourRouter from "./api/tours/tourRouter";
 import tourRouterV2 from "./api/tours/tourRouterV2";
 import tourSearchRouter from "./api/tours/tourSearchRouter";
@@ -22,7 +23,6 @@ import businessReviewRouter from "./api/businessReviews/businessReviewRoutes";
 import adRouter from "./api/ads/adRoutes";
 import cors from "cors";
 import { config } from "./config/config";
-import breadcrumbsMiddleware from "./middlewares/breadcrumbsMiddleware";
 import { metricsMiddleware } from "./middlewares/metricsMiddleware";
 import { generalLimiter } from "./middlewares/rateLimiter";
 import swaggerUi from 'swagger-ui-express';
@@ -64,9 +64,6 @@ app.use(
 app.use(metricsMiddleware);
 app.use('/api', generalLimiter);
 
-// Apply breadcrumbsMiddleware before specific routes
-app.use(breadcrumbsMiddleware);
-
 // Swagger Documentation
 const swaggerSpec = getSwaggerSpec();
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
@@ -94,6 +91,7 @@ app.get("/", (req, res) => {
 // API v1 routes - individual route registrations for flexibility
 app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/users', userRouter);
+app.use('/api/v1/users', tourSettingsRouter);
 app.use('/api/v1/tours', tourRouter);
 app.use('/api/v1/tour-search', tourSearchRouter);
 app.use('/api/v1/subscribers', subscriberRouter);

@@ -5,7 +5,7 @@ import { config } from "../config/config";
 import { HTTP_STATUS } from "../utils/apiResponse";
 import { AuthUser } from "../types/express";
 import { COOKIE_NAMES, COOKIE_DURATIONS, getAuthCookieOptions } from "../utils/cookieUtils";
-import { findUserById } from "../api/user/userRepo.pg";
+import { findUserByIdCached } from "../api/user/userRepo.pg";
 
 /**
  * Authentication middleware with sliding session
@@ -88,10 +88,10 @@ const authenticate = async (req: Request, res: Response, next: NextFunction) => 
 
     // Role changes must come from Postgres. A connection failure is not an
     // invalid token — fall back to the role already signed into this cookie.
-    let account: Awaited<ReturnType<typeof findUserById>>;
+    let account: Awaited<ReturnType<typeof findUserByIdCached>>;
     let roleLookupFailed = false;
     try {
-      account = await findUserById(decoded.sub as string);
+      account = await findUserByIdCached(decoded.sub as string);
     } catch (dbError) {
       roleLookupFailed = true;
       account = undefined;
@@ -139,6 +139,8 @@ const authenticate = async (req: Request, res: Response, next: NextFunction) => 
       roles: sessionRoles,
       keepMeSignedIn: keepMeSignedIn,
     };
+    // Reuse this row instead of re-fetching the same user later in the request.
+    req.authAccount = account;
 
     next();
   } catch (err) {
