@@ -30,9 +30,9 @@ export const destinationApi = {
     getMyDestinations: (filters?: { isActive?: boolean; isFavorite?: boolean }) =>
         api.get('/global/destinations/user-destinations', { params: filters }),
     getMyActive: () =>
-        api.get('/global/destinations/my-active'),
+        api.get('/global/destinations/seller/enabled'),
     getMyFavorites: () =>
-        api.get('/global/destinations/my-favorites'),
+        api.get('/global/destinations/seller/favorites'),
     // These previously called paths/methods that don't exist on the server
     // (POST .../add, DELETE .../remove, PATCH .../toggle-favorite) — aligned
     // to the routes that are actually registered.

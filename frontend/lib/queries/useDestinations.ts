@@ -98,8 +98,10 @@ export const useMyActiveDestinations = () => {
     return useQuery({
         queryKey: destinationKeys.myActive(),
         queryFn: async () => {
+            // /seller/enabled returns { ...sellerDestinationPreferences row, destination: {...} } —
+            // normalizeDestinationResponse flattens the nested `destination`.
             const response = await destinationApi.getMyActive();
-            return extractResponseData(response);
+            return normalizeDestinationResponse(extractResponseData(response));
         },
     });
 };

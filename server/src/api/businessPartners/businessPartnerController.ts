@@ -345,7 +345,18 @@ export const approveBusinessPartner = async (req: Request, res: Response, next: 
       updatedAt: new Date(),
     }).where(eq(businessPartners.id, businessPartnerId)).returning();
 
-    await db.update(users).set({ role: existing.type, updatedAt: new Date() }).where(eq(users.id, existing.ownerId));
+    // `users.role` is a single column, but ownership of this listing (and
+    // therefore access to /dashboard/business, review moderation, ad
+    // campaigns, etc.) is entirely governed by businessPartners.ownerId, not
+    // by role — every controller in this domain checks ownerId directly.
+    // So don't blindly overwrite role: a seller (or admin) who also runs a
+    // business listing must keep that role, or they'd be silently locked
+    // out of `/dashboard/tours/*` (isAdminOrSeller checks role === 'seller'
+    // exactly) the moment their unrelated business application is approved.
+    const [owner] = await db.select({ role: users.role }).from(users).where(eq(users.id, existing.ownerId)).limit(1);
+    if (owner && owner.role !== 'admin' && owner.role !== 'seller') {
+      await db.update(users).set({ role: existing.type, updatedAt: new Date() }).where(eq(users.id, existing.ownerId));
+    }
 
     // Create their tour-media R2 folder now, so it's ready before their first upload.
     await ensureMediaFolder(existing.ownerId, existing.name);

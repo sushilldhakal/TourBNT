@@ -25,9 +25,9 @@ export const categoryApi = {
     getMyCategories: (filters?: { isActive?: boolean; isFavorite?: boolean }) =>
         api.get('/global/categories/user-categories', { params: filters }),
     getMyActive: () =>
-        api.get('/global/categories/my-active'),
+        api.get('/global/categories/seller/enabled'),
     getMyFavorites: () =>
-        api.get('/global/categories/my-favorites'),
+        api.get('/global/categories/seller/favorites'),
     // These three previously called paths/methods that don't exist on the
     // server (POST .../add, DELETE .../remove, PATCH .../toggle-favorite) —
     // aligned to the routes that are actually registered.

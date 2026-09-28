@@ -1,9 +1,15 @@
-import { db, bookings, tours, users } from '@tourbnt/db';
+import { db, bookings, tours, users, tourAuthors } from '@tourbnt/db';
 import { eq, and, gte, lt, inArray, desc, asc, count, sql } from 'drizzle-orm';
 import createHttpError from 'http-errors';
 import { calculateBookingPricing, type PaymentType } from '../utils/pricingCalculator';
 
 type BookingRow = typeof bookings.$inferSelect;
+
+/** Identifies the caller for an ownership-gated write; admins bypass the tour-ownership check entirely. */
+interface Requester {
+    id: string;
+    isAdmin: boolean;
+}
 
 interface PaginationParams {
     page: number;
@@ -55,6 +61,25 @@ function sortColumn(sortBy?: string) {
 }
 
 export class BookingService {
+    /**
+     * A seller only has visibility/write access to bookings on tours they
+     * author — `authorizeRoles('admin', 'seller')` on the route only checks
+     * *that* the caller is a seller, not *which* tour(s) they own, so every
+     * booking-mutating/listing path a seller can reach must re-check
+     * ownership here before touching another seller's bookings.
+     */
+    private static async assertTourAccess(tourId: string, requester?: Requester) {
+        if (!requester || requester.isAdmin) return;
+        const [owned] = await db
+            .select({ tourId: tourAuthors.tourId })
+            .from(tourAuthors)
+            .where(and(eq(tourAuthors.tourId, tourId), eq(tourAuthors.userId, requester.id)))
+            .limit(1);
+        if (!owned) {
+            throw createHttpError(403, 'You do not have access to bookings for this tour');
+        }
+    }
+
     private static async getTourForBooking(tourId: string) {
         const [tour] = await db.select().from(tours).where(eq(tours.id, tourId)).limit(1);
         if (!tour) {
@@ -125,8 +150,12 @@ export class BookingService {
             .insert(bookings)
             .values({
                 tourId: bookingData.tour,
-                tourTitle: bookingData.tourTitle,
-                tourCode: bookingData.tourCode,
+                // Snapshotted from the tour we just loaded, never from the
+                // client — bookingData.tourTitle/tourCode would let a caller
+                // record a booking against tourId X under a different tour's
+                // name/code, corrupting vouchers and admin listings.
+                tourTitle: tour.title,
+                tourCode: tour.code,
                 userId: bookingData.user ?? null,
                 isGuestBooking: !!bookingData.isGuestBooking,
                 guestInfo: bookingData.guestInfo ?? null,
@@ -214,7 +243,8 @@ export class BookingService {
         };
     }
 
-    static async getTourBookings(tourId: string, paginationParams: PaginationParams) {
+    static async getTourBookings(tourId: string, paginationParams: PaginationParams, requester?: Requester) {
+        await BookingService.assertTourAccess(tourId, requester);
         const where = eq(bookings.tourId, tourId);
         const { page, limit } = paginationParams;
 
@@ -234,7 +264,15 @@ export class BookingService {
         };
     }
 
-    static async updateBookingStatus(bookingId: string, status: string, notes?: string) {
+    static async updateBookingStatus(bookingId: string, status: string, notes?: string, requester?: Requester) {
+        if (requester && !requester.isAdmin) {
+            const [existing] = await db.select({ tourId: bookings.tourId }).from(bookings).where(eq(bookings.id, bookingId)).limit(1);
+            if (!existing) {
+                throw createHttpError(404, 'Booking not found');
+            }
+            await BookingService.assertTourAccess(existing.tourId, requester);
+        }
+
         const updateData: Partial<BookingRow> = { status: status as any, updatedAt: new Date() };
 
         if (status === 'confirmed') {
@@ -259,7 +297,15 @@ export class BookingService {
         return withRelations;
     }
 
-    static async updatePaymentStatus(bookingId: string, paymentStatus: string, paidAmount?: number, transactionId?: string) {
+    static async updatePaymentStatus(bookingId: string, paymentStatus: string, paidAmount?: number, transactionId?: string, requester?: Requester) {
+        if (requester && !requester.isAdmin) {
+            const [existing] = await db.select({ tourId: bookings.tourId }).from(bookings).where(eq(bookings.id, bookingId)).limit(1);
+            if (!existing) {
+                throw createHttpError(404, 'Booking not found');
+            }
+            await BookingService.assertTourAccess(existing.tourId, requester);
+        }
+
         const updateData: Partial<BookingRow> = { paymentStatus: paymentStatus as any, updatedAt: new Date() };
 
         if (paidAmount !== undefined) {
