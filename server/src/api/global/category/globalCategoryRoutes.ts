@@ -10,6 +10,7 @@ import {
   updateCategory,
   updateCategoryPreferences,
   deleteCategory,
+  getCategoryUsage,
   getEnabledCategories,
   getFavoriteCategories,
   getPendingCategories,
@@ -388,6 +389,7 @@ router.post('/:categoryId/remove-from-list', authenticate, removeExistingCategor
 router.get('/admin/pending', getPendingCategories as any);
 router.put('/admin/:categoryId/approve', approveCategory as any);
 router.put('/admin/:categoryId/reject', rejectCategory as any);
+router.get('/admin/:categoryId/usage', authorizeRoles('admin'), getCategoryUsage as any);
 router.delete('/admin/:categoryId', authorizeRoles('admin'), deleteCategory as any);
 
 export default router;

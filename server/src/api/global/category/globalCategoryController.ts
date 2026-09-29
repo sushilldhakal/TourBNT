@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { db, globalCategories, sellerCategoryPreferences, sellerSettings, users, tours, tourCategories } from '@tourbnt/db';
+import { db, globalCategories, sellerCategoryPreferences, sellerSettings, users, tours, tourCategories, tourAuthors } from '@tourbnt/db';
 import { eq, and, or, ilike, desc, inArray, sql } from 'drizzle-orm';
 import type { SellerInfo } from '../../user/userTypes';
 
@@ -475,6 +475,62 @@ export const rejectCategory = async (req: Request, res: Response) => {
     res.json({ success: true, message: 'Category rejected successfully', data: updated });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error rejecting category', error: error instanceof Error ? error.message : 'Unknown error' });
+  }
+};
+
+// Admin: how many sellers have this category in their profile, and which
+// tours reference it — shown before deletion, since deleteCategory is a
+// hard delete (tourCategories cascades) with no undo. sellerCount/usageCount
+// on the row itself aren't trustworthy here: they're manually incremented/
+// decremented and several write paths (submitCategory for the creator,
+// toggleCategoryActiveStatus) never touch them, so they drift. This scans
+// the actual data instead: sellerInfo.category (the one place every write
+// path lands) and the tourCategories join table.
+export const getCategoryUsage = async (req: Request, res: Response): Promise<void> => {
+  try {
+    if (!req.user?.roles?.includes('admin')) {
+      res.status(403).json({ success: false, message: 'Admin access required' });
+      return;
+    }
+    const { categoryId } = req.params;
+
+    const sellers = await db
+      .select({ id: users.id, name: users.name, email: users.email })
+      .from(users)
+      .where(sql`${users.sellerInfo} IS NOT NULL AND EXISTS (
+        SELECT 1 FROM jsonb_array_elements(${users.sellerInfo}->'category') AS elem
+        WHERE elem->>'categoryId' = ${categoryId}
+      )`);
+
+    const tourRows = await db
+      .select({ id: tours.id, title: tours.title, code: tours.code })
+      .from(tourCategories)
+      .innerJoin(tours, eq(tourCategories.tourId, tours.id))
+      .where(eq(tourCategories.categoryId, categoryId));
+
+    const tourIds = tourRows.map((t) => t.id);
+    const authorRows = tourIds.length
+      ? await db.select({ tourId: tourAuthors.tourId, name: users.name }).from(tourAuthors).innerJoin(users, eq(tourAuthors.userId, users.id)).where(inArray(tourAuthors.tourId, tourIds))
+      : [];
+    const sellerNamesByTour = new Map<string, string[]>();
+    for (const { tourId, name } of authorRows) {
+      const list = sellerNamesByTour.get(tourId) || [];
+      list.push(name);
+      sellerNamesByTour.set(tourId, list);
+    }
+    const tourList = tourRows.map((t) => ({ ...t, sellerNames: sellerNamesByTour.get(t.id) || [] }));
+
+    res.json({
+      success: true,
+      data: {
+        sellerCount: sellers.length,
+        sellers,
+        tourCount: tourList.length,
+        tours: tourList,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error fetching category usage', error: error instanceof Error ? error.message : 'Unknown error' });
   }
 };
 

@@ -157,6 +157,23 @@ export const deleteCategory = async (categoryId: string) => {
     }
 };
 
+export interface EntityUsage {
+    sellerCount: number;
+    sellers: Array<{ id: string; name: string; email: string }>;
+    tourCount: number;
+    tours: Array<{ id: string; title: string; code: string; sellerNames: string[] }>;
+}
+
+/** Admin-only: how many sellers have this category in their profile, and which tours reference it — shown before deleting. */
+export const getCategoryUsage = async (categoryId: string) => {
+    try {
+        const response = await api.get(`/global/categories/admin/${categoryId}/usage`);
+        return extractResponseData<EntityUsage>(response);
+    } catch (error) {
+        throw handleApiError(error, 'fetching category usage');
+    }
+};
+
 export const getPendingCategories = async () => {
     try {
         const response = await categoryApi.adminGetPending();

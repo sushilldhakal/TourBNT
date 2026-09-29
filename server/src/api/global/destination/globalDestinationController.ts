@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { db, globalDestinations, sellerDestinationPreferences, sellerSettings, users, tours } from '@tourbnt/db';
+import { db, globalDestinations, sellerDestinationPreferences, sellerSettings, users, tours, tourAuthors } from '@tourbnt/db';
 import { eq, and, or, ilike, ne, desc, isNull, isNotNull, inArray, sql } from 'drizzle-orm';
 import type { SellerInfo } from '../../user/userTypes';
 import * as notifications from '../../notifications/notificationController';
@@ -405,6 +405,56 @@ export const rejectDestination = async (req: Request, res: Response) => {
     res.json({ success: true, message: 'Destination rejected successfully', data: updated });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error rejecting destination' });
+  }
+};
+
+// Admin: how many sellers have this destination in their profile, and which
+// tours use it (tours.destinationId is a direct column — a tour has exactly
+// one destination, unlike the many-to-many tourCategories join). Shown
+// before deletion since deleteDestination is a hard delete with no undo.
+// sellerCount on the row isn't trustworthy: it's manually incremented/
+// decremented and submitDestination never touches it for the creator, so
+// it drifts. This scans the actual data instead.
+export const getDestinationUsage = async (req: Request, res: Response) => {
+  try {
+    if (!req.user?.roles?.includes('admin')) {
+      return res.status(403).json({ success: false, message: 'Admin access required' });
+    }
+    const { destinationId } = req.params;
+
+    const sellers = await db
+      .select({ id: users.id, name: users.name, email: users.email })
+      .from(users)
+      .where(sql`${users.sellerInfo} IS NOT NULL AND EXISTS (
+        SELECT 1 FROM jsonb_array_elements(${users.sellerInfo}->'destination') AS elem
+        WHERE elem->>'destinationId' = ${destinationId}
+      )`);
+
+    const tourRows = await db.select({ id: tours.id, title: tours.title, code: tours.code }).from(tours).where(eq(tours.destinationId, destinationId));
+
+    const tourIds = tourRows.map((t) => t.id);
+    const authorRows = tourIds.length
+      ? await db.select({ tourId: tourAuthors.tourId, name: users.name }).from(tourAuthors).innerJoin(users, eq(tourAuthors.userId, users.id)).where(inArray(tourAuthors.tourId, tourIds))
+      : [];
+    const sellerNamesByTour = new Map<string, string[]>();
+    for (const { tourId, name } of authorRows) {
+      const list = sellerNamesByTour.get(tourId) || [];
+      list.push(name);
+      sellerNamesByTour.set(tourId, list);
+    }
+    const tourList = tourRows.map((t) => ({ ...t, sellerNames: sellerNamesByTour.get(t.id) || [] }));
+
+    res.json({
+      success: true,
+      data: {
+        sellerCount: sellers.length,
+        sellers,
+        tourCount: tourList.length,
+        tours: tourList,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error fetching destination usage' });
   }
 };
 

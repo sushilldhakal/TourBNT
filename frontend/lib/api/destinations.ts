@@ -1,4 +1,5 @@
 import { api, handleApiError, extractResponseData } from './apiClient';
+import type { EntityUsage } from './categories';
 
 /**
  * Destination API
@@ -163,6 +164,16 @@ export const deleteDestination = async (destinationId: string) => {
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'deleting destination');
+    }
+};
+
+/** Admin-only: how many sellers have this destination in their profile, and which tours use it — shown before deleting. */
+export const getDestinationUsage = async (destinationId: string) => {
+    try {
+        const response = await api.get(`/global/destinations/admin/${destinationId}/usage`);
+        return extractResponseData<EntityUsage>(response);
+    } catch (error) {
+        throw handleApiError(error, 'fetching destination usage');
     }
 };
 
