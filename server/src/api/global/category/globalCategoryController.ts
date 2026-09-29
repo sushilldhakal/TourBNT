@@ -128,20 +128,29 @@ export const getUserCategories = async (req: Request, res: Response): Promise<vo
     }
 
     const categoryIds = userCategories.map((c) => c.categoryId);
-    const globalRows = await db
-      .select()
-      .from(globalCategories)
-      .where(and(inArray(globalCategories.id, categoryIds), inArray(globalCategories.approvalStatus, ['pending', 'approved'])));
+    // No approvalStatus filter here — this is "categories this seller is
+    // associated with" including rejected ones, so a rejection is visible
+    // with its reason and can be edited/resubmitted (see updateCategory).
+    // Filtering rejected ones out used to make them vanish from the seller's
+    // own list entirely, with no way back to them.
+    const globalRows = await db.select().from(globalCategories).where(inArray(globalCategories.id, categoryIds));
     const globalById = new Map(globalRows.map((c) => [c.id, c]));
 
     const validCategories = userCategories
       .filter((uc) => globalById.has(uc.categoryId))
-      .map((uc) => ({
-        ...globalById.get(uc.categoryId),
-        isActive: uc.isActive,
-        isApproved: uc.isApproved,
-        approvalStatus: uc.approvalStatus,
-      }));
+      .map((uc) => {
+        const global = globalById.get(uc.categoryId)!;
+        return {
+          ...global,
+          // isActive is a genuine per-seller preference (not tracked on the
+          // global row), but isApproved/approvalStatus are facts about the
+          // category itself — read those from `global`, the one place
+          // they're ever written, rather than this per-seller mirror,
+          // which only gets updated by approveCategory/rejectCategory/
+          // updateCategory and can otherwise drift stale.
+          isActive: uc.isActive,
+        };
+      });
 
     res.json({ success: true, data: validCategories, count: validCategories.length });
   } catch (error) {
@@ -324,9 +333,20 @@ export const updateCategory = async (req: Request, res: Response): Promise<void>
       updatedAt: new Date(),
     };
 
+    // A non-admin editing their own category is a resubmission — most often
+    // after a rejection, per the rejectionReason the seller was shown. Put
+    // it back in the review queue and clear the stale rejection fields
+    // (rejectCategory will set fresh ones if it's rejected again), and sync
+    // the per-seller mirror in sellerInfo.category so getUserCategories
+    // reflects 'pending' immediately instead of the old 'rejected' — that
+    // mirror is only otherwise updated by approveCategory/rejectCategory.
     if (!isAdmin) {
       updates.approvalStatus = 'pending';
       updates.isApproved = false;
+      updates.rejectionReason = null;
+      updates.rejectedBy = null;
+      updates.rejectedAt = null;
+      await syncUserCategoryStatus(category.createdBy, categoryId, { isApproved: false, approvalStatus: 'pending' });
     }
 
     const [updated] = await db.update(globalCategories).set(updates).where(eq(globalCategories.id, categoryId)).returning();

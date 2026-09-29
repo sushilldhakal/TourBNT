@@ -485,7 +485,16 @@ export const updateDestination = async (req: Request, res: Response) => {
       updatedAt: new Date(),
     };
 
-    if (!isAdmin && destination.approvalStatus === 'approved' && !isOnlyActiveToggle) {
+    // Re-review is needed when a non-admin edits something already
+    // approved (it's live and changing) or resubmits something rejected
+    // (the whole point of editing per the rejectionReason they were shown)
+    // — but not for a no-op edit to an already-pending destination, and not
+    // for a trivial active/inactive toggle on an approved one.
+    const needsReReview = !isAdmin && (
+      (destination.approvalStatus === 'approved' && !isOnlyActiveToggle) ||
+      destination.approvalStatus === 'rejected'
+    );
+    if (needsReReview) {
       updates.isApproved = false;
       updates.approvalStatus = 'pending';
       updates.approvedBy = null;
@@ -494,6 +503,7 @@ export const updateDestination = async (req: Request, res: Response) => {
       updates.rejectedAt = null;
       updates.rejectionReason = null;
       updates.submittedAt = new Date();
+      await syncUserDestinationStatus(destination.createdBy, destinationId, { isApproved: false, approvalStatus: 'pending' });
     }
 
     const [updated] = await db.update(globalDestinations).set(updates).where(eq(globalDestinations.id, destinationId)).returning();
@@ -735,7 +745,13 @@ export const getUserDestinations = async (req: Request, res: Response) => {
     }
 
     const ids = destinationList.map((d) => d.destinationId);
-    const globalRows = await db.select().from(globalDestinations).where(and(inArray(globalDestinations.id, ids), eq(globalDestinations.approvalStatus, 'approved')));
+    // No approvalStatus filter — this is "destinations this seller is
+    // associated with", including pending and rejected ones, so a
+    // rejection stays visible with its reason and can be edited/
+    // resubmitted (see updateDestination). Filtering them out made a
+    // rejected (or even still-pending) destination vanish from the
+    // seller's own list with no way back to it.
+    const globalRows = await db.select().from(globalDestinations).where(inArray(globalDestinations.id, ids));
     const byId = new Map(globalRows.map((d) => [d.id, d]));
 
     const userDestinations = destinationList
@@ -752,9 +768,15 @@ export const getUserDestinations = async (req: Request, res: Response) => {
           city: globalDest.city,
           coordinates: { latitude: globalDest.latitude, longitude: globalDest.longitude },
           popularity: globalDest.popularity,
+          // isActive is a genuine per-seller preference; approvalStatus/
+          // isApproved/rejectionReason are facts about the destination
+          // itself, so read those from globalDest (the one place they're
+          // ever written) rather than this per-seller mirror, which can
+          // otherwise drift stale.
           isActive: userDest.isActive,
-          approvalStatus: userDest.approvalStatus,
-          isApproved: userDest.isApproved,
+          approvalStatus: globalDest.approvalStatus,
+          isApproved: globalDest.isApproved,
+          rejectionReason: globalDest.rejectionReason,
           addedAt: userDest.addedAt,
         };
       })
