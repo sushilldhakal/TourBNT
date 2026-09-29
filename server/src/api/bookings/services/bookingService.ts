@@ -2,6 +2,7 @@ import { db, bookings, tours, users, tourAuthors } from '@tourbnt/db';
 import { eq, and, gte, lt, inArray, desc, asc, count, sql } from 'drizzle-orm';
 import createHttpError from 'http-errors';
 import { calculateBookingPricing, type PaymentType } from '../utils/pricingCalculator';
+import { ItineraryRequestService, findMatchingFixedDeparture } from '../../tours/services/itineraryRequestService';
 
 type BookingRow = typeof bookings.$inferSelect;
 
@@ -88,7 +89,7 @@ export class BookingService {
         return tour;
     }
 
-    private static async checkAvailabilityForTour(tour: typeof tours.$inferSelect, departureDate: Date): Promise<{ available: boolean; remainingCapacity: number }> {
+    private static async checkAvailabilityForTour(tour: typeof tours.$inferSelect, departureDate: Date): Promise<{ available: boolean; remainingCapacity: number; reason?: 'sold_out' | 'logistics_pending' }> {
         const dayStart = new Date(departureDate);
         dayStart.setHours(0, 0, 0, 0);
         const dayEnd = new Date(departureDate);
@@ -111,13 +112,29 @@ export class BookingService {
         const maxCapacity = tour.maxSize || 10;
         const remainingCapacity = maxCapacity - totalBooked;
 
+        if (remainingCapacity <= 0) {
+            return { available: false, remainingCapacity: 0, reason: 'sold_out' };
+        }
+
+        // A fixed-departure date isn't bookable until every hotel/restaurant/
+        // guide/transport provider linked to the itinerary has confirmed
+        // capacity for it — a flexible/open date has no such pre-negotiated
+        // date, so it's unaffected (logistics gets coordinated reactively per
+        // booking; see ItineraryRequestService.generateOrUpdateRequestsForBooking).
+        if (findMatchingFixedDeparture(tour, departureDate)) {
+            const confirmed = await ItineraryRequestService.isFixedDepartureDateConfirmed(tour.id, departureDate);
+            if (!confirmed) {
+                return { available: false, remainingCapacity: Math.max(0, remainingCapacity), reason: 'logistics_pending' };
+            }
+        }
+
         return {
-            available: remainingCapacity > 0,
+            available: true,
             remainingCapacity: Math.max(0, remainingCapacity),
         };
     }
 
-    static async checkAvailability(tourId: string, departureDate: Date): Promise<{ available: boolean; remainingCapacity: number }> {
+    static async checkAvailability(tourId: string, departureDate: Date): Promise<{ available: boolean; remainingCapacity: number; reason?: 'sold_out' | 'logistics_pending' }> {
         const tour = await BookingService.getTourForBooking(tourId);
         return BookingService.checkAvailabilityForTour(tour, departureDate);
     }
@@ -137,6 +154,9 @@ export class BookingService {
         const totalParticipants = participants.adults + participants.children;
 
         const availability = await BookingService.checkAvailabilityForTour(tour, departureDate);
+        if (availability.reason === 'logistics_pending') {
+            throw createHttpError(400, 'This departure date is not yet bookable — the hotel/guide/transport/restaurant providers for this itinerary haven\'t all confirmed availability yet.');
+        }
         if (!availability.available || availability.remainingCapacity < totalParticipants) {
             throw createHttpError(400, `Insufficient capacity. Only ${availability.remainingCapacity} spots remaining.`);
         }
@@ -172,6 +192,19 @@ export class BookingService {
                 bookingReference: bookingData.bookingReference || generateBookingReference(),
             })
             .returning();
+
+        // Fixed-departure dates already have their partner requests from
+        // reconcileFixedDepartureRequests (checked above via
+        // isFixedDepartureDateConfirmed); a flexible date has none yet, so
+        // this booking is what creates/updates them. Best-effort — a
+        // logistics-notification hiccup must never fail the booking itself.
+        if (!findMatchingFixedDeparture(tour, departureDate)) {
+            try {
+                await ItineraryRequestService.generateOrUpdateRequestsForBooking(booking);
+            } catch (err) {
+                console.error(`Failed to generate itinerary partner requests for booking ${booking.id}:`, err);
+            }
+        }
 
         return booking;
     }
@@ -291,6 +324,14 @@ export class BookingService {
         const [booking] = await db.update(bookings).set(updateData).where(eq(bookings.id, bookingId)).returning();
         if (!booking) {
             throw createHttpError(404, 'Booking not found');
+        }
+
+        if (status === 'cancelled') {
+            try {
+                await ItineraryRequestService.removeContributionForBooking(booking.id);
+            } catch (err) {
+                console.error(`Failed to remove itinerary request contribution for cancelled booking ${booking.id}:`, err);
+            }
         }
 
         const [withRelations] = await attachRelations([booking], { tour: true, user: false });

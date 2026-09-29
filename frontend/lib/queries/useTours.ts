@@ -4,9 +4,9 @@
  */
 
 import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
-import { getTours, getLatestTours, getTourTitlesByIds, getMyTours } from '@/lib/api/tours';
+import { getTours, getLatestTours, getTourTitlesByIds, getMyTours, getTourLogisticsStatus } from '@/lib/api/tours';
 import { queryKeys } from './queryKeys';
-import type { ToursResponse } from '@/lib/api/tours';
+import type { ToursResponse, TourItineraryRequestStatus } from '@/lib/api/tours';
 import type { TourTitle } from '@/types/types';
 
 export function useTours(params?: { pageParam?: number; limit?: number }) {
@@ -66,5 +66,15 @@ export function useTourTitlesByIds(ids: string[], enabled = true) {
         queryFn: () => getTourTitlesByIds(ids) as Promise<TourTitle[]>,
         enabled: enabled && ids.length > 0,
         staleTime: 60_000,
+    });
+}
+
+/** Read-only per-day hotel/restaurant/guide/transport confirmation status — only meaningful once the tour has fixed departures. */
+export function useTourLogisticsStatus(tourId: string | undefined, enabled = true) {
+    return useQuery<TourItineraryRequestStatus[]>({
+        queryKey: queryKeys.businessPartners.tourLogisticsStatus(tourId ?? ''),
+        queryFn: () => getTourLogisticsStatus(tourId!),
+        enabled: enabled && !!tourId,
+        staleTime: 30_000,
     });
 }

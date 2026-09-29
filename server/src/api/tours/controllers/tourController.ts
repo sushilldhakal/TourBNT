@@ -284,3 +284,16 @@ export const checkTourAvailability = asyncAuthHandler(async (req: Request, res: 
 
   return sendSuccess(res, availability, 'Tour availability checked successfully');
 });
+
+/**
+ * Read-only per-day partner confirmation status for the tour editor —
+ * lets a seller see at a glance which linked hotel/restaurant/guide/
+ * transport providers have confirmed availability, and for which dates.
+ */
+export const getTourLogisticsStatus = asyncAuthHandler(async (req: Request, res: Response) => {
+  const { tourId } = req.params;
+  const { ItineraryRequestService } = await import('../services/itineraryRequestService');
+  const isAdmin = req.user?.roles?.includes('admin') ?? false;
+  const requests = await ItineraryRequestService.getRequestsForTour(tourId, { id: req.user!.id, isAdmin });
+  return sendSuccess(res, requests, 'Logistics status retrieved successfully');
+});

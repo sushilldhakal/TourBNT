@@ -20,6 +20,7 @@ import {
 import { getDefaultItineraryItem } from '@/lib/utils/defaultTourValues';
 import NovelEditor from '@/components/dashboard/editor/NovelEditor';
 import { BusinessPartnerPicker } from './BusinessPartnerPicker';
+import { LogisticsStatusPanel } from './LogisticsStatusPanel';
 /**
  * TourItinerary Component
  * Handles tour itinerary with outline and dynamic day-by-day items
@@ -171,6 +172,8 @@ export function TourItinerary() {
                     </Button>
                 </CardContent>
             </Card>
+
+            <LogisticsStatusPanel />
 
             {/* Delete Confirmation Dialog */}
             <Dialog open={deleteIndex !== null} onOpenChange={(open) => !open && handleDeleteCancel()}>

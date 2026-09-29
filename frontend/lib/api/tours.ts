@@ -338,6 +338,32 @@ export const updateTour = async (tourId: string, data: FormData) => {
 /**
  * Delete a tour
  */
+export interface TourItineraryRequestStatus {
+    id: string;
+    tourId: string;
+    businessPartnerId: string;
+    partnerName: string;
+    partnerType: string;
+    role: 'transport' | 'accommodation' | 'guide' | 'meals' | 'other';
+    serviceDate: string;
+    serviceTime?: string | null;
+    headcount: number;
+    status: 'pending' | 'confirmed' | 'declined';
+    capacityConfirmed?: number | null;
+    responseNotes?: string | null;
+    sourceDepartureDate?: string | null;
+}
+
+/** Read-only per-day partner confirmation status for the tour editor. */
+export const getTourLogisticsStatus = async (tourId: string) => {
+    try {
+        const response = await api.get(`/tours/${tourId}/logistics-status`);
+        return extractResponseData<TourItineraryRequestStatus[]>(response);
+    } catch (error) {
+        throw handleApiError(error, 'fetching logistics status');
+    }
+};
+
 export const deleteTour = async (tourId: string) => {
     if (!tourId || tourId.trim() === '') {
         throw new Error('Tour ID is required for deletion');

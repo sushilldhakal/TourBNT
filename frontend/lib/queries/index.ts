@@ -52,3 +52,4 @@ export * from './useReviews';
 export * from './useCompanyInfo';
 export * from './useFaq';
 export * from './useFacts';
+export * from './useBusinessPartners';
