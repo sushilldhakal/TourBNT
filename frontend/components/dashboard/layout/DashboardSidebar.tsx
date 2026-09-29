@@ -7,7 +7,7 @@ import {
     ChevronDown, ChevronRight, Plus, List, MapPin, FolderTree, Lightbulb,
     HelpCircle, Calendar, Star, Wrench, MessageSquare, UserPlus, Briefcase,
     PanelLeftClose, PanelLeft,
-    UserCog, CalendarCheck
+    UserCog, CalendarCheck, Compass, Utensils, Truck
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState, useMemo } from 'react';
@@ -18,8 +18,26 @@ import {
     TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { useAuth } from '@/lib/hooks/useAuth';
-import { isAdmin, RoleGroups } from '@/lib/utils/roles';
+import { isAdmin } from '@/lib/utils/roles';
+import { useMyBusinessPartners } from '@/lib/queries';
+import type { BusinessPartnerType } from '@/lib/api/businessPartners';
 import { Megaphone, Building2 } from 'lucide-react';
+
+/**
+ * Which nav link each business-partner type resolves to. A user can own
+ * more than one business-partner listing (role no longer determines this —
+ * see approveBusinessPartner on the server, which stopped overwriting an
+ * existing seller/admin role), so this is driven by what they actually
+ * own (useMyBusinessPartners), not by their single `role` column.
+ */
+const TYPE_TO_NAV: Record<BusinessPartnerType, { href: string; label: string; icon: any }> = {
+    hotel: { href: '/dashboard/hotels', label: 'Hotels', icon: Building2 },
+    guesthouse: { href: '/dashboard/hotels', label: 'Hotels', icon: Building2 },
+    restaurant: { href: '/dashboard/restaurants', label: 'Restaurant', icon: Utensils },
+    guide: { href: '/dashboard/guides', label: 'Guide', icon: Compass },
+    transport: { href: '/dashboard/logistics', label: 'Logistics', icon: Truck },
+    advertiser: { href: '/dashboard/advertising', label: 'Advertising', icon: Megaphone },
+};
 
 /**
  * Dashboard Sidebar Component
@@ -39,7 +57,6 @@ interface NavigationItem {
     icon: any;
     children?: NavigationItem[];
     adminOnly?: boolean; // Flag to mark admin-only items
-    partnerOnly?: boolean; // Flag to mark items for business-partner roles only (guide/hotel/guesthouse/restaurant/transport/advertiser)
 }
 
 const baseNavigationItems: NavigationItem[] = [
@@ -90,13 +107,6 @@ const baseNavigationItems: NavigationItem[] = [
             { href: '/dashboard/ads', label: 'Ad Campaigns', icon: Megaphone, adminOnly: true },
         ]
     },
-    // "My Business" — limited dashboard for guides/hotels/guesthouses/restaurants/transport/advertisers.
-    {
-        href: '/dashboard/business',
-        label: 'My Business',
-        icon: Building2,
-        partnerOnly: true,
-    },
     // Add My Profile link at top level (accessible to all authenticated users)
     {
         href: '/dashboard/profile', // We'll create this page
@@ -136,22 +146,36 @@ export function DashboardSidebar({ isCollapsed, onToggle, mobileMenuOpen = false
     const [expandedItems, setExpandedItems] = useState<string[]>([]);
     const { userRole, isHydrated, user } = useAuth();
     const isUserAdmin = isAdmin(userRole);
-    const isBusinessPartner = !!userRole && (RoleGroups.BUSINESS_PARTNER as readonly string[]).includes(userRole);
 
     // Extract userId to avoid dependency issues
     const userId = user?.id;
 
-    // Filter navigation items based on user role
+    // Which business-partner listings this user actually owns — not their
+    // single `role` column, which can't represent owning more than one
+    // (e.g. a seller who also runs an approved hotel). Cheap enough to fetch
+    // for every dashboard user rather than gate it behind a role guess.
+    const { data: myBusinesses } = useMyBusinessPartners(!!userId);
+    const businessNavItems: NavigationItem[] = useMemo(() => {
+        if (!myBusinesses || myBusinesses.length === 0) return [];
+        const seenHrefs = new Set<string>();
+        const items: NavigationItem[] = [];
+        for (const business of myBusinesses) {
+            const nav = TYPE_TO_NAV[business.type];
+            if (!nav || seenHrefs.has(nav.href)) continue;
+            seenHrefs.add(nav.href);
+            items.push({ href: nav.href, label: nav.label, icon: nav.icon });
+        }
+        return items;
+    }, [myBusinesses]);
+
+    // Filter navigation items based on user role, then splice in the
+    // business-partner items (if any) right before "My Profile".
     const navigationItems = useMemo(() => {
         if (!isHydrated) return baseNavigationItems;
 
-        return baseNavigationItems
+        const filtered = baseNavigationItems
             .filter((item) => {
-                // First, filter out parent items that are admin-only or partner-only
                 if (item.adminOnly && !isUserAdmin) {
-                    return false;
-                }
-                if (item.partnerOnly && !isBusinessPartner) {
                     return false;
                 }
 
@@ -184,12 +208,14 @@ export function DashboardSidebar({ isCollapsed, onToggle, mobileMenuOpen = false
                 }
 
                 return true;
-            })
-            .map((item) => {
-                // Return the item (children already filtered if applicable)
-                return item;
             });
-    }, [isHydrated, isUserAdmin, isBusinessPartner, userId]);
+
+        if (businessNavItems.length === 0) return filtered;
+
+        const profileIndex = filtered.findIndex((item) => item.href === '/dashboard/profile');
+        const insertAt = profileIndex === -1 ? filtered.length : profileIndex;
+        return [...filtered.slice(0, insertAt), ...businessNavItems, ...filtered.slice(insertAt)];
+    }, [isHydrated, isUserAdmin, userId, businessNavItems]);
 
     // Auto-expand parent menu if child is active
     useState(() => {

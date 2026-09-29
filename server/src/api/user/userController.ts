@@ -436,9 +436,16 @@ export const approveSellerApplication = async (req: Request, res: Response, next
 
     const updatedSellerInfo: SellerInfo = { ...sellerInfo, isApproved: true, approvedAt: new Date(), rejectionReason: undefined, rejectedAt: undefined };
 
+    // Never downgrade an admin to 'seller' — approving their own seller
+    // application (e.g. a test/dual-role account) must not cost them admin
+    // access. Any other current role (business-partner type, plain 'user')
+    // legitimately becomes 'seller', since tour-management routes gate on
+    // role === 'seller' exactly and the approval is explicitly granting that.
+    const nextRole = user.role === 'admin' ? user.role : 'seller';
+
     const [updatedUser] = await db
       .update(users)
-      .set({ role: 'seller', sellerInfo: updatedSellerInfo, updatedAt: new Date() })
+      .set({ role: nextRole, sellerInfo: updatedSellerInfo, updatedAt: new Date() })
       .where(eq(users.id, userId))
       .returning();
 

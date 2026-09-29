@@ -89,11 +89,14 @@ export const useMyCategories = (filters?: { isActive?: boolean; isFavorite?: boo
 };
 
 export const useMyActiveCategories = () => {
-    return useQuery({
+    return useQuery<CategoryData[]>({
         queryKey: categoryKeys.myActive(),
         queryFn: async () => {
+            // /seller/enabled returns { ...sellerCategoryPreferences row, category: {...} } —
+            // normalizeCategoryResponse flattens the nested `category` the same
+            // way it does for the sellerInfo-backed endpoints below.
             const response = await categoryApi.getMyActive();
-            return extractResponseData(response);
+            return normalizeCategoryResponse(extractResponseData(response));
         },
     });
 };

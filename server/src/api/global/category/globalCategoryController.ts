@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { db, globalCategories, sellerCategoryPreferences, sellerSettings, users, tours, tourCategories } from '@tourbnt/db';
+import { db, globalCategories, sellerCategoryPreferences, sellerSettings, users, tours, tourCategories, tourAuthors } from '@tourbnt/db';
 import { eq, and, or, ilike, desc, inArray, sql } from 'drizzle-orm';
 import type { SellerInfo } from '../../user/userTypes';
 
@@ -128,20 +128,29 @@ export const getUserCategories = async (req: Request, res: Response): Promise<vo
     }
 
     const categoryIds = userCategories.map((c) => c.categoryId);
-    const globalRows = await db
-      .select()
-      .from(globalCategories)
-      .where(and(inArray(globalCategories.id, categoryIds), inArray(globalCategories.approvalStatus, ['pending', 'approved'])));
+    // No approvalStatus filter here — this is "categories this seller is
+    // associated with" including rejected ones, so a rejection is visible
+    // with its reason and can be edited/resubmitted (see updateCategory).
+    // Filtering rejected ones out used to make them vanish from the seller's
+    // own list entirely, with no way back to them.
+    const globalRows = await db.select().from(globalCategories).where(inArray(globalCategories.id, categoryIds));
     const globalById = new Map(globalRows.map((c) => [c.id, c]));
 
     const validCategories = userCategories
       .filter((uc) => globalById.has(uc.categoryId))
-      .map((uc) => ({
-        ...globalById.get(uc.categoryId),
-        isActive: uc.isActive,
-        isApproved: uc.isApproved,
-        approvalStatus: uc.approvalStatus,
-      }));
+      .map((uc) => {
+        const global = globalById.get(uc.categoryId)!;
+        return {
+          ...global,
+          // isActive is a genuine per-seller preference (not tracked on the
+          // global row), but isApproved/approvalStatus are facts about the
+          // category itself — read those from `global`, the one place
+          // they're ever written, rather than this per-seller mirror,
+          // which only gets updated by approveCategory/rejectCategory/
+          // updateCategory and can otherwise drift stale.
+          isActive: uc.isActive,
+        };
+      });
 
     res.json({ success: true, data: validCategories, count: validCategories.length });
   } catch (error) {
@@ -267,9 +276,15 @@ export const submitCategory = async (req: Request, res: Response): Promise<void>
       })
       .returning();
 
+    // Track this submission against the creator regardless of role — a
+    // guide/hotel/restaurant/transport/advertiser submitting a category has
+    // no sellerInfo at all (that's seller-onboarding-specific), so gating
+    // this on `user?.sellerInfo` being already truthy silently dropped
+    // their submission from their own "my categories" list (getUserCategories
+    // reads only sellerInfo.category) with no way to ever find it again.
     const [user] = await db.select().from(users).where(eq(users.id, createdBy)).limit(1);
-    if (user?.sellerInfo) {
-      const sellerInfo = user.sellerInfo as SellerInfo;
+    if (user) {
+      const sellerInfo = (user.sellerInfo as SellerInfo | null) || ({ category: [] } as unknown as SellerInfo);
       const categoryList = sellerInfo.category || [];
       categoryList.push({
         categoryId: category.id,
@@ -324,9 +339,20 @@ export const updateCategory = async (req: Request, res: Response): Promise<void>
       updatedAt: new Date(),
     };
 
+    // A non-admin editing their own category is a resubmission — most often
+    // after a rejection, per the rejectionReason the seller was shown. Put
+    // it back in the review queue and clear the stale rejection fields
+    // (rejectCategory will set fresh ones if it's rejected again), and sync
+    // the per-seller mirror in sellerInfo.category so getUserCategories
+    // reflects 'pending' immediately instead of the old 'rejected' — that
+    // mirror is only otherwise updated by approveCategory/rejectCategory.
     if (!isAdmin) {
       updates.approvalStatus = 'pending';
       updates.isApproved = false;
+      updates.rejectionReason = null;
+      updates.rejectedBy = null;
+      updates.rejectedAt = null;
+      await syncUserCategoryStatus(category.createdBy, categoryId, { isApproved: false, approvalStatus: 'pending' });
     }
 
     const [updated] = await db.update(globalCategories).set(updates).where(eq(globalCategories.id, categoryId)).returning();
@@ -452,7 +478,64 @@ export const rejectCategory = async (req: Request, res: Response) => {
   }
 };
 
-// Admin: Delete category
+// How many sellers have this category in their profile, and which tours
+// reference it. sellerCount/usageCount on the row itself aren't trustworthy
+// here: they're manually incremented/decremented and several write paths
+// (submitCategory for the creator, toggleCategoryActiveStatus) never touch
+// them, so they drift. This scans the actual data instead: sellerInfo.category
+// (the one place every write path lands) and the tourCategories join table.
+// Shared by getCategoryUsage (the admin-facing lookup) and deleteCategory
+// (which refuses to delete while either count is non-zero).
+async function computeCategoryUsage(categoryId: string) {
+  const sellers = await db
+    .select({ id: users.id, name: users.name, email: users.email })
+    .from(users)
+    .where(sql`${users.sellerInfo} IS NOT NULL AND EXISTS (
+      SELECT 1 FROM jsonb_array_elements(${users.sellerInfo}->'category') AS elem
+      WHERE elem->>'categoryId' = ${categoryId}
+    )`);
+
+  const tourRows = await db
+    .select({ id: tours.id, title: tours.title, code: tours.code })
+    .from(tourCategories)
+    .innerJoin(tours, eq(tourCategories.tourId, tours.id))
+    .where(eq(tourCategories.categoryId, categoryId));
+
+  const tourIds = tourRows.map((t) => t.id);
+  const authorRows = tourIds.length
+    ? await db.select({ tourId: tourAuthors.tourId, name: users.name }).from(tourAuthors).innerJoin(users, eq(tourAuthors.userId, users.id)).where(inArray(tourAuthors.tourId, tourIds))
+    : [];
+  const sellerNamesByTour = new Map<string, string[]>();
+  for (const { tourId, name } of authorRows) {
+    const list = sellerNamesByTour.get(tourId) || [];
+    list.push(name);
+    sellerNamesByTour.set(tourId, list);
+  }
+  const tourList = tourRows.map((t) => ({ ...t, sellerNames: sellerNamesByTour.get(t.id) || [] }));
+
+  return { sellerCount: sellers.length, sellers, tourCount: tourList.length, tours: tourList };
+}
+
+// Admin: usage lookup shown before deletion (see computeCategoryUsage).
+export const getCategoryUsage = async (req: Request, res: Response): Promise<void> => {
+  try {
+    if (!req.user?.roles?.includes('admin')) {
+      res.status(403).json({ success: false, message: 'Admin access required' });
+      return;
+    }
+    const { categoryId } = req.params;
+    const usage = await computeCategoryUsage(categoryId);
+    res.json({ success: true, data: usage });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error fetching category usage', error: error instanceof Error ? error.message : 'Unknown error' });
+  }
+};
+
+// Admin: Delete category — refuses while any seller or tour still
+// references it (see computeCategoryUsage). They have to be removed from
+// every profile/tour first; this is a hard delete with no undo, and
+// tourCategories cascades, so it would otherwise silently un-categorize
+// live tour packages.
 export const deleteCategory = async (req: Request, res: Response): Promise<void> => {
   try {
     if (!req.user?.roles?.includes('admin')) {
@@ -461,12 +544,23 @@ export const deleteCategory = async (req: Request, res: Response): Promise<void>
     }
 
     const { categoryId } = req.params;
-    const [deleted] = await db.delete(globalCategories).where(eq(globalCategories.id, categoryId)).returning();
-    if (!deleted) {
+    const [existing] = await db.select({ id: globalCategories.id }).from(globalCategories).where(eq(globalCategories.id, categoryId)).limit(1);
+    if (!existing) {
       res.status(404).json({ success: false, message: 'Category not found' });
       return;
     }
 
+    const usage = await computeCategoryUsage(categoryId);
+    if (usage.sellerCount > 0 || usage.tourCount > 0) {
+      res.status(409).json({
+        success: false,
+        message: `Cannot delete — ${usage.sellerCount} seller(s) and ${usage.tourCount} tour(s) still reference this category. Remove it from their profiles/tours first.`,
+        data: usage,
+      });
+      return;
+    }
+
+    await db.delete(globalCategories).where(eq(globalCategories.id, categoryId));
     res.json({ success: true, message: 'Category deleted successfully' });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error deleting category', error: error instanceof Error ? error.message : 'Unknown error' });

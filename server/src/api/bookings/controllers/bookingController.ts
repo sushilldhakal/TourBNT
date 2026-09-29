@@ -185,12 +185,16 @@ export const getTourBookings = async (req: Request, res: Response, next: NextFun
         const { tourId } = req.params;
         const { page = 1, limit = 10 } = req.query;
 
-        const result = await BookingService.getTourBookings(tourId, {
-            page: Number(page),
-            limit: Number(limit),
-            sortBy: 'createdAt',
-            sortOrder: 'desc'
-        });
+        const result = await BookingService.getTourBookings(
+            tourId,
+            {
+                page: Number(page),
+                limit: Number(limit),
+                sortBy: 'createdAt',
+                sortOrder: 'desc'
+            },
+            req.user ? { id: req.user.id, isAdmin: req.user.roles.includes('admin') } : undefined
+        );
 
         sendPaginatedResponse(res, result.items, {
             page: result.page,
@@ -215,7 +219,12 @@ export const updateBookingStatus = async (req: Request, res: Response, next: Nex
             throw createHttpError(400, 'Status is required');
         }
 
-        const booking = await BookingService.updateBookingStatus(bookingId, status, notes);
+        const booking = await BookingService.updateBookingStatus(
+            bookingId,
+            status,
+            notes,
+            req.user ? { id: req.user.id, isAdmin: req.user.roles.includes('admin') } : undefined
+        );
 
         sendSuccess(res, booking, 'Booking status updated successfully');
     } catch (error) {
@@ -239,7 +248,8 @@ export const updatePaymentStatus = async (req: Request, res: Response, next: Nex
             bookingId,
             paymentStatus,
             paidAmount,
-            transactionId
+            transactionId,
+            req.user ? { id: req.user.id, isAdmin: req.user.roles.includes('admin') } : undefined
         );
 
         sendSuccess(res, booking, 'Payment status updated successfully');

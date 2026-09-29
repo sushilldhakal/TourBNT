@@ -197,3 +197,101 @@ export const toggleBusinessReviewLike = async (reviewId: string) => {
         throw handleApiError(error, 'liking business review');
     }
 };
+
+// Capacity & per-date itinerary-request confirmation.
+
+export interface BusinessPartnerCapacity {
+    businessPartnerId: string;
+    unitLabel: string;
+    defaultDailyCapacity: number;
+}
+
+export interface BusinessPartnerCapacityOverride {
+    id: string;
+    businessPartnerId: string;
+    date: string;
+    capacity: number;
+}
+
+export type ItineraryRequestStatus = 'pending' | 'confirmed' | 'declined';
+
+export interface ItineraryPartnerRequest {
+    id: string;
+    tourId: string;
+    tourItineraryPartnerId: string;
+    businessPartnerId: string;
+    role: 'transport' | 'accommodation' | 'guide' | 'meals' | 'other';
+    serviceDate: string;
+    serviceTime?: string | null;
+    headcount: number;
+    status: ItineraryRequestStatus;
+    capacityConfirmed?: number | null;
+    responseNotes?: string | null;
+    sourceDepartureDate?: string | null;
+    tour: { id: string; title: string };
+    createdAt: string;
+    updatedAt: string;
+}
+
+export const getMyCapacity = async (businessPartnerId: string) => {
+    try {
+        const response = await api.get(`/business-partners/${businessPartnerId}/capacity`);
+        return extractResponseData<BusinessPartnerCapacity>(response);
+    } catch (error) {
+        throw handleApiError(error, 'fetching capacity');
+    }
+};
+
+export const updateMyCapacity = async (businessPartnerId: string, data: { unitLabel?: string; defaultDailyCapacity?: number }) => {
+    try {
+        const response = await api.patch(`/business-partners/${businessPartnerId}/capacity`, data);
+        return extractResponseData<BusinessPartnerCapacity>(response);
+    } catch (error) {
+        throw handleApiError(error, 'updating capacity');
+    }
+};
+
+export const getCapacityOverrides = async (businessPartnerId: string) => {
+    try {
+        const response = await api.get(`/business-partners/${businessPartnerId}/capacity/overrides`);
+        return extractResponseData<BusinessPartnerCapacityOverride[]>(response);
+    } catch (error) {
+        throw handleApiError(error, 'fetching capacity overrides');
+    }
+};
+
+export const setCapacityOverride = async (businessPartnerId: string, date: string, capacity: number) => {
+    try {
+        const response = await api.put(`/business-partners/${businessPartnerId}/capacity/overrides/${date}`, { capacity });
+        return extractResponseData<BusinessPartnerCapacityOverride>(response);
+    } catch (error) {
+        throw handleApiError(error, 'saving capacity override');
+    }
+};
+
+export const getAvailableCapacityForDate = async (businessPartnerId: string, date: string) => {
+    try {
+        const response = await api.get(`/business-partners/${businessPartnerId}/capacity/available`, { params: { date } });
+        return extractResponseData<{ date: string; available: number }>(response);
+    } catch (error) {
+        throw handleApiError(error, 'fetching available capacity');
+    }
+};
+
+export const getMyItineraryRequests = async (businessPartnerId: string, params?: { status?: ItineraryRequestStatus; page?: number; limit?: number }) => {
+    try {
+        const response = await api.get(`/business-partners/${businessPartnerId}/requests`, { params });
+        return response.data as { success: boolean; data: ItineraryPartnerRequest[]; pagination: { page: number; limit: number; totalItems: number; totalPages: number } };
+    } catch (error) {
+        throw handleApiError(error, 'fetching itinerary requests');
+    }
+};
+
+export const respondToItineraryRequest = async (businessPartnerId: string, requestId: string, status: 'confirmed' | 'declined', capacityConfirmed?: number, notes?: string) => {
+    try {
+        const response = await api.patch(`/business-partners/${businessPartnerId}/requests/${requestId}`, { status, capacityConfirmed, notes });
+        return extractResponseData<ItineraryPartnerRequest>(response);
+    } catch (error) {
+        throw handleApiError(error, 'responding to itinerary request');
+    }
+};

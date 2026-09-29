@@ -19,7 +19,8 @@ import {
   getUserToursTitle,
   getMyTours,
   incrementTourBookings,
-  checkTourAvailability
+  checkTourAvailability,
+  getTourLogisticsStatus
 } from './controllers/tourController';
 import {
   validateObjectId,
@@ -589,6 +590,9 @@ router.get('/:tourId/rating', validateObjectId(), getTourRating);
  *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.get('/:tourId/bookings', authenticate, authorizeRoles('admin', 'seller'), validateObjectId(), paginationMiddleware(), getTourBookings);
+
+// Read-only per-day partner confirmation status for the tour editor (ownership checked inside the service).
+router.get('/:tourId/logistics-status', authenticate, validateObjectId(), getTourLogisticsStatus);
 
 // RESTful update and delete routes (requires authentication and admin/seller role)
 /**

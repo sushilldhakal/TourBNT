@@ -18,6 +18,15 @@ import {
   getToursFeaturingBusinessPartner,
 } from './businessPartnerController';
 import { getBusinessReviews, addBusinessReview } from '../businessReviews/businessReviewController';
+import {
+  getMyCapacity,
+  updateMyCapacity,
+  getCapacityOverrides,
+  setCapacityOverride,
+  getMyItineraryRequests,
+  respondToItineraryRequest,
+  getAvailableCapacityForDate,
+} from './capacityController';
 
 const businessPartnerRouter = express.Router();
 
@@ -85,5 +94,15 @@ businessPartnerRouter.post('/:businessPartnerId/reviews', authenticate, addBusin
 
 // Public: "tours featuring this partner" reverse lookup for the profile page.
 businessPartnerRouter.get('/:businessPartnerId/tours', getToursFeaturingBusinessPartner);
+
+// Capacity & per-date itinerary-request confirmation (owner-or-admin gated
+// inside each controller — see capacityController.ts).
+businessPartnerRouter.get('/:businessPartnerId/capacity', authenticate, asyncAuthHandler(getMyCapacity));
+businessPartnerRouter.patch('/:businessPartnerId/capacity', authenticate, asyncAuthHandler(updateMyCapacity));
+businessPartnerRouter.get('/:businessPartnerId/capacity/available', authenticate, asyncAuthHandler(getAvailableCapacityForDate));
+businessPartnerRouter.get('/:businessPartnerId/capacity/overrides', authenticate, asyncAuthHandler(getCapacityOverrides));
+businessPartnerRouter.put('/:businessPartnerId/capacity/overrides/:date', authenticate, asyncAuthHandler(setCapacityOverride));
+businessPartnerRouter.get('/:businessPartnerId/requests', authenticate, paginationMiddleware(), asyncAuthHandler(getMyItineraryRequests));
+businessPartnerRouter.patch('/:businessPartnerId/requests/:requestId', authenticate, asyncAuthHandler(respondToItineraryRequest));
 
 export default businessPartnerRouter;

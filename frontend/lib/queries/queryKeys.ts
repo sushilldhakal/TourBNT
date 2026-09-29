@@ -131,6 +131,15 @@ export const queryKeys = {
 
     // Featured tour titles (categories/destinations grids)
     featuredTourTitles: (userId: string | undefined) => ['tourTitles', userId] as const,
+
+    // Business partners (hotels/restaurants/guides/logistics/advertisers)
+    businessPartners: {
+        mine: () => ['business-partners', 'mine'] as const,
+        capacity: (businessPartnerId: string) => ['business-partners', businessPartnerId, 'capacity'] as const,
+        capacityOverrides: (businessPartnerId: string) => ['business-partners', businessPartnerId, 'capacity-overrides'] as const,
+        requests: (businessPartnerId: string, status?: string) => ['business-partners', businessPartnerId, 'requests', status] as const,
+        tourLogisticsStatus: (tourId: string) => ['tours', tourId, 'logistics-status'] as const,
+    },
 };
 
 /** Backward-compat: destinations key set (same shape as before) */

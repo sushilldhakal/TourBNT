@@ -267,3 +267,54 @@ export const createAdRejectionNotification = async (
   }).returning();
   return notification;
 };
+
+// System-generated — no human sender (created by tourService/bookingService
+// when a tour's fixed departures or a flexible-date booking need a partner
+// to confirm capacity for a real service date).
+export const createItineraryRequestCreatedNotification = async (
+  recipientId: string,
+  tourTitle: string,
+  serviceDate: string,
+  requestId: string
+) => {
+  const [notification] = await db.insert(notifications).values({
+    recipientId,
+    type: 'itinerary_request_created',
+    title: 'Availability requested',
+    message: `"${tourTitle}" needs you to confirm capacity for ${serviceDate}.`,
+    data: { requestId, tourTitle, serviceDate },
+  }).returning();
+  return notification;
+};
+
+export const createItineraryRequestConfirmedNotification = async (
+  recipientId: string,
+  partnerName: string,
+  serviceDate: string,
+  requestId: string
+) => {
+  const [notification] = await db.insert(notifications).values({
+    recipientId,
+    type: 'itinerary_request_confirmed',
+    title: 'Availability confirmed',
+    message: `${partnerName} confirmed capacity for ${serviceDate}.`,
+    data: { requestId, partnerName, serviceDate },
+  }).returning();
+  return notification;
+};
+
+export const createItineraryRequestDeclinedNotification = async (
+  recipientId: string,
+  partnerName: string,
+  serviceDate: string,
+  requestId: string
+) => {
+  const [notification] = await db.insert(notifications).values({
+    recipientId,
+    type: 'itinerary_request_declined',
+    title: 'Availability declined',
+    message: `${partnerName} could not confirm capacity for ${serviceDate}. Check the tour's logistics status.`,
+    data: { requestId, partnerName, serviceDate },
+  }).returning();
+  return notification;
+};

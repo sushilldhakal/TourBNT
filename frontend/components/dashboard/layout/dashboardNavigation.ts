@@ -1,7 +1,8 @@
 import {
     Home, FileText, Users, Image, Settings, Mail, LayoutDashboard,
     List, MapPin, FolderTree, Lightbulb, HelpCircle, Calendar, Star, Wrench,
-    MessageSquare, Plus, Briefcase, UserCog, CalendarCheck, Building2, Megaphone
+    MessageSquare, Plus, Briefcase, UserCog, CalendarCheck, Building2, Megaphone,
+    Compass, Utensils, Truck
 } from 'lucide-react';
 import type { NavigationItem, FlatNavItem } from '@/types/dashboard';
 
@@ -74,12 +75,15 @@ export const baseNavigationItems: NavigationItem[] = [
             { href: '/dashboard/ads', label: 'Ad Campaigns', icon: Megaphone, adminOnly: true },
         ],
     },
-    {
-        href: '/dashboard/business',
-        label: 'My Business',
-        icon: Building2,
-        partnerOnly: true,
-    },
+    // Split by type (see DashboardSidebar for the ownership-driven version
+    // that only shows the ones a user actually owns) — the search palette
+    // shows all of these once `isPartner` is true rather than tracking
+    // exactly which types, since it's a discovery tool, not primary nav.
+    { href: '/dashboard/hotels', label: 'Hotels', icon: Building2, partnerOnly: true },
+    { href: '/dashboard/restaurants', label: 'Restaurant', icon: Utensils, partnerOnly: true },
+    { href: '/dashboard/guides', label: 'Guide', icon: Compass, partnerOnly: true },
+    { href: '/dashboard/logistics', label: 'Logistics', icon: Truck, partnerOnly: true },
+    { href: '/dashboard/advertising', label: 'Advertising', icon: Megaphone, partnerOnly: true },
     {
         href: '/dashboard/settings',
         label: 'Settings',

@@ -9,6 +9,7 @@ import {
   updateDestination,
   updateDestinationPreferences,
   deleteDestination,
+  getDestinationUsage,
   getEnabledDestinations,
   getFavoriteDestinations,
   getPendingDestinations,
@@ -362,6 +363,7 @@ router.post('/:destinationId/remove-from-list', authenticate, removeExistingDest
 router.get('/admin/pending', getPendingDestinations as any);
 router.put('/admin/:destinationId/approve', approveDestination as any);
 router.put('/admin/:destinationId/reject', rejectDestination as any);
+router.get('/admin/:destinationId/usage', getDestinationUsage as any);
 router.delete('/admin/:destinationId', deleteDestination as any);
 router.post('/admin/fix-deleted-approved', fixDeletedApprovedDestinations as any);
 

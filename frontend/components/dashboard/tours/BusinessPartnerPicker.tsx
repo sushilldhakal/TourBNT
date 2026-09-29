@@ -15,6 +15,8 @@ interface ItineraryPartner {
     businessPartnerId?: string;
     name: string;
     notes?: string;
+    /** "HH:mm" — only meaningful for role='meals' (lunch vs dinner sittings). Feeds the restaurant's confirmation request. */
+    time?: string;
 }
 
 const ROLE_TO_TYPES: Record<ItineraryPartnerRole, BusinessPartnerType[]> = {
@@ -105,6 +107,11 @@ export function BusinessPartnerPicker({ basePath, role, label, placeholder }: Bu
         upsert(query.trim() ? { name: query } : null);
     };
 
+    const setTime = (time: string) => {
+        if (!current) return;
+        upsert({ ...current, time: time || undefined });
+    };
+
     return (
         <div className="space-y-2 relative">
             <Label>{label}</Label>
@@ -143,6 +150,20 @@ export function BusinessPartnerPicker({ basePath, role, label, placeholder }: Bu
             )}
             {!current?.businessPartnerId && query.trim() && (
                 <p className="text-xs text-muted-foreground">Not registered on TourBNT — will be shown as plain text with no link.</p>
+            )}
+            {role === 'meals' && current && (
+                <div className="flex items-center gap-2 pt-1">
+                    <Label className="text-xs text-muted-foreground shrink-0">Sitting time</Label>
+                    <Input
+                        type="time"
+                        className="h-8 w-32"
+                        value={current.time || ''}
+                        onChange={(e) => setTime(e.target.value)}
+                    />
+                    {current.businessPartnerId && (
+                        <span className="text-xs text-muted-foreground">Lets {current.name} know exactly when to expect the group.</span>
+                    )}
+                </div>
             )}
         </div>
     );

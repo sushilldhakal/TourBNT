@@ -9,14 +9,15 @@ import { Check, Clock, X as XIcon, Edit, Trash2, Power, Star } from "lucide-reac
 import { DestinationTypes, type DestinationTableViewProps } from "@/types/types";
 import { EditDestinationDialog } from "./EditDestinationDialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useCacheManager } from '@/lib/queries/cacheUtils';
 import { useAuth } from "@/lib/hooks/useAuth";
-import { deleteDestination, removeExistingDestinationFromSeller } from '@/lib/api/destinations';
+import { deleteDestination, removeExistingDestinationFromSeller, getDestinationUsage } from '@/lib/api/destinations';
 import { toast } from "@/components/ui/use-toast";
 import Image from "next/image";
 import RichTextRenderer from "@/components/RichTextRenderer";
 import { useToggleDestinationActive } from '@/lib/queries/useDestinations';
+import { UsageWarning } from '../UsageWarning';
 
 // Component for toggle active button
 const ToggleActiveButton = ({
@@ -102,6 +103,13 @@ const DestinationTableView = ({ destinations, isLoading, onRefresh }: Destinatio
     const selectedDestination = selectedDestinationId
         ? destinations.find(d => d._id === selectedDestinationId || (d as any).destinationId === selectedDestinationId || d.id === selectedDestinationId)
         : null;
+
+    const { data: usage, isLoading: usageLoading } = useQuery({
+        queryKey: ['destination-usage', selectedDestinationId],
+        queryFn: () => getDestinationUsage(selectedDestinationId!),
+        enabled: deleteDialogOpen && isAdminView && !!selectedDestinationId,
+    });
+    const isDeleteBlocked = isAdminView && !!usage && (usage.sellerCount > 0 || usage.tourCount > 0);
 
     const getLocationString = (destination: DestinationTypes) => {
         const parts = [destination.city, destination.region, destination.country].filter(Boolean);
@@ -328,6 +336,7 @@ const DestinationTableView = ({ destinations, isLoading, onRefresh }: Destinatio
                             Are you sure you want to delete &quot;{selectedDestination?.name}&quot;? This action cannot be undone.
                         </DialogDescription>
                     </DialogHeader>
+                    {isAdminView && <UsageWarning usage={usage} isLoading={usageLoading} entityLabel="destination" />}
                     <DialogFooter>
                         <Button
                             variant="outline"
@@ -345,7 +354,8 @@ const DestinationTableView = ({ destinations, isLoading, onRefresh }: Destinatio
                                     deleteMutation.mutate(selectedDestinationId);
                                 }
                             }}
-                            disabled={deleteMutation.isPending}
+                            disabled={deleteMutation.isPending || (isAdminView && usageLoading) || isDeleteBlocked}
+                            title={isDeleteBlocked ? 'Remove this destination from every seller/tour listed above first' : undefined}
                         >
                             {deleteMutation.isPending ? "Deleting..." : "Delete"}
                         </Button>

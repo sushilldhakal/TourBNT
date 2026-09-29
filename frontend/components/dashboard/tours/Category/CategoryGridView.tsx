@@ -10,14 +10,15 @@ import { useCacheManager, useTourTitlesByIds } from '@/lib/queries';
 import { useAuth } from "@/lib/hooks/useAuth";
 import { EditCategoryDialog } from "./EditCategoryDialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { useMutation } from "@tanstack/react-query";
-import { deleteCategory, removeExistingCategoryFromSeller } from '@/lib/api/categories';
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { deleteCategory, removeExistingCategoryFromSeller, getCategoryUsage } from '@/lib/api/categories';
 import { toast } from "@/components/ui/use-toast";
 import Image from "next/image";
 import RichTextRenderer from "@/components/RichTextRenderer";
 import { useToggleCategoryActive } from '@/lib/queries/useCategories';
 import { useMemo, useState, useEffect } from "react";
 import Link from "next/link";
+import { UsageWarning } from '../UsageWarning';
 
 // Component for toggle active button
 const ToggleActiveButton = ({
@@ -119,6 +120,13 @@ const CategoryGridView = ({ categories, isLoading, onRefresh }: CategoryGridView
     const selectedCategory = selectedCategoryId
         ? categories.find(c => c._id === selectedCategoryId || (c as any).categoryId === selectedCategoryId)
         : null;
+
+    const { data: usage, isLoading: usageLoading } = useQuery({
+        queryKey: ['category-usage', selectedCategoryId],
+        queryFn: () => getCategoryUsage(selectedCategoryId!),
+        enabled: deleteDialogOpen && isAdminView && !!selectedCategoryId,
+    });
+    const isDeleteBlocked = isAdminView && !!usage && (usage.sellerCount > 0 || usage.tourCount > 0);
 
     if (isLoading) {
         return (
@@ -337,6 +345,7 @@ const CategoryGridView = ({ categories, isLoading, onRefresh }: CategoryGridView
                             Are you sure you want to {isAdminView ? 'delete' : 'remove'} &quot;{selectedCategory?.name}&quot;? {isAdminView && 'This action cannot be undone.'}
                         </DialogDescription>
                     </DialogHeader>
+                    {isAdminView && <UsageWarning usage={usage} isLoading={usageLoading} entityLabel="category" />}
                     <DialogFooter className="gap-3">
                         <Button
                             variant="outline"
@@ -355,7 +364,8 @@ const CategoryGridView = ({ categories, isLoading, onRefresh }: CategoryGridView
                                     deleteMutation.mutate(selectedCategoryId);
                                 }
                             }}
-                            disabled={deleteMutation.isPending}
+                            disabled={deleteMutation.isPending || (isAdminView && usageLoading) || isDeleteBlocked}
+                            title={isDeleteBlocked ? 'Remove this category from every seller/tour listed above first' : undefined}
                             aria-label={`Confirm ${isAdminView ? 'delete' : 'remove'} category`}
                         >
                             {deleteMutation.isPending ? "Processing..." : (isAdminView ? "Delete" : "Remove")}

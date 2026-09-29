@@ -10,6 +10,7 @@ import {
   updateCategory,
   updateCategoryPreferences,
   deleteCategory,
+  getCategoryUsage,
   getEnabledCategories,
   getFavoriteCategories,
   getPendingCategories,
@@ -374,6 +375,11 @@ router.get('/:categoryId', getCategoryById);
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
+// Categories stay seller+admin only — a category describes what a tour is
+// (rafting, trekking), which only the seller building the tour decides.
+// Business partners (hotel/restaurant/guide/transport/advertiser) don't
+// author tour categories; unlike destinations, they have no analogous
+// "location" use for a category. See globalDestinationRoutes.ts.
 router.post('/submit', uploadNone, authorizeRoles('admin', 'seller'), submitCategory as any);
 router.put('/:categoryId', uploadNone, authorizeRoles('admin', 'seller'), updateCategory as any);
 router.patch('/:categoryId', uploadNone, authorizeRoles('admin', 'seller'), updateCategory as any);
@@ -387,6 +393,7 @@ router.post('/:categoryId/remove-from-list', authenticate, removeExistingCategor
 router.get('/admin/pending', getPendingCategories as any);
 router.put('/admin/:categoryId/approve', approveCategory as any);
 router.put('/admin/:categoryId/reject', rejectCategory as any);
+router.get('/admin/:categoryId/usage', authorizeRoles('admin'), getCategoryUsage as any);
 router.delete('/admin/:categoryId', authorizeRoles('admin'), deleteCategory as any);
 
 export default router;

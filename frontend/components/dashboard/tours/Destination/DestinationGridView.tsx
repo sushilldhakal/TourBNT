@@ -10,13 +10,14 @@ import { useAuth } from "@/lib/hooks/useAuth";
 import { useEffect, useMemo, useState } from "react";
 import { EditDestinationDialog } from "./EditDestinationDialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { useMutation } from "@tanstack/react-query";
-import { deleteDestination, removeExistingDestinationFromSeller } from '@/lib/api/destinations';
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { deleteDestination, removeExistingDestinationFromSeller, getDestinationUsage } from '@/lib/api/destinations';
 import { toast } from "@/components/ui/use-toast";
 import Image from "next/image";
 import RichTextRenderer from "@/components/RichTextRenderer";
 import { useToggleDestinationActive } from '@/lib/queries/useDestinations';
 import Link from "next/link";
+import { UsageWarning } from '../UsageWarning';
 
 // Component for toggle active button
 const ToggleActiveButton = ({
@@ -118,6 +119,13 @@ const DestinationGridView = ({ destinations, isLoading, onRefresh }: Destination
     const selectedDestination = selectedDestinationId
         ? destinations.find(d => d._id === selectedDestinationId || (d as any).destinationId === selectedDestinationId)
         : null;
+
+    const { data: usage, isLoading: usageLoading } = useQuery({
+        queryKey: ['destination-usage', selectedDestinationId],
+        queryFn: () => getDestinationUsage(selectedDestinationId!),
+        enabled: deleteDialogOpen && isAdminView && !!selectedDestinationId,
+    });
+    const isDeleteBlocked = isAdminView && !!usage && (usage.sellerCount > 0 || usage.tourCount > 0);
 
     const getLocationString = (destination: DestinationTypes) => {
         const parts = [destination.city, destination.region, destination.country].filter(Boolean);
@@ -344,6 +352,7 @@ const DestinationGridView = ({ destinations, isLoading, onRefresh }: Destination
                             Are you sure you want to delete &quot;{selectedDestination?.name}&quot;? This action cannot be undone.
                         </DialogDescription>
                     </DialogHeader>
+                    {isAdminView && <UsageWarning usage={usage} isLoading={usageLoading} entityLabel="destination" />}
                     <DialogFooter>
                         <Button
                             variant="outline"
@@ -361,7 +370,8 @@ const DestinationGridView = ({ destinations, isLoading, onRefresh }: Destination
                                     deleteMutation.mutate(selectedDestinationId);
                                 }
                             }}
-                            disabled={deleteMutation.isPending}
+                            disabled={deleteMutation.isPending || (isAdminView && usageLoading) || isDeleteBlocked}
+                            title={isDeleteBlocked ? 'Remove this destination from every seller/tour listed above first' : undefined}
                         >
                             {deleteMutation.isPending ? "Deleting..." : "Delete"}
                         </Button>

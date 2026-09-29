@@ -78,6 +78,9 @@ export const notificationTypeEnum = pgEnum('notification_type', [
   'business_review_received',
   'ad_approved',
   'ad_rejected',
+  'itinerary_request_created',
+  'itinerary_request_confirmed',
+  'itinerary_request_declined',
 ]);
 export const mediaKindEnum = pgEnum('media_kind', ['image', 'video', 'pdf']);
 
@@ -116,6 +119,10 @@ export const itineraryPartnerRoleEnum = pgEnum('itinerary_partner_role', [
   'meals',
   'other',
 ]);
+// A partner's response to a specific-date service request (see
+// itineraryPartnerRequests below) — separate from businessPartners'
+// onboarding approvalStatus, which only gates the listing itself.
+export const itineraryRequestStatusEnum = pgEnum('itinerary_request_status', ['pending', 'confirmed', 'declined']);
 // Where on the site an ad campaign is eligible to render.
 export const adPlacementSlotEnum = pgEnum('ad_placement_slot', [
   'tour_detail',
@@ -839,6 +846,94 @@ export const tourItineraryPartners = pgTable('tour_itinerary_partners', {
 }, (table) => ({
   tourDayIdx: index('tour_itinerary_partners_tour_day_idx').on(table.tourId, table.dayId),
   partnerIdx: index('tour_itinerary_partners_partner_idx').on(table.businessPartnerId),
+}));
+
+// ---------------------------------------------------------------------------
+// Partner capacity & per-date service confirmation. A tourItineraryPartners
+// row is just a template link (day -> role -> partner); it says nothing
+// about a real calendar date, headcount, or whether the partner has
+// actually agreed to it. These tables turn that link into a real
+// commitment: how much capacity a partner generally has (businessPartner
+// Capacity/Overrides), and, for each real service date a tour needs them,
+// whether they've confirmed it (itineraryPartnerRequests). See
+// itineraryRequestService.ts (server) for how requests are generated and
+// bookingService.ts for how a fixed-departure date's bookability is gated
+// on every linked partner's request being 'confirmed'.
+// ---------------------------------------------------------------------------
+
+// One row per partner — their general capacity policy. unitLabel is a
+// partner-facing label ("room"/"seat"/"vehicle seat"/"slot") the frontend
+// defaults from businessPartners.type but the partner can rename.
+export const businessPartnerCapacity = pgTable('business_partner_capacity', {
+  businessPartnerId: text('business_partner_id').primaryKey().references(() => businessPartners.id, { onDelete: 'cascade' }),
+  unitLabel: text('unit_label').notNull().default('unit'),
+  defaultDailyCapacity: integer('default_daily_capacity').notNull().default(0),
+  ...timestamps,
+});
+
+// Per-date exceptions to defaultDailyCapacity (e.g. a hotel already sold
+// out that night for reasons unrelated to TourBNT).
+export const businessPartnerCapacityOverrides = pgTable('business_partner_capacity_overrides', {
+  id: id(),
+  businessPartnerId: text('business_partner_id').notNull().references(() => businessPartners.id, { onDelete: 'cascade' }),
+  date: date('date').notNull(),
+  capacity: integer('capacity').notNull(),
+  ...timestamps,
+}, (table) => ({
+  partnerDateIdx: uniqueIndex('business_partner_capacity_overrides_partner_date_idx').on(table.businessPartnerId, table.date),
+}));
+
+// A request for a partner to confirm capacity for one real service date.
+// headcount means different things depending on how the request was
+// generated (see itineraryRequestService.ts):
+//  - fixed-departure sourced (sourceDepartureDate set): the reservation
+//    ask — that departure's maxPax (or the tour's maxSize as a fallback).
+//    Actual booked-so-far is computed on read from
+//    itineraryRequestBookingContributions, never stored here.
+//  - per-booking sourced (sourceDepartureDate null, flexible-date tour):
+//    headcount IS sum(contributions) for this request, recomputed after
+//    every contribution insert/delete — never hand-incremented, so it
+//    can't drift from the bookings that actually make it up.
+export const itineraryPartnerRequests = pgTable('itinerary_partner_requests', {
+  id: id(),
+  tourId: text('tour_id').notNull().references(() => tours.id, { onDelete: 'cascade' }),
+  tourItineraryPartnerId: text('tour_itinerary_partner_id').notNull().references(() => tourItineraryPartners.id, { onDelete: 'cascade' }),
+  businessPartnerId: text('business_partner_id').notNull().references(() => businessPartners.id, { onDelete: 'cascade' }),
+  role: itineraryPartnerRoleEnum('role').notNull(),
+  serviceDate: date('service_date').notNull(),
+  // e.g. "13:00" — meaningful for role='meals' (lunch vs dinner sittings);
+  // left null for accommodation/transport/guide requests.
+  serviceTime: text('service_time'),
+  headcount: integer('headcount').notNull().default(0),
+  status: itineraryRequestStatusEnum('status').notNull().default('pending'),
+  capacityConfirmed: integer('capacity_confirmed'),
+  responseNotes: text('response_notes'),
+  respondedAt: timestamp('responded_at', { withTimezone: true }),
+  respondedBy: text('responded_by').references(() => users.id),
+  // Set only for fixed-departure-sourced requests, so isFixedDepartureDate
+  // Confirmed() can find every request belonging to one departure.
+  sourceDepartureDate: timestamp('source_departure_date', { withTimezone: true }),
+  ...timestamps,
+}, (table) => ({
+  partnerDateIdx: index('itinerary_partner_requests_partner_date_idx').on(table.businessPartnerId, table.serviceDate),
+  tourIdx: index('itinerary_partner_requests_tour_idx').on(table.tourId),
+  // Lets request generation be a plain upsert: one request per (day-link,
+  // date, time-slot), regardless of how many bookings/departures feed it.
+  dedupeIdx: uniqueIndex('itinerary_partner_requests_dedupe_idx').on(table.tourItineraryPartnerId, table.serviceDate, table.serviceTime),
+}));
+
+// Ledger of which booking contributed how many people to a given
+// (flexible-date, per-booking-sourced) request — so headcount is always
+// recomputed from real contributions rather than incrementally patched,
+// and cancelling a booking cleanly subtracts exactly what it added.
+export const itineraryRequestBookingContributions = pgTable('itinerary_request_booking_contributions', {
+  id: id(),
+  requestId: text('request_id').notNull().references(() => itineraryPartnerRequests.id, { onDelete: 'cascade' }),
+  bookingId: text('booking_id').notNull().references(() => bookings.id, { onDelete: 'cascade' }),
+  headcount: integer('headcount').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  requestBookingIdx: uniqueIndex('itinerary_request_contributions_request_booking_idx').on(table.requestId, table.bookingId),
 }));
 
 // ---------------------------------------------------------------------------

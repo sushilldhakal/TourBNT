@@ -4,6 +4,16 @@ import createHttpError from 'http-errors';
 import { Tour } from '../tourTypes';
 import { ITINERARY_ROLE_TO_PARTNER_TYPES } from '../../businessPartners/businessPartnerTypes';
 import { cacheGet, cacheSet, cacheDel, cacheDelPattern, getRedisClient } from '../../../config/redisClient';
+import { ItineraryRequestService } from './itineraryRequestService';
+
+/** Best-effort — a partner-notification hiccup must never fail the tour save itself. */
+async function reconcileItineraryRequests(tourId: string) {
+  try {
+    await ItineraryRequestService.reconcileFixedDepartureRequests(tourId);
+  } catch (err) {
+    console.error(`Failed to reconcile itinerary partner requests for tour ${tourId}:`, err);
+  }
+}
 
 type TourRow = typeof tours.$inferSelect;
 
@@ -286,6 +296,7 @@ export class TourService {
     await syncTourCategories(newTour.id, categoryIds);
     await syncTourAuthors(newTour.id, [authorId]);
     await syncTourItineraryPartners(newTour.id, columnData.itinerary as unknown[] | undefined);
+    await reconcileItineraryRequests(newTour.id);
 
     const [enriched] = await attachRelations([newTour]);
     await cacheDelPattern('route:tour*');
@@ -311,6 +322,7 @@ export class TourService {
 
     const [updatedTour] = await db.update(tours).set(columnData).where(eq(tours.id, tourId)).returning();
     await syncTourCategories(tourId, categoryIds);
+    await reconcileItineraryRequests(tourId);
 
     const [enriched] = await attachRelations([updatedTour]);
     await TourService.invalidateTourCaches(tourId);
