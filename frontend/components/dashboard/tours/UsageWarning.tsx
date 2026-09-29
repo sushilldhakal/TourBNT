@@ -44,7 +44,7 @@ export function UsageWarning({ usage, isLoading, entityLabel }: UsageWarningProp
     return (
         <Alert variant="destructive">
             <AlertTriangle className="h-4 w-4" />
-            <AlertTitle>This {entityLabel} is in use</AlertTitle>
+            <AlertTitle>Can&apos;t delete — this {entityLabel} is in use</AlertTitle>
             <AlertDescription>
                 <div className="space-y-2 mt-1">
                     {usage.sellerCount > 0 && (
@@ -65,7 +65,7 @@ export function UsageWarning({ usage, isLoading, entityLabel }: UsageWarningProp
                             </ul>
                         </div>
                     )}
-                    <p className="text-sm font-medium pt-1">Deleting will remove it from every profile and tour listed above. This cannot be undone.</p>
+                    <p className="text-sm font-medium pt-1">Remove it from every profile and tour listed above before it can be deleted.</p>
                 </div>
             </AlertDescription>
         </Alert>

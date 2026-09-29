@@ -478,14 +478,45 @@ export const rejectCategory = async (req: Request, res: Response) => {
   }
 };
 
-// Admin: how many sellers have this category in their profile, and which
-// tours reference it — shown before deletion, since deleteCategory is a
-// hard delete (tourCategories cascades) with no undo. sellerCount/usageCount
-// on the row itself aren't trustworthy here: they're manually incremented/
-// decremented and several write paths (submitCategory for the creator,
-// toggleCategoryActiveStatus) never touch them, so they drift. This scans
-// the actual data instead: sellerInfo.category (the one place every write
-// path lands) and the tourCategories join table.
+// How many sellers have this category in their profile, and which tours
+// reference it. sellerCount/usageCount on the row itself aren't trustworthy
+// here: they're manually incremented/decremented and several write paths
+// (submitCategory for the creator, toggleCategoryActiveStatus) never touch
+// them, so they drift. This scans the actual data instead: sellerInfo.category
+// (the one place every write path lands) and the tourCategories join table.
+// Shared by getCategoryUsage (the admin-facing lookup) and deleteCategory
+// (which refuses to delete while either count is non-zero).
+async function computeCategoryUsage(categoryId: string) {
+  const sellers = await db
+    .select({ id: users.id, name: users.name, email: users.email })
+    .from(users)
+    .where(sql`${users.sellerInfo} IS NOT NULL AND EXISTS (
+      SELECT 1 FROM jsonb_array_elements(${users.sellerInfo}->'category') AS elem
+      WHERE elem->>'categoryId' = ${categoryId}
+    )`);
+
+  const tourRows = await db
+    .select({ id: tours.id, title: tours.title, code: tours.code })
+    .from(tourCategories)
+    .innerJoin(tours, eq(tourCategories.tourId, tours.id))
+    .where(eq(tourCategories.categoryId, categoryId));
+
+  const tourIds = tourRows.map((t) => t.id);
+  const authorRows = tourIds.length
+    ? await db.select({ tourId: tourAuthors.tourId, name: users.name }).from(tourAuthors).innerJoin(users, eq(tourAuthors.userId, users.id)).where(inArray(tourAuthors.tourId, tourIds))
+    : [];
+  const sellerNamesByTour = new Map<string, string[]>();
+  for (const { tourId, name } of authorRows) {
+    const list = sellerNamesByTour.get(tourId) || [];
+    list.push(name);
+    sellerNamesByTour.set(tourId, list);
+  }
+  const tourList = tourRows.map((t) => ({ ...t, sellerNames: sellerNamesByTour.get(t.id) || [] }));
+
+  return { sellerCount: sellers.length, sellers, tourCount: tourList.length, tours: tourList };
+}
+
+// Admin: usage lookup shown before deletion (see computeCategoryUsage).
 export const getCategoryUsage = async (req: Request, res: Response): Promise<void> => {
   try {
     if (!req.user?.roles?.includes('admin')) {
@@ -493,48 +524,18 @@ export const getCategoryUsage = async (req: Request, res: Response): Promise<voi
       return;
     }
     const { categoryId } = req.params;
-
-    const sellers = await db
-      .select({ id: users.id, name: users.name, email: users.email })
-      .from(users)
-      .where(sql`${users.sellerInfo} IS NOT NULL AND EXISTS (
-        SELECT 1 FROM jsonb_array_elements(${users.sellerInfo}->'category') AS elem
-        WHERE elem->>'categoryId' = ${categoryId}
-      )`);
-
-    const tourRows = await db
-      .select({ id: tours.id, title: tours.title, code: tours.code })
-      .from(tourCategories)
-      .innerJoin(tours, eq(tourCategories.tourId, tours.id))
-      .where(eq(tourCategories.categoryId, categoryId));
-
-    const tourIds = tourRows.map((t) => t.id);
-    const authorRows = tourIds.length
-      ? await db.select({ tourId: tourAuthors.tourId, name: users.name }).from(tourAuthors).innerJoin(users, eq(tourAuthors.userId, users.id)).where(inArray(tourAuthors.tourId, tourIds))
-      : [];
-    const sellerNamesByTour = new Map<string, string[]>();
-    for (const { tourId, name } of authorRows) {
-      const list = sellerNamesByTour.get(tourId) || [];
-      list.push(name);
-      sellerNamesByTour.set(tourId, list);
-    }
-    const tourList = tourRows.map((t) => ({ ...t, sellerNames: sellerNamesByTour.get(t.id) || [] }));
-
-    res.json({
-      success: true,
-      data: {
-        sellerCount: sellers.length,
-        sellers,
-        tourCount: tourList.length,
-        tours: tourList,
-      },
-    });
+    const usage = await computeCategoryUsage(categoryId);
+    res.json({ success: true, data: usage });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error fetching category usage', error: error instanceof Error ? error.message : 'Unknown error' });
   }
 };
 
-// Admin: Delete category
+// Admin: Delete category — refuses while any seller or tour still
+// references it (see computeCategoryUsage). They have to be removed from
+// every profile/tour first; this is a hard delete with no undo, and
+// tourCategories cascades, so it would otherwise silently un-categorize
+// live tour packages.
 export const deleteCategory = async (req: Request, res: Response): Promise<void> => {
   try {
     if (!req.user?.roles?.includes('admin')) {
@@ -543,12 +544,23 @@ export const deleteCategory = async (req: Request, res: Response): Promise<void>
     }
 
     const { categoryId } = req.params;
-    const [deleted] = await db.delete(globalCategories).where(eq(globalCategories.id, categoryId)).returning();
-    if (!deleted) {
+    const [existing] = await db.select({ id: globalCategories.id }).from(globalCategories).where(eq(globalCategories.id, categoryId)).limit(1);
+    if (!existing) {
       res.status(404).json({ success: false, message: 'Category not found' });
       return;
     }
 
+    const usage = await computeCategoryUsage(categoryId);
+    if (usage.sellerCount > 0 || usage.tourCount > 0) {
+      res.status(409).json({
+        success: false,
+        message: `Cannot delete — ${usage.sellerCount} seller(s) and ${usage.tourCount} tour(s) still reference this category. Remove it from their profiles/tours first.`,
+        data: usage,
+      });
+      return;
+    }
+
+    await db.delete(globalCategories).where(eq(globalCategories.id, categoryId));
     res.json({ success: true, message: 'Category deleted successfully' });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error deleting category', error: error instanceof Error ? error.message : 'Unknown error' });

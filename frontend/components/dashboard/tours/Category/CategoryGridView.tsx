@@ -126,6 +126,7 @@ const CategoryGridView = ({ categories, isLoading, onRefresh }: CategoryGridView
         queryFn: () => getCategoryUsage(selectedCategoryId!),
         enabled: deleteDialogOpen && isAdminView && !!selectedCategoryId,
     });
+    const isDeleteBlocked = isAdminView && !!usage && (usage.sellerCount > 0 || usage.tourCount > 0);
 
     if (isLoading) {
         return (
@@ -363,7 +364,8 @@ const CategoryGridView = ({ categories, isLoading, onRefresh }: CategoryGridView
                                     deleteMutation.mutate(selectedCategoryId);
                                 }
                             }}
-                            disabled={deleteMutation.isPending}
+                            disabled={deleteMutation.isPending || (isAdminView && usageLoading) || isDeleteBlocked}
+                            title={isDeleteBlocked ? 'Remove this category from every seller/tour listed above first' : undefined}
                             aria-label={`Confirm ${isAdminView ? 'delete' : 'remove'} category`}
                         >
                             {deleteMutation.isPending ? "Processing..." : (isAdminView ? "Delete" : "Remove")}

@@ -109,6 +109,7 @@ const DestinationTableView = ({ destinations, isLoading, onRefresh }: Destinatio
         queryFn: () => getDestinationUsage(selectedDestinationId!),
         enabled: deleteDialogOpen && isAdminView && !!selectedDestinationId,
     });
+    const isDeleteBlocked = isAdminView && !!usage && (usage.sellerCount > 0 || usage.tourCount > 0);
 
     const getLocationString = (destination: DestinationTypes) => {
         const parts = [destination.city, destination.region, destination.country].filter(Boolean);
@@ -353,7 +354,8 @@ const DestinationTableView = ({ destinations, isLoading, onRefresh }: Destinatio
                                     deleteMutation.mutate(selectedDestinationId);
                                 }
                             }}
-                            disabled={deleteMutation.isPending}
+                            disabled={deleteMutation.isPending || (isAdminView && usageLoading) || isDeleteBlocked}
+                            title={isDeleteBlocked ? 'Remove this destination from every seller/tour listed above first' : undefined}
                         >
                             {deleteMutation.isPending ? "Deleting..." : "Delete"}
                         </Button>

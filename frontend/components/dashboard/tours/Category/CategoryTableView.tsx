@@ -110,6 +110,7 @@ const CategoryTableView = ({ categories, isLoading, onRefresh }: CategoryTableVi
         queryFn: () => getCategoryUsage(selectedCategoryId!),
         enabled: deleteDialogOpen && isAdminView && !!selectedCategoryId,
     });
+    const isDeleteBlocked = isAdminView && !!usage && (usage.sellerCount > 0 || usage.tourCount > 0);
 
     const columns: ColumnDef<CategoryData>[] = [
         {
@@ -339,7 +340,8 @@ const CategoryTableView = ({ categories, isLoading, onRefresh }: CategoryTableVi
                                     deleteMutation.mutate(selectedCategoryId);
                                 }
                             }}
-                            disabled={deleteMutation.isPending}
+                            disabled={deleteMutation.isPending || (isAdminView && usageLoading) || isDeleteBlocked}
+                            title={isDeleteBlocked ? 'Remove this category from every seller/tour listed above first' : undefined}
                         >
                             {deleteMutation.isPending ? "Processing..." : (isAdminView ? "Delete" : "Remove")}
                         </Button>

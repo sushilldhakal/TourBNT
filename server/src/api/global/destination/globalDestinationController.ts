@@ -408,57 +408,57 @@ export const rejectDestination = async (req: Request, res: Response) => {
   }
 };
 
-// Admin: how many sellers have this destination in their profile, and which
-// tours use it (tours.destinationId is a direct column — a tour has exactly
-// one destination, unlike the many-to-many tourCategories join). Shown
-// before deletion since deleteDestination is a hard delete with no undo.
-// sellerCount on the row isn't trustworthy: it's manually incremented/
-// decremented and submitDestination never touches it for the creator, so
-// it drifts. This scans the actual data instead.
+// How many sellers have this destination in their profile, and which tours
+// use it (tours.destinationId is a direct column — a tour has exactly one
+// destination, unlike the many-to-many tourCategories join). sellerCount on
+// the row isn't trustworthy: it's manually incremented/decremented and
+// submitDestination never touches it for the creator, so it drifts. This
+// scans the actual data instead. Shared by getDestinationUsage (the
+// admin-facing lookup) and deleteDestination (which refuses to delete
+// while either count is non-zero).
+async function computeDestinationUsage(destinationId: string) {
+  const sellers = await db
+    .select({ id: users.id, name: users.name, email: users.email })
+    .from(users)
+    .where(sql`${users.sellerInfo} IS NOT NULL AND EXISTS (
+      SELECT 1 FROM jsonb_array_elements(${users.sellerInfo}->'destination') AS elem
+      WHERE elem->>'destinationId' = ${destinationId}
+    )`);
+
+  const tourRows = await db.select({ id: tours.id, title: tours.title, code: tours.code }).from(tours).where(eq(tours.destinationId, destinationId));
+
+  const tourIds = tourRows.map((t) => t.id);
+  const authorRows = tourIds.length
+    ? await db.select({ tourId: tourAuthors.tourId, name: users.name }).from(tourAuthors).innerJoin(users, eq(tourAuthors.userId, users.id)).where(inArray(tourAuthors.tourId, tourIds))
+    : [];
+  const sellerNamesByTour = new Map<string, string[]>();
+  for (const { tourId, name } of authorRows) {
+    const list = sellerNamesByTour.get(tourId) || [];
+    list.push(name);
+    sellerNamesByTour.set(tourId, list);
+  }
+  const tourList = tourRows.map((t) => ({ ...t, sellerNames: sellerNamesByTour.get(t.id) || [] }));
+
+  return { sellerCount: sellers.length, sellers, tourCount: tourList.length, tours: tourList };
+}
+
+// Admin: usage lookup shown before deletion (see computeDestinationUsage).
 export const getDestinationUsage = async (req: Request, res: Response) => {
   try {
     if (!req.user?.roles?.includes('admin')) {
       return res.status(403).json({ success: false, message: 'Admin access required' });
     }
     const { destinationId } = req.params;
-
-    const sellers = await db
-      .select({ id: users.id, name: users.name, email: users.email })
-      .from(users)
-      .where(sql`${users.sellerInfo} IS NOT NULL AND EXISTS (
-        SELECT 1 FROM jsonb_array_elements(${users.sellerInfo}->'destination') AS elem
-        WHERE elem->>'destinationId' = ${destinationId}
-      )`);
-
-    const tourRows = await db.select({ id: tours.id, title: tours.title, code: tours.code }).from(tours).where(eq(tours.destinationId, destinationId));
-
-    const tourIds = tourRows.map((t) => t.id);
-    const authorRows = tourIds.length
-      ? await db.select({ tourId: tourAuthors.tourId, name: users.name }).from(tourAuthors).innerJoin(users, eq(tourAuthors.userId, users.id)).where(inArray(tourAuthors.tourId, tourIds))
-      : [];
-    const sellerNamesByTour = new Map<string, string[]>();
-    for (const { tourId, name } of authorRows) {
-      const list = sellerNamesByTour.get(tourId) || [];
-      list.push(name);
-      sellerNamesByTour.set(tourId, list);
-    }
-    const tourList = tourRows.map((t) => ({ ...t, sellerNames: sellerNamesByTour.get(t.id) || [] }));
-
-    res.json({
-      success: true,
-      data: {
-        sellerCount: sellers.length,
-        sellers,
-        tourCount: tourList.length,
-        tours: tourList,
-      },
-    });
+    const usage = await computeDestinationUsage(destinationId);
+    res.json({ success: true, data: usage });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error fetching destination usage' });
   }
 };
 
-// Admin: Delete destination (hard delete)
+// Admin: Delete destination (hard delete) — refuses while any seller or
+// tour still references it (see computeDestinationUsage). They have to be
+// removed from every profile/tour first; this has no undo.
 export const deleteDestination = async (req: Request, res: Response) => {
   try {
     if (!req.user?.roles?.includes('admin')) {
@@ -466,12 +466,21 @@ export const deleteDestination = async (req: Request, res: Response) => {
     }
 
     const { destinationId } = req.params;
-    const [deleted] = await db.delete(globalDestinations).where(eq(globalDestinations.id, destinationId)).returning();
-    if (!deleted) {
+    const [existing] = await db.select({ id: globalDestinations.id }).from(globalDestinations).where(eq(globalDestinations.id, destinationId)).limit(1);
+    if (!existing) {
       return res.status(404).json({ success: false, message: 'Destination not found' });
     }
 
-    // Seller preferences referencing this destination cascade-delete via the FK.
+    const usage = await computeDestinationUsage(destinationId);
+    if (usage.sellerCount > 0 || usage.tourCount > 0) {
+      return res.status(409).json({
+        success: false,
+        message: `Cannot delete — ${usage.sellerCount} seller(s) and ${usage.tourCount} tour(s) still reference this destination. Remove it from their profiles/tours first.`,
+        data: usage,
+      });
+    }
+
+    await db.delete(globalDestinations).where(eq(globalDestinations.id, destinationId));
     res.json({ success: true, message: 'Destination permanently deleted from database' });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error deleting destination' });
