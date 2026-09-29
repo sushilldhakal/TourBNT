@@ -156,7 +156,7 @@ export function DashboardSidebar({ isCollapsed, onToggle, mobileMenuOpen = false
     // for every dashboard user rather than gate it behind a role guess.
     const { data: myBusinesses } = useMyBusinessPartners(!!userId);
     const businessNavItems: NavigationItem[] = useMemo(() => {
-        if (!myBusinesses || myBusinesses.length === 0) return [];
+        if (!Array.isArray(myBusinesses) || myBusinesses.length === 0) return [];
         const seenHrefs = new Set<string>();
         const items: NavigationItem[] = [];
         for (const business of myBusinesses) {

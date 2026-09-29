@@ -45,7 +45,10 @@ export const applyAsBusinessPartner = async (formData: FormData) => {
 export const getMyBusinessPartners = async () => {
     try {
         const response = await api.get('/business-partners/me');
-        return extractResponseData<BusinessPartner[]>(response);
+        // extractResponseData falls through to the whole {success, message,
+        // data} wrapper when `data` is an array (its "is this nested or
+        // direct" check treats arrays as direct data) — unwrap explicitly.
+        return (response.data?.data ?? []) as BusinessPartner[];
     } catch (error) {
         throw handleApiError(error, 'fetching your businesses');
     }
@@ -72,7 +75,10 @@ export const getBusinessPartnerBySlug = async (slug: string) => {
 export const searchBusinessPartners = async (params: { type?: BusinessPartnerType; destinationId?: string; q?: string; categoryId?: string; page?: number; limit?: number }) => {
     try {
         const response = await api.get('/business-partners', { params });
-        return response.data as { success: boolean; data: BusinessPartner[]; pagination: { page: number; limit: number; totalItems: number; totalPages: number } };
+        // Backend uses sendPaginatedResponse, which puts the array under
+        // `.items`, not `.data` — normalize to `.data` here for callers.
+        const body = response.data as { success: boolean; items: BusinessPartner[]; pagination: { page: number; limit: number; totalItems: number; totalPages: number } };
+        return { success: body.success, data: body.items ?? [], pagination: body.pagination };
     } catch (error) {
         throw handleApiError(error, 'searching businesses');
     }
@@ -101,7 +107,10 @@ export const updateBusinessPartnerTargeting = async (businessPartnerId: string, 
 export const getPendingBusinessPartners = async (page = 1, limit = 10) => {
     try {
         const response = await api.get('/business-partners/pending', { params: { page, limit } });
-        return response.data as { success: boolean; data: BusinessPartner[]; pagination: { page: number; limit: number; totalItems: number; totalPages: number } };
+        // Backend uses sendPaginatedResponse, which puts the array under
+        // `.items`, not `.data` — normalize to `.data` here for callers.
+        const body = response.data as { success: boolean; items: BusinessPartner[]; pagination: { page: number; limit: number; totalItems: number; totalPages: number } };
+        return { success: body.success, data: body.items ?? [], pagination: body.pagination };
     } catch (error) {
         throw handleApiError(error, 'fetching pending businesses');
     }
@@ -183,7 +192,8 @@ export const addBusinessReviewReply = async (reviewId: string, comment: string) 
 export const getToursFeaturingBusinessPartner = async (businessPartnerId: string) => {
     try {
         const response = await api.get(`/business-partners/${businessPartnerId}/tours`);
-        return extractResponseData<Array<{ id: string; title: string; code: string; coverImage?: string; price?: number; averageRating: number }>>(response);
+        // Same extractResponseData array-unwrapping flaw as getMyBusinessPartners.
+        return (response.data?.data ?? []) as Array<{ id: string; title: string; code: string; coverImage?: string; price?: number; averageRating: number }>;
     } catch (error) {
         throw handleApiError(error, 'fetching tours featuring this business');
     }
@@ -254,7 +264,8 @@ export const updateMyCapacity = async (businessPartnerId: string, data: { unitLa
 export const getCapacityOverrides = async (businessPartnerId: string) => {
     try {
         const response = await api.get(`/business-partners/${businessPartnerId}/capacity/overrides`);
-        return extractResponseData<BusinessPartnerCapacityOverride[]>(response);
+        // Same extractResponseData array-unwrapping flaw as getMyBusinessPartners.
+        return (response.data?.data ?? []) as BusinessPartnerCapacityOverride[];
     } catch (error) {
         throw handleApiError(error, 'fetching capacity overrides');
     }
@@ -281,7 +292,10 @@ export const getAvailableCapacityForDate = async (businessPartnerId: string, dat
 export const getMyItineraryRequests = async (businessPartnerId: string, params?: { status?: ItineraryRequestStatus; page?: number; limit?: number }) => {
     try {
         const response = await api.get(`/business-partners/${businessPartnerId}/requests`, { params });
-        return response.data as { success: boolean; data: ItineraryPartnerRequest[]; pagination: { page: number; limit: number; totalItems: number; totalPages: number } };
+        // Backend uses sendPaginatedResponse, which puts the array under
+        // `.items`, not `.data` — normalize to `.data` here for callers.
+        const body = response.data as { success: boolean; items: ItineraryPartnerRequest[]; pagination: { page: number; limit: number; totalItems: number; totalPages: number } };
+        return { success: body.success, data: body.items ?? [], pagination: body.pagination };
     } catch (error) {
         throw handleApiError(error, 'fetching itinerary requests');
     }
