@@ -276,9 +276,15 @@ export const submitCategory = async (req: Request, res: Response): Promise<void>
       })
       .returning();
 
+    // Track this submission against the creator regardless of role — a
+    // guide/hotel/restaurant/transport/advertiser submitting a category has
+    // no sellerInfo at all (that's seller-onboarding-specific), so gating
+    // this on `user?.sellerInfo` being already truthy silently dropped
+    // their submission from their own "my categories" list (getUserCategories
+    // reads only sellerInfo.category) with no way to ever find it again.
     const [user] = await db.select().from(users).where(eq(users.id, createdBy)).limit(1);
-    if (user?.sellerInfo) {
-      const sellerInfo = user.sellerInfo as SellerInfo;
+    if (user) {
+      const sellerInfo = (user.sellerInfo as SellerInfo | null) || ({ category: [] } as unknown as SellerInfo);
       const categoryList = sellerInfo.category || [];
       categoryList.push({
         categoryId: category.id,

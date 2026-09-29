@@ -252,9 +252,16 @@ export const submitDestination = async (req: Request, res: Response) => {
       })
       .returning();
 
+    // Track this submission against the creator regardless of role — a
+    // guide/hotel/restaurant/transport/advertiser submitting a destination
+    // has no sellerInfo at all (that's seller-onboarding-specific), so
+    // gating this on `user?.sellerInfo` being already truthy silently
+    // dropped their submission from their own "my destinations" list
+    // (getUserDestinations reads only sellerInfo.destination) with no way
+    // to ever find it again.
     const [user] = await db.select().from(users).where(eq(users.id, createdBy)).limit(1);
-    if (user?.sellerInfo) {
-      const sellerInfo = user.sellerInfo as SellerInfo;
+    if (user) {
+      const sellerInfo = (user.sellerInfo as SellerInfo | null) || ({ destination: [] } as unknown as SellerInfo);
       const destinationList = sellerInfo.destination || [];
       destinationList.push({ destinationId: destination.id, destinationName: destination.name, isActive: false, isApproved: false, approvalStatus: 'pending', addedAt: new Date() });
       await db.update(users).set({ sellerInfo: { ...sellerInfo, destination: destinationList }, updatedAt: new Date() }).where(eq(users.id, createdBy));
