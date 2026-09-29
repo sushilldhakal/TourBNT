@@ -31,7 +31,8 @@ import {
     CommandItem,
 } from '@/components/ui/command';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { isAdmin, RoleGroups } from '@/lib/utils/roles';
+import { isAdmin } from '@/lib/utils/roles';
+import { useMyBusinessPartners } from '@/lib/queries';
 import { baseNavigationItems, getFlatNavigationForSearch } from './dashboardNavigation';
 import type { DashboardHeaderProps } from '@/types/dashboard';
 
@@ -56,7 +57,10 @@ export function DashboardHeader({ onToggleSidebar, onLogout }: DashboardHeaderPr
     const [notificationsLoading, setNotificationsLoading] = useState(false);
     const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
     const isUserAdmin = isAdmin(userRole ?? displayRole);
-    const isUserPartner = !!userRole && (RoleGroups.BUSINESS_PARTNER as readonly string[]).includes(userRole);
+    // Ownership-driven, not role-driven — a seller/admin can also own an
+    // approved business listing (see approveBusinessPartner on the server).
+    const { data: myBusinesses } = useMyBusinessPartners(!!user?.id);
+    const isUserPartner = !!myBusinesses && myBusinesses.length > 0;
 
     const loadRecentMessages = useCallback(() => {
         setMessagesLoading(true);
