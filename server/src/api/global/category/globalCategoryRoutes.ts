@@ -25,7 +25,6 @@ import { authenticate, authorizeRoles } from '../../../middlewares/authenticate'
 import { uploadNone } from '../../../middlewares/multer';
 import { paginationMiddleware } from '../../../middlewares/pagination';
 import { cacheRoute } from '../../../middlewares/cacheMiddleware';
-import { DASHBOARD_ROLES } from '../../../constants/roles';
 
 const router = express.Router();
 
@@ -376,10 +375,15 @@ router.get('/:categoryId', getCategoryById);
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/submit', uploadNone, authorizeRoles(...DASHBOARD_ROLES), submitCategory as any);
-router.put('/:categoryId', uploadNone, authorizeRoles(...DASHBOARD_ROLES), updateCategory as any);
-router.patch('/:categoryId', uploadNone, authorizeRoles(...DASHBOARD_ROLES), updateCategory as any);
-router.put('/preferences', authorizeRoles(...DASHBOARD_ROLES), updateCategoryPreferences as any);
+// Categories stay seller+admin only — a category describes what a tour is
+// (rafting, trekking), which only the seller building the tour decides.
+// Business partners (hotel/restaurant/guide/transport/advertiser) don't
+// author tour categories; unlike destinations, they have no analogous
+// "location" use for a category. See globalDestinationRoutes.ts.
+router.post('/submit', uploadNone, authorizeRoles('admin', 'seller'), submitCategory as any);
+router.put('/:categoryId', uploadNone, authorizeRoles('admin', 'seller'), updateCategory as any);
+router.patch('/:categoryId', uploadNone, authorizeRoles('admin', 'seller'), updateCategory as any);
+router.put('/preferences', authorizeRoles('admin', 'seller'), updateCategoryPreferences as any);
 router.put('/:categoryId/favorite', toggleFavoriteCategory as any);
 router.patch('/:categoryId/toggle-active', toggleCategoryActiveStatus as any);
 router.post('/:categoryId/add-to-list', authenticate, addExistingCategoryToSeller as any);

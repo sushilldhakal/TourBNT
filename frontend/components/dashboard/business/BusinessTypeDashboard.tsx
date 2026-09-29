@@ -8,6 +8,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from '@/components/ui/use-toast';
 import { DashboardCardHeader } from '@/components/dashboard/layout/CardHeader';
 import type { LucideIcon } from 'lucide-react';
@@ -27,6 +29,11 @@ import {
 import { getMyAdCampaigns, createAdCampaign, updateAdTargeting, getAdStats, type Advertisement, type AdPlacementSlot } from '@/lib/api/ads';
 import { getApprovedCategories, getApprovedDestinations } from '@/lib/api/globalApi';
 import { useMyBusinessPartners, useMyCapacity, useCapacityOverrides, useMyItineraryRequests } from '@/lib/queries';
+import { useDestinationsRoleBased } from '@/lib/queries/useDestinations';
+import type { DestinationTypes } from '@/types/types';
+import AddDestination from '@/components/dashboard/tours/Destination/AddDestination';
+
+const ADD_DESTINATION = '__add_destination__';
 
 const STATUS_LABEL: Record<string, { label: string; variant: 'default' | 'destructive' | 'secondary' }> = {
     pending: { label: 'Pending Review', variant: 'secondary' },
@@ -184,6 +191,9 @@ function ProfileTab({ business }: { business: BusinessPartner }) {
     const [detailsForm, setDetailsForm] = useState<Record<string, string>>(
         Object.fromEntries(fields.map((f) => [f.key, f.kind === 'list' ? parseListField(details[f.key]) : String(details[f.key] ?? '')]))
     );
+    const [destinationId, setDestinationId] = useState(business.destinationId || '');
+    const [addDestinationOpen, setAddDestinationOpen] = useState(false);
+    const { data: destinations = [], isLoading: destinationsLoading } = useDestinationsRoleBased();
 
     const mutation = useMutation({
         mutationFn: (fd: FormData) => updateMyBusinessPartner(business.id, fd),
@@ -207,6 +217,7 @@ function ProfileTab({ business }: { business: BusinessPartner }) {
         const fd = new FormData();
         Object.entries(form).forEach(([k, v]) => fd.append(k, v));
         fd.append('details', JSON.stringify(nextDetails));
+        fd.append('destinationId', destinationId);
         mutation.mutate(fd);
     };
 
@@ -237,6 +248,44 @@ function ProfileTab({ business }: { business: BusinessPartner }) {
                         <label className="block text-sm font-medium mb-1">Website</label>
                         <Input value={form.website} onChange={(e) => setForm({ ...form, website: e.target.value })} />
                     </div>
+                    <div>
+                        <label className="block text-sm font-medium mb-1">Location</label>
+                        <Select
+                            value={destinationId || undefined}
+                            onValueChange={(v) => {
+                                if (v === ADD_DESTINATION) {
+                                    setAddDestinationOpen(true);
+                                    return;
+                                }
+                                setDestinationId(v);
+                            }}
+                        >
+                            <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Where are you based?" />
+                            </SelectTrigger>
+                            <SelectContent className="z-[9999]">
+                                {destinationsLoading ? (
+                                    <div className="px-2 py-3 text-center text-sm text-muted-foreground">Loading destinations...</div>
+                                ) : Array.isArray(destinations) && destinations.length > 0 ? (
+                                    (destinations as DestinationTypes[]).map((dest) => {
+                                        const id = dest._id != null ? String(dest._id) : '';
+                                        if (!id) return null;
+                                        return (
+                                            <SelectItem disabled={dest.isActive === false} key={id} value={id}>
+                                                {dest.name}
+                                            </SelectItem>
+                                        );
+                                    })
+                                ) : null}
+                                {!destinationsLoading && (
+                                    <SelectItem value={ADD_DESTINATION}>Add destination</SelectItem>
+                                )}
+                            </SelectContent>
+                        </Select>
+                        <p className="text-sm text-muted-foreground mt-1">
+                            The destination you&apos;re located in — e.g. a Srinagar restaurant sets Srinagar here, the same destination tours tag when they include you.
+                        </p>
+                    </div>
 
                     {fields.length > 0 && (
                         <div className="space-y-4 pt-2 border-t">
@@ -261,6 +310,21 @@ function ProfileTab({ business }: { business: BusinessPartner }) {
                     <Button type="submit" disabled={mutation.isPending}>{mutation.isPending ? 'Saving...' : 'Save Changes'}</Button>
                 </form>
             </CardContent>
+
+            <Dialog open={addDestinationOpen} onOpenChange={setAddDestinationOpen}>
+                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle>Add destination</DialogTitle>
+                    </DialogHeader>
+                    <AddDestination
+                        onDestinationAdded={(created) => {
+                            setAddDestinationOpen(false);
+                            const id = created && typeof created === 'object' ? ((created as { _id?: string; id?: string })._id || (created as { _id?: string; id?: string }).id) : undefined;
+                            if (id) setDestinationId(id);
+                        }}
+                    />
+                </DialogContent>
+            </Dialog>
         </Card>
     );
 }
