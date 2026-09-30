@@ -16,8 +16,10 @@ interface ItineraryPartner {
     businessPartnerId?: string;
     name: string;
     notes?: string;
-    /** "HH:mm" — only meaningful for role='meals' (lunch vs dinner sittings). Feeds the restaurant's confirmation request. */
+    /** "HH:mm" — a single sitting point for role='meals', or the start of an engagement window for role='guide' (paired with endTime below). Feeds the partner's confirmation request. */
     time?: string;
+    /** "HH:mm" — end of a guide's engagement window (e.g. "17:00" for a 9-5 day). Lets isTimeSlotAvailable check for real scheduling conflicts instead of a pooled daily count. */
+    endTime?: string;
     /** How many rooms/seats/covers the agency is asking for — the actual quantity a request reserves against the partner's capacity, distinct from traveler headcount. */
     unitsRequested?: number;
     /** Free-text override of what's being asked for, e.g. "Deluxe room". Defaults to the partner's own unit label (room/seat/slot) when unset. */
@@ -133,6 +135,11 @@ export function BusinessPartnerPicker({ basePath, role, label, placeholder }: Bu
         upsert({ ...current, time: time || undefined });
     };
 
+    const setEndTime = (endTime: string) => {
+        if (!current) return;
+        upsert({ ...current, endTime: endTime || undefined });
+    };
+
     const setUnitsRequested = (value: string) => {
         if (!current) return;
         const parsed = value === '' ? undefined : Math.max(0, Number(value));
@@ -204,6 +211,17 @@ export function BusinessPartnerPicker({ basePath, role, label, placeholder }: Bu
                     />
                     {current.businessPartnerId && (
                         <span className="text-xs text-muted-foreground">Lets {current.name} know exactly when to expect the group.</span>
+                    )}
+                </div>
+            )}
+            {role === 'guide' && current && (
+                <div className="flex items-center gap-2 pt-1">
+                    <Label className="text-xs text-muted-foreground shrink-0">From</Label>
+                    <Input type="time" className="h-8 w-32" value={current.time || ''} onChange={(e) => setTime(e.target.value)} />
+                    <Label className="text-xs text-muted-foreground shrink-0">To</Label>
+                    <Input type="time" className="h-8 w-32" value={current.endTime || ''} onChange={(e) => setEndTime(e.target.value)} />
+                    {current.businessPartnerId && (
+                        <span className="text-xs text-muted-foreground">A real time window lets {current.name} take other bookings outside it.</span>
                     )}
                 </div>
             )}

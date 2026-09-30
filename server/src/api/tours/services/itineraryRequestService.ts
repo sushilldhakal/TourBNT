@@ -9,6 +9,7 @@ import {
   businessPartnerCapacityOverrides,
   businessPartnerUnitTypes,
   businessPartnerUnitTypeBlocks,
+  businessPartnerAvailabilityBlocks,
   businessPartners,
   tourAuthors,
   bookings,
@@ -84,12 +85,16 @@ function getItineraryDayIndex(tour: Pick<TourRow, 'itinerary'>, dayId: string): 
   return itinerary.findIndex((day) => day?.id === dayId);
 }
 
-/** Optional "HH:mm" the seller set on this day's partner entry for this role (meals sittings). */
-function getItineraryPartnerServiceTime(tour: Pick<TourRow, 'itinerary'>, dayId: string, role: string): string | undefined {
-  const itinerary = Array.isArray(tour.itinerary) ? (tour.itinerary as Array<{ id?: string; partners?: Array<{ role?: string; time?: string }> }>) : [];
+/**
+ * Optional "HH:mm" time window the seller set on this day's partner entry
+ * for this role — a single sitting point for meals (`time` only), or a
+ * start/end engagement window for guides (`time` + `endTime`).
+ */
+function getItineraryPartnerServiceTime(tour: Pick<TourRow, 'itinerary'>, dayId: string, role: string): { time?: string; endTime?: string } {
+  const itinerary = Array.isArray(tour.itinerary) ? (tour.itinerary as Array<{ id?: string; partners?: Array<{ role?: string; time?: string; endTime?: string }> }>) : [];
   const day = itinerary.find((d) => d?.id === dayId);
   const partner = day?.partners?.find((p) => p?.role === role);
-  return partner?.time || undefined;
+  return { time: partner?.time || undefined, endTime: partner?.endTime || undefined };
 }
 
 /** The fixed departure (if any) whose startDate falls on the same calendar day as `departureDate`. */
@@ -118,13 +123,15 @@ export class ItineraryRequestService {
 
     const departures = getFixedDepartures(tour).filter((dep) => dep.startDate.getTime() > Date.now());
 
-    type DesiredKey = { tourItineraryPartnerId: string; serviceDate: string; serviceTime: string | null };
+    type DesiredKey = { tourItineraryPartnerId: string; serviceDate: string; serviceTime: string | null; serviceEndTime: string | null };
     const desired: Array<DesiredKey & { link: ItineraryPartnerRow; headcount: number; unitsRequested: number; sourceDepartureDate: Date }> = [];
 
     for (const link of partnerLinks) {
       const dayIndex = getItineraryDayIndex(tour, link.dayId);
       if (dayIndex < 0) continue;
-      const serviceTime = getItineraryPartnerServiceTime(tour, link.dayId, link.role) ?? null;
+      const { time: serviceTimeRaw, endTime } = getItineraryPartnerServiceTime(tour, link.dayId, link.role);
+      const serviceTime = serviceTimeRaw ?? null;
+      const serviceEndTime = endTime ?? null;
 
       for (const dep of departures) {
         const serviceDate = toDateString(addDays(dep.startDate, dayIndex));
@@ -133,7 +140,7 @@ export class ItineraryRequestService {
         // (e.g. "10 rooms" for accommodation); otherwise fall back to the
         // departure's/tour's traveler count, same as headcount.
         const unitsRequested = link.unitsRequested ?? headcount;
-        desired.push({ tourItineraryPartnerId: link.id, serviceDate, serviceTime, link, headcount, unitsRequested, sourceDepartureDate: dep.startDate });
+        desired.push({ tourItineraryPartnerId: link.id, serviceDate, serviceTime, serviceEndTime, link, headcount, unitsRequested, sourceDepartureDate: dep.startDate });
       }
     }
 
@@ -158,6 +165,7 @@ export class ItineraryRequestService {
               role: d.link.role,
               serviceDate: d.serviceDate,
               serviceTime: d.serviceTime,
+              serviceEndTime: d.serviceEndTime,
               headcount: d.headcount,
               unitsRequested: d.unitsRequested,
               unitTypeId: d.link.unitTypeId,
@@ -233,7 +241,9 @@ export class ItineraryRequestService {
       const dayIndex = getItineraryDayIndex(tour, link.dayId);
       if (dayIndex < 0) continue;
       const serviceDate = toDateString(addDays(new Date(booking.departureDate), dayIndex));
-      const serviceTime = getItineraryPartnerServiceTime(tour, link.dayId, link.role) ?? null;
+      const { time: serviceTimeRaw, endTime } = getItineraryPartnerServiceTime(tour, link.dayId, link.role);
+      const serviceTime = serviceTimeRaw ?? null;
+      const serviceEndTime = endTime ?? null;
 
       const [existing] = await db
         .select()
@@ -255,6 +265,7 @@ export class ItineraryRequestService {
           role: link.role,
           serviceDate,
           serviceTime,
+          serviceEndTime,
           headcount: 0,
           unitsRequested: 0,
           unitTypeId: link.unitTypeId,
@@ -442,7 +453,7 @@ export class ItineraryRequestService {
     const [request] = await db.select().from(itineraryPartnerRequests).where(eq(itineraryPartnerRequests.id, requestId)).limit(1);
     if (!request) throw createHttpError(404, 'Request not found');
 
-    const [partner] = await db.select({ ownerId: businessPartners.ownerId, name: businessPartners.name }).from(businessPartners).where(eq(businessPartners.id, request.businessPartnerId)).limit(1);
+    const [partner] = await db.select({ ownerId: businessPartners.ownerId, name: businessPartners.name, type: businessPartners.type }).from(businessPartners).where(eq(businessPartners.id, request.businessPartnerId)).limit(1);
     if (!partner) throw createHttpError(404, 'Business not found');
     if (!requester.isAdmin && partner.ownerId !== requester.id) {
       throw createHttpError(403, 'Not authorized to respond to this request');
@@ -462,9 +473,28 @@ export class ItineraryRequestService {
       if (params.units === undefined || params.units < 0) {
         throw createHttpError(400, 'units is required');
       }
-      const available = await ItineraryRequestService.getAvailableCapacity(request.businessPartnerId, request.serviceDate, requestId, request.unitTypeId);
-      if (params.units > available) {
-        throw createHttpError(400, `Only ${available} available on ${request.serviceDate} — cannot commit ${params.units}`);
+      // A guide is one person, not a count of identical resources — check
+      // for a real time-window conflict instead of pooling against a daily
+      // number, so two non-overlapping half-day bookings never falsely block
+      // each other. Everyone else keeps the pooled-count check.
+      if (partner.type === 'guide') {
+        if (!request.serviceTime || !request.serviceEndTime) {
+          throw createHttpError(400, 'This request has no start/end time to check availability against');
+        }
+        const isAvailable = await ItineraryRequestService.isTimeSlotAvailable(request.businessPartnerId, request.serviceDate, request.serviceTime, request.serviceEndTime, requestId);
+        if (!isAvailable) {
+          throw createHttpError(400, `Not available on ${request.serviceDate} between ${request.serviceTime} and ${request.serviceEndTime}`);
+        }
+        const [capacityPolicy] = await db.select({ defaultDailyCapacity: businessPartnerCapacity.defaultDailyCapacity }).from(businessPartnerCapacity)
+          .where(eq(businessPartnerCapacity.businessPartnerId, request.businessPartnerId)).limit(1);
+        if (capacityPolicy?.defaultDailyCapacity && params.units > capacityPolicy.defaultDailyCapacity) {
+          throw createHttpError(400, `This exceeds your group-size limit of ${capacityPolicy.defaultDailyCapacity}`);
+        }
+      } else {
+        const available = await ItineraryRequestService.getAvailableCapacity(request.businessPartnerId, request.serviceDate, requestId, request.unitTypeId);
+        if (params.units > available) {
+          throw createHttpError(400, `Only ${available} available on ${request.serviceDate} — cannot commit ${params.units}`);
+        }
       }
       toStatus = action === 'hold' ? 'held' : 'confirmed';
       patch = {
@@ -532,7 +562,7 @@ export class ItineraryRequestService {
       throw createHttpError(400, `Request is not awaiting a counter-offer response (currently ${request.status})`);
     }
 
-    const [partner] = await db.select({ ownerId: businessPartners.ownerId }).from(businessPartners).where(eq(businessPartners.id, request.businessPartnerId)).limit(1);
+    const [partner] = await db.select({ ownerId: businessPartners.ownerId, type: businessPartners.type }).from(businessPartners).where(eq(businessPartners.id, request.businessPartnerId)).limit(1);
 
     let toStatus: RequestStatus;
     let patch: Partial<typeof itineraryPartnerRequests.$inferInsert>;
@@ -540,15 +570,26 @@ export class ItineraryRequestService {
     if (accept) {
       const units = request.counterUnits ?? request.unitsRequested;
       const effectiveDate = request.counterDate ?? request.serviceDate;
-      const available = await ItineraryRequestService.getAvailableCapacity(request.businessPartnerId, effectiveDate, requestId, request.unitTypeId);
-      if (units > available) {
-        throw createHttpError(400, `Only ${available} available on ${effectiveDate} — cannot accept ${units}`);
+      const effectiveTime = request.counterTime ?? request.serviceTime;
+      if (partner?.type === 'guide') {
+        if (!effectiveTime || !request.serviceEndTime) {
+          throw createHttpError(400, 'This request has no start/end time to check availability against');
+        }
+        const isAvailable = await ItineraryRequestService.isTimeSlotAvailable(request.businessPartnerId, effectiveDate, effectiveTime, request.serviceEndTime, requestId);
+        if (!isAvailable) {
+          throw createHttpError(400, `Not available on ${effectiveDate} between ${effectiveTime} and ${request.serviceEndTime}`);
+        }
+      } else {
+        const available = await ItineraryRequestService.getAvailableCapacity(request.businessPartnerId, effectiveDate, requestId, request.unitTypeId);
+        if (units > available) {
+          throw createHttpError(400, `Only ${available} available on ${effectiveDate} — cannot accept ${units}`);
+        }
       }
       toStatus = 'held';
       patch = {
         status: 'held',
         serviceDate: effectiveDate,
-        serviceTime: request.counterTime ?? request.serviceTime,
+        serviceTime: effectiveTime,
         unitsRequested: units,
         capacityConfirmed: units,
         holdExpiresAt: new Date(Date.now() + HOLD_DURATION_MS),
@@ -615,7 +656,7 @@ export class ItineraryRequestService {
    * yet (before any booking, or a tour with no fixed departures) — reads
    * units/unitType off the tourItineraryPartners link itself.
    */
-  static async createManualRequest(tourItineraryPartnerId: string, requester: { id: string; isAdmin: boolean }, serviceDate: string, serviceTime?: string) {
+  static async createManualRequest(tourItineraryPartnerId: string, requester: { id: string; isAdmin: boolean }, serviceDate: string, serviceTime?: string, serviceEndTime?: string) {
     const [link] = await db.select().from(tourItineraryPartners).where(eq(tourItineraryPartners.id, tourItineraryPartnerId)).limit(1);
     if (!link) throw createHttpError(404, 'Itinerary partner link not found');
     if (!link.businessPartnerId) throw createHttpError(400, 'This day\'s partner is a free-typed name, not a registered business — link a real business first');
@@ -640,6 +681,7 @@ export class ItineraryRequestService {
       role: link.role,
       serviceDate,
       serviceTime: serviceTime ?? null,
+      serviceEndTime: serviceEndTime ?? null,
       headcount: unitsRequested,
       unitsRequested,
       unitTypeId: link.unitTypeId,
@@ -887,6 +929,59 @@ export class ItineraryRequestService {
 
     await db.delete(businessPartnerUnitTypes).where(eq(businessPartnerUnitTypes.id, unitTypeId));
     return { blocked: false, liveRequestCount: 0, linkCount: 0 };
+  }
+
+  /**
+   * True iff [startTime, endTime) on `date` overlaps no manual
+   * businessPartnerAvailabilityBlocks row and no other live
+   * (pending/held/confirmed/countered) request for this partner — the
+   * guide-appropriate replacement for getAvailableCapacity's pooled-count
+   * math, since a single person's calendar is a conflict check, not a
+   * subtraction. A block/request with a missing time is treated as
+   * occupying the whole day (conservative).
+   */
+  static async isTimeSlotAvailable(businessPartnerId: string, date: string, startTime: string, endTime: string, excludingRequestId?: string): Promise<boolean> {
+    const overlaps = (existingStart: string | null, existingEnd: string | null): boolean => {
+      if (!existingStart || !existingEnd) return true; // no time recorded — assume it occupies the whole day
+      return !(existingEnd <= startTime || existingStart >= endTime);
+    };
+
+    const blocks = await db.select({ startTime: businessPartnerAvailabilityBlocks.startTime, endTime: businessPartnerAvailabilityBlocks.endTime })
+      .from(businessPartnerAvailabilityBlocks)
+      .where(and(eq(businessPartnerAvailabilityBlocks.businessPartnerId, businessPartnerId), eq(businessPartnerAvailabilityBlocks.date, date)));
+    if (blocks.some((b) => overlaps(b.startTime, b.endTime))) return false;
+
+    const conditions = [
+      eq(itineraryPartnerRequests.businessPartnerId, businessPartnerId),
+      eq(itineraryPartnerRequests.serviceDate, date),
+      inArray(itineraryPartnerRequests.status, ['pending', 'held', 'confirmed', 'countered']),
+    ];
+    if (excludingRequestId) conditions.push(ne(itineraryPartnerRequests.id, excludingRequestId));
+
+    const requests = await db.select({ serviceTime: itineraryPartnerRequests.serviceTime, serviceEndTime: itineraryPartnerRequests.serviceEndTime })
+      .from(itineraryPartnerRequests)
+      .where(and(...conditions));
+    if (requests.some((r) => overlaps(r.serviceTime, r.serviceEndTime))) return false;
+
+    return true;
+  }
+
+  /** Owner-or-admin gated in the controller. */
+  static async getAvailabilityBlocks(businessPartnerId: string, date?: string) {
+    const conditions = [eq(businessPartnerAvailabilityBlocks.businessPartnerId, businessPartnerId)];
+    if (date) conditions.push(eq(businessPartnerAvailabilityBlocks.date, date));
+    return db.select().from(businessPartnerAvailabilityBlocks).where(and(...conditions)).orderBy(businessPartnerAvailabilityBlocks.date);
+  }
+
+  /** Owner-or-admin gated in the controller. */
+  static async setAvailabilityBlock(businessPartnerId: string, date: string, startTime: string, endTime: string, reason?: string) {
+    const [created] = await db.insert(businessPartnerAvailabilityBlocks).values({ businessPartnerId, date, startTime, endTime, reason: reason || null }).returning();
+    return created;
+  }
+
+  /** Owner-or-admin gated in the controller. */
+  static async deleteAvailabilityBlock(blockId: string): Promise<void> {
+    await db.delete(businessPartnerAvailabilityBlocks).where(eq(businessPartnerAvailabilityBlocks.id, blockId));
   }
 }
 

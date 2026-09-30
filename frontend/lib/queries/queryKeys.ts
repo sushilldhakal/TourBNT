@@ -141,6 +141,7 @@ export const queryKeys = {
         tourLogisticsStatus: (tourId: string) => ['tours', tourId, 'logistics-status'] as const,
         unitTypes: (businessPartnerId: string) => ['business-partners', businessPartnerId, 'unit-types'] as const,
         unitTypeInventory: (businessPartnerId: string, unitTypeId: string, from: string, to: string) => ['business-partners', businessPartnerId, 'unit-types', unitTypeId, 'inventory', from, to] as const,
+        availabilityBlocks: (businessPartnerId: string) => ['business-partners', businessPartnerId, 'availability-blocks'] as const,
     },
 };
 

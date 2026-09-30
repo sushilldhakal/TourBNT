@@ -954,6 +954,23 @@ export const businessPartnerUnitTypeBlocks = pgTable('business_partner_unit_type
   unitDateChannelIdx: uniqueIndex('business_partner_unit_type_blocks_unique_idx').on(table.unitTypeId, table.date, table.channel),
 }));
 
+// A guide's (or any single-person/single-resource partner's) manually
+// marked unavailable window — the time-range equivalent of
+// businessPartnerUnitTypeBlocks above, but keyed straight on the partner
+// (no unit-type concept for a single person's calendar) and with no
+// channel: a guide is either free for a window or not, full stop.
+export const businessPartnerAvailabilityBlocks = pgTable('business_partner_availability_blocks', {
+  id: id(),
+  businessPartnerId: text('business_partner_id').notNull().references(() => businessPartners.id, { onDelete: 'cascade' }),
+  date: date('date').notNull(),
+  startTime: text('start_time').notNull(),
+  endTime: text('end_time').notNull(),
+  reason: text('reason'),
+  ...timestamps,
+}, (table) => ({
+  partnerDateIdx: index('business_partner_availability_blocks_partner_date_idx').on(table.businessPartnerId, table.date),
+}));
+
 // A request for a partner to confirm capacity for one real service date.
 // headcount means different things depending on how the request was
 // generated (see itineraryRequestService.ts):
@@ -972,9 +989,15 @@ export const itineraryPartnerRequests = pgTable('itinerary_partner_requests', {
   businessPartnerId: text('business_partner_id').notNull().references(() => businessPartners.id, { onDelete: 'cascade' }),
   role: itineraryPartnerRoleEnum('role').notNull(),
   serviceDate: date('service_date').notNull(),
-  // e.g. "13:00" — meaningful for role='meals' (lunch vs dinner sittings);
-  // left null for accommodation/transport/guide requests.
+  // e.g. "13:00" — a single sitting point for role='meals', or the start of
+  // an engagement window for role='guide' (paired with serviceEndTime
+  // below); left null for accommodation/transport requests.
   serviceTime: text('service_time'),
+  // The end of a guide engagement window (e.g. "17:00" for a 9-5 day) —
+  // isTimeSlotAvailable uses [serviceTime, serviceEndTime) to check for
+  // overlapping bookings instead of the pooled-count capacity check every
+  // other role uses. Null for roles that don't need a window.
+  serviceEndTime: text('service_end_time'),
   headcount: integer('headcount').notNull().default(0),
   // The quantity actually being asked for (rooms/seats/etc.), distinct from
   // headcount (people) — snapshotted from tourItineraryPartners.unitsRequested,

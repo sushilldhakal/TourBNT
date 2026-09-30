@@ -223,6 +223,7 @@ export interface ItineraryPartnerRequest {
     role: 'transport' | 'accommodation' | 'guide' | 'meals' | 'other';
     serviceDate: string;
     serviceTime?: string | null;
+    serviceEndTime?: string | null;
     headcount: number;
     unitsRequested: number;
     unitTypeId?: string | null;

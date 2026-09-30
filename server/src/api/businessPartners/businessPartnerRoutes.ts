@@ -36,6 +36,11 @@ import {
   setUnitTypeBlock,
   getUnitTypeBlocks,
 } from './unitTypeController';
+import {
+  getAvailabilityBlocks,
+  createAvailabilityBlock,
+  deleteAvailabilityBlock,
+} from './availabilityController';
 
 const businessPartnerRouter = express.Router();
 
@@ -125,5 +130,11 @@ businessPartnerRouter.delete('/:businessPartnerId/unit-types/:unitTypeId', authe
 businessPartnerRouter.get('/:businessPartnerId/unit-types/:unitTypeId/inventory', authenticate, asyncAuthHandler(getUnitTypeInventory));
 businessPartnerRouter.put('/:businessPartnerId/unit-types/:unitTypeId/blocks/:date', authenticate, asyncAuthHandler(setUnitTypeBlock));
 businessPartnerRouter.get('/:businessPartnerId/unit-types/:unitTypeId/blocks', authenticate, asyncAuthHandler(getUnitTypeBlocks));
+
+// A guide's (or any single-resource partner's) manually marked unavailable
+// windows — owner-or-admin gated inside each controller.
+businessPartnerRouter.get('/:businessPartnerId/availability-blocks', authenticate, asyncAuthHandler(getAvailabilityBlocks));
+businessPartnerRouter.post('/:businessPartnerId/availability-blocks', authenticate, asyncAuthHandler(createAvailabilityBlock));
+businessPartnerRouter.delete('/:businessPartnerId/availability-blocks/:blockId', authenticate, asyncAuthHandler(deleteAvailabilityBlock));
 
 export default businessPartnerRouter;

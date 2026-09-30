@@ -14,6 +14,7 @@ import {
     type ItineraryRequestStatus,
 } from '@/lib/api/businessPartners';
 import { getUnitTypes, getUnitTypeInventory } from '@/lib/api/unitTypes';
+import { getAvailabilityBlocks } from '@/lib/api/availability';
 import { queryKeys } from './queryKeys';
 
 export function useMyBusinessPartners(enabled = true) {
@@ -67,5 +68,14 @@ export function useUnitTypeInventory(businessPartnerId: string | undefined, unit
         queryFn: () => getUnitTypeInventory(businessPartnerId!, unitTypeId!, from, to),
         enabled: enabled && !!businessPartnerId && !!unitTypeId,
         staleTime: 30 * 1000,
+    });
+}
+
+export function useAvailabilityBlocks(businessPartnerId: string | undefined, enabled = true) {
+    return useQuery({
+        queryKey: queryKeys.businessPartners.availabilityBlocks(businessPartnerId ?? ''),
+        queryFn: () => getAvailabilityBlocks(businessPartnerId!),
+        enabled: enabled && !!businessPartnerId,
+        staleTime: 60 * 1000,
     });
 }

@@ -38,7 +38,8 @@ import {
     type BusinessPartnerUnitType,
     type UnitBlockChannel,
 } from '@/lib/api/unitTypes';
-import { useMyBusinessPartners, useMyCapacity, useCapacityOverrides, useMyItineraryRequests, useUnitTypes, useUnitTypeInventory } from '@/lib/queries';
+import { createAvailabilityBlock, deleteAvailabilityBlock } from '@/lib/api/availability';
+import { useMyBusinessPartners, useMyCapacity, useCapacityOverrides, useMyItineraryRequests, useUnitTypes, useUnitTypeInventory, useAvailabilityBlocks } from '@/lib/queries';
 import { queryKeys } from '@/lib/queries/queryKeys';
 import { useDestinationsRoleBased } from '@/lib/queries/useDestinations';
 import type { DestinationTypes } from '@/types/types';
@@ -535,6 +536,83 @@ function UnitTypesSection({ businessPartnerId, businessType }: { businessPartner
     );
 }
 
+function GuideAvailabilitySection({ businessPartnerId }: { businessPartnerId: string }) {
+    const queryClient = useQueryClient();
+    const { data: blocks, isLoading } = useAvailabilityBlocks(businessPartnerId);
+    const [date, setDate] = useState('');
+    const [startTime, setStartTime] = useState('');
+    const [endTime, setEndTime] = useState('');
+    const [reason, setReason] = useState('');
+
+    const invalidate = () => queryClient.invalidateQueries({ queryKey: queryKeys.businessPartners.availabilityBlocks(businessPartnerId) });
+
+    const createMutation = useMutation({
+        mutationFn: () => createAvailabilityBlock(businessPartnerId, date, startTime, endTime, reason || undefined),
+        onSuccess: () => {
+            toast({ title: 'Unavailable window added' });
+            setDate(''); setStartTime(''); setEndTime(''); setReason('');
+            invalidate();
+        },
+        onError: (error: Error) => toast({ title: 'Could not add', description: error.message, variant: 'destructive' }),
+    });
+
+    const deleteMutation = useMutation({
+        mutationFn: (blockId: string) => deleteAvailabilityBlock(businessPartnerId, blockId),
+        onSuccess: () => { toast({ title: 'Removed' }); invalidate(); },
+        onError: (error: Error) => toast({ title: 'Could not remove', description: error.message, variant: 'destructive' }),
+    });
+
+    return (
+        <Card>
+            <CardHeader><CardTitle>Availability</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                    Mark windows you&apos;re unavailable (a day off, another booking) — sellers can request any window you haven&apos;t blocked or already accepted another tour for.
+                </p>
+
+                <div className="flex items-end gap-2 max-w-2xl flex-wrap">
+                    <div>
+                        <label className="block text-sm font-medium mb-1">Date</label>
+                        <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium mb-1">From</label>
+                        <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium mb-1">To</label>
+                        <Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+                    </div>
+                    <div className="flex-1 min-w-[140px]">
+                        <label className="block text-sm font-medium mb-1">Reason (optional)</label>
+                        <Input placeholder="e.g. Day off" value={reason} onChange={(e) => setReason(e.target.value)} />
+                    </div>
+                    <Button disabled={createMutation.isPending || !date || !startTime || !endTime} onClick={() => createMutation.mutate()}>
+                        Add
+                    </Button>
+                </div>
+
+                {isLoading ? (
+                    <p className="text-sm text-muted-foreground">Loading...</p>
+                ) : blocks && blocks.length > 0 ? (
+                    <div className="space-y-1.5 pt-2">
+                        {blocks.map((b) => (
+                            <div key={b.id} className="flex items-center justify-between text-sm border rounded-md px-3 py-2">
+                                <span>{b.date} · {b.startTime}–{b.endTime}{b.reason && ` · ${b.reason}`}</span>
+                                <Button size="sm" variant="ghost" className="text-destructive h-7" disabled={deleteMutation.isPending} onClick={() => deleteMutation.mutate(b.id)}>
+                                    Remove
+                                </Button>
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <p className="text-sm text-muted-foreground">No unavailable windows — you&apos;re open for any date/time a seller requests.</p>
+                )}
+            </CardContent>
+        </Card>
+    );
+}
+
 function CapacityTab({ businessPartnerId, businessType }: { businessPartnerId: string; businessType: BusinessPartnerType }) {
     const queryClient = useQueryClient();
     const { data: capacity, isLoading: capacityLoading } = useMyCapacity(businessPartnerId);
@@ -577,18 +655,22 @@ function CapacityTab({ businessPartnerId, businessType }: { businessPartnerId: s
 
     const showUnitTypes = businessType === 'hotel' || businessType === 'guesthouse' || businessType === 'restaurant';
     const unitTypeCopy = showUnitTypes ? UNIT_TYPE_COPY[businessType as 'hotel' | 'guesthouse' | 'restaurant'] : null;
+    const isGuide = businessType === 'guide';
 
     return (
         <div className="space-y-6">
             {showUnitTypes && <UnitTypesSection businessPartnerId={businessPartnerId} businessType={businessType as 'hotel' | 'guesthouse' | 'restaurant'} />}
+            {isGuide && <GuideAvailabilitySection businessPartnerId={businessPartnerId} />}
 
             <Card>
-                <CardHeader><CardTitle>Default capacity</CardTitle></CardHeader>
+                <CardHeader><CardTitle>{isGuide ? 'Group-size limit' : 'Default capacity'}</CardTitle></CardHeader>
                 <CardContent>
                     <p className="text-sm text-muted-foreground mb-4">
-                        {unitTypeCopy
-                            ? `Fallback capacity for any day a seller links you without picking one of your ${unitTypeCopy.itemNounPlural} above.`
-                            : `How many ${unitLabel || 'units'} you can typically offer per day. Sellers see this as how much room they have to work with when planning an itinerary.`}
+                        {isGuide
+                            ? 'The most tourists you can personally guide in one engagement. Checked in addition to the time-window availability above — leave at 0 for no limit.'
+                            : unitTypeCopy
+                                ? `Fallback capacity for any day a seller links you without picking one of your ${unitTypeCopy.itemNounPlural} above.`
+                                : `How many ${unitLabel || 'units'} you can typically offer per day. Sellers see this as how much room they have to work with when planning an itinerary.`}
                     </p>
                     <div className="flex items-end gap-4 max-w-md">
                         <div className="flex-1">
@@ -713,7 +795,7 @@ function RequestsTab({ businessPartnerId }: { businessPartnerId: string }) {
                                     <div>
                                         <p className="font-medium">{r.tour.title}</p>
                                         <p className="text-sm text-muted-foreground">
-                                            {r.serviceDate}{r.serviceTime && ` · ${r.serviceTime}`} · {askLabel}
+                                            {r.serviceDate}{r.serviceTime && ` · ${r.serviceTime}${r.serviceEndTime ? `–${r.serviceEndTime}` : ''}`} · {askLabel}
                                         </p>
                                     </div>
                                     <Badge variant="outline" className={`gap-1.5 shrink-0 ${meta.className}`}>
