@@ -30,7 +30,16 @@ import {
 } from '@/lib/api/businessPartners';
 import { getMyAdCampaigns, createAdCampaign, updateAdTargeting, getAdStats, type Advertisement, type AdPlacementSlot } from '@/lib/api/ads';
 import { getApprovedCategories, getApprovedDestinations } from '@/lib/api/globalApi';
-import { useMyBusinessPartners, useMyCapacity, useCapacityOverrides, useMyItineraryRequests } from '@/lib/queries';
+import {
+    createUnitType,
+    updateUnitType,
+    deleteUnitType,
+    setUnitTypeBlock,
+    type BusinessPartnerUnitType,
+    type UnitBlockChannel,
+} from '@/lib/api/unitTypes';
+import { useMyBusinessPartners, useMyCapacity, useCapacityOverrides, useMyItineraryRequests, useUnitTypes, useUnitTypeInventory } from '@/lib/queries';
+import { queryKeys } from '@/lib/queries/queryKeys';
 import { useDestinationsRoleBased } from '@/lib/queries/useDestinations';
 import type { DestinationTypes } from '@/types/types';
 import AddDestination from '@/components/dashboard/tours/Destination/AddDestination';
@@ -150,7 +159,7 @@ export function BusinessTypeDashboard({ types, title, description, icon, showLog
                 </TabsContent>
                 {showLogistics && (
                     <TabsContent value="capacity" className="mt-4">
-                        <CapacityTab businessPartnerId={business.id} />
+                        <CapacityTab businessPartnerId={business.id} businessType={business.type} />
                     </TabsContent>
                 )}
                 {showLogistics && (
@@ -331,7 +340,188 @@ function ProfileTab({ business }: { business: BusinessPartner }) {
     );
 }
 
-function CapacityTab({ businessPartnerId }: { businessPartnerId: string }) {
+const CHANNEL_LABEL: Record<UnitBlockChannel, string> = {
+    direct: 'Direct',
+    private: 'Private',
+    other: 'Other',
+    maintenance: 'Maintenance',
+};
+
+function todayISO() {
+    return new Date().toISOString().slice(0, 10);
+}
+function addDaysISO(date: string, days: number) {
+    const d = new Date(date);
+    d.setDate(d.getDate() + days);
+    return d.toISOString().slice(0, 10);
+}
+
+function UnitTypeInventoryTable({ businessPartnerId, unitType }: { businessPartnerId: string; unitType: BusinessPartnerUnitType }) {
+    const queryClient = useQueryClient();
+    const [from] = useState(todayISO());
+    const [to] = useState(addDaysISO(todayISO(), 13));
+    const { data: inventory, isLoading } = useUnitTypeInventory(businessPartnerId, unitType.id, from, to);
+    const [blockDrafts, setBlockDrafts] = useState<Record<string, { channel: UnitBlockChannel; count: string }>>({});
+
+    const blockMutation = useMutation({
+        mutationFn: ({ date, channel, count }: { date: string; channel: UnitBlockChannel; count: number }) =>
+            setUnitTypeBlock(businessPartnerId, unitType.id, date, channel, count),
+        onSuccess: () => {
+            toast({ title: 'Block saved' });
+            queryClient.invalidateQueries({ queryKey: queryKeys.businessPartners.unitTypeInventory(businessPartnerId, unitType.id, from, to) });
+        },
+        onError: (error: Error) => toast({ title: 'Save failed', description: error.message, variant: 'destructive' }),
+    });
+
+    if (isLoading) return <p className="text-xs text-muted-foreground">Loading inventory...</p>;
+    if (!inventory) return null;
+
+    return (
+        <div className="space-y-1.5">
+            {inventory.map((day) => {
+                const draft = blockDrafts[day.date] ?? { channel: 'direct' as UnitBlockChannel, count: '' };
+                const breakdown = Object.entries(day.blockedByChannel)
+                    .map(([ch, n]) => `${n} ${CHANNEL_LABEL[ch as UnitBlockChannel]}`)
+                    .concat(day.reservedByTourBnt > 0 ? [`${day.reservedByTourBnt} TourBNT`] : [])
+                    .join(' · ');
+                return (
+                    <div key={day.date} className="flex items-center justify-between gap-3 text-sm border rounded-md px-3 py-2 flex-wrap">
+                        <div className="min-w-0">
+                            <span className="font-medium">{day.date}</span>
+                            <span className="text-muted-foreground"> · {day.total} total · {day.occupied} occupied · {day.available} available</span>
+                            {breakdown && <p className="text-xs text-muted-foreground">{breakdown}</p>}
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                            <select
+                                className="h-8 text-xs border rounded-md px-1.5 bg-background"
+                                value={draft.channel}
+                                onChange={(e) => setBlockDrafts({ ...blockDrafts, [day.date]: { ...draft, channel: e.target.value as UnitBlockChannel } })}
+                            >
+                                {(Object.keys(CHANNEL_LABEL) as UnitBlockChannel[]).map((ch) => (
+                                    <option key={ch} value={ch}>{CHANNEL_LABEL[ch]}</option>
+                                ))}
+                            </select>
+                            <Input
+                                type="number"
+                                min={0}
+                                className="h-8 w-16"
+                                placeholder="qty"
+                                value={draft.count}
+                                onChange={(e) => setBlockDrafts({ ...blockDrafts, [day.date]: { ...draft, count: e.target.value } })}
+                            />
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={blockMutation.isPending || draft.count === ''}
+                                onClick={() => blockMutation.mutate({ date: day.date, channel: draft.channel, count: Number(draft.count) })}
+                            >
+                                Block
+                            </Button>
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+
+function RoomTypesSection({ businessPartnerId }: { businessPartnerId: string }) {
+    const queryClient = useQueryClient();
+    const { data: unitTypes, isLoading } = useUnitTypes(businessPartnerId);
+    const [newName, setNewName] = useState('');
+    const [newTotal, setNewTotal] = useState('');
+    const [expandedId, setExpandedId] = useState<string | null>(null);
+
+    const invalidate = () => queryClient.invalidateQueries({ queryKey: queryKeys.businessPartners.unitTypes(businessPartnerId) });
+
+    const createMutation = useMutation({
+        mutationFn: () => createUnitType(businessPartnerId, { name: newName.trim(), totalUnits: Number(newTotal) || 0 }),
+        onSuccess: () => { toast({ title: 'Room type added' }); setNewName(''); setNewTotal(''); invalidate(); },
+        onError: (error: Error) => toast({ title: 'Could not add room type', description: error.message, variant: 'destructive' }),
+    });
+
+    const updateTotalMutation = useMutation({
+        mutationFn: ({ id, totalUnits }: { id: string; totalUnits: number }) => updateUnitType(businessPartnerId, id, { totalUnits }),
+        onSuccess: () => { toast({ title: 'Updated' }); invalidate(); },
+        onError: (error: Error) => toast({ title: 'Update failed', description: error.message, variant: 'destructive' }),
+    });
+
+    const deleteMutation = useMutation({
+        mutationFn: (id: string) => deleteUnitType(businessPartnerId, id),
+        onSuccess: () => { toast({ title: 'Room type deleted' }); invalidate(); },
+        onError: (error: Error) => toast({ title: 'Could not delete', description: error.message, variant: 'destructive' }),
+    });
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Room types</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                    Sellers pick one of these when linking you to a tour day, so capacity is tracked per room type instead of one pooled number.
+                </p>
+
+                <div className="flex items-end gap-2 max-w-md">
+                    <div className="flex-1">
+                        <label className="block text-sm font-medium mb-1">Name</label>
+                        <Input placeholder="e.g. Deluxe" value={newName} onChange={(e) => setNewName(e.target.value)} />
+                    </div>
+                    <div className="w-28">
+                        <label className="block text-sm font-medium mb-1">Total rooms</label>
+                        <Input type="number" min={0} value={newTotal} onChange={(e) => setNewTotal(e.target.value)} />
+                    </div>
+                    <Button disabled={createMutation.isPending || !newName.trim()} onClick={() => createMutation.mutate()}>
+                        Add
+                    </Button>
+                </div>
+
+                {isLoading ? (
+                    <p className="text-sm text-muted-foreground">Loading...</p>
+                ) : unitTypes && unitTypes.length > 0 ? (
+                    <div className="space-y-2 pt-2">
+                        {unitTypes.map((ut) => (
+                            <div key={ut.id} className="border rounded-md">
+                                <div className="flex items-center justify-between gap-3 px-3 py-2">
+                                    <button type="button" className="font-medium text-sm text-left" onClick={() => setExpandedId(expandedId === ut.id ? null : ut.id)}>
+                                        {ut.name}
+                                    </button>
+                                    <div className="flex items-center gap-2">
+                                        <Input
+                                            type="number"
+                                            min={0}
+                                            className="h-8 w-20"
+                                            defaultValue={ut.totalUnits}
+                                            onBlur={(e) => {
+                                                const value = Number(e.target.value);
+                                                if (value !== ut.totalUnits) updateTotalMutation.mutate({ id: ut.id, totalUnits: value });
+                                            }}
+                                        />
+                                        <Button size="sm" variant="ghost" onClick={() => setExpandedId(expandedId === ut.id ? null : ut.id)}>
+                                            {expandedId === ut.id ? 'Hide' : 'Inventory'}
+                                        </Button>
+                                        <Button size="sm" variant="ghost" className="text-destructive" disabled={deleteMutation.isPending} onClick={() => deleteMutation.mutate(ut.id)}>
+                                            Delete
+                                        </Button>
+                                    </div>
+                                </div>
+                                {expandedId === ut.id && (
+                                    <div className="px-3 pb-3 pt-1 border-t">
+                                        <UnitTypeInventoryTable businessPartnerId={businessPartnerId} unitType={ut} />
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <p className="text-sm text-muted-foreground">No room types yet — add one above.</p>
+                )}
+            </CardContent>
+        </Card>
+    );
+}
+
+function CapacityTab({ businessPartnerId, businessType }: { businessPartnerId: string; businessType: BusinessPartnerType }) {
     const queryClient = useQueryClient();
     const { data: capacity, isLoading: capacityLoading } = useMyCapacity(businessPartnerId);
     const { data: overrides } = useCapacityOverrides(businessPartnerId);
@@ -371,13 +561,19 @@ function CapacityTab({ businessPartnerId }: { businessPartnerId: string }) {
 
     if (capacityLoading) return <div className="text-muted-foreground text-sm">Loading...</div>;
 
+    const showRoomTypes = businessType === 'hotel' || businessType === 'guesthouse';
+
     return (
         <div className="space-y-6">
+            {showRoomTypes && <RoomTypesSection businessPartnerId={businessPartnerId} />}
+
             <Card>
                 <CardHeader><CardTitle>Default capacity</CardTitle></CardHeader>
                 <CardContent>
                     <p className="text-sm text-muted-foreground mb-4">
-                        How many {unitLabel || 'units'} you can typically offer per day. Sellers see this as how much room they have to work with when planning an itinerary.
+                        {showRoomTypes
+                            ? 'Fallback capacity for any day a seller links you without picking one of your room types above.'
+                            : `How many ${unitLabel || 'units'} you can typically offer per day. Sellers see this as how much room they have to work with when planning an itinerary.`}
                     </p>
                     <div className="flex items-end gap-4 max-w-md">
                         <div className="flex-1">
@@ -444,10 +640,10 @@ const REQUEST_STATUS_META: Record<ItineraryRequestStatus, { label: string; icon:
 };
 
 /** Live "X available on this date" hint shown while the partner is deciding — finally puts getAvailableCapacityForDate to use. */
-function AvailableCapacityHint({ businessPartnerId, date, unitLabel }: { businessPartnerId: string; date: string; unitLabel: string }) {
+function AvailableCapacityHint({ businessPartnerId, date, unitLabel, unitTypeId }: { businessPartnerId: string; date: string; unitLabel: string; unitTypeId?: string | null }) {
     const { data } = useQuery({
-        queryKey: ['business-partners', businessPartnerId, 'capacity-available', date],
-        queryFn: () => getAvailableCapacityForDate(businessPartnerId, date),
+        queryKey: ['business-partners', businessPartnerId, 'capacity-available', date, unitTypeId ?? null],
+        queryFn: () => getAvailableCapacityForDate(businessPartnerId, date, unitTypeId ?? undefined),
     });
     if (!data) return null;
     return <p className="text-xs text-muted-foreground">You have {data.available} {unitLabel} available on {date}.</p>;
@@ -513,7 +709,7 @@ function RequestsTab({ businessPartnerId }: { businessPartnerId: string }) {
 
                                 {r.status === 'pending' && (
                                     <>
-                                        <AvailableCapacityHint businessPartnerId={businessPartnerId} date={r.serviceDate} unitLabel="units" />
+                                        <AvailableCapacityHint businessPartnerId={businessPartnerId} date={r.serviceDate} unitLabel="units" unitTypeId={r.unitTypeId} />
                                         <div className="flex items-center gap-2 flex-wrap pt-1">
                                             <Input
                                                 type="number"

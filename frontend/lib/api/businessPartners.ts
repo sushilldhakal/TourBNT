@@ -225,6 +225,7 @@ export interface ItineraryPartnerRequest {
     serviceTime?: string | null;
     headcount: number;
     unitsRequested: number;
+    unitTypeId?: string | null;
     status: ItineraryRequestStatus;
     capacityConfirmed?: number | null;
     responseNotes?: string | null;
@@ -276,9 +277,9 @@ export const setCapacityOverride = async (businessPartnerId: string, date: strin
     }
 };
 
-export const getAvailableCapacityForDate = async (businessPartnerId: string, date: string) => {
+export const getAvailableCapacityForDate = async (businessPartnerId: string, date: string, unitTypeId?: string) => {
     try {
-        const response = await api.get(`/business-partners/${businessPartnerId}/capacity/available`, { params: { date } });
+        const response = await api.get(`/business-partners/${businessPartnerId}/capacity/available`, { params: { date, unitTypeId } });
         return extractResponseData<{ date: string; available: number }>(response);
     } catch (error) {
         throw handleApiError(error, 'fetching available capacity');

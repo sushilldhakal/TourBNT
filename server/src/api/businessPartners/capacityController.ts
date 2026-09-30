@@ -20,7 +20,7 @@ const DEFAULT_UNIT_LABEL: Record<string, string> = {
   advertiser: 'unit',
 };
 
-async function assertOwnerOrAdmin(businessPartnerId: string, req: Request): Promise<boolean> {
+export async function assertOwnerOrAdmin(businessPartnerId: string, req: Request): Promise<boolean> {
   const isAdmin = req.user?.roles?.includes('admin') ?? false;
   if (isAdmin) return true;
   const [partner] = await db.select({ ownerId: businessPartners.ownerId }).from(businessPartners).where(eq(businessPartners.id, businessPartnerId)).limit(1);
@@ -193,12 +193,12 @@ export const respondToItineraryRequest = async (req: Request, res: Response, nex
 export const getAvailableCapacityForDate = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { businessPartnerId } = req.params;
-    const { date } = req.query as { date?: string };
+    const { date, unitTypeId } = req.query as { date?: string; unitTypeId?: string };
     if (!req.user) return handleUnauthorized(res, 'Not authenticated');
     if (!(await assertOwnerOrAdmin(businessPartnerId, req))) return sendForbiddenError(res, 'Not authorized to view this business\'s capacity');
     if (!date) return sendValidationError(res, 'Validation failed', [{ field: 'date', message: 'date is required' }]);
 
-    const available = await ItineraryRequestService.getAvailableCapacity(businessPartnerId, date);
+    const available = await ItineraryRequestService.getAvailableCapacity(businessPartnerId, date, undefined, unitTypeId || undefined);
     return sendSuccess(res, { date, available }, 'Available capacity retrieved successfully');
   } catch (error) {
     next(error);

@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { searchBusinessPartners, BusinessPartner, BusinessPartnerType } from '@/lib/api/businessPartners';
+import { useUnitTypes } from '@/lib/queries';
 import { useTourContext } from '@/providers/TourProvider';
 
 export type ItineraryPartnerRole = 'transport' | 'accommodation' | 'guide' | 'meals' | 'other';
@@ -21,6 +22,8 @@ interface ItineraryPartner {
     unitsRequested?: number;
     /** Free-text override of what's being asked for, e.g. "Deluxe room". Defaults to the partner's own unit label (room/seat/slot) when unset. */
     unitType?: string;
+    /** Structured link to one of the linked partner's own configured unit types (see businessPartnerUnitTypes) — set when picked from the dropdown, so capacity is checked per-type. Null/unset when the partner has none configured yet or unitType is still free text. */
+    unitTypeId?: string;
 }
 
 const ROLE_TO_TYPES: Record<ItineraryPartnerRole, BusinessPartnerType[]> = {
@@ -59,6 +62,11 @@ export function BusinessPartnerPicker({ basePath, role, label, placeholder }: Bu
     const partnersPath = `${basePath}.partners`;
     const partners: ItineraryPartner[] = watch(partnersPath) || [];
     const current = partners.find((p) => p?.role === role);
+
+    // Real, hotel-configured room types (or later, transport vehicle types)
+    // for the linked partner — when they've set any up, the agency picks
+    // from this list instead of typing a free-text guess.
+    const { data: unitTypes } = useUnitTypes(role === 'accommodation' ? current?.businessPartnerId : undefined);
 
     const [query, setQuery] = useState(current?.name || '');
     const [results, setResults] = useState<BusinessPartner[]>([]);
@@ -132,7 +140,13 @@ export function BusinessPartnerPicker({ basePath, role, label, placeholder }: Bu
 
     const setUnitType = (value: string) => {
         if (!current) return;
-        upsert({ ...current, unitType: value || undefined });
+        upsert({ ...current, unitType: value || undefined, unitTypeId: undefined });
+    };
+
+    const setUnitTypeById = (unitTypeId: string) => {
+        if (!current) return;
+        const picked = unitTypes?.find((t) => t.id === unitTypeId);
+        upsert({ ...current, unitTypeId: unitTypeId || undefined, unitType: picked?.name });
     };
 
     return (
@@ -199,12 +213,25 @@ export function BusinessPartnerPicker({ basePath, role, label, placeholder }: Bu
                         value={current.unitsRequested ?? ''}
                         onChange={(e) => setUnitsRequested(e.target.value)}
                     />
-                    <Input
-                        className="h-8 flex-1"
-                        placeholder="e.g. Deluxe room (optional)"
-                        value={current.unitType || ''}
-                        onChange={(e) => setUnitType(e.target.value)}
-                    />
+                    {unitTypes && unitTypes.length > 0 ? (
+                        <select
+                            className="h-8 flex-1 text-sm border rounded-md px-2 bg-background"
+                            value={current.unitTypeId || ''}
+                            onChange={(e) => setUnitTypeById(e.target.value)}
+                        >
+                            <option value="">Select a room type...</option>
+                            {unitTypes.map((t) => (
+                                <option key={t.id} value={t.id}>{t.name} ({t.totalUnits} total)</option>
+                            ))}
+                        </select>
+                    ) : (
+                        <Input
+                            className="h-8 flex-1"
+                            placeholder="e.g. Deluxe room (optional)"
+                            value={current.unitType || ''}
+                            onChange={(e) => setUnitType(e.target.value)}
+                        />
+                    )}
                 </div>
             )}
         </div>

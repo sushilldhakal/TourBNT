@@ -861,6 +861,12 @@ export const tourItineraryPartners = pgTable('tour_itinerary_partners', {
   // Free-text override of what unit is being asked for (e.g. "Deluxe room").
   // Defaults to the partner's own businessPartnerCapacity.unitLabel when unset.
   unitType: text('unit_type'),
+  // Structured link to one of the partner's own businessPartnerUnitTypes, when
+  // they've configured real named types (hotel room types, transport vehicle
+  // types) — lets capacity be checked per-type instead of pooled per-partner.
+  // Null when the partner has no configured types yet; `unitType` above still
+  // carries the display name either way.
+  unitTypeId: text('unit_type_id').references(() => businessPartnerUnitTypes.id, { onDelete: 'set null' }),
   ...timestamps,
 }, (table) => ({
   tourDayIdx: index('tour_itinerary_partners_tour_day_idx').on(table.tourId, table.dayId),
@@ -902,6 +908,48 @@ export const businessPartnerCapacityOverrides = pgTable('business_partner_capaci
   partnerDateIdx: uniqueIndex('business_partner_capacity_overrides_partner_date_idx').on(table.businessPartnerId, table.date),
 }));
 
+// ---------------------------------------------------------------------------
+// Named unit types with a real per-type count — a hotel's room types today
+// (Deluxe/Standard/Suite), a transport company's vehicle types later, reusing
+// the same shape. Generic on purpose: businessPartnerCapacity/Overrides above
+// stay as the pooled-per-partner fallback for partners with no configured
+// types, or for roles (guide/meals-without-a-type) that never need one.
+// ---------------------------------------------------------------------------
+
+// A hotel/guesthouse (or later, transport) partner's own named inventory type.
+export const businessPartnerUnitTypes = pgTable('business_partner_unit_types', {
+  id: id(),
+  businessPartnerId: text('business_partner_id').notNull().references(() => businessPartners.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  totalUnits: integer('total_units').notNull().default(0),
+  description: text('description'),
+  sortOrder: integer('sort_order').notNull().default(0),
+  isActive: boolean('is_active').notNull().default(true),
+  ...timestamps,
+}, (table) => ({
+  partnerNameIdx: uniqueIndex('business_partner_unit_types_partner_name_idx').on(table.businessPartnerId, table.name),
+}));
+
+// Where a unit type's inventory is manually blocked out from — anything that
+// ISN'T a TourBNT reservation (those are derived live from
+// itineraryPartnerRequests, never double-recorded here).
+export const unitBlockChannelEnum = pgEnum('unit_block_channel', ['direct', 'private', 'other', 'maintenance']);
+
+// One upsertable row per (unit type, date, channel) — e.g. "15 blocked for
+// Direct bookings on Oct 10". Occupied for a date = SUM of these across every
+// channel + whatever TourBNT has pending/held/confirmed/countered that date.
+export const businessPartnerUnitTypeBlocks = pgTable('business_partner_unit_type_blocks', {
+  id: id(),
+  unitTypeId: text('unit_type_id').notNull().references(() => businessPartnerUnitTypes.id, { onDelete: 'cascade' }),
+  date: date('date').notNull(),
+  channel: unitBlockChannelEnum('channel').notNull(),
+  blockedCount: integer('blocked_count').notNull(),
+  notes: text('notes'),
+  ...timestamps,
+}, (table) => ({
+  unitDateChannelIdx: uniqueIndex('business_partner_unit_type_blocks_unique_idx').on(table.unitTypeId, table.date, table.channel),
+}));
+
 // A request for a partner to confirm capacity for one real service date.
 // headcount means different things depending on how the request was
 // generated (see itineraryRequestService.ts):
@@ -929,6 +977,10 @@ export const itineraryPartnerRequests = pgTable('itinerary_partner_requests', {
   // falling back to departure capacity/tour.maxSize when the agency didn't
   // set one. This (not headcount) is what getAvailableCapacity reserves against.
   unitsRequested: integer('units_requested').notNull().default(0),
+  // Snapshotted from tourItineraryPartners.unitTypeId at generation time.
+  // When set, getAvailableCapacity checks this specific type's own inventory
+  // instead of the partner's pooled capacity — see businessPartnerUnitTypes.
+  unitTypeId: text('unit_type_id').references(() => businessPartnerUnitTypes.id, { onDelete: 'set null' }),
   status: itineraryRequestStatusEnum('status').notNull().default('pending'),
   // Units the partner has committed, whether tentatively (status='held') or
   // finally (status='confirmed') — the same field carries both, since a
@@ -1376,6 +1428,7 @@ export const businessReviewLikesRelations = relations(businessReviewLikes, ({ on
 export const tourItineraryPartnersRelations = relations(tourItineraryPartners, ({ one }) => ({
   tour: one(tours, { fields: [tourItineraryPartners.tourId], references: [tours.id] }),
   businessPartner: one(businessPartners, { fields: [tourItineraryPartners.businessPartnerId], references: [businessPartners.id] }),
+  unitType: one(businessPartnerUnitTypes, { fields: [tourItineraryPartners.unitTypeId], references: [businessPartnerUnitTypes.id] }),
 }));
 
 export const advertisementsRelations = relations(advertisements, ({ one, many }) => ({

@@ -7,6 +7,8 @@ import {
   itineraryRequestBookingContributions,
   businessPartnerCapacity,
   businessPartnerCapacityOverrides,
+  businessPartnerUnitTypes,
+  businessPartnerUnitTypeBlocks,
   businessPartners,
   tourAuthors,
   bookings,
@@ -158,6 +160,7 @@ export class ItineraryRequestService {
               serviceTime: d.serviceTime,
               headcount: d.headcount,
               unitsRequested: d.unitsRequested,
+              unitTypeId: d.link.unitTypeId,
               respondByAt: new Date(Date.now() + RESPOND_BY_MS),
               sourceDepartureDate: d.sourceDepartureDate,
             }).returning({ id: itineraryPartnerRequests.id });
@@ -176,7 +179,7 @@ export class ItineraryRequestService {
             // Refresh the ask if the seller changed capacity/maxSize/quantity
             // since — never touch a request the partner has already responded to.
             await tx.update(itineraryPartnerRequests)
-              .set({ headcount: d.headcount, unitsRequested: d.unitsRequested, updatedAt: new Date() })
+              .set({ headcount: d.headcount, unitsRequested: d.unitsRequested, unitTypeId: d.link.unitTypeId, updatedAt: new Date() })
               .where(eq(itineraryPartnerRequests.id, existing.id));
           }
         }
@@ -254,6 +257,7 @@ export class ItineraryRequestService {
           serviceTime,
           headcount: 0,
           unitsRequested: 0,
+          unitTypeId: link.unitTypeId,
           respondByAt: new Date(Date.now() + RESPOND_BY_MS),
         }).returning({ id: itineraryPartnerRequests.id });
         requestId = created.id;
@@ -458,7 +462,7 @@ export class ItineraryRequestService {
       if (params.units === undefined || params.units < 0) {
         throw createHttpError(400, 'units is required');
       }
-      const available = await ItineraryRequestService.getAvailableCapacity(request.businessPartnerId, request.serviceDate, requestId);
+      const available = await ItineraryRequestService.getAvailableCapacity(request.businessPartnerId, request.serviceDate, requestId, request.unitTypeId);
       if (params.units > available) {
         throw createHttpError(400, `Only ${available} available on ${request.serviceDate} — cannot commit ${params.units}`);
       }
@@ -536,7 +540,7 @@ export class ItineraryRequestService {
     if (accept) {
       const units = request.counterUnits ?? request.unitsRequested;
       const effectiveDate = request.counterDate ?? request.serviceDate;
-      const available = await ItineraryRequestService.getAvailableCapacity(request.businessPartnerId, effectiveDate, requestId);
+      const available = await ItineraryRequestService.getAvailableCapacity(request.businessPartnerId, effectiveDate, requestId, request.unitTypeId);
       if (units > available) {
         throw createHttpError(400, `Only ${available} available on ${effectiveDate} — cannot accept ${units}`);
       }
@@ -638,6 +642,7 @@ export class ItineraryRequestService {
       serviceTime: serviceTime ?? null,
       headcount: unitsRequested,
       unitsRequested,
+      unitTypeId: link.unitTypeId,
       respondByAt: new Date(Date.now() + RESPOND_BY_MS),
     }).returning();
 
@@ -753,19 +758,38 @@ export class ItineraryRequestService {
     return stale.length;
   }
 
-  /** Total capacity for (partner, date) minus what's already reserved (pending/held/confirmed/countered) by OTHER requests for that same date. */
-  static async getAvailableCapacity(businessPartnerId: string, serviceDate: string, excludingRequestId?: string): Promise<number> {
-    const [override] = await db.select({ capacity: businessPartnerCapacityOverrides.capacity }).from(businessPartnerCapacityOverrides)
-      .where(and(eq(businessPartnerCapacityOverrides.businessPartnerId, businessPartnerId), eq(businessPartnerCapacityOverrides.date, serviceDate)))
-      .limit(1);
-    const [policy] = await db.select({ defaultDailyCapacity: businessPartnerCapacity.defaultDailyCapacity }).from(businessPartnerCapacity)
-      .where(eq(businessPartnerCapacity.businessPartnerId, businessPartnerId)).limit(1);
-    const total = override?.capacity ?? policy?.defaultDailyCapacity ?? 0;
+  /**
+   * Total capacity for (partner, date) minus what's already reserved
+   * (pending/held/confirmed/countered) by OTHER requests for that same
+   * date. When `unitTypeId` is given, checks that specific
+   * businessPartnerUnitTypes row's own totalUnits/blocks instead of the
+   * partner's pooled businessPartnerCapacity/Overrides, and scopes the
+   * reservation sum to requests against that same type — so two different
+   * room/vehicle types on the same date never share a pool.
+   */
+  static async getAvailableCapacity(businessPartnerId: string, serviceDate: string, excludingRequestId?: string, unitTypeId?: string | null): Promise<number> {
+    let total: number;
+    if (unitTypeId) {
+      const [unitType] = await db.select({ totalUnits: businessPartnerUnitTypes.totalUnits }).from(businessPartnerUnitTypes)
+        .where(eq(businessPartnerUnitTypes.id, unitTypeId)).limit(1);
+      const [{ blocked }] = await db
+        .select({ blocked: sql<number>`COALESCE(SUM(${businessPartnerUnitTypeBlocks.blockedCount}), 0)` })
+        .from(businessPartnerUnitTypeBlocks)
+        .where(and(eq(businessPartnerUnitTypeBlocks.unitTypeId, unitTypeId), eq(businessPartnerUnitTypeBlocks.date, serviceDate)));
+      total = Math.max(0, (unitType?.totalUnits ?? 0) - Number(blocked));
+    } else {
+      const [override] = await db.select({ capacity: businessPartnerCapacityOverrides.capacity }).from(businessPartnerCapacityOverrides)
+        .where(and(eq(businessPartnerCapacityOverrides.businessPartnerId, businessPartnerId), eq(businessPartnerCapacityOverrides.date, serviceDate)))
+        .limit(1);
+      const [policy] = await db.select({ defaultDailyCapacity: businessPartnerCapacity.defaultDailyCapacity }).from(businessPartnerCapacity)
+        .where(eq(businessPartnerCapacity.businessPartnerId, businessPartnerId)).limit(1);
+      total = override?.capacity ?? policy?.defaultDailyCapacity ?? 0;
+    }
 
     const conditions = [
-      eq(itineraryPartnerRequests.businessPartnerId, businessPartnerId),
       eq(itineraryPartnerRequests.serviceDate, serviceDate),
       inArray(itineraryPartnerRequests.status, ['pending', 'held', 'confirmed', 'countered']),
+      unitTypeId ? eq(itineraryPartnerRequests.unitTypeId, unitTypeId) : eq(itineraryPartnerRequests.businessPartnerId, businessPartnerId),
     ];
     if (excludingRequestId) conditions.push(ne(itineraryPartnerRequests.id, excludingRequestId));
 
@@ -784,6 +808,85 @@ export class ItineraryRequestService {
       .where(and(...conditions));
 
     return Math.max(0, total - Number(reserved));
+  }
+
+  /**
+   * Total/blocked/reserved/available per date over a range, for the
+   * partner's own inventory management table — one grouped-by-date query
+   * per source instead of N+1 per-date getAvailableCapacity calls.
+   */
+  static async getUnitTypeInventory(unitTypeId: string, from: string, to: string) {
+    const [unitType] = await db.select().from(businessPartnerUnitTypes).where(eq(businessPartnerUnitTypes.id, unitTypeId)).limit(1);
+    if (!unitType) throw createHttpError(404, 'Unit type not found');
+
+    const blockRows = await db
+      .select({ date: businessPartnerUnitTypeBlocks.date, channel: businessPartnerUnitTypeBlocks.channel, blockedCount: businessPartnerUnitTypeBlocks.blockedCount })
+      .from(businessPartnerUnitTypeBlocks)
+      .where(and(eq(businessPartnerUnitTypeBlocks.unitTypeId, unitTypeId), sql`${businessPartnerUnitTypeBlocks.date} BETWEEN ${from} AND ${to}`));
+
+    const reservedRows = await db
+      .select({
+        date: itineraryPartnerRequests.serviceDate,
+        status: itineraryPartnerRequests.status,
+        unitsRequested: itineraryPartnerRequests.unitsRequested,
+        capacityConfirmed: itineraryPartnerRequests.capacityConfirmed,
+      })
+      .from(itineraryPartnerRequests)
+      .where(and(
+        eq(itineraryPartnerRequests.unitTypeId, unitTypeId),
+        inArray(itineraryPartnerRequests.status, ['pending', 'held', 'confirmed', 'countered']),
+        sql`${itineraryPartnerRequests.serviceDate} BETWEEN ${from} AND ${to}`,
+      ));
+
+    const blockedByDate = new Map<string, { total: number; byChannel: Record<string, number> }>();
+    for (const b of blockRows) {
+      const entry = blockedByDate.get(b.date) ?? { total: 0, byChannel: {} };
+      entry.total += b.blockedCount;
+      entry.byChannel[b.channel] = (entry.byChannel[b.channel] ?? 0) + b.blockedCount;
+      blockedByDate.set(b.date, entry);
+    }
+    const reservedByDate = new Map<string, number>();
+    for (const r of reservedRows) {
+      const units = r.status === 'pending' || r.status === 'countered' ? r.unitsRequested : (r.capacityConfirmed ?? 0);
+      reservedByDate.set(r.date, (reservedByDate.get(r.date) ?? 0) + units);
+    }
+
+    const dates: string[] = [];
+    for (let d = new Date(from); toDateString(d) <= to; d = addDays(d, 1)) dates.push(toDateString(d));
+
+    return dates.map((date) => {
+      const blocked = blockedByDate.get(date)?.total ?? 0;
+      const reserved = reservedByDate.get(date) ?? 0;
+      const occupied = blocked + reserved;
+      return {
+        date,
+        total: unitType.totalUnits,
+        blocked,
+        blockedByChannel: blockedByDate.get(date)?.byChannel ?? {},
+        reservedByTourBnt: reserved,
+        occupied,
+        available: Math.max(0, unitType.totalUnits - occupied),
+      };
+    });
+  }
+
+  /** Admin/owner-checked in the controller — refuses if a live (non-terminal) request or itinerary link still references this type. */
+  static async deleteUnitType(unitTypeId: string): Promise<{ blocked: boolean; liveRequestCount: number; linkCount: number }> {
+    const [{ value: liveRequestCount }] = await db
+      .select({ value: sql<number>`count(*)` })
+      .from(itineraryPartnerRequests)
+      .where(and(eq(itineraryPartnerRequests.unitTypeId, unitTypeId), inArray(itineraryPartnerRequests.status, ['pending', 'held', 'countered'])));
+    const [{ value: linkCount }] = await db
+      .select({ value: sql<number>`count(*)` })
+      .from(tourItineraryPartners)
+      .where(eq(tourItineraryPartners.unitTypeId, unitTypeId));
+
+    if (Number(liveRequestCount) > 0 || Number(linkCount) > 0) {
+      return { blocked: true, liveRequestCount: Number(liveRequestCount), linkCount: Number(linkCount) };
+    }
+
+    await db.delete(businessPartnerUnitTypes).where(eq(businessPartnerUnitTypes.id, unitTypeId));
+    return { blocked: false, liveRequestCount: 0, linkCount: 0 };
   }
 }
 
