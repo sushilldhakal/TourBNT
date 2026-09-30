@@ -3,7 +3,9 @@ import {
     createBooking,
     processPayment,
     getUserBookings,
+    getBookingById,
     getBookingByReference,
+    getBookingTimeline,
     validatePromoCode,
     cancelBooking,
 } from '@/lib/api/bookings';
@@ -58,6 +60,31 @@ export const useBookingByReference = (bookingReference: string, enabled = true) 
         queryFn: () => getBookingByReference(bookingReference),
         enabled: enabled && !!bookingReference,
         staleTime: 1000 * 60 * 5, // 5 minutes
+    });
+};
+
+/**
+ * Hook to get a single booking by its own ID (as opposed to reference).
+ */
+export const useBookingById = (bookingId: string, enabled = true) => {
+    return useQuery({
+        queryKey: queryKeys.bookings.detail(bookingId),
+        queryFn: () => getBookingById(bookingId),
+        enabled: enabled && !!bookingId,
+        staleTime: 1000 * 60 * 5, // 5 minutes
+    });
+};
+
+/**
+ * Hook to get a booking's day-by-day timeline — the customer's own
+ * "My Trip" view of each day's supplier confirmation status.
+ */
+export const useBookingTimeline = (bookingId: string, enabled = true) => {
+    return useQuery({
+        queryKey: ['booking', bookingId, 'timeline'],
+        queryFn: () => getBookingTimeline(bookingId),
+        enabled: enabled && !!bookingId,
+        staleTime: 1000 * 60, // 1 minute — status can change from the agency/partner side
     });
 };
 

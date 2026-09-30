@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { BookingService } from '../services/bookingService';
+import { ItineraryRequestService } from '../../tours/services/itineraryRequestService';
 import { HTTP_STATUS, sendSuccess, sendPaginatedResponse } from '../../../utils/apiResponse';
 import createHttpError from 'http-errors';
 
@@ -99,7 +100,33 @@ export const getBookingById = async (req: Request, res: Response, next: NextFunc
         const { bookingId } = req.params;
         const booking = await BookingService.getBookingById(bookingId);
 
+        if (req.user && booking.userId && booking.userId !== req.user.id && !req.user.roles.includes('admin')) {
+            throw createHttpError(403, 'You do not have access to this booking');
+        }
+
         sendSuccess(res, booking, 'Booking retrieved successfully');
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Get a booking's day-by-day itinerary with each supplier's live
+ * confirmation status — the customer's own "My Trip" timeline.
+ */
+export const getBookingTimeline = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { bookingId } = req.params;
+        if (!req.user) {
+            throw createHttpError(401, 'Authentication required');
+        }
+
+        const timeline = await ItineraryRequestService.getBookingTimeline(bookingId, {
+            id: req.user.id,
+            isAdmin: req.user.roles.includes('admin'),
+        });
+
+        sendSuccess(res, timeline, 'Booking timeline retrieved successfully');
     } catch (error) {
         next(error);
     }

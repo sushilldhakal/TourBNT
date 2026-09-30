@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { getBookingById, cancelBooking } from '@/lib/api/bookings';
 
-interface BookingDetail {
+interface LegacyBookingDetail {
     id?: string;
     _id?: string;
     reference?: string;
@@ -23,7 +23,7 @@ interface BookingDetail {
 export default function SingleBookingPage() {
     const params = useParams();
     const bookingId = typeof params.bookingId === 'string' ? params.bookingId : '';
-    const [booking, setBooking] = useState<BookingDetail | null>(null);
+    const [booking, setBooking] = useState<LegacyBookingDetail | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [cancelling, setCancelling] = useState(false);
@@ -35,8 +35,8 @@ export default function SingleBookingPage() {
         }
         let cancelled = false;
         getBookingById(bookingId)
-            .then((data: BookingDetail) => {
-                if (!cancelled) setBooking(data);
+            .then((data) => {
+                if (!cancelled) setBooking(data as unknown as LegacyBookingDetail);
             })
             .catch(() => {
                 if (!cancelled) setError('Booking not found or you don’t have access.');

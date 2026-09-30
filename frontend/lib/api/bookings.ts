@@ -6,6 +6,51 @@ import { api, handleApiError, extractResponseData } from './apiClient';
  * Follows server API specifications from API_DOCUMENTATION.md
  */
 
+export interface BookingDetail {
+    id: string;
+    tourId: string;
+    tourTitle: string;
+    tourCode: string;
+    userId: string | null;
+    departureDate: string;
+    participants: { adults: number; children: number; infants?: number };
+    pricing?: { totalPrice?: number; currency?: string };
+    status: 'pending' | 'confirmed' | 'cancelled' | 'completed';
+    contactName?: string;
+    contactEmail?: string;
+    contactPhone?: string;
+    specialRequests?: string;
+    bookingReference?: string;
+    createdAt?: string;
+    tour: { id: string; title: string; code?: string; coverImage?: string; location?: string } | null;
+}
+
+export type BookingTimelinePartnerStatus = 'pending' | 'held' | 'confirmed' | 'countered' | 'declined' | 'expired' | 'unscheduled';
+
+export interface BookingTimelinePartner {
+    role: 'transport' | 'accommodation' | 'guide' | 'meals' | 'other';
+    businessPartnerId: string | null;
+    businessPartnerName: string | null;
+    unitType: string | null;
+    status: BookingTimelinePartnerStatus;
+    serviceTime: string | null;
+    serviceEndTime: string | null;
+    holdExpiresAt: string | null;
+    respondByAt: string | null;
+}
+
+export interface BookingTimelineDay {
+    dayId: string | null;
+    dayIndex: number;
+    date: string | null;
+    title: string;
+    description: string;
+    destination: string | null;
+    partners: BookingTimelinePartner[];
+}
+
+export type BookingTimeline = BookingTimelineDay[];
+
 export interface BookingData {
     tourId: string;
     tourTitle: string;
@@ -100,9 +145,22 @@ export const getAllBookings = async (params?: {
 export const getBookingById = async (bookingId: string) => {
     try {
         const response = await api.get(`/bookings/${bookingId}`);
-        return extractResponseData(response);
+        return extractResponseData<BookingDetail>(response);
     } catch (error) {
         throw handleApiError(error, 'fetching booking');
+    }
+};
+
+/**
+ * Get a booking's day-by-day itinerary with each supplier's live
+ * confirmation status — the customer's own "My Trip" timeline.
+ */
+export const getBookingTimeline = async (bookingId: string) => {
+    try {
+        const response = await api.get(`/bookings/${bookingId}/timeline`);
+        return extractResponseData<BookingTimeline>(response);
+    } catch (error) {
+        throw handleApiError(error, 'fetching booking timeline');
     }
 };
 

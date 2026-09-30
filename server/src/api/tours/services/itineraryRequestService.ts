@@ -435,6 +435,91 @@ export class ItineraryRequestService {
   }
 
   /**
+   * A customer's own view of their booking: every itinerary day with the
+   * live status of each supplier tied to that day's real calendar date —
+   * computed the same way request generation does (booking.departureDate +
+   * the day's array index), so this works identically for fixed-departure
+   * and flexible/booking-driven tours without branching on schedule type.
+   */
+  static async getBookingTimeline(bookingId: string, requester: { id: string; isAdmin: boolean }) {
+    const [booking] = await db.select().from(bookings).where(eq(bookings.id, bookingId)).limit(1);
+    if (!booking) throw createHttpError(404, 'Booking not found');
+    if (!requester.isAdmin && booking.userId !== requester.id) {
+      throw createHttpError(403, 'You do not have access to this booking');
+    }
+
+    const [tour] = await db.select({ itinerary: tours.itinerary }).from(tours).where(eq(tours.id, booking.tourId)).limit(1);
+    if (!tour) throw createHttpError(404, 'Tour not found');
+
+    const itinerary = Array.isArray(tour.itinerary)
+      ? (tour.itinerary as Array<{ id?: string; title?: string; description?: string; destination?: string }>)
+      : [];
+
+    const links = await db
+      .select({ link: tourItineraryPartners, partnerName: businessPartners.name })
+      .from(tourItineraryPartners)
+      .innerJoin(businessPartners, eq(tourItineraryPartners.businessPartnerId, businessPartners.id))
+      .where(and(eq(tourItineraryPartners.tourId, booking.tourId), sql`${tourItineraryPartners.businessPartnerId} IS NOT NULL`));
+
+    const linksByDayId = new Map<string, typeof links>();
+    for (const l of links) {
+      const list = linksByDayId.get(l.link.dayId) || [];
+      list.push(l);
+      linksByDayId.set(l.link.dayId, list);
+    }
+
+    const dayDates = itinerary.map((day, dayIndex) => ({
+      dayId: day?.id,
+      dayIndex,
+      date: toDateString(addDays(new Date(booking.departureDate), dayIndex)),
+    }));
+
+    const dateStrings = [...new Set(dayDates.map((d) => d.date))];
+    const requestRows = dateStrings.length
+      ? await db
+          .select()
+          .from(itineraryPartnerRequests)
+          .where(and(eq(itineraryPartnerRequests.tourId, booking.tourId), inArray(itineraryPartnerRequests.serviceDate, dateStrings)))
+      : [];
+
+    const requestsByLinkAndDate = new Map<string, RequestRow>();
+    for (const request of requestRows) {
+      requestsByLinkAndDate.set(`${request.tourItineraryPartnerId}:${request.serviceDate}`, request);
+    }
+
+    return itinerary.map((day, dayIndex) => {
+      const dayId = day?.id;
+      const date = dayDates[dayIndex]?.date ?? null;
+      const dayLinks = dayId ? linksByDayId.get(dayId) ?? [] : [];
+
+      const partners = dayLinks.map(({ link, partnerName }) => {
+        const request = date ? requestsByLinkAndDate.get(`${link.id}:${date}`) : undefined;
+        return {
+          role: link.role,
+          businessPartnerId: link.businessPartnerId,
+          businessPartnerName: partnerName,
+          unitType: link.unitType ?? null,
+          status: (request?.status ?? 'unscheduled') as RequestStatus | 'unscheduled',
+          serviceTime: request?.serviceTime ?? null,
+          serviceEndTime: request?.serviceEndTime ?? null,
+          holdExpiresAt: request?.holdExpiresAt ?? null,
+          respondByAt: request?.respondByAt ?? null,
+        };
+      });
+
+      return {
+        dayId: dayId ?? null,
+        dayIndex,
+        date,
+        title: day?.title ?? '',
+        description: day?.description ?? '',
+        destination: day?.destination ?? null,
+        partners,
+      };
+    });
+  }
+
+  /**
    * Partner (owner-or-admin) responds to a request they're holding a
    * decision on. `action` replaces the old binary confirmed/declined:
    *  - hold: tentatively reserve `units`, expiring at holdExpiresAt unless promoted.
