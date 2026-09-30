@@ -56,6 +56,11 @@ export const queryKeys = {
         list: (mediaType: string) => ['media', mediaType] as const,
     },
 
+    // Public homepage payload (tours, categories, destinations, reviews, posts)
+    home: {
+        feed: () => ['home-feed'] as const,
+    },
+
     // Tours
     tours: {
         all: () => ['tours'] as const,

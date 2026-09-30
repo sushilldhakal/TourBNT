@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { useLatestTours } from "@/lib/queries";
+import { useHomeFeed } from "@/lib/queries/useHome";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -11,12 +11,8 @@ import { ContentContainer } from "@/components/layout/PublicLayoutClient";
 import type { Tour } from "@/types/types";
 
 const HomeSlider = () => {
-    const { data } = useLatestTours();
-
-    // Backend returns { success, message, data: tours[] } → extractResponseData gives the array
-    const toursList = Array.isArray(data?.data)
-        ? data?.data
-        : (data as any)?.data?.tours ?? (data as any)?.tours ?? [];
+    const { data, isPending } = useHomeFeed();
+    const toursList = data?.tours ?? [];
 
     const [current, setCurrent] = useState(0);
     const [progress, setProgress] = useState(0);
@@ -121,7 +117,7 @@ const HomeSlider = () => {
         }
     };
 
-    if (!sortedTours || sortedTours.length === 0) {
+    if (isPending) {
         return (
             <div className="relative w-full max-w-full overflow-hidden">
                 <div className="relative aspect-video">

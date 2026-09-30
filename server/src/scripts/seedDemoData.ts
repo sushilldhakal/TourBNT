@@ -246,7 +246,6 @@ async function seed() {
   // customers: signed up through the site, wanting to book tours
   const customers = Array.from({ length: 60 }, (_, i) =>
     mkUser({ email: `customer${pad(i + 1)}`, name: personName(i + 20), role: 'user', group: 'Customers', verified: i % 9 !== 0, note: i % 9 === 0 ? 'Email not verified yet' : '' }));
-  const subscriberUsers = Array.from({ length: 6 }, (_, i) => mkUser({ email: `subscriber${pad(i + 1)}`, name: personName(i + 90), role: 'subscriber', group: 'Subscribers (role)', note: 'Newsletter-only account' }));
 
   // ---------------------------------------------------------------------
   // business partners — owners + listings
@@ -819,12 +818,11 @@ async function seed() {
   console.log(`✅ Conversations: ${convRows.length}   Messages: ${msgRows.length}`);
 
   // ---------------------------------------------------------------------
-  // subscribers (newsletter) — some are also registered users
+  // subscribers (newsletter) — separate from users
   // ---------------------------------------------------------------------
+  // Newsletter subscribers are just email addresses — deliberately NOT users.
   const subRows = [
-    ...customers.filter((_, i) => i % 3 === 0).map((c) => ({ email: c.email, subscribedAt: daysFromNow(-int(1, 150)) })),
-    ...subscriberUsers.map((u) => ({ email: u.email, subscribedAt: daysFromNow(-int(1, 150)) })),
-    ...Array.from({ length: 30 }, (_, i) => ({ email: `newsletter${pad(i + 1)}@${DEMO_DOMAIN}`, subscribedAt: daysFromNow(-int(0, 200)) })),
+    ...Array.from({ length: 50 }, (_, i) => ({ email: `newsletter${pad(i + 1)}@${DEMO_DOMAIN}`, subscribedAt: daysFromNow(-int(0, 200)) })),
   ].map((s) => ({ id: uuid(), ...s, createdAt: s.subscribedAt, updatedAt: s.subscribedAt }));
   await insertChunked(S.subscribers, subRows);
   console.log(`✅ Subscribers: ${subRows.length}`);

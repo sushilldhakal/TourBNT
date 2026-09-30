@@ -1,6 +1,6 @@
 "use client";
 
-import { useApprovedDestinations } from "@/lib/queries";
+import { useHomeFeed } from "@/lib/queries/useHome";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { MapPin, Globe, Building } from "lucide-react";
@@ -18,12 +18,10 @@ export default function DestinationTour() {
     const [activeIndex, setActiveIndex] = useState(0);
     const [animationKey, setAnimationKey] = useState(0);
 
-    const { data: destinationResponse, isLoading } = useApprovedDestinations();
+    const { data: feed, isPending } = useHomeFeed();
 
     const sortedDestinations = useMemo(() => {
-        const raw = destinationResponse as { data?: Destination[] };
-        const items = raw?.data ?? [];
-        if (!items) return [];
+        const items = feed?.destinations ?? [];
         return [...items]
             .sort((a: Destination, b: Destination) => {
                 if (a.popularity && b.popularity) {
@@ -32,7 +30,7 @@ export default function DestinationTour() {
                 return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
             })
             .slice(0, 8);
-    }, [destinationResponse]);
+    }, [feed?.destinations]);
 
     // Some APIs return DestinationTypes shape (with id/region/city). We keep runtime-safe access here.
     type DestinationUi = Destination & {
@@ -52,7 +50,7 @@ export default function DestinationTour() {
         return () => clearInterval(interval);
     }, [uiDestinations.length]);
 
-    if (isLoading) {
+    if (isPending) {
         return (
             <div className="py-16 w-full">
                 <ContentContainer className="px-4 transition-all duration-300">

@@ -19,7 +19,10 @@ import {
   toggleFavoriteCategory,
   toggleCategoryActiveStatus,
   addExistingCategoryToSeller,
-  removeExistingCategoryFromSeller
+  removeExistingCategoryFromSeller,
+  getAllCategoriesAdmin,
+  getChangeRequests,
+  changeRequestNotFound,
 } from './globalCategoryController';
 import { authenticate, authorizeRoles } from '../../../middlewares/authenticate';
 import { uploadNone } from '../../../middlewares/multer';
@@ -391,6 +394,10 @@ router.post('/:categoryId/remove-from-list', authenticate, removeExistingCategor
 
 // Admin routes
 router.get('/admin/pending', getPendingCategories as any);
+router.get('/admin/all', authorizeRoles('admin'), getAllCategoriesAdmin as any);
+router.get('/admin/change-requests', authorizeRoles('admin'), getChangeRequests as any);
+router.put('/admin/change-requests/:changeRequestId/approve', authorizeRoles('admin'), changeRequestNotFound as any);
+router.put('/admin/change-requests/:changeRequestId/reject', authorizeRoles('admin'), changeRequestNotFound as any);
 router.put('/admin/:categoryId/approve', approveCategory as any);
 router.put('/admin/:categoryId/reject', rejectCategory as any);
 router.get('/admin/:categoryId/usage', authorizeRoles('admin'), getCategoryUsage as any);

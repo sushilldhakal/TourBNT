@@ -7,6 +7,7 @@ import { paginationMiddleware } from '../../middlewares/pagination';
 import { filterSortMiddleware } from '../../middlewares/filterSort';
 import { simpleViewTracking } from '../../middlewares/viewTracking';
 import { uploadNone } from '../../middlewares/multer';
+import { cacheRoute } from '../../middlewares/cacheMiddleware';
 import {
   addComment,
   deleteComment,
@@ -23,6 +24,7 @@ const postRouter = express.Router();
 
 // Post-related routes - RESTful patterns
 postRouter.get('/',
+  cacheRoute('posts', 120),
   paginationMiddleware(),
   filterSortMiddleware(['status', 'author'], ['createdAt', 'updatedAt', 'title', 'views']),
   getAllPosts

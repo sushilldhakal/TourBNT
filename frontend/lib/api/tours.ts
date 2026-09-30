@@ -152,8 +152,8 @@ export const getMyTours = async ({
     limit?: number;
 } = {}): Promise<ToursResponse> => {
     try {
-        // Convert limit >= 100 to "all" for hybrid memory-friendly API
-        const limitParam = limit >= 100 ? 'all' : limit;
+        // The server caps page size at 100; larger requests page through it.
+        const limitParam = Math.min(limit, 100);
         const url = `/tours/me?page=${pageParam + 1}&limit=${limitParam}`;
         const response = await api.get(url, { timeout: 30000 }); // Increased timeout for large datasets
         const data = extractResponseData(response);

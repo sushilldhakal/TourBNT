@@ -192,7 +192,7 @@ export function MainHeader({ onSearchToggle }: MainHeaderProps) {
                                                     </Link>
                                                 )}
                                                 <Link
-                                                    href="/profile"
+                                                    href="/dashboard/profile"
                                                     className="block px-4 py-2 text-sm hover:bg-accent hover:text-accent-foreground"
                                                     onClick={() => setShowUserMenu(false)}
                                                 >
@@ -274,7 +274,7 @@ export function MainHeader({ onSearchToggle }: MainHeaderProps) {
                                         </Link>
                                     )}
                                     <Link
-                                        href="/profile"
+                                        href="/dashboard/profile"
                                         className="text-secondary-foreground hover:bg-accent hover:text-accent-foreground block rounded-md px-3 py-2 text-base font-medium"
                                         onClick={() => setIsOpen(false)}
                                     >

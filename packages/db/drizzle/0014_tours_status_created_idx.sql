@@ -1,0 +1,1 @@
+CREATE INDEX "tours_status_created_idx" ON "tours" USING btree ("tour_status","created_at");

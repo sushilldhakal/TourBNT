@@ -35,15 +35,11 @@ const SectionSkeleton = () => (
     <div className="w-full h-64 bg-muted animate-pulse rounded-lg" />
 );
 
-interface HomePageContentProps {
-    isLoaded: boolean;
-}
-
-export function HomePageContent({ isLoaded }: HomePageContentProps) {
+export function HomePageContent() {
     return (
         <>
             <div className="relative">
-                <div className={`transition-opacity duration-500 ${isLoaded ? 'opacity-100' : 'opacity-0'}`}>
+                <div>
                     <HomeSlider />
                 </div>
                 <div className="absolute inset-0 pointer-events-none">

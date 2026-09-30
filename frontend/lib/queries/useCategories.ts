@@ -175,7 +175,8 @@ export const useAllCategories = () => {
     return useQuery<CategoryData[]>({
         queryKey: queryKeys.categories.roleBased(),
         queryFn: async () => {
-            const data = await getUserCategories();
+            // Admins see every category, not just ones on their own seller profile.
+            const data = await getAllCategoriesAdmin();
             return normalizeCategoryResponse(data);
         },
         enabled: isAdmin,

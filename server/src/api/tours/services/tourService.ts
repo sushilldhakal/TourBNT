@@ -1,5 +1,5 @@
 import { db, tours, tourCategories, tourAuthors, globalCategories, users, facts as factsTable, tourItineraryPartners, businessPartners, businessPartnerUnitTypes } from '@tourbnt/db';
-import { eq, and, or, ilike, gte, lte, gt, desc, asc, sql, inArray, count, type SQL } from 'drizzle-orm';
+import { eq, and, or, ilike, gte, lte, gt, desc, asc, sql, inArray, count, getTableColumns, type SQL } from 'drizzle-orm';
 import createHttpError from 'http-errors';
 import { Tour } from '../tourTypes';
 import { ITINERARY_ROLE_TO_PARTNER_TYPES } from '../../businessPartners/businessPartnerTypes';
@@ -25,11 +25,23 @@ interface TourPaginationParams {
   sortOrder?: 'asc' | 'desc';
 }
 
+/**
+ * Listing columns: everything except the big per-tour JSON/text blobs
+ * (itinerary, gallery, FAQs, facts, include/exclude, outline). Cards and
+ * tables never render them, and the full row made every list page haul
+ * megabytes over the wire. `getTourById` still returns the whole row.
+ */
+const {
+  itinerary: _itinerary, gallery: _gallery, faqs: _faqs, facts: _facts,
+  include: _include, exclude: _exclude, outline: _outline,
+  ...LIST_COLUMNS
+} = getTableColumns(tours);
+
 const AUTHOR_COLUMNS = { id: users.id, name: users.name, email: users.email, roles: users.role } as const;
 const CATEGORY_COLUMNS = { id: globalCategories.id, name: globalCategories.name, description: globalCategories.description } as const;
 
 /** Batches author/category lookups for a set of tours and merges them in. */
-async function attachRelations(rows: TourRow[]): Promise<any[]> {
+async function attachRelations<T extends { id: string }>(rows: T[]): Promise<any[]> {
   if (rows.length === 0) return [];
   const tourIds = rows.map((t) => t.id);
 
@@ -232,7 +244,7 @@ export class TourService {
     return sql`(${tours.priceLockDate} IS NULL OR ${tours.priceLockDate} > now())`;
   }
 
-  static async getAllTours(filters: { destination?: string; category?: string; status?: string } = {}, paginationParams: TourPaginationParams, sortOptions?: { field: string; order: 'asc' | 'desc' }, includeUnpublished: boolean = false) {
+  static async getAllTours(filters: { destination?: string; category?: string; status?: string } = {}, paginationParams: TourPaginationParams & { cursor?: string }, sortOptions?: { field: string; order: 'asc' | 'desc' }, includeUnpublished: boolean = false) {
     const conditions: SQL[] = [this.notPriceLocked()];
     if (filters.destination) conditions.push(eq(tours.destinationId, filters.destination));
     if (filters.status) conditions.push(eq(tours.tourStatus, filters.status as 'Draft' | 'Published' | 'Archived'));
@@ -252,13 +264,36 @@ export class TourService {
     const limit = paginationParams.limit || 10;
     const skip = (page - 1) * limit;
 
+    // Keyset ("seek") pagination for the default newest-first order: with
+    // `cursor`, the query seeks past the last row seen instead of OFFSET-scanning
+    // everything before it, so page 500 costs the same as page 1. Opaque cursor
+    // comes back as `nextCursor`; the total count is skipped on cursor requests.
+    if (paginationParams.cursor !== undefined && sortField === 'createdAt' && sortOptions?.order !== 'asc') {
+      const [createdAtIso, cursorId] = Buffer.from(paginationParams.cursor, 'base64url').toString().split('|');
+      const cursorDate = new Date(createdAtIso);
+      const seek = cursorId && !Number.isNaN(cursorDate.getTime())
+        ? sql`(${tours.createdAt}, ${tours.id}) < (${cursorDate.toISOString()}::timestamptz, ${cursorId})`
+        : undefined;
+      const seekRows = await db
+        .select(LIST_COLUMNS)
+        .from(tours)
+        .where(seek ? and(where, seek) : where)
+        .orderBy(desc(tours.createdAt), desc(tours.id))
+        .limit(limit + 1);
+      const hasMore = seekRows.length > limit;
+      const pageRows = hasMore ? seekRows.slice(0, limit) : seekRows;
+      const last = pageRows[pageRows.length - 1];
+      const nextCursor = hasMore && last ? Buffer.from(`${last.createdAt.toISOString()}|${last.id}`).toString('base64url') : null;
+      return { items: await attachRelations(pageRows), page: 1, limit, totalItems: null as number | null, totalPages: null as number | null, nextCursor };
+    }
+
     const [rows, [{ value: totalItems }]] = await Promise.all([
-      db.select().from(tours).where(where).orderBy(sortOrderFn(orderColumn)).limit(limit).offset(skip),
+      db.select(LIST_COLUMNS).from(tours).where(where).orderBy(sortOrderFn(orderColumn)).limit(limit).offset(skip),
       db.select({ value: count() }).from(tours).where(where),
     ]);
 
     const items = await attachRelations(rows);
-    return { items, page, limit, totalItems, totalPages: Math.ceil(totalItems / limit) };
+    return { items, page, limit, totalItems: totalItems as number | null, totalPages: Math.ceil(totalItems / limit) as number | null, nextCursor: undefined as string | null | undefined };
   }
 
   private static tourCacheKey(tourId: string) {
@@ -385,7 +420,7 @@ export class TourService {
     const skip = (page - 1) * limit;
 
     const [rows, [{ value: totalItems }]] = await Promise.all([
-      db.select().from(tours).where(where).orderBy(desc(tours.createdAt)).limit(limit).offset(skip),
+      db.select(LIST_COLUMNS).from(tours).where(where).orderBy(desc(tours.createdAt)).limit(limit).offset(skip),
       db.select({ value: count() }).from(tours).where(where),
     ]);
 
@@ -412,7 +447,7 @@ export class TourService {
         break;
     }
 
-    const rows = await db.select().from(tours).where(and(...conditions)).orderBy(orderBy).limit(limit);
+    const rows = await db.select(LIST_COLUMNS).from(tours).where(and(...conditions)).orderBy(orderBy).limit(limit);
     return attachRelations(rows);
   }
 
@@ -424,7 +459,7 @@ export class TourService {
     const skip = (page - 1) * limit;
 
     const [rows, [{ value: totalItems }]] = await Promise.all([
-      db.select().from(tours).where(where).orderBy(desc(tours.createdAt)).limit(limit).offset(skip),
+      db.select(LIST_COLUMNS).from(tours).where(where).orderBy(desc(tours.createdAt)).limit(limit).offset(skip),
       db.select({ value: count() }).from(tours).where(where),
     ]);
 

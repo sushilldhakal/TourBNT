@@ -17,7 +17,11 @@ export const getUserFaqs = async (req: Request, res: Response, next: NextFunctio
       return handleForbidden(res, 'Not authorized to view these FAQs');
     }
 
-    const items = await db.select().from(faqs).where(eq(faqs.userId, requestedUserId)).orderBy(desc(faqs.createdAt));
+    // Bounded: never load an unbounded list. Callers may pass page/limit; the default
+    // (and ceiling) is 200 rows per request.
+    const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? '200'), 10) || 200, 1), 200);
+    const page = Math.max(parseInt(String(req.query.page ?? '1'), 10) || 1, 1);
+    const items = await db.select().from(faqs).where(eq(faqs.userId, requestedUserId)).orderBy(desc(faqs.createdAt)).limit(limit).offset((page - 1) * limit);
     sendSuccess(res, items, 'FAQs retrieved successfully');
   } catch (error) {
     console.error('Error fetching user FAQs:', error);

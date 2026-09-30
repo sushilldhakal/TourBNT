@@ -35,7 +35,7 @@ export const getAllTours = asyncAuthHandler(async (req: Request, res: Response) 
 
     const result = await TourService.getAllTours(
       filters,
-      { page, limit: limit as number, sortBy, sortOrder },
+      { page, limit: limit as number, sortBy, sortOrder, cursor: typeof req.query.cursor === 'string' ? req.query.cursor : undefined },
       { field: sortBy, order: sortOrder },
       isAdmin
     );
@@ -43,9 +43,10 @@ export const getAllTours = asyncAuthHandler(async (req: Request, res: Response) 
     return sendPaginatedResponse(res, result.items, {
       page: result.page,
       limit: result.limit,
-      totalItems: result.totalItems,
-      totalPages: result.totalPages
-    }, 'Tours retrieved successfully');
+      totalItems: result.totalItems as number,
+      totalPages: result.totalPages as number,
+      ...(result.nextCursor !== undefined ? { nextCursor: result.nextCursor } : {}),
+    } as any, 'Tours retrieved successfully');
   } catch (error: any) {
     return sendError(res, error.message || 'Failed to fetch tours', HTTP_STATUS.INTERNAL_SERVER_ERROR);
   }
@@ -221,7 +222,8 @@ export const getMyTours = asyncAuthHandler(async (req: Request, res: Response) =
 
   const page = parseInt(req.query.page as string) || 1;
   const limitParam = req.query.limit as string;
-  const limit = limitParam === 'all' ? Number.MAX_SAFE_INTEGER : (parseInt(limitParam) || 10);
+  // `all` used to mean unbounded; cap it so one request can't read the whole table.
+  const limit = limitParam === 'all' ? 100 : Math.min(parseInt(limitParam) || 10, 100);
 
   const result = await TourService.getUserTours(userId, isAdmin, { page, limit });
 

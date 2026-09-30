@@ -15,6 +15,8 @@ interface UseAuthReturn {
     refetch: () => Promise<User | null>;
 }
 
+let bootstrapInFlight: Promise<any> | null = null;
+
 export const useAuth = (): UseAuthReturn => {
     const router = useRouter();
     const { user, setUser, clearUser } = useUserStore();
@@ -41,9 +43,14 @@ export const useAuth = (): UseAuthReturn => {
 
         devLog('auth', `protected route, bootstrap /users/me: ${currentPath}`);
 
+        // useAuth is mounted by dozens of components; share one in-flight
+        // /users/me instead of every instance firing its own.
         const bootstrap = async () => {
             try {
-                const response = await api.get('/users/me');
+                if (!bootstrapInFlight) {
+                    bootstrapInFlight = api.get('/users/me').finally(() => { bootstrapInFlight = null; });
+                }
+                const response = await bootstrapInFlight;
                 const userData = extractResponseData<User>(response);
 
                 if (userData?.id) {

@@ -19,8 +19,8 @@ const ALL_FILTER_VALUE = "__all__";
 const TourSearch = () => {
     const router = useRouter();
     const { toast } = useToast();
-    const { data: categoriesData } = useApprovedCategories({ limit: 100 });
-    const { data: destinationsData } = useApprovedDestinations({ limit: 100 });
+    const { data: categoriesData } = useApprovedCategories();
+    const { data: destinationsData } = useApprovedDestinations();
 
     const categories = Array.isArray(categoriesData) ? categoriesData : (categoriesData as { data?: unknown[] })?.data ?? [];
     const destinations = Array.isArray(destinationsData) ? destinationsData : (destinationsData as { data?: unknown[] })?.data ?? [];

@@ -2,14 +2,15 @@
  * Comment queries – single source of truth for comment data fetching.
  */
 
-import { useQuery } from '@tanstack/react-query';
-import { getAllComments, getCommentsByPost, getCommentWithReplies } from '@/lib/api/comments';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
+import { getCommentsPage, getCommentsByPost, getCommentWithReplies } from '@/lib/api/comments';
 import { queryKeys } from './queryKeys';
 
-export function useAllComments() {
+export function useCommentsPage(params: { page: number; limit: number; q?: string }) {
     return useQuery({
-        queryKey: queryKeys.comments.all(),
-        queryFn: getAllComments,
+        queryKey: [...queryKeys.comments.all(), 'page', params],
+        queryFn: () => getCommentsPage(params),
+        placeholderData: keepPreviousData,
         staleTime: 1000 * 60 * 2,
     });
 }

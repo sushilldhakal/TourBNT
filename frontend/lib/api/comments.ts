@@ -17,17 +17,15 @@ export const addComment = async (commentData: FormData, postId: string) => {
 };
 
 /**
- * Get all comments (admin)
- * Uses limit=all to fetch all comments for client-side pagination
+ * Get one page of comments (admin sees all, sellers see comments on their posts).
+ * Paging and text search happen on the server.
  */
-export const getAllComments = async () => {
+export const getCommentsPage = async (params: { page: number; limit: number; q?: string }) => {
     try {
         const response = await api.get('/comments', {
-            params: {
-                limit: 'all', // Triggers hybrid pagination on backend
-            }
+            params: { page: params.page, limit: params.limit, ...(params.q ? { q: params.q } : {}) },
         });
-        return extractResponseData(response);
+        return extractResponseData<{ data?: unknown[]; pagination?: { totalItems: number; totalPages: number } }>(response);
     } catch (error) {
         throw handleApiError(error, 'fetching comments');
     }

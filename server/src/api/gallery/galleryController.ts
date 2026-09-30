@@ -77,10 +77,10 @@ export const getMedia = async (req: Request
   try {
     const { mediaType } = req.query as { mediaType: string };
     const page = parseInt(req.query.page as string) || 1;
-    const limitParam = req.query.limit as string;
-    const limit = limitParam === 'all' || parseInt(limitParam) >= 100
-      ? 'all'
-      : parseInt(limitParam) || 10;
+    // Page size is always bounded — `limit=all` / 100+ used to return the
+    // whole media table. Callers that need more page through it.
+    const MAX_MEDIA_LIMIT = 100;
+    const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 10, 1), MAX_MEDIA_LIMIT);
 
     if (!['images', 'pdfs', 'videos'].includes(mediaType)) {
       return next(createHttpError(400, 'Invalid mediaType parameter'));
@@ -95,27 +95,24 @@ export const getMedia = async (req: Request
 
     const [{ value: totalMediaCount }] = await db.select({ value: count() }).from(mediaAssets).where(where);
 
-    const isAll = limit === 'all';
-    const pageNum = isAll ? 1 : page;
-    const limitNum = isAll ? Math.max(totalMediaCount, 1) : limit;
-    const skip = isAll ? 0 : (pageNum - 1) * limitNum;
+    const skip = (page - 1) * limit;
 
     const rows = await db
       .select()
       .from(mediaAssets)
       .where(where)
       .orderBy(desc(mediaAssets.uploadedAt))
-      .limit(isAll ? undefined as any : limitNum)
-      .offset(isAll ? 0 : skip);
+      .limit(limit)
+      .offset(skip);
 
-    const totalPages = isAll ? 1 : Math.ceil(totalMediaCount / limitNum);
+    const totalPages = Math.ceil(totalMediaCount / limit);
 
     return res.status(HTTP_STATUS.OK).json({
       success: true,
       items: rows,
       pagination: {
-        page: pageNum,
-        limit: isAll ? totalMediaCount : limitNum,
+        page,
+        limit,
         totalItems: totalMediaCount,
         totalPages
       },

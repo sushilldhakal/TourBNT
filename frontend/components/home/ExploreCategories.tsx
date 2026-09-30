@@ -1,6 +1,6 @@
 "use client";
 
-import { useApprovedCategories } from "@/lib/queries";
+import { useHomeFeed } from "@/lib/queries/useHome";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Folder, FolderOpen } from "lucide-react";
@@ -14,14 +14,13 @@ export default function ExploreCategories() {
     const [activeIndex, setActiveIndex] = useState(0);
     const [animationKey, setAnimationKey] = useState(0);
 
-    const { data, isLoading } = useApprovedCategories();
+    const { data, isPending } = useHomeFeed();
     const categories: CategoryData[] = useMemo(() => {
-        const raw = Array.isArray(data) ? data : (data as { data?: CategoryData[] })?.data;
-        if (!raw || !Array.isArray(raw)) return [];
+        const raw = data?.categories ?? [];
         return [...raw]
             .sort((a, b) => (b.usageCount || 0) - (a.usageCount || 0))
             .slice(0, 12);
-    }, [data]);
+    }, [data?.categories]);
 
     useEffect(() => {
         if (!categories.length) return;
@@ -33,7 +32,7 @@ export default function ExploreCategories() {
         return () => clearInterval(interval);
     }, [categories.length]);
 
-    if (isLoading) {
+    if (isPending) {
         return (
             <div className="py-16 bg-secondary/10 w-full">
                 <ContentContainer className="px-4 transition-all duration-300">

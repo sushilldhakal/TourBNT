@@ -70,11 +70,13 @@ export const authLimiter = rateLimit({
     }
 });
 
-const GENERAL_LIMIT = process.env.NODE_ENV === 'development' ? 2000 : 300;
+// One dashboard session fires a burst of calls, and a whole office shares one
+// IP, so 300/15min tripped quickly. Overridable via GENERAL_RATE_LIMIT.
+const GENERAL_LIMIT = parseInt(process.env.GENERAL_RATE_LIMIT || '', 10) || (process.env.NODE_ENV === 'development' ? 2000 : 1500);
 
 /**
  * Rate limiter for general API endpoints.
- * Development stays high so the dashboard can load. Production is 300 per 15 minutes per IP.
+ * Development stays high so the dashboard can load. Production defaults to 1500 per 15 minutes per IP.
  */
 export const generalLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes

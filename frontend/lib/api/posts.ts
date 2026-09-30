@@ -14,10 +14,7 @@ export const getPosts =  async ({
     limit?: number;
 } = {}) => {
     try {
-        // Add timestamp to prevent caching
-        const timestamp = new Date().getTime();
-
-        const response = await api.get(`/posts?_t=${timestamp}`, {
+        const response = await api.get('/posts', {
             params: {
                 page,
                 limit

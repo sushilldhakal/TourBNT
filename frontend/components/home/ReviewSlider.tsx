@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useApprovedReviews } from "@/lib/queries";
+import { useHomeFeed } from "@/lib/queries/useHome";
 import { Star, Quote } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent } from "@/components/ui/card";
@@ -23,24 +23,16 @@ const ReviewSlider = () => {
     const [current, setCurrent] = React.useState(0);
     const [count, setCount] = React.useState(0);
 
-    const { data, isLoading, isError } = useApprovedReviews();
+    const { data, isPending, isError } = useHomeFeed();
     const approvedReviews = React.useMemo(() => {
-        // Support standard { data: [] } and legacy { reviews: [] } or raw array
-        const raw = data as { data?: Review[]; reviews?: Review[] } | undefined;
-        const list = Array.isArray(raw?.data)
-            ? raw.data
-            : Array.isArray(raw?.reviews)
-                ? raw.reviews
-                : Array.isArray(data)
-                    ? data
-                    : [];
+        const list = data?.reviews ?? [];
         if (!list.length) return [];
         return [...list].sort((a: Review, b: Review) => {
             if (a.likes != null && b.likes != null && a.likes !== b.likes) return b.likes - a.likes;
             if (a.views != null && b.views != null && a.views !== b.views) return b.views - a.views;
             return new Date((b.createdAt as string) || 0).getTime() - new Date((a.createdAt as string) || 0).getTime();
         }).slice(0, 9);
-    }, [data]);
+    }, [data?.reviews]);
 
     const renderStars = (rating: number) => {
         return Array(5).fill(0).map((_, i) => (
@@ -55,7 +47,7 @@ const ReviewSlider = () => {
         api.on("select", () => setCurrent(api.selectedScrollSnap()));
     }, [api]);
 
-    if (isLoading) {
+    if (isPending) {
         return (
             <div className="py-16 bg-primary/5 w-full">
                 <ContentContainer className="px-4 transition-all duration-300">
@@ -75,7 +67,7 @@ const ReviewSlider = () => {
         );
     }
 
-    if (isError || !data) {
+    if (isError) {
         return (
             <div className="py-16 bg-primary/5 w-full">
                 <ContentContainer className="px-4 transition-all duration-300">

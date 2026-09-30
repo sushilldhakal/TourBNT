@@ -7,8 +7,6 @@ import {
     VisibilityState,
     flexRender,
     getCoreRowModel,
-    getFilteredRowModel,
-    getPaginationRowModel,
     getSortedRowModel,
     useReactTable,
     ColumnDef,
@@ -35,7 +33,8 @@ import {
 } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useMutation } from "@tanstack/react-query";
-import { useCacheManager, useAllComments } from "@/lib/queries";
+import { useCacheManager, useCommentsPage } from "@/lib/queries";
+import { useDebouncedValue } from "@/lib/hooks/useDebouncedValue";
 import { deleteComment, editComment } from "@/lib/api/comments";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
@@ -192,7 +191,14 @@ export default function CommentsPage() {
     const { invalidateComments } = useCacheManager();
     const { toast } = useToast();
 
-    const { data: initialCommentData, isLoading, isError } = useAllComments();
+    const [search, setSearch] = React.useState("");
+    const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: 10 });
+    const q = useDebouncedValue(search.trim());
+    const { data: initialCommentData, isLoading, isError } = useCommentsPage({
+        page: pagination.pageIndex + 1,
+        limit: pagination.pageSize,
+        q,
+    });
 
     const acceptMutation = useMutation({
         mutationFn: ({ data, commentId }: { data: FormData; commentId: string }) =>
@@ -235,8 +241,9 @@ export default function CommentsPage() {
 
     // Extract comments from the response structure
     // extractResponseData returns { data: [...], pagination: {...} }
-    const raw = initialCommentData as { data?: Comment[] };
+    const raw = initialCommentData as { data?: Comment[]; pagination?: { totalItems: number; totalPages: number } };
     const comments = raw?.data ?? [];
+    const pageCount = Math.max(raw?.pagination?.totalPages ?? 1, 1);
 
     const handleAcceptComment = React.useCallback((_id: string) => {
         const formdata = new FormData();
@@ -259,9 +266,10 @@ export default function CommentsPage() {
         onSortingChange: setSorting,
         onColumnFiltersChange: setColumnFilters,
         getCoreRowModel: getCoreRowModel(),
-        getPaginationRowModel: getPaginationRowModel(),
         getSortedRowModel: getSortedRowModel(),
-        getFilteredRowModel: getFilteredRowModel(),
+        manualPagination: true,
+        pageCount,
+        onPaginationChange: setPagination,
         onColumnVisibilityChange: setColumnVisibility,
         onRowSelectionChange: setRowSelection,
         state: {
@@ -269,11 +277,12 @@ export default function CommentsPage() {
             columnFilters,
             columnVisibility,
             rowSelection,
+            pagination,
         },
     });
 
     const handleBulkAccept = () => {
-        const selectedRows = table.getFilteredSelectedRowModel().rows;
+        const selectedRows = table.getSelectedRowModel().rows;
         const selectedIds = selectedRows.map((row) => row.original._id || row.original.id);
 
         // Accept each comment individually
@@ -288,7 +297,7 @@ export default function CommentsPage() {
     };
 
     const handleBulkDelete = () => {
-        const selectedRows = table.getFilteredSelectedRowModel().rows;
+        const selectedRows = table.getSelectedRowModel().rows;
         const selectedIds = selectedRows.map((row) => row.original._id || row.original.id);
         deleteMutation.mutate(selectedIds.join(', '));
         // Clear selection after bulk delete
@@ -330,10 +339,11 @@ export default function CommentsPage() {
             <div className="flex items-center py-4">
                 <Input
                     placeholder="Filter comments..."
-                    value={(table.getColumn("text")?.getFilterValue() as string) ?? ""}
-                    onChange={(event) =>
-                        table.getColumn("text")?.setFilterValue(event.target.value)
-                    }
+                    value={search}
+                    onChange={(event) => {
+                        setSearch(event.target.value);
+                        setPagination((p) => ({ ...p, pageIndex: 0 }));
+                    }}
                     className="max-w-sm"
                 />
                 <Button
@@ -508,8 +518,8 @@ export default function CommentsPage() {
                     </Select>
                 </div>
                 <div className="flex-1 text-sm text-muted-foreground">
-                    {table.getFilteredSelectedRowModel().rows.length} of{' '}
-                    {table.getFilteredRowModel().rows.length} row(s) selected.
+                    {table.getSelectedRowModel().rows.length} of{' '}
+                    {table.getRowModel().rows.length} row(s) selected.
                 </div>
                 <div className="space-x-2">
                     <Button

@@ -12,15 +12,15 @@ const mockCompanyInfo: CompanyInfo = {
     contactEmail: "support@TourBNT.com",
     address: "123 Travel Lane, Sydney, NSW 2000, Australia",
     resources: [
-        { title: "Travel Guides", link: "/guides" },
-        { title: "Tour Packages", link: "/packages" },
-        { title: "Destination Tips", link: "/tips" },
-        { title: "Travel Insurance", link: "/insurance" }
+        { title: "Travel Guides", link: "/blog" },
+        { title: "Tour Packages", link: "/tours" },
+        { title: "Destination Tips", link: "/blog" },
+        { title: "Travel Insurance", link: "/contact" }
     ],
     quickLinks: [
         { title: "About Us", link: "/about" },
-        { title: "Our Services", link: "/services" },
-        { title: "Meet Our Team", link: "/team" },
+        { title: "Our Services", link: "/about" },
+        { title: "Meet Our Team", link: "/about" },
         { title: "Download App", link: "/app" }
     ],
     socialMedia: [

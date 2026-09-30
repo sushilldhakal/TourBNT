@@ -88,7 +88,7 @@ export {
 } from './reviews';
 
 export {
-    getAllComments,
+    getCommentsPage,
     addComment,
     deleteComment,
 } from './comments';

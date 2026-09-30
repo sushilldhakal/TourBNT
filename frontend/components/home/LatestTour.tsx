@@ -1,6 +1,6 @@
 "use client";
 
-import { useLatestTours } from "@/lib/queries";
+import { useHomeFeed } from "@/lib/queries/useHome";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Calendar, ChevronLeft, ChevronRight, ThumbsUp } from "lucide-react";
@@ -11,7 +11,6 @@ import {
     CarouselItem,
 } from "@/components/ui/carousel-lazy";
 import { useEffect, useState } from "react";
-import { getLatestTours } from "@/lib/api/tours";
 import Image from 'next/image';
 import type { Tour } from "@/types/types";
 
@@ -22,7 +21,7 @@ const LatestTour = () => {
         api.on("select", () => { });
     }, [api]);
 
-    const { data } = useLatestTours();
+    const { data } = useHomeFeed();
 
     const getTourPricing = (tour: Tour) => {
         let originalPrice = tour.price || 0;
@@ -63,8 +62,7 @@ const LatestTour = () => {
         return { originalPrice, displayPrice, hasDiscount, discountPercentage };
     };
 
-    // API returns array directly, or { data: { tours } } depending on backend
-    const toursList = Array.isArray(data?.data) ? data?.data : [];
+    const toursList = data?.tours ?? [];
     const sortedTours = toursList.length
         ? [...toursList]
             .sort((a: Tour, b: Tour) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())

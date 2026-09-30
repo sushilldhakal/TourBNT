@@ -8,19 +8,35 @@ import * as notifications from '../../notifications/notificationController';
 export const getApprovedDestinations = async (req: Request, res: Response): Promise<void> => {
   try {
     const { country, region, search } = req.query;
+    // Bounded: ?limit (max 100 when explicitly paging, else a 500 ceiling for
+    // dropdowns) plus ?page. Previously every approved row came back.
+    const explicitLimit = req.query.limit !== undefined;
+    const limit = Math.min(Math.max(parseInt(String(req.query.limit)) || 0, 0), explicitLimit ? 100 : 500) || (explicitLimit ? 10 : 500);
+    const page = Math.max(parseInt(String(req.query.page)) || 1, 1);
 
     const conditions = [eq(globalDestinations.isActive, true), eq(globalDestinations.isApproved, true), eq(globalDestinations.approvalStatus, 'approved')];
     if (country && typeof country === 'string') conditions.push(ilike(globalDestinations.country, `%${country}%`));
     if (region && typeof region === 'string') conditions.push(ilike(globalDestinations.region, `%${region}%`));
     if (search && typeof search === 'string') conditions.push(or(ilike(globalDestinations.name, `%${search}%`), ilike(globalDestinations.description, `%${search}%`))!);
+    const where = and(...conditions);
 
-    const destinations = await db
-      .select()
-      .from(globalDestinations)
-      .where(and(...conditions))
-      .orderBy(desc(globalDestinations.popularity), globalDestinations.name);
+    const [destinations, [{ total }]] = await Promise.all([
+      db
+        .select()
+        .from(globalDestinations)
+        .where(where)
+        .orderBy(desc(globalDestinations.popularity), globalDestinations.name)
+        .limit(limit)
+        .offset((page - 1) * limit),
+      db.select({ total: sql<number>`count(*)::int` }).from(globalDestinations).where(where),
+    ]);
 
-    res.json({ success: true, message: 'Approved destinations retrieved successfully', data: destinations });
+    res.json({
+      success: true,
+      message: 'Approved destinations retrieved successfully',
+      data: destinations,
+      pagination: { page, limit, totalItems: total, totalPages: Math.ceil(total / limit) },
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error fetching approved destinations' });
   }
@@ -292,6 +308,48 @@ export const getPendingDestinations = async (req: Request, res: Response) => {
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error fetching pending destinations' });
   }
+};
+
+// Admin: every destination regardless of who created it (the dashboard
+// list used to fall back to "the signed-in user's own", which is empty for
+// admins). Optional approvalStatus filter; capped page size.
+export const getAllDestinationsAdmin = async (req: Request, res: Response) => {
+  try {
+    if (!req.user?.roles?.includes('admin')) {
+      return res.status(403).json({ success: false, message: 'Admin access required' });
+    }
+    const { approvalStatus } = req.query;
+    const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? '200'), 10) || 200, 1), 500);
+    const page = Math.max(parseInt(String(req.query.page ?? '1'), 10) || 1, 1);
+    const where = typeof approvalStatus === 'string' && approvalStatus ? eq(globalDestinations.approvalStatus, approvalStatus as any) : undefined;
+
+    const [rows, [{ count }]] = await Promise.all([
+      db
+        .select({ item: globalDestinations, creator: { id: users.id, name: users.name, email: users.email } })
+        .from(globalDestinations)
+        .leftJoin(users, eq(globalDestinations.createdBy, users.id))
+        .where(where)
+        .orderBy(desc(globalDestinations.createdAt))
+        .limit(limit)
+        .offset((page - 1) * limit),
+      db.select({ count: sql<number>`count(*)::int` }).from(globalDestinations).where(where),
+    ]);
+
+    const data = rows.map(({ item, creator }) => ({ ...item, createdBy: creator }));
+    res.json({ success: true, data, count: data.length, pagination: { page, limit, totalItems: count, totalPages: Math.ceil(count / limit) } });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error fetching destinations' });
+  }
+};
+
+// Edits by owners/admins are applied directly (see updateDestination), so there is
+// no change-request queue. The dashboard still polls for one; answer with an
+// empty list rather than a 404, and 404 honestly on approve/reject.
+export const getChangeRequests = (_req: Request, res: Response) => {
+  res.json({ success: true, data: [], count: 0 });
+};
+export const changeRequestNotFound = (_req: Request, res: Response) => {
+  res.status(404).json({ success: false, message: 'Change request not found' });
 };
 
 const syncUserDestinationStatus = async (createdBy: string | null, destinationId: string, patch: Partial<{ isApproved: boolean; approvalStatus: string; isActive: boolean }>) => {

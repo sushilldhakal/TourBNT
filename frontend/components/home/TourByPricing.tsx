@@ -1,6 +1,6 @@
 "use client";
 
-import { useLatestTours } from "@/lib/queries";
+import { useHomeFeed } from "@/lib/queries/useHome";
 import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useState } from "react";
@@ -10,14 +10,13 @@ import {
     CarouselContent,
     CarouselItem,
 } from "@/components/ui/carousel-with-plugins-lazy";
-import { getLatestTours } from "@/lib/api/tours";
 import type { Tour } from "@/types/types";
 
 const TourByPricing = () => {
     const [progress, setProgress] = useState(0);
     const [api, setApi] = useState<CarouselApi | null>(null);
 
-    const { data } = useLatestTours();
+    const { data } = useHomeFeed();
 
     useEffect(() => {
         if (!api) return;
@@ -34,7 +33,7 @@ const TourByPricing = () => {
         };
     }, [api]);
 
-    const toursList = Array.isArray(data?.data) ? data?.data : (data as { data?: { tours?: Tour[] }; tours?: Tour[] })?.data?.tours ?? (data as { tours?: Tour[] })?.tours ?? [];
+    const toursList = data?.tours ?? [];
     const sortedTours = toursList.length
         ? [...toursList].sort((a: Tour, b: Tour) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 10)
         : [];

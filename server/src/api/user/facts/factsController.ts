@@ -26,7 +26,11 @@ export const getUserFacts = async (req: Request, res: Response, next: NextFuncti
       return handleForbidden(res, 'Not authorized to view these facts');
     }
 
-    const items = await db.select().from(facts).where(eq(facts.userId, requestedUserId)).orderBy(desc(facts.createdAt));
+    // Bounded: never load an unbounded list. Callers may pass page/limit; the default
+    // (and ceiling) is 200 rows per request.
+    const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? '200'), 10) || 200, 1), 200);
+    const page = Math.max(parseInt(String(req.query.page ?? '1'), 10) || 1, 1);
+    const items = await db.select().from(facts).where(eq(facts.userId, requestedUserId)).orderBy(desc(facts.createdAt)).limit(limit).offset((page - 1) * limit);
     sendSuccess(res, items, 'Facts retrieved successfully');
   } catch (error) {
     next(error);

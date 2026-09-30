@@ -380,6 +380,8 @@ export const tours = pgTable('tours', {
 }, (table) => ({
   codeIdx: uniqueIndex('tours_code_idx').on(table.code),
   statusIdx: index('tours_status_idx').on(table.tourStatus),
+  // Serves the published-tours listing (filter by status, newest first) without a sort.
+  statusCreatedIdx: index('tours_status_created_idx').on(table.tourStatus, table.createdAt),
   destinationIdx: index('tours_destination_idx').on(table.destinationId),
 }));
 

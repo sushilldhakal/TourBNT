@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { usePublicPosts } from "@/lib/queries";
+import { useHomeFeed } from "@/lib/queries/useHome";
 import { format } from "date-fns";
 import { Heart, Eye, MessageSquare, BookOpen, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
@@ -21,25 +21,10 @@ import { ContentContainer } from '@/components/layout/PublicLayoutClient';
 import Image from 'next/image';
 
 export default function RecentBlog() {
-    const [posts, setPosts] = useState<Post[]>([]);
     const [api, setApi] = useState<CarouselApi | null>(null);
 
-    const { data: response, isLoading, error } = usePublicPosts();
-    useEffect(() => {
-        // sendPaginatedResponse serializes the array under `items`, not `data`.
-        const raw = response as { items?: Post[]; data?: Post[] } | undefined;
-        const list = raw?.items ?? raw?.data ?? [];
-        if (list) {
-            const updatedPosts = list.map((post: Post) => ({
-                ...post,
-                liked: false,
-                likes: post.likes || 0,
-                views: post.views || 0,
-                comments: Array.isArray(post.comments) ? post.comments : []
-            }));
-            setPosts(updatedPosts);
-        }
-    }, [response]);
+    const { data, isPending, error } = useHomeFeed();
+    const posts: Array<Post & { excerpt?: string; commentCount?: number }> = data?.posts ?? [];
 
     useEffect(() => {
         if (!api) return;
@@ -63,7 +48,7 @@ export default function RecentBlog() {
         }
     };
 
-    if (isLoading) {
+    if (isPending) {
         return (
             <div className="py-16">
                 <ContentContainer className="px-4 transition-all duration-300">
@@ -158,7 +143,8 @@ export default function RecentBlog() {
                 >
                     <CarouselContent className="-ml-2 md:-ml-4">
                         {publishedPosts.map((post) => {
-                            const contentText = extractContentText(post.content);
+                            const contentText = post.excerpt || extractContentText(post.content || '');
+                            const commentTotal = post.commentCount ?? (Array.isArray(post.comments) ? post.comments.length : 0);
 
                             return (
                                 <CarouselItem key={post.id} className="pl-2 md:pl-4 md:basis-1/2 lg:basis-1/3">
@@ -177,9 +163,9 @@ export default function RecentBlog() {
                                                     <BookOpen className="h-10 w-10 text-muted-foreground/40" />
                                                 </div>
                                             )}
-                                            {post.comments && post.comments.length > 0 && (
+                                            {commentTotal > 0 && (
                                                 <Badge className="absolute top-2 right-2 bg-primary/80 hover:bg-primary">
-                                                    {post.comments.length} Comments
+                                                    {commentTotal} Comments
                                                 </Badge>
                                             )}
                                         </div>
@@ -224,7 +210,7 @@ export default function RecentBlog() {
                                                     </span>
                                                     <span className="flex items-center gap-1">
                                                         <MessageSquare className="h-3.5 w-3.5" />
-                                                        <span>{Array.isArray(post.comments) ? post.comments.length : 0}</span>
+                                                        <span>{commentTotal}</span>
                                                     </span>
                                                 </div>
                                             </div>

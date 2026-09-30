@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
+import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
 import { EnhancedChatInterface, type Contact, type Message } from '@/components/chat/EnhancedChatInterface';
 import { useAuth } from '@/lib/hooks/useAuth';
@@ -79,24 +80,32 @@ export default function MessagePage() {
     const searchParams = useSearchParams();
     const { userId: currentUserId } = useAuth();
     const conversationId = searchParams.get('conversationId');
-    const [contacts, setContacts] = useState<Contact[]>([]);
-    const [loading, setLoading] = useState(true);
-
-    const loadConversations = useCallback(async () => {
-        setLoading(true);
-        try {
-            const { items } = await getConversations({ limit: 100 });
-            setContacts(items.map(conversationToContact));
-        } catch {
-            setContacts([]);
-        } finally {
-            setLoading(false);
-        }
-    }, []);
-
+    const queryClient = useQueryClient();
+    // One shared query (deduped across remounts/strict-mode). The first page of
+    // 100 renders immediately; further pages are pulled in behind it, so there is
+    // no hard cap on how many conversations show up.
+    const conversations = useInfiniteQuery({
+        queryKey: ['conversations', 'dashboard-list'],
+        queryFn: ({ pageParam }) => getConversations({ page: pageParam, limit: 100 }),
+        initialPageParam: 1,
+        getNextPageParam: (last) =>
+            last.pagination.page < last.pagination.totalPages ? last.pagination.page + 1 : undefined,
+        staleTime: 30_000,
+    });
+    const { hasNextPage, isFetchingNextPage, fetchNextPage } = conversations;
     useEffect(() => {
-        loadConversations();
-    }, [loadConversations]);
+        if (hasNextPage && !isFetchingNextPage) fetchNextPage();
+    }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+    const contacts = useMemo<Contact[]>(
+        () => (conversations.data?.pages ?? []).flatMap((p) => p.items).map(conversationToContact),
+        [conversations.data],
+    );
+    const loading = conversations.isLoading;
+    const loadConversations = useCallback(
+        () => queryClient.invalidateQueries({ queryKey: ['conversations', 'dashboard-list'] }),
+        [queryClient],
+    );
 
     const onLoadMessages = useCallback(async (contactId: string): Promise<Message[]> => {
         const msgs = await getConversationMessages(contactId);

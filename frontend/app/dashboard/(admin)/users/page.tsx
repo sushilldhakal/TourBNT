@@ -26,7 +26,6 @@ import { getRoleBadgeColor } from '@/lib/utils/roles';
 const TABS: Array<{ key: string; label: string; role?: string }> = [
     { key: 'all', label: 'All' },
     { key: 'user', label: 'Customers', role: 'user' },
-    { key: 'subscriber', label: 'Subscribers', role: 'subscriber' },
     { key: 'seller', label: 'Sellers', role: 'seller' },
     { key: 'hotel', label: 'Hotels', role: 'hotel' },
     { key: 'guesthouse', label: 'Guesthouses', role: 'guesthouse' },

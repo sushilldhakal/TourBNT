@@ -23,6 +23,7 @@ import businessPartnerRouter from "./api/businessPartners/businessPartnerRoutes"
 import businessReviewRouter from "./api/businessReviews/businessReviewRoutes";
 import adRouter from "./api/ads/adRoutes";
 import conversationRouter from "./api/conversations/conversationRoutes";
+import homeRouter from "./api/home/homeRoutes";
 import cors from "cors";
 import { config } from "./config/config";
 import { metricsMiddleware } from "./middlewares/metricsMiddleware";
@@ -91,6 +92,7 @@ app.get("/", (req, res) => {
 });
 
 // API v1 routes - individual route registrations for flexibility
+app.use('/api/v1/home', homeRouter);
 app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/users', userRouter);
 app.use('/api/v1/users', tourSettingsRouter);

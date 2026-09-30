@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import createHttpError from 'http-errors';
 import { db, comments, commentLikes, posts, users } from '@tourbnt/db';
-import { eq, and, inArray, count, desc, sql } from 'drizzle-orm';
+import { eq, and, inArray, count, desc, sql, ilike } from 'drizzle-orm';
 import { sendSuccess, sendPaginatedResponse } from '../../utils/apiResponse';
 
 const userSelect = { id: users.id, name: users.name, avatar: users.avatar } as const;
@@ -265,6 +265,13 @@ export const getAllComments = async (req: Request, res: Response, next: NextFunc
       const ownPosts = await db.select({ id: posts.id }).from(posts).where(eq(posts.authorId, req.user!.id));
       const postIds = ownPosts.map((p) => p.id);
       where = postIds.length ? inArray(comments.postId, postIds) : eq(comments.postId, '__none__');
+    }
+
+    // Server-side text search so the dashboard can page instead of downloading everything.
+    const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    if (q) {
+      const match = ilike(comments.text, `%${q.replace(/[%_\\]/g, '\\$&')}%`);
+      where = where ? and(where, match) : match;
     }
 
     const [rows, [{ value: totalComments }]] = await Promise.all([

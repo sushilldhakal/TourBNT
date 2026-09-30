@@ -46,8 +46,10 @@ export function MenuBarSearch({ handleSearch, headerSearch }: MenuBarSearchProps
     const [latestTours, setLatestTours] = useState<Tour[]>([]);
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // Fetch categories and latest tours on mount
+    // Load suggestions only after the search panel opens. Fetching them on
+    // every page mount duplicated the homepage's tour and category requests.
     useEffect(() => {
+        if (!headerSearch) return;
         let cancelled = false;
         getApprovedCategories()
             .then((res: unknown) => {
@@ -70,7 +72,7 @@ export function MenuBarSearch({ handleSearch, headerSearch }: MenuBarSearchProps
                 if (!cancelled) setLatestTours([]);
             });
         return () => { cancelled = true; };
-    }, []);
+    }, [headerSearch]);
 
     useEffect(() => {
         const checkHeaderFixed = () => {

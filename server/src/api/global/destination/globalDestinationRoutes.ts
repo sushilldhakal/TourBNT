@@ -20,7 +20,10 @@ import {
   removeExistingDestinationFromSeller,
   toggleDestinationActiveStatus,
   getUserDestinations,
-  fixDeletedApprovedDestinations
+  fixDeletedApprovedDestinations,
+  getAllDestinationsAdmin,
+  getChangeRequests,
+  changeRequestNotFound,
 } from './globalDestinationController';
 import { authenticate, authorizeRoles } from '../../../middlewares/authenticate';
 import { uploadNone } from '../../../middlewares/multer';
@@ -361,6 +364,10 @@ router.post('/:destinationId/remove-from-list', authenticate, removeExistingDest
 
 // Admin routes
 router.get('/admin/pending', getPendingDestinations as any);
+router.get('/admin/all', authorizeRoles('admin'), getAllDestinationsAdmin as any);
+router.get('/admin/change-requests', authorizeRoles('admin'), getChangeRequests as any);
+router.put('/admin/change-requests/:changeRequestId/approve', authorizeRoles('admin'), changeRequestNotFound as any);
+router.put('/admin/change-requests/:changeRequestId/reject', authorizeRoles('admin'), changeRequestNotFound as any);
 router.put('/admin/:destinationId/approve', approveDestination as any);
 router.put('/admin/:destinationId/reject', rejectDestination as any);
 router.get('/admin/:destinationId/usage', getDestinationUsage as any);

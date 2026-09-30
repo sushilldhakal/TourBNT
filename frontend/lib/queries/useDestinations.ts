@@ -196,7 +196,8 @@ export const useAllDestinations = () => {
     return useQuery<DestinationTypes[]>({
         queryKey: queryKeys.destinations.roleBased(),
         queryFn: async () => {
-            const data = await getUserDestinations();
+            // Admins see every destination, not just ones on their own seller profile.
+            const data = await getAllDestinationsAdmin();
             return normalizeDestinationResponse(data);
         },
         enabled: isAdmin,

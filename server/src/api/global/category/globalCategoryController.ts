@@ -60,15 +60,36 @@ export const getCategoryById = async (req: Request, res: Response): Promise<void
 // Get all approved categories (public)
 export const getApprovedCategories = async (req: Request, res: Response): Promise<void> => {
   try {
-    const rows = await db
-      .select({ category: globalCategories, creator: { id: users.id, name: users.name, email: users.email } })
-      .from(globalCategories)
-      .leftJoin(users, eq(globalCategories.createdBy, users.id))
-      .where(and(eq(globalCategories.isApproved, true), eq(globalCategories.approvalStatus, 'approved')))
-      .orderBy(desc(globalCategories.createdAt));
+    // Bounded: ?limit (max 100 when explicitly paging, else a 500 ceiling for
+    // dropdowns) plus ?page and ?search. Previously every approved row came back.
+    const explicitLimit = req.query.limit !== undefined;
+    const limit = Math.min(Math.max(parseInt(String(req.query.limit)) || 0, 0), explicitLimit ? 100 : 500) || (explicitLimit ? 10 : 500);
+    const page = Math.max(parseInt(String(req.query.page)) || 1, 1);
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+
+    const conditions = [eq(globalCategories.isApproved, true), eq(globalCategories.approvalStatus, 'approved')];
+    if (search) conditions.push(ilike(globalCategories.name, `%${search}%`));
+    const where = and(...conditions);
+
+    const [rows, [{ total }]] = await Promise.all([
+      db
+        .select({ category: globalCategories, creator: { id: users.id, name: users.name, email: users.email } })
+        .from(globalCategories)
+        .leftJoin(users, eq(globalCategories.createdBy, users.id))
+        .where(where)
+        .orderBy(desc(globalCategories.createdAt))
+        .limit(limit)
+        .offset((page - 1) * limit),
+      db.select({ total: sql<number>`count(*)::int` }).from(globalCategories).where(where),
+    ]);
 
     const categories = rows.map(({ category, creator }) => ({ ...category, createdBy: creator }));
-    res.json({ success: true, message: 'Approved categories retrieved successfully', data: categories });
+    res.json({
+      success: true,
+      message: 'Approved categories retrieved successfully',
+      data: categories,
+      pagination: { page, limit, totalItems: total, totalPages: Math.ceil(total / limit) },
+    });
   } catch (error) {
     console.error('Error fetching approved categories:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch categories' });
@@ -382,6 +403,48 @@ export const getPendingCategories = async (req: Request, res: Response): Promise
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error fetching pending categories', error: error instanceof Error ? error.message : 'Unknown error' });
   }
+};
+
+// Admin: every category regardless of who created it (the dashboard
+// list used to fall back to "the signed-in user's own", which is empty for
+// admins). Optional approvalStatus filter; capped page size.
+export const getAllCategoriesAdmin = async (req: Request, res: Response) => {
+  try {
+    if (!req.user?.roles?.includes('admin')) {
+      return res.status(403).json({ success: false, message: 'Admin access required' });
+    }
+    const { approvalStatus } = req.query;
+    const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? '200'), 10) || 200, 1), 500);
+    const page = Math.max(parseInt(String(req.query.page ?? '1'), 10) || 1, 1);
+    const where = typeof approvalStatus === 'string' && approvalStatus ? eq(globalCategories.approvalStatus, approvalStatus as any) : undefined;
+
+    const [rows, [{ count }]] = await Promise.all([
+      db
+        .select({ item: globalCategories, creator: { id: users.id, name: users.name, email: users.email } })
+        .from(globalCategories)
+        .leftJoin(users, eq(globalCategories.createdBy, users.id))
+        .where(where)
+        .orderBy(desc(globalCategories.createdAt))
+        .limit(limit)
+        .offset((page - 1) * limit),
+      db.select({ count: sql<number>`count(*)::int` }).from(globalCategories).where(where),
+    ]);
+
+    const data = rows.map(({ item, creator }) => ({ ...item, createdBy: creator }));
+    res.json({ success: true, data, count: data.length, pagination: { page, limit, totalItems: count, totalPages: Math.ceil(count / limit) } });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error fetching categories' });
+  }
+};
+
+// Edits by owners/admins are applied directly (see updateCategory), so there is
+// no change-request queue. The dashboard still polls for one; answer with an
+// empty list rather than a 404, and 404 honestly on approve/reject.
+export const getChangeRequests = (_req: Request, res: Response) => {
+  res.json({ success: true, data: [], count: 0 });
+};
+export const changeRequestNotFound = (_req: Request, res: Response) => {
+  res.status(404).json({ success: false, message: 'Change request not found' });
 };
 
 const syncUserCategoryStatus = async (createdBy: string | null, categoryId: string, patch: Partial<{ isApproved: boolean; approvalStatus: string; isActive: boolean }>) => {

@@ -3,6 +3,7 @@ import { authenticate, authorizeRoles } from '../../middlewares/authenticate';
 import { paginationMiddleware } from '../../middlewares/pagination';
 import { filterSortMiddleware } from '../../middlewares/filterSort';
 import { simpleViewTracking } from '../../middlewares/viewTracking';
+import { cacheRoute } from '../../middlewares/cacheMiddleware';
 import { db, reviews } from '@tourbnt/db';
 import { eq, sql } from 'drizzle-orm';
 import {
@@ -81,6 +82,7 @@ const router = express.Router({ mergeParams: true }); // mergeParams allows acce
  *                   type: number
  */
 router.get('/',
+    cacheRoute('reviews', 120),
     paginationMiddleware(),
     filterSortMiddleware(['status'], ['createdAt', 'rating']),
     getAllApprovedReviews
