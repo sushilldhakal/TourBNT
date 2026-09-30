@@ -426,13 +426,16 @@ function UnitTypeInventoryTable({ businessPartnerId, unitType }: { businessPartn
     );
 }
 
-const UNIT_TYPE_COPY: Record<'hotel' | 'guesthouse' | 'restaurant', { title: string; itemNoun: string; itemNounPlural: string; unitLabel: string; namePlaceholder: string; showTime: boolean }> = {
+type UnitTypeBusinessType = 'hotel' | 'guesthouse' | 'restaurant' | 'transport';
+
+const UNIT_TYPE_COPY: Record<UnitTypeBusinessType, { title: string; itemNoun: string; itemNounPlural: string; unitLabel: string; namePlaceholder: string; showTime: boolean }> = {
     hotel: { title: 'Room types', itemNoun: 'room type', itemNounPlural: 'room types', unitLabel: 'Total rooms', namePlaceholder: 'e.g. Deluxe', showTime: false },
     guesthouse: { title: 'Room types', itemNoun: 'room type', itemNounPlural: 'room types', unitLabel: 'Total rooms', namePlaceholder: 'e.g. Deluxe', showTime: false },
     restaurant: { title: 'Meal slots', itemNoun: 'meal slot', itemNounPlural: 'meal slots', unitLabel: 'Seats', namePlaceholder: 'e.g. Dinner', showTime: true },
+    transport: { title: 'Vehicle types', itemNoun: 'vehicle type', itemNounPlural: 'vehicle types', unitLabel: 'Seats', namePlaceholder: 'e.g. Toyota Hiace', showTime: false },
 };
 
-function UnitTypesSection({ businessPartnerId, businessType }: { businessPartnerId: string; businessType: 'hotel' | 'guesthouse' | 'restaurant' }) {
+function UnitTypesSection({ businessPartnerId, businessType }: { businessPartnerId: string; businessType: UnitTypeBusinessType }) {
     const copy = UNIT_TYPE_COPY[businessType];
     const queryClient = useQueryClient();
     const { data: unitTypes, isLoading } = useUnitTypes(businessPartnerId);
@@ -653,13 +656,13 @@ function CapacityTab({ businessPartnerId, businessType }: { businessPartnerId: s
 
     if (capacityLoading) return <div className="text-muted-foreground text-sm">Loading...</div>;
 
-    const showUnitTypes = businessType === 'hotel' || businessType === 'guesthouse' || businessType === 'restaurant';
-    const unitTypeCopy = showUnitTypes ? UNIT_TYPE_COPY[businessType as 'hotel' | 'guesthouse' | 'restaurant'] : null;
+    const showUnitTypes = businessType === 'hotel' || businessType === 'guesthouse' || businessType === 'restaurant' || businessType === 'transport';
+    const unitTypeCopy = showUnitTypes ? UNIT_TYPE_COPY[businessType as UnitTypeBusinessType] : null;
     const isGuide = businessType === 'guide';
 
     return (
         <div className="space-y-6">
-            {showUnitTypes && <UnitTypesSection businessPartnerId={businessPartnerId} businessType={businessType as 'hotel' | 'guesthouse' | 'restaurant'} />}
+            {showUnitTypes && <UnitTypesSection businessPartnerId={businessPartnerId} businessType={businessType as UnitTypeBusinessType} />}
             {isGuide && <GuideAvailabilitySection businessPartnerId={businessPartnerId} />}
 
             <Card>

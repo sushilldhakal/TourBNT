@@ -66,10 +66,10 @@ export function BusinessPartnerPicker({ basePath, role, label, placeholder }: Bu
     const current = partners.find((p) => p?.role === role);
 
     // Real, partner-configured unit types (hotel room types, restaurant meal
-    // slots, or later transport vehicle types) for the linked partner — when
-    // they've set any up, the agency picks from this list instead of typing
-    // a free-text guess.
-    const { data: unitTypes } = useUnitTypes(role === 'accommodation' || role === 'meals' ? current?.businessPartnerId : undefined);
+    // slots, transport vehicle types) for the linked partner — when they've
+    // set any up, the agency picks from this list instead of typing a
+    // free-text guess.
+    const { data: unitTypes } = useUnitTypes(role === 'accommodation' || role === 'meals' || role === 'transport' ? current?.businessPartnerId : undefined);
 
     const [query, setQuery] = useState(current?.name || '');
     const [results, setResults] = useState<BusinessPartner[]>([]);
