@@ -2,8 +2,9 @@
 
 import { useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, Clock, XCircle, Building2, RotateCcw, Send, Repeat2, ChevronDown, ChevronRight } from 'lucide-react';
+import { CheckCircle2, Clock, XCircle, Building2, RotateCcw, Send, Repeat2, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -149,7 +150,7 @@ function RequestRow({ tourId, row }: { tourId: string; row: TourItineraryRequest
     const Icon = meta?.icon;
 
     return (
-        <div className="rounded-md border px-3 py-2 text-sm space-y-2">
+        <div id={`itinerary-request-${row.id ?? row.tourItineraryPartnerId}`} className="rounded-md border px-3 py-2 text-sm space-y-2 scroll-mt-4">
             <div className="flex items-center justify-between gap-3 flex-wrap">
                 <div className="min-w-0">
                     <span className="font-medium">{row.partnerName}</span>
@@ -226,6 +227,59 @@ function RequestRow({ tourId, row }: { tourId: string; row: TourItineraryRequest
     );
 }
 
+const NOT_CONFIRMED_LABEL: Record<NonNullable<TourItineraryRequestStatus['status']>, string> = {
+    pending: 'Requested',
+    held: 'Held',
+    countered: 'Countered',
+    declined: 'Declined',
+    expired: 'Expired',
+    confirmed: 'Confirmed',
+} as const;
+
+/**
+ * One verdict for the whole date instead of making the agency read every
+ * row — "Confirmed" only once every linked requirement is, otherwise names
+ * exactly which supplier(s) are still blocking it. Computed purely from the
+ * rows already fetched for this date; no extra request.
+ */
+function DateVerdict({ rows }: { rows: TourItineraryRequestStatus[] }) {
+    const blockers = rows.filter((r) => r.status !== 'confirmed');
+
+    if (blockers.length === 0) {
+        return (
+            <Alert className="py-2">
+                <CheckCircle2 className="h-4 w-4" />
+                <AlertTitle className="text-sm">Confirmed</AlertTitle>
+            </Alert>
+        );
+    }
+
+    return (
+        <Alert variant="destructive" className="py-2">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle className="text-sm">Not yet confirmable</AlertTitle>
+            <AlertDescription>
+                <ul className="text-sm space-y-0.5 mt-1">
+                    {blockers.map((b) => (
+                        <li key={b.id ?? b.tourItineraryPartnerId}>
+                            <a
+                                href={`#itinerary-request-${b.id ?? b.tourItineraryPartnerId}`}
+                                className="underline underline-offset-2 hover:no-underline"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    document.getElementById(`itinerary-request-${b.id ?? b.tourItineraryPartnerId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                }}
+                            >
+                                {ROLE_LABEL[b.role] || b.role} ({b.partnerName}) — {b.status ? NOT_CONFIRMED_LABEL[b.status] : 'Not requested'}
+                            </a>
+                        </li>
+                    ))}
+                </ul>
+            </AlertDescription>
+        </Alert>
+    );
+}
+
 /**
  * Agency orchestrator table: every hotel/restaurant/guide/transport
  * requirement linked to this itinerary, its quantity, and its request
@@ -284,6 +338,7 @@ export function LogisticsStatusPanel() {
                 {dated.map(([date, rows]) => (
                     <div key={date} className="space-y-2">
                         <p className="text-sm font-medium">{format(new Date(date), 'EEEE, MMM d, yyyy')}</p>
+                        <DateVerdict rows={rows} />
                         <div className="space-y-1.5">
                             {rows.map((r) => (
                                 <RequestRow key={r.id} tourId={tourId} row={r} />
