@@ -36,10 +36,28 @@ export const redirectToLogin = (currentPath: string) => {
  * Browser automatically sends httpOnly cookies with every request
  */
 
-const BACKEND = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000') + '/api/v1';
+const DIRECT_BACKEND = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000') + '/api/v1';
+
+/**
+ * Auth cookies are host-only. `npm run dev:lan` points the API at the machine's
+ * LAN IP while the page is opened on localhost, so a direct login stores `token`
+ * on the LAN host and the dashboard guard (which only sees localhost cookies)
+ * bounces back to /auth/login. When the page host and API host differ, call the
+ * same-origin Next proxy so Set-Cookie lands on the page host.
+ */
+function browserApiBaseUrl(): string {
+    if (typeof window === 'undefined') return DIRECT_BACKEND;
+    try {
+        const backendHost = new URL(process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000').hostname;
+        if (window.location.hostname !== backendHost) return '/api/v1';
+    } catch {
+        return '/api/v1';
+    }
+    return DIRECT_BACKEND;
+}
 
 export const api = axios.create({
-    baseURL: BACKEND,
+    baseURL: browserApiBaseUrl(),
     timeout: getApiTimeout('default'),
     withCredentials: true, // CRITICAL: Enables httpOnly cookie sending
     decompress: true,
@@ -51,7 +69,7 @@ export const api = axios.create({
 
 // Server-side API client (for SSR and public endpoints)
 export const serverApi = axios.create({
-    baseURL: (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000') + '/api/v1',
+    baseURL: DIRECT_BACKEND,
     timeout: getApiTimeout('default'),
     withCredentials: true,
     decompress: true,

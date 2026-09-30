@@ -62,13 +62,22 @@ async function proxyRequest(request: NextRequest, pathSegments: string[], method
             statusText: response.statusText,
         });
 
+        const skipHeaders = new Set(['content-encoding', 'content-length', 'transfer-encoding', 'set-cookie']);
         response.headers.forEach((value, key) => {
-            if (!['content-encoding', 'content-length', 'transfer-encoding'].includes(key.toLowerCase())) {
+            if (!skipHeaders.has(key.toLowerCase())) {
                 nextResponse.headers.set(key, value);
             }
         });
-        const setCookie = response.headers.get('set-cookie');
-        if (setCookie) nextResponse.headers.set('set-cookie', setCookie);
+        // undici hides Set-Cookie from forEach/get(); getSetCookie keeps each cookie intact.
+        const setCookies = typeof response.headers.getSetCookie === 'function'
+            ? response.headers.getSetCookie()
+            : [];
+        const cookies = setCookies.length > 0
+            ? setCookies
+            : [response.headers.get('set-cookie')].filter((value): value is string => !!value);
+        for (const cookie of cookies) {
+            nextResponse.headers.append('set-cookie', cookie);
+        }
 
         return nextResponse;
     } catch (err) {
