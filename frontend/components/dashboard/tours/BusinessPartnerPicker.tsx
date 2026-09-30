@@ -17,6 +17,10 @@ interface ItineraryPartner {
     notes?: string;
     /** "HH:mm" — only meaningful for role='meals' (lunch vs dinner sittings). Feeds the restaurant's confirmation request. */
     time?: string;
+    /** How many rooms/seats/covers the agency is asking for — the actual quantity a request reserves against the partner's capacity, distinct from traveler headcount. */
+    unitsRequested?: number;
+    /** Free-text override of what's being asked for, e.g. "Deluxe room". Defaults to the partner's own unit label (room/seat/slot) when unset. */
+    unitType?: string;
 }
 
 const ROLE_TO_TYPES: Record<ItineraryPartnerRole, BusinessPartnerType[]> = {
@@ -25,6 +29,14 @@ const ROLE_TO_TYPES: Record<ItineraryPartnerRole, BusinessPartnerType[]> = {
     guide: ['guide'],
     meals: ['restaurant'],
     other: ['guide', 'hotel', 'guesthouse', 'restaurant', 'transport', 'advertiser'],
+};
+
+/** Roles where "how many rooms/seats/covers" is a meaningful, separate ask from traveler headcount. Guide/other are time- or ad-hoc-based instead. */
+const ROLES_WITH_QUANTITY: ItineraryPartnerRole[] = ['accommodation', 'meals', 'transport'];
+const QUANTITY_LABEL: Record<string, string> = {
+    accommodation: 'Rooms',
+    meals: 'Covers',
+    transport: 'Seats',
 };
 
 interface BusinessPartnerPickerProps {
@@ -112,6 +124,17 @@ export function BusinessPartnerPicker({ basePath, role, label, placeholder }: Bu
         upsert({ ...current, time: time || undefined });
     };
 
+    const setUnitsRequested = (value: string) => {
+        if (!current) return;
+        const parsed = value === '' ? undefined : Math.max(0, Number(value));
+        upsert({ ...current, unitsRequested: Number.isFinite(parsed) ? parsed : undefined });
+    };
+
+    const setUnitType = (value: string) => {
+        if (!current) return;
+        upsert({ ...current, unitType: value || undefined });
+    };
+
     return (
         <div className="space-y-2 relative">
             <Label>{label}</Label>
@@ -163,6 +186,25 @@ export function BusinessPartnerPicker({ basePath, role, label, placeholder }: Bu
                     {current.businessPartnerId && (
                         <span className="text-xs text-muted-foreground">Lets {current.name} know exactly when to expect the group.</span>
                     )}
+                </div>
+            )}
+            {ROLES_WITH_QUANTITY.includes(role) && current && (
+                <div className="flex items-center gap-2 pt-1">
+                    <Label className="text-xs text-muted-foreground shrink-0">{QUANTITY_LABEL[role]}</Label>
+                    <Input
+                        type="number"
+                        min={0}
+                        className="h-8 w-20"
+                        placeholder="e.g. 10"
+                        value={current.unitsRequested ?? ''}
+                        onChange={(e) => setUnitsRequested(e.target.value)}
+                    />
+                    <Input
+                        className="h-8 flex-1"
+                        placeholder="e.g. Deluxe room (optional)"
+                        value={current.unitType || ''}
+                        onChange={(e) => setUnitType(e.target.value)}
+                    />
                 </div>
             )}
         </div>

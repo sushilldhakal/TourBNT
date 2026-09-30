@@ -3,6 +3,7 @@ import {
   tours,
   tourItineraryPartners,
   itineraryPartnerRequests,
+  itineraryRequestEvents,
   itineraryRequestBookingContributions,
   businessPartnerCapacity,
   businessPartnerCapacityOverrides,
@@ -10,19 +11,59 @@ import {
   tourAuthors,
   bookings,
 } from '@tourbnt/db';
-import { eq, and, inArray, sql, ne } from 'drizzle-orm';
+import { eq, and, or, inArray, sql, ne, lt } from 'drizzle-orm';
 import createHttpError from 'http-errors';
 import * as notifications from '../../notifications/notificationController';
 
 type TourRow = typeof tours.$inferSelect;
 type BookingRow = typeof bookings.$inferSelect;
 type ItineraryPartnerRow = typeof tourItineraryPartners.$inferSelect;
+type RequestRow = typeof itineraryPartnerRequests.$inferSelect;
+type RequestStatus = RequestRow['status'];
+
+const HOLD_DURATION_MS = 48 * 60 * 60 * 1000;
+const RESPOND_BY_MS = 72 * 60 * 60 * 1000;
 
 interface FixedDeparture {
-  _id?: string;
-  startDate: string | Date;
-  endDate?: string | Date;
-  maxPax?: number;
+  startDate: Date;
+  /** Seats this departure can hold. Undefined when the seller didn't set one — callers fall back to tour.maxSize. */
+  capacity?: number;
+}
+
+interface TourDatesShape {
+  scheduleType?: string;
+  defaultDateRange?: { from?: string | Date; to?: string | Date } | null;
+  departures?: Array<{ dateRange?: { from?: string | Date; to?: string | Date } | null; capacity?: number }>;
+}
+
+/**
+ * The tour's real, agency-authored departure dates — read from
+ * `tours.tourDates` (written by the tour editor's date-scheduling step),
+ * NOT the legacy `tours.fixedDepartures` column, which nothing in the
+ * frontend ever populates. A 'multiple' schedule contributes one entry per
+ * departure (each with its own capacity); a 'fixed' schedule contributes
+ * its single date range with no per-date capacity override (falls back to
+ * tour.maxSize downstream). 'flexible'/'recurring' tours have no fixed
+ * dates to gate — bookings on those go through generateOrUpdateRequestsForBooking instead.
+ */
+function getFixedDepartures(tour: Pick<TourRow, 'tourDates'>): FixedDeparture[] {
+  const tourDates = (tour.tourDates ?? null) as TourDatesShape | null;
+  if (!tourDates) return [];
+
+  if (tourDates.scheduleType === 'multiple') {
+    return (tourDates.departures ?? [])
+      .filter((d) => d?.dateRange?.from)
+      .map((d) => ({
+        startDate: new Date(d.dateRange!.from!),
+        capacity: typeof d.capacity === 'number' ? d.capacity : undefined,
+      }));
+  }
+
+  if (tourDates.scheduleType === 'fixed' && tourDates.defaultDateRange?.from) {
+    return [{ startDate: new Date(tourDates.defaultDateRange.from) }];
+  }
+
+  return [];
 }
 
 const toDateString = (d: Date): string => d.toISOString().slice(0, 10);
@@ -50,9 +91,8 @@ function getItineraryPartnerServiceTime(tour: Pick<TourRow, 'itinerary'>, dayId:
 }
 
 /** The fixed departure (if any) whose startDate falls on the same calendar day as `departureDate`. */
-export function findMatchingFixedDeparture(tour: Pick<TourRow, 'fixedDepartures'>, departureDate: Date): FixedDeparture | undefined {
-  const departures = Array.isArray(tour.fixedDepartures) ? (tour.fixedDepartures as FixedDeparture[]) : [];
-  return departures.find((dep) => dep?.startDate && sameCalendarDay(new Date(dep.startDate), departureDate));
+export function findMatchingFixedDeparture(tour: Pick<TourRow, 'tourDates'>, departureDate: Date): FixedDeparture | undefined {
+  return getFixedDepartures(tour).find((dep) => sameCalendarDay(dep.startDate, departureDate));
 }
 
 export class ItineraryRequestService {
@@ -74,11 +114,10 @@ export class ItineraryRequestService {
       .from(tourItineraryPartners)
       .where(and(eq(tourItineraryPartners.tourId, tourId), sql`${tourItineraryPartners.businessPartnerId} IS NOT NULL`));
 
-    const departures = (Array.isArray(tour.fixedDepartures) ? (tour.fixedDepartures as FixedDeparture[]) : [])
-      .filter((dep) => dep?.startDate && new Date(dep.startDate).getTime() > Date.now());
+    const departures = getFixedDepartures(tour).filter((dep) => dep.startDate.getTime() > Date.now());
 
     type DesiredKey = { tourItineraryPartnerId: string; serviceDate: string; serviceTime: string | null };
-    const desired: Array<DesiredKey & { link: ItineraryPartnerRow; headcount: number; sourceDepartureDate: Date }> = [];
+    const desired: Array<DesiredKey & { link: ItineraryPartnerRow; headcount: number; unitsRequested: number; sourceDepartureDate: Date }> = [];
 
     for (const link of partnerLinks) {
       const dayIndex = getItineraryDayIndex(tour, link.dayId);
@@ -86,10 +125,13 @@ export class ItineraryRequestService {
       const serviceTime = getItineraryPartnerServiceTime(tour, link.dayId, link.role) ?? null;
 
       for (const dep of departures) {
-        const start = new Date(dep.startDate);
-        const serviceDate = toDateString(addDays(start, dayIndex));
-        const headcount = dep.maxPax ?? tour.maxSize ?? 0;
-        desired.push({ tourItineraryPartnerId: link.id, serviceDate, serviceTime, link, headcount, sourceDepartureDate: start });
+        const serviceDate = toDateString(addDays(dep.startDate, dayIndex));
+        const headcount = dep.capacity ?? tour.maxSize ?? 0;
+        // The agency's own stated quantity for this link wins when set
+        // (e.g. "10 rooms" for accommodation); otherwise fall back to the
+        // departure's/tour's traveler count, same as headcount.
+        const unitsRequested = link.unitsRequested ?? headcount;
+        desired.push({ tourItineraryPartnerId: link.id, serviceDate, serviceTime, link, headcount, unitsRequested, sourceDepartureDate: dep.startDate });
       }
     }
 
@@ -115,8 +157,15 @@ export class ItineraryRequestService {
               serviceDate: d.serviceDate,
               serviceTime: d.serviceTime,
               headcount: d.headcount,
+              unitsRequested: d.unitsRequested,
+              respondByAt: new Date(Date.now() + RESPOND_BY_MS),
               sourceDepartureDate: d.sourceDepartureDate,
             }).returning({ id: itineraryPartnerRequests.id });
+
+            await tx.insert(itineraryRequestEvents).values({
+              requestId: created.id, fromStatus: null, toStatus: 'pending',
+              actorRole: 'system', unitsAtEvent: d.unitsRequested, notes: 'Auto-generated from fixed departure',
+            });
 
             try {
               await notifyPartnerOfNewRequest(created.id);
@@ -124,10 +173,10 @@ export class ItineraryRequestService {
               console.error('Failed to notify partner of new itinerary request:', err);
             }
           } else if (existing.status === 'pending') {
-            // Refresh the ask if the seller changed maxPax/maxSize since — never
-            // touch a request the partner has already confirmed or declined.
+            // Refresh the ask if the seller changed capacity/maxSize/quantity
+            // since — never touch a request the partner has already responded to.
             await tx.update(itineraryPartnerRequests)
-              .set({ headcount: d.headcount, updatedAt: new Date() })
+              .set({ headcount: d.headcount, unitsRequested: d.unitsRequested, updatedAt: new Date() })
               .where(eq(itineraryPartnerRequests.id, existing.id));
           }
         }
@@ -204,9 +253,12 @@ export class ItineraryRequestService {
           serviceDate,
           serviceTime,
           headcount: 0,
+          unitsRequested: 0,
+          respondByAt: new Date(Date.now() + RESPOND_BY_MS),
         }).returning({ id: itineraryPartnerRequests.id });
         requestId = created.id;
         isNew = true;
+        await logEvent(requestId, null, 'pending', null, 'system', 0, 'Auto-generated from booking');
       } else {
         requestId = existing.id;
       }
@@ -220,10 +272,23 @@ export class ItineraryRequestService {
         .from(itineraryRequestBookingContributions)
         .where(eq(itineraryRequestBookingContributions.requestId, requestId));
 
+      // For a flexible-date tour, headcount (people) and unitsRequested (the
+      // quantity reserved against the partner's pool) are the same number —
+      // there's no separate agency-authored room/seat count on this path.
       const needsReconfirm = existing?.status === 'confirmed' && Number(total) > (existing.capacityConfirmed ?? 0);
       await db.update(itineraryPartnerRequests)
-        .set({ headcount: Number(total), status: needsReconfirm ? 'pending' : undefined, updatedAt: new Date() })
+        .set({
+          headcount: Number(total),
+          unitsRequested: Number(total),
+          status: needsReconfirm ? 'pending' : undefined,
+          holdExpiresAt: needsReconfirm ? null : undefined,
+          updatedAt: new Date(),
+        })
         .where(eq(itineraryPartnerRequests.id, requestId));
+
+      if (needsReconfirm && existing) {
+        await logEvent(requestId, existing.status, 'pending', null, 'system', Number(total), 'Booking increased headcount past what was confirmed — reconfirmation needed');
+      }
 
       try {
         if (isNew) await notifyPartnerOfNewRequest(requestId);
@@ -258,7 +323,7 @@ export class ItineraryRequestService {
         await db.delete(itineraryPartnerRequests).where(eq(itineraryPartnerRequests.id, request.id));
       } else {
         await db.update(itineraryPartnerRequests)
-          .set({ headcount: Number(total), updatedAt: new Date() })
+          .set({ headcount: Number(total), unitsRequested: Number(total), updatedAt: new Date() })
           .where(eq(itineraryPartnerRequests.id, request.id));
       }
     }
@@ -278,32 +343,97 @@ export class ItineraryRequestService {
     return Number(unconfirmedCount) === 0;
   }
 
-  /** Seller (tour author) or admin: every request for this tour, with the partner's name, for a read-only logistics-status panel on the tour editor. */
-  static async getRequestsForTour(tourId: string, requester: { id: string; isAdmin: boolean }) {
-    if (!requester.isAdmin) {
-      const [owned] = await db
-        .select({ tourId: tourAuthors.tourId })
-        .from(tourAuthors)
-        .where(and(eq(tourAuthors.tourId, tourId), eq(tourAuthors.userId, requester.id)))
-        .limit(1);
-      if (!owned) throw createHttpError(403, 'You do not have access to this tour\'s logistics status');
-    }
+  /** Admin, or a tourAuthors row for the tour — else 403. Shared by every agency-facing method below. */
+  static async assertTourAuthorOrAdmin(tourId: string, requester: { id: string; isAdmin: boolean }): Promise<void> {
+    if (requester.isAdmin) return;
+    const [owned] = await db
+      .select({ tourId: tourAuthors.tourId })
+      .from(tourAuthors)
+      .where(and(eq(tourAuthors.tourId, tourId), eq(tourAuthors.userId, requester.id)))
+      .limit(1);
+    if (!owned) throw createHttpError(403, 'You do not have access to this tour');
+  }
 
-    return db
+  /**
+   * Seller (tour author) or admin: every request for this tour, with the
+   * partner's name, plus a synthetic "not yet requested" row for any linked
+   * partner that has no request at all — the agency orchestrator table
+   * shows these with a "Send request" action.
+   */
+  static async getRequestsForTour(tourId: string, requester: { id: string; isAdmin: boolean }) {
+    await ItineraryRequestService.assertTourAuthorOrAdmin(tourId, requester);
+
+    const requestedRows = await db
       .select({ request: itineraryPartnerRequests, partnerName: businessPartners.name, partnerType: businessPartners.type })
       .from(itineraryPartnerRequests)
       .innerJoin(businessPartners, eq(itineraryPartnerRequests.businessPartnerId, businessPartners.id))
-      .where(eq(itineraryPartnerRequests.tourId, tourId))
-      .then((rows) => rows.map(({ request, partnerName, partnerType }) => ({ ...request, partnerName, partnerType })));
+      .where(eq(itineraryPartnerRequests.tourId, tourId));
+
+    const requestIds = requestedRows.map((r) => r.request.id);
+    const events = requestIds.length
+      ? await db.select().from(itineraryRequestEvents).where(inArray(itineraryRequestEvents.requestId, requestIds)).orderBy(itineraryRequestEvents.createdAt)
+      : [];
+    const eventsByRequest = new Map<string, typeof events>();
+    for (const e of events) {
+      const list = eventsByRequest.get(e.requestId) || [];
+      list.push(e);
+      eventsByRequest.set(e.requestId, list);
+    }
+
+    const links = await db
+      .select({ link: tourItineraryPartners, partnerName: businessPartners.name, partnerType: businessPartners.type })
+      .from(tourItineraryPartners)
+      .innerJoin(businessPartners, eq(tourItineraryPartners.businessPartnerId, businessPartners.id))
+      .where(and(eq(tourItineraryPartners.tourId, tourId), sql`${tourItineraryPartners.businessPartnerId} IS NOT NULL`));
+    const linkById = new Map(links.map((l) => [l.link.id, l.link]));
+
+    const requested = requestedRows.map(({ request, partnerName, partnerType }) => ({
+      ...request,
+      partnerName,
+      partnerType,
+      unitType: linkById.get(request.tourItineraryPartnerId)?.unitType ?? null,
+      events: eventsByRequest.get(request.id) ?? [],
+    }));
+
+    const linkedPartnerIds = new Set(requested.map((r) => r.tourItineraryPartnerId));
+
+    const unrequested = links
+      .filter((l) => !linkedPartnerIds.has(l.link.id))
+      .map((l) => ({
+        id: null as string | null,
+        tourId,
+        tourItineraryPartnerId: l.link.id,
+        businessPartnerId: l.link.businessPartnerId,
+        role: l.link.role,
+        serviceDate: null as string | null,
+        serviceTime: null as string | null,
+        headcount: 0,
+        unitsRequested: l.link.unitsRequested ?? 0,
+        unitType: l.link.unitType ?? null,
+        status: null as RequestStatus | null,
+        partnerName: l.partnerName,
+        partnerType: l.partnerType,
+        events: [] as typeof events,
+      }));
+
+    return [...requested, ...unrequested];
   }
 
-  /** Owner-or-admin gated confirm/decline, with capacity validated against the partner's remaining capacity for that date. */
+  /**
+   * Partner (owner-or-admin) responds to a request they're holding a
+   * decision on. `action` replaces the old binary confirmed/declined:
+   *  - hold: tentatively reserve `units`, expiring at holdExpiresAt unless promoted.
+   *  - confirm: lock in `units` for good — allowed straight from pending, or promoting a hold.
+   *  - decline: refuse outright.
+   *  - counter: propose different units/date/time back to the agency (see respondToCounter).
+   * hold/confirm both re-validate against getAvailableCapacity so two
+   * simultaneous responses can't jointly over-commit the partner's pool.
+   */
   static async respondToRequest(
     requestId: string,
     requester: { id: string; isAdmin: boolean },
-    status: 'confirmed' | 'declined',
-    capacityConfirmed?: number,
-    notes?: string,
+    action: 'hold' | 'confirm' | 'decline' | 'counter',
+    params: { units?: number; notes?: string; counterUnits?: number; counterDate?: string; counterTime?: string } = {},
   ) {
     const [request] = await db.select().from(itineraryPartnerRequests).where(eq(itineraryPartnerRequests.id, requestId)).limit(1);
     if (!request) throw createHttpError(404, 'Request not found');
@@ -314,35 +444,316 @@ export class ItineraryRequestService {
       throw createHttpError(403, 'Not authorized to respond to this request');
     }
 
-    if (status === 'confirmed') {
-      if (capacityConfirmed === undefined || capacityConfirmed < 0) {
-        throw createHttpError(400, 'capacityConfirmed is required to confirm a request');
+    const fromStatus = request.status;
+    let toStatus: RequestStatus;
+    let patch: Partial<typeof itineraryPartnerRequests.$inferInsert>;
+
+    if (action === 'hold' || action === 'confirm') {
+      if (action === 'hold' && fromStatus !== 'pending') {
+        throw createHttpError(400, `Cannot hold a request that is currently ${fromStatus}`);
+      }
+      if (action === 'confirm' && fromStatus !== 'pending' && fromStatus !== 'held') {
+        throw createHttpError(400, `Cannot confirm a request that is currently ${fromStatus}`);
+      }
+      if (params.units === undefined || params.units < 0) {
+        throw createHttpError(400, 'units is required');
       }
       const available = await ItineraryRequestService.getAvailableCapacity(request.businessPartnerId, request.serviceDate, requestId);
-      if (capacityConfirmed > available) {
-        throw createHttpError(400, `Only ${available} available on ${request.serviceDate} — cannot confirm ${capacityConfirmed}`);
+      if (params.units > available) {
+        throw createHttpError(400, `Only ${available} available on ${request.serviceDate} — cannot commit ${params.units}`);
       }
+      toStatus = action === 'hold' ? 'held' : 'confirmed';
+      patch = {
+        status: toStatus,
+        capacityConfirmed: params.units,
+        responseNotes: params.notes ?? null,
+        respondedAt: new Date(),
+        respondedBy: requester.id,
+        holdExpiresAt: action === 'hold' ? new Date(Date.now() + HOLD_DURATION_MS) : null,
+        counterUnits: null, counterDate: null, counterTime: null, counterNotes: null,
+      };
+    } else if (action === 'decline') {
+      if (fromStatus !== 'pending' && fromStatus !== 'held' && fromStatus !== 'countered') {
+        throw createHttpError(400, `Cannot decline a request that is currently ${fromStatus}`);
+      }
+      toStatus = 'declined';
+      patch = {
+        status: 'declined',
+        capacityConfirmed: null,
+        responseNotes: params.notes ?? null,
+        respondedAt: new Date(),
+        respondedBy: requester.id,
+        holdExpiresAt: null,
+        counterUnits: null, counterDate: null, counterTime: null, counterNotes: null,
+      };
+    } else if (action === 'counter') {
+      if (fromStatus !== 'pending') {
+        throw createHttpError(400, `Cannot counter a request that is currently ${fromStatus}`);
+      }
+      if (params.counterUnits === undefined && !params.counterDate && !params.counterTime) {
+        throw createHttpError(400, 'Provide at least one of counterUnits, counterDate, or counterTime');
+      }
+      toStatus = 'countered';
+      patch = {
+        status: 'countered',
+        respondedAt: new Date(),
+        respondedBy: requester.id,
+        counterUnits: params.counterUnits ?? null,
+        counterDate: params.counterDate ?? null,
+        counterTime: params.counterTime ?? null,
+        counterNotes: params.notes ?? null,
+      };
+    } else {
+      throw createHttpError(400, `Unknown action: ${action}`);
     }
 
-    const [updated] = await db.update(itineraryPartnerRequests).set({
-      status,
-      capacityConfirmed: status === 'confirmed' ? capacityConfirmed : null,
-      responseNotes: notes ?? null,
-      respondedAt: new Date(),
-      respondedBy: requester.id,
-      updatedAt: new Date(),
-    }).where(eq(itineraryPartnerRequests.id, requestId)).returning();
+    const updated = await updateRequestWithVersion(requestId, request.version, patch);
+    await logEvent(requestId, fromStatus, toStatus, requester.id, 'partner', patch.capacityConfirmed ?? request.unitsRequested, params.notes);
 
     try {
-      await notifySellersOfResponse(updated, partner.name, status);
+      await notifyAgencyOfPartnerResponse(updated, partner.name, toStatus);
     } catch (err) {
-      console.error('Failed to notify sellers of itinerary request response:', err);
+      console.error('Failed to notify agency of itinerary request response:', err);
     }
 
     return updated;
   }
 
-  /** Total capacity for (partner, date) minus what's already confirmed on OTHER requests for that same date. */
+  /** Agency (tour author) or admin accepts or declines a partner's counter-offer on a `countered` request. */
+  static async respondToCounter(requestId: string, requester: { id: string; isAdmin: boolean }, accept: boolean) {
+    const [request] = await db.select().from(itineraryPartnerRequests).where(eq(itineraryPartnerRequests.id, requestId)).limit(1);
+    if (!request) throw createHttpError(404, 'Request not found');
+    await ItineraryRequestService.assertTourAuthorOrAdmin(request.tourId, requester);
+    if (request.status !== 'countered') {
+      throw createHttpError(400, `Request is not awaiting a counter-offer response (currently ${request.status})`);
+    }
+
+    const [partner] = await db.select({ ownerId: businessPartners.ownerId }).from(businessPartners).where(eq(businessPartners.id, request.businessPartnerId)).limit(1);
+
+    let toStatus: RequestStatus;
+    let patch: Partial<typeof itineraryPartnerRequests.$inferInsert>;
+
+    if (accept) {
+      const units = request.counterUnits ?? request.unitsRequested;
+      const effectiveDate = request.counterDate ?? request.serviceDate;
+      const available = await ItineraryRequestService.getAvailableCapacity(request.businessPartnerId, effectiveDate, requestId);
+      if (units > available) {
+        throw createHttpError(400, `Only ${available} available on ${effectiveDate} — cannot accept ${units}`);
+      }
+      toStatus = 'held';
+      patch = {
+        status: 'held',
+        serviceDate: effectiveDate,
+        serviceTime: request.counterTime ?? request.serviceTime,
+        unitsRequested: units,
+        capacityConfirmed: units,
+        holdExpiresAt: new Date(Date.now() + HOLD_DURATION_MS),
+        counterUnits: null, counterDate: null, counterTime: null, counterNotes: null,
+      };
+    } else {
+      toStatus = 'declined';
+      patch = {
+        status: 'declined',
+        capacityConfirmed: null,
+        holdExpiresAt: null,
+        counterUnits: null, counterDate: null, counterTime: null, counterNotes: null,
+      };
+    }
+
+    const updated = await updateRequestWithVersion(requestId, request.version, patch);
+    await logEvent(requestId, 'countered', toStatus, requester.id, 'agency', updated.capacityConfirmed ?? updated.unitsRequested, accept ? 'Agency accepted counter-offer' : 'Agency declined counter-offer');
+
+    // Only the accept path has a fitting notification today (no "your
+    // counter was declined" copy exists yet) — the decline is still fully
+    // recorded via the status change and the event log above either way.
+    if (partner && accept) {
+      try {
+        const [tour] = await db.select({ title: tours.title }).from(tours).where(eq(tours.id, updated.tourId)).limit(1);
+        await notifications.createItineraryRequestHeldNotification(partner.ownerId, tour?.title ?? 'a tour', updated.serviceDate, updated.id);
+      } catch (err) {
+        console.error('Failed to notify partner of counter-offer acceptance:', err);
+      }
+    }
+
+    return updated;
+  }
+
+  /** Agency/admin: resurrect a `declined`/`expired` request back to `pending` — there's otherwise no path back once a partner says no or a request times out. Backs "replace/re-request" in the orchestrator table. */
+  static async reopenRequest(requestId: string, requester: { id: string; isAdmin: boolean }) {
+    const [request] = await db.select().from(itineraryPartnerRequests).where(eq(itineraryPartnerRequests.id, requestId)).limit(1);
+    if (!request) throw createHttpError(404, 'Request not found');
+    await ItineraryRequestService.assertTourAuthorOrAdmin(request.tourId, requester);
+    if (request.status !== 'declined' && request.status !== 'expired') {
+      throw createHttpError(400, `Only a declined or expired request can be reopened (currently ${request.status})`);
+    }
+
+    const updated = await updateRequestWithVersion(requestId, request.version, {
+      status: 'pending',
+      capacityConfirmed: null,
+      holdExpiresAt: null,
+      respondByAt: new Date(Date.now() + RESPOND_BY_MS),
+      counterUnits: null, counterDate: null, counterTime: null, counterNotes: null,
+      responseNotes: null,
+    });
+    await logEvent(requestId, request.status, 'pending', requester.id, 'agency', request.unitsRequested, 'Reopened by agency');
+
+    try {
+      await notifyPartnerOfNewRequest(requestId);
+    } catch (err) {
+      console.error('Failed to notify partner of reopened request:', err);
+    }
+
+    return updated;
+  }
+
+  /**
+   * Agency/admin: send a request on demand for a link that has no request
+   * yet (before any booking, or a tour with no fixed departures) — reads
+   * units/unitType off the tourItineraryPartners link itself.
+   */
+  static async createManualRequest(tourItineraryPartnerId: string, requester: { id: string; isAdmin: boolean }, serviceDate: string, serviceTime?: string) {
+    const [link] = await db.select().from(tourItineraryPartners).where(eq(tourItineraryPartners.id, tourItineraryPartnerId)).limit(1);
+    if (!link) throw createHttpError(404, 'Itinerary partner link not found');
+    if (!link.businessPartnerId) throw createHttpError(400, 'This day\'s partner is a free-typed name, not a registered business — link a real business first');
+    await ItineraryRequestService.assertTourAuthorOrAdmin(link.tourId, requester);
+
+    const [existing] = await db
+      .select({ id: itineraryPartnerRequests.id })
+      .from(itineraryPartnerRequests)
+      .where(and(
+        eq(itineraryPartnerRequests.tourItineraryPartnerId, tourItineraryPartnerId),
+        eq(itineraryPartnerRequests.serviceDate, serviceDate),
+        serviceTime ? eq(itineraryPartnerRequests.serviceTime, serviceTime) : sql`${itineraryPartnerRequests.serviceTime} IS NULL`,
+      ))
+      .limit(1);
+    if (existing) throw createHttpError(409, 'A request already exists for this partner on this date');
+
+    const unitsRequested = link.unitsRequested ?? 0;
+    const [created] = await db.insert(itineraryPartnerRequests).values({
+      tourId: link.tourId,
+      tourItineraryPartnerId,
+      businessPartnerId: link.businessPartnerId,
+      role: link.role,
+      serviceDate,
+      serviceTime: serviceTime ?? null,
+      headcount: unitsRequested,
+      unitsRequested,
+      respondByAt: new Date(Date.now() + RESPOND_BY_MS),
+    }).returning();
+
+    await logEvent(created.id, null, 'pending', requester.id, 'agency', unitsRequested, 'Manually sent by agency');
+
+    try {
+      await notifyPartnerOfNewRequest(created.id);
+    } catch (err) {
+      console.error('Failed to notify partner of manual itinerary request:', err);
+    }
+
+    return created;
+  }
+
+  /**
+   * Agency/admin: swap the business partner linked to a day/role in place —
+   * preserves the tourItineraryPartners row's id (and any events history via
+   * the request it had) instead of the delete-and-reinsert a normal tour
+   * save does, which would silently cascade-delete any live request.
+   * Declines any live request against the old partner (with an event note)
+   * and creates a fresh pending request for the new one if the old one had
+   * a real service date to carry over.
+   */
+  static async replaceSupplier(tourItineraryPartnerId: string, requester: { id: string; isAdmin: boolean }, businessPartnerId: string, name: string) {
+    const [link] = await db.select().from(tourItineraryPartners).where(eq(tourItineraryPartners.id, tourItineraryPartnerId)).limit(1);
+    if (!link) throw createHttpError(404, 'Itinerary partner link not found');
+    await ItineraryRequestService.assertTourAuthorOrAdmin(link.tourId, requester);
+
+    const [newPartner] = await db.select({ id: businessPartners.id, type: businessPartners.type, approvalStatus: businessPartners.approvalStatus }).from(businessPartners).where(eq(businessPartners.id, businessPartnerId)).limit(1);
+    if (!newPartner || newPartner.approvalStatus !== 'approved') {
+      throw createHttpError(400, 'The replacement business is unknown or not yet approved');
+    }
+
+    const liveRequests = await db
+      .select()
+      .from(itineraryPartnerRequests)
+      .where(and(
+        eq(itineraryPartnerRequests.tourItineraryPartnerId, tourItineraryPartnerId),
+        inArray(itineraryPartnerRequests.status, ['pending', 'held', 'countered']),
+      ));
+
+    for (const oldRequest of liveRequests) {
+      const [oldPartner] = await db.select({ ownerId: businessPartners.ownerId }).from(businessPartners).where(eq(businessPartners.id, oldRequest.businessPartnerId)).limit(1);
+      await updateRequestWithVersion(oldRequest.id, oldRequest.version, {
+        status: 'declined',
+        capacityConfirmed: null,
+        holdExpiresAt: null,
+        counterUnits: null, counterDate: null, counterTime: null, counterNotes: null,
+        responseNotes: 'Replaced by agency',
+      });
+      await logEvent(oldRequest.id, oldRequest.status, 'declined', requester.id, 'agency', 0, 'Replaced by agency');
+      if (oldPartner) {
+        try {
+          const [tour] = await db.select({ title: tours.title }).from(tours).where(eq(tours.id, link.tourId)).limit(1);
+          await notifications.createItineraryRequestReplacedNotification(oldPartner.ownerId, tour?.title ?? 'a tour', oldRequest.serviceDate, oldRequest.id);
+        } catch (err) {
+          console.error('Failed to notify replaced partner:', err);
+        }
+      }
+    }
+
+    await db.update(tourItineraryPartners).set({ businessPartnerId, name, updatedAt: new Date() }).where(eq(tourItineraryPartners.id, tourItineraryPartnerId));
+
+    // Carry the swap forward with a fresh request on the same date, if the old link had one.
+    const carryDate = liveRequests[0]?.serviceDate;
+    if (carryDate) {
+      await ItineraryRequestService.createManualRequest(tourItineraryPartnerId, requester, carryDate, liveRequests[0]?.serviceTime ?? undefined);
+    }
+
+    return { tourItineraryPartnerId, businessPartnerId, name };
+  }
+
+  /**
+   * Sweep: `held` rows past holdExpiresAt, and `pending`/`countered` rows
+   * past respondByAt, get flipped to `expired`, freeing whatever capacity
+   * they had reserved. Run on a timer (itineraryRequestExpiry.ts) — this is
+   * what makes getAvailableCapacity's pooled reservation safe over time
+   * rather than permanently locking up a partner's calendar.
+   */
+  static async expireStaleRequests(): Promise<number> {
+    const now = new Date();
+    const stale = await db
+      .select()
+      .from(itineraryPartnerRequests)
+      .where(or(
+        and(eq(itineraryPartnerRequests.status, 'held'), lt(itineraryPartnerRequests.holdExpiresAt, now)),
+        and(inArray(itineraryPartnerRequests.status, ['pending', 'countered']), lt(itineraryPartnerRequests.respondByAt, now)),
+      ));
+
+    for (const request of stale) {
+      const updated = await updateRequestWithVersion(request.id, request.version, {
+        status: 'expired',
+        capacityConfirmed: null,
+        holdExpiresAt: null,
+        respondByAt: null,
+        counterUnits: null, counterDate: null, counterTime: null, counterNotes: null,
+      }).catch(() => null);
+      if (!updated) continue; // lost a race with a real response — leave it as whatever it now is
+
+      await logEvent(request.id, request.status, 'expired', null, 'system', 0, 'Auto-expired: no response in time');
+
+      try {
+        const [tour] = await db.select({ title: tours.title }).from(tours).where(eq(tours.id, request.tourId)).limit(1);
+        const authors = await db.select({ userId: tourAuthors.userId }).from(tourAuthors).where(eq(tourAuthors.tourId, request.tourId));
+        for (const { userId } of authors) {
+          await notifications.createItineraryRequestExpiredNotification(userId, tour?.title ?? 'a tour', request.serviceDate, request.id);
+        }
+      } catch (err) {
+        console.error('Failed to notify agency of expired itinerary request:', err);
+      }
+    }
+
+    return stale.length;
+  }
+
+  /** Total capacity for (partner, date) minus what's already reserved (pending/held/confirmed/countered) by OTHER requests for that same date. */
   static async getAvailableCapacity(businessPartnerId: string, serviceDate: string, excludingRequestId?: string): Promise<number> {
     const [override] = await db.select({ capacity: businessPartnerCapacityOverrides.capacity }).from(businessPartnerCapacityOverrides)
       .where(and(eq(businessPartnerCapacityOverrides.businessPartnerId, businessPartnerId), eq(businessPartnerCapacityOverrides.date, serviceDate)))
@@ -354,17 +765,57 @@ export class ItineraryRequestService {
     const conditions = [
       eq(itineraryPartnerRequests.businessPartnerId, businessPartnerId),
       eq(itineraryPartnerRequests.serviceDate, serviceDate),
-      eq(itineraryPartnerRequests.status, 'confirmed'),
+      inArray(itineraryPartnerRequests.status, ['pending', 'held', 'confirmed', 'countered']),
     ];
     if (excludingRequestId) conditions.push(ne(itineraryPartnerRequests.id, excludingRequestId));
 
+    // Pending/countered reserve their ask (unitsRequested); held/confirmed
+    // reserve what the partner actually committed (capacityConfirmed) — a
+    // hold or confirm can be for less than was originally asked.
     const [{ reserved }] = await db
-      .select({ reserved: sql<number>`COALESCE(SUM(${itineraryPartnerRequests.capacityConfirmed}), 0)` })
+      .select({
+        reserved: sql<number>`COALESCE(SUM(CASE
+          WHEN ${itineraryPartnerRequests.status} IN ('pending', 'countered') THEN ${itineraryPartnerRequests.unitsRequested}
+          WHEN ${itineraryPartnerRequests.status} IN ('held', 'confirmed') THEN COALESCE(${itineraryPartnerRequests.capacityConfirmed}, 0)
+          ELSE 0
+        END), 0)`,
+      })
       .from(itineraryPartnerRequests)
       .where(and(...conditions));
 
     return Math.max(0, total - Number(reserved));
   }
+}
+
+/**
+ * Applies `patch` only if the row is still at `expectedVersion`, incrementing
+ * it — the optimistic-concurrency guard that stops two racing transitions
+ * (e.g. a partner confirming while the expiry sweep is expiring the same
+ * request) from silently clobbering each other. Throws 409 if the row moved.
+ */
+async function updateRequestWithVersion(
+  requestId: string,
+  expectedVersion: number,
+  patch: Partial<typeof itineraryPartnerRequests.$inferInsert>,
+): Promise<RequestRow> {
+  const [updated] = await db.update(itineraryPartnerRequests)
+    .set({ ...patch, version: expectedVersion + 1, updatedAt: new Date() })
+    .where(and(eq(itineraryPartnerRequests.id, requestId), eq(itineraryPartnerRequests.version, expectedVersion)))
+    .returning();
+  if (!updated) throw createHttpError(409, 'This request was just updated by someone else — refresh and try again.');
+  return updated;
+}
+
+async function logEvent(
+  requestId: string,
+  fromStatus: RequestStatus | null,
+  toStatus: RequestStatus,
+  actorId: string | null,
+  actorRole: 'agency' | 'partner' | 'system',
+  unitsAtEvent: number | null,
+  notes?: string | null,
+): Promise<void> {
+  await db.insert(itineraryRequestEvents).values({ requestId, fromStatus, toStatus, actorId, actorRole, unitsAtEvent, notes: notes ?? null });
 }
 
 async function notifyPartnerOfNewRequest(requestId: string): Promise<void> {
@@ -379,13 +830,25 @@ async function notifyPartnerOfNewRequest(requestId: string): Promise<void> {
   await notifications.createItineraryRequestCreatedNotification(row.ownerId, row.tourTitle, row.request.serviceDate, row.request.id);
 }
 
-async function notifySellersOfResponse(request: typeof itineraryPartnerRequests.$inferSelect, partnerName: string, status: 'confirmed' | 'declined'): Promise<void> {
+async function notifyAgencyOfPartnerResponse(request: RequestRow, partnerName: string, status: RequestStatus): Promise<void> {
   const authors = await db.select({ userId: tourAuthors.userId }).from(tourAuthors).where(eq(tourAuthors.tourId, request.tourId));
+  if (authors.length === 0) return;
+
+  let tourTitle: string | undefined;
+  if (status === 'held' || status === 'countered') {
+    const [tour] = await db.select({ title: tours.title }).from(tours).where(eq(tours.id, request.tourId)).limit(1);
+    tourTitle = tour?.title;
+  }
+
   for (const { userId } of authors) {
     if (status === 'confirmed') {
       await notifications.createItineraryRequestConfirmedNotification(userId, partnerName, request.serviceDate, request.id);
-    } else {
+    } else if (status === 'declined') {
       await notifications.createItineraryRequestDeclinedNotification(userId, partnerName, request.serviceDate, request.id);
+    } else if (status === 'held') {
+      await notifications.createItineraryRequestHeldNotification(userId, tourTitle ?? 'a tour', request.serviceDate, request.id);
+    } else if (status === 'countered') {
+      await notifications.createItineraryRequestCounteredNotification(userId, tourTitle ?? 'a tour', request.serviceDate, request.id);
     }
   }
 }

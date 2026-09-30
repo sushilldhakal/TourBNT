@@ -2,6 +2,7 @@ import app from "./src/app";
 import { config } from "./src/config/config";
 import connectDB from "./src/config/db";
 import { startViewCounterFlusher, flushViewCounters } from "./src/services/viewCounterFlusher";
+import { startItineraryRequestExpirySweep } from "./src/services/itineraryRequestExpiry";
 import { closeRedis } from "./src/config/redisClient";
 
 const startServer = async () => {
@@ -15,6 +16,7 @@ const startServer = async () => {
   });
 
   startViewCounterFlusher();
+  startItineraryRequestExpirySweep();
 
   // Flush buffered view counts before exiting, so a redeploy/restart
   // (PM2, nodemon) doesn't silently drop up to one flush interval's worth.

@@ -81,6 +81,10 @@ export const notificationTypeEnum = pgEnum('notification_type', [
   'itinerary_request_created',
   'itinerary_request_confirmed',
   'itinerary_request_declined',
+  'itinerary_request_held',
+  'itinerary_request_countered',
+  'itinerary_request_expired',
+  'itinerary_request_replaced',
 ]);
 export const mediaKindEnum = pgEnum('media_kind', ['image', 'video', 'pdf']);
 
@@ -122,7 +126,14 @@ export const itineraryPartnerRoleEnum = pgEnum('itinerary_partner_role', [
 // A partner's response to a specific-date service request (see
 // itineraryPartnerRequests below) — separate from businessPartners'
 // onboarding approvalStatus, which only gates the listing itself.
-export const itineraryRequestStatusEnum = pgEnum('itinerary_request_status', ['pending', 'confirmed', 'declined']);
+// 'pending' = agency asked, awaiting response ("Requested" in the UI).
+// 'held' = partner tentatively reserved units, expiring at holdExpiresAt
+// unless promoted to 'confirmed'. 'countered' = partner proposed different
+// units/date/time (see the counter* columns) for the agency to accept or
+// decline. 'expired' = a stale 'pending'/'held' the sweep auto-released.
+export const itineraryRequestStatusEnum = pgEnum('itinerary_request_status', ['pending', 'held', 'confirmed', 'countered', 'declined', 'expired']);
+// Who/what caused an itineraryRequestEvents transition.
+export const itineraryRequestActorRoleEnum = pgEnum('itinerary_request_actor_role', ['agency', 'partner', 'system']);
 // Where on the site an ad campaign is eligible to render.
 export const adPlacementSlotEnum = pgEnum('ad_placement_slot', [
   'tour_detail',
@@ -842,6 +853,14 @@ export const tourItineraryPartners = pgTable('tour_itinerary_partners', {
   name: text('name').notNull(),
   notes: text('notes'),
   sortOrder: integer('sort_order').notNull().default(0),
+  // The agency's own stated quantity for this day/role (e.g. "10" rooms) —
+  // null for roles where a unit count doesn't apply (guide/other). Read by
+  // itineraryRequestService as the ask on generated/manual requests instead
+  // of deriving one purely from departure capacity or booking headcount.
+  unitsRequested: integer('units_requested'),
+  // Free-text override of what unit is being asked for (e.g. "Deluxe room").
+  // Defaults to the partner's own businessPartnerCapacity.unitLabel when unset.
+  unitType: text('unit_type'),
   ...timestamps,
 }, (table) => ({
   tourDayIdx: index('tour_itinerary_partners_tour_day_idx').on(table.tourId, table.dayId),
@@ -905,11 +924,40 @@ export const itineraryPartnerRequests = pgTable('itinerary_partner_requests', {
   // left null for accommodation/transport/guide requests.
   serviceTime: text('service_time'),
   headcount: integer('headcount').notNull().default(0),
+  // The quantity actually being asked for (rooms/seats/etc.), distinct from
+  // headcount (people) — snapshotted from tourItineraryPartners.unitsRequested,
+  // falling back to departure capacity/tour.maxSize when the agency didn't
+  // set one. This (not headcount) is what getAvailableCapacity reserves against.
+  unitsRequested: integer('units_requested').notNull().default(0),
   status: itineraryRequestStatusEnum('status').notNull().default('pending'),
+  // Units the partner has committed, whether tentatively (status='held') or
+  // finally (status='confirmed') — the same field carries both, since a
+  // hold being promoted to confirmed doesn't change how much was committed.
   capacityConfirmed: integer('capacity_confirmed'),
   responseNotes: text('response_notes'),
   respondedAt: timestamp('responded_at', { withTimezone: true }),
   respondedBy: text('responded_by').references(() => users.id),
+  // Set when entering 'held'; past this with no confirm, the expiry sweep
+  // (itineraryRequestExpiry.ts) flips the row to 'expired' and frees the
+  // capacity it was holding.
+  holdExpiresAt: timestamp('hold_expires_at', { withTimezone: true }),
+  // Set on a fresh 'pending' request (createdAt + 72h); an unanswered
+  // request past this is also swept to 'expired' rather than blocking a
+  // fixed-departure date forever.
+  respondByAt: timestamp('respond_by_at', { withTimezone: true }),
+  // Populated when a partner responds with status='countered' — what they
+  // can actually offer instead of the original ask. The agency then either
+  // accepts (copied into the live serviceDate/serviceTime/unitsRequested,
+  // status -> 'held') or declines (status -> 'declined') via
+  // ItineraryRequestService.respondToCounter.
+  counterUnits: integer('counter_units'),
+  counterDate: date('counter_date'),
+  counterTime: text('counter_time'),
+  counterNotes: text('counter_notes'),
+  // Optimistic-concurrency guard: every transition checks-and-increments
+  // this so two racing responses to the same request can't silently clobber
+  // each other.
+  version: integer('version').notNull().default(1),
   // Set only for fixed-departure-sourced requests, so isFixedDepartureDate
   // Confirmed() can find every request belonging to one departure.
   sourceDepartureDate: timestamp('source_departure_date', { withTimezone: true }),
@@ -920,6 +968,24 @@ export const itineraryPartnerRequests = pgTable('itinerary_partner_requests', {
   // Lets request generation be a plain upsert: one request per (day-link,
   // date, time-slot), regardless of how many bookings/departures feed it.
   dedupeIdx: uniqueIndex('itinerary_partner_requests_dedupe_idx').on(table.tourItineraryPartnerId, table.serviceDate, table.serviceTime),
+}));
+
+// Append-only audit trail — one row per status transition on a request
+// (agency-, partner-, or system/sweep-driven), since itineraryPartnerRequests
+// itself only ever holds the current state. Powers the orchestrator table's
+// per-requirement history (e.g. "Requested -> Held by Hotel A -> Confirmed").
+export const itineraryRequestEvents = pgTable('itinerary_request_events', {
+  id: id(),
+  requestId: text('request_id').notNull().references(() => itineraryPartnerRequests.id, { onDelete: 'cascade' }),
+  fromStatus: itineraryRequestStatusEnum('from_status'),
+  toStatus: itineraryRequestStatusEnum('to_status').notNull(),
+  actorId: text('actor_id').references(() => users.id),
+  actorRole: itineraryRequestActorRoleEnum('actor_role').notNull(),
+  unitsAtEvent: integer('units_at_event'),
+  notes: text('notes'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  requestIdx: index('itinerary_request_events_request_idx').on(table.requestId, table.createdAt),
 }));
 
 // Ledger of which booking contributed how many people to a given

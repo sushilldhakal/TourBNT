@@ -213,7 +213,7 @@ export interface BusinessPartnerCapacityOverride {
     capacity: number;
 }
 
-export type ItineraryRequestStatus = 'pending' | 'confirmed' | 'declined';
+export type ItineraryRequestStatus = 'pending' | 'held' | 'confirmed' | 'countered' | 'declined' | 'expired';
 
 export interface ItineraryPartnerRequest {
     id: string;
@@ -224,9 +224,16 @@ export interface ItineraryPartnerRequest {
     serviceDate: string;
     serviceTime?: string | null;
     headcount: number;
+    unitsRequested: number;
     status: ItineraryRequestStatus;
     capacityConfirmed?: number | null;
     responseNotes?: string | null;
+    holdExpiresAt?: string | null;
+    respondByAt?: string | null;
+    counterUnits?: number | null;
+    counterDate?: string | null;
+    counterTime?: string | null;
+    counterNotes?: string | null;
     sourceDepartureDate?: string | null;
     tour: { id: string; title: string };
     createdAt: string;
@@ -287,9 +294,14 @@ export const getMyItineraryRequests = async (businessPartnerId: string, params?:
     }
 };
 
-export const respondToItineraryRequest = async (businessPartnerId: string, requestId: string, status: 'confirmed' | 'declined', capacityConfirmed?: number, notes?: string) => {
+export const respondToItineraryRequest = async (
+    businessPartnerId: string,
+    requestId: string,
+    action: 'hold' | 'confirm' | 'decline' | 'counter',
+    params?: { units?: number; notes?: string; counterUnits?: number; counterDate?: string; counterTime?: string },
+) => {
     try {
-        const response = await api.patch(`/business-partners/${businessPartnerId}/requests/${requestId}`, { status, capacityConfirmed, notes });
+        const response = await api.patch(`/business-partners/${businessPartnerId}/requests/${requestId}`, { action, ...params });
         return extractResponseData<ItineraryPartnerRequest>(response);
     } catch (error) {
         throw handleApiError(error, 'responding to itinerary request');

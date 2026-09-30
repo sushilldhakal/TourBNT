@@ -167,16 +167,23 @@ export const respondToItineraryRequest = async (req: Request, res: Response, nex
   try {
     if (!req.user) return handleUnauthorized(res, 'Not authenticated');
     const { requestId } = req.params;
-    const { status, capacityConfirmed, notes } = req.body as { status?: 'confirmed' | 'declined'; capacityConfirmed?: number; notes?: string };
+    const { action, units, notes, counterUnits, counterDate, counterTime } = req.body as {
+      action?: 'hold' | 'confirm' | 'decline' | 'counter';
+      units?: number;
+      notes?: string;
+      counterUnits?: number;
+      counterDate?: string;
+      counterTime?: string;
+    };
 
-    if (!status || !['confirmed', 'declined'].includes(status)) {
-      return sendValidationError(res, 'Validation failed', [{ field: 'status', message: 'status must be "confirmed" or "declined"' }]);
+    if (!action || !['hold', 'confirm', 'decline', 'counter'].includes(action)) {
+      return sendValidationError(res, 'Validation failed', [{ field: 'action', message: 'action must be "hold", "confirm", "decline", or "counter"' }]);
     }
 
     const isAdmin = req.user.roles?.includes('admin') ?? false;
-    const updated = await ItineraryRequestService.respondToRequest(requestId, { id: req.user.id, isAdmin }, status, capacityConfirmed, notes);
+    const updated = await ItineraryRequestService.respondToRequest(requestId, { id: req.user.id, isAdmin }, action, { units, notes, counterUnits, counterDate, counterTime });
 
-    return sendSuccess(res, updated, `Request ${status} successfully`);
+    return sendSuccess(res, updated, `Request ${action} applied successfully`);
   } catch (error) {
     next(error);
   }

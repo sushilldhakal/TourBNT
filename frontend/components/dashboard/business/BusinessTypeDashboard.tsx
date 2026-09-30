@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -13,11 +14,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { toast } from '@/components/ui/use-toast';
 import { DashboardCardHeader } from '@/components/dashboard/layout/CardHeader';
 import type { LucideIcon } from 'lucide-react';
-import { CheckCircle2, Clock, XCircle } from 'lucide-react';
+import { CheckCircle2, Clock, XCircle, Repeat2 } from 'lucide-react';
 import {
     respondToItineraryRequest,
     updateMyCapacity,
     setCapacityOverride,
+    getAvailableCapacityForDate,
     getBusinessReviews,
     addBusinessReviewReply,
     updateMyBusinessPartner,
@@ -434,9 +436,22 @@ function CapacityTab({ businessPartnerId }: { businessPartnerId: string }) {
 
 const REQUEST_STATUS_META: Record<ItineraryRequestStatus, { label: string; icon: LucideIcon; className: string }> = {
     pending: { label: 'Needs response', icon: Clock, className: 'text-amber-600 bg-amber-50 border-amber-200' },
+    held: { label: 'Held by you', icon: Clock, className: 'text-sky-600 bg-sky-50 border-sky-200' },
     confirmed: { label: 'Confirmed', icon: CheckCircle2, className: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
+    countered: { label: 'Awaiting agency', icon: Repeat2, className: 'text-violet-600 bg-violet-50 border-violet-200' },
     declined: { label: 'Declined', icon: XCircle, className: 'text-destructive bg-destructive/5 border-destructive/20' },
+    expired: { label: 'Expired', icon: XCircle, className: 'text-muted-foreground bg-muted border-border' },
 };
+
+/** Live "X available on this date" hint shown while the partner is deciding — finally puts getAvailableCapacityForDate to use. */
+function AvailableCapacityHint({ businessPartnerId, date, unitLabel }: { businessPartnerId: string; date: string; unitLabel: string }) {
+    const { data } = useQuery({
+        queryKey: ['business-partners', businessPartnerId, 'capacity-available', date],
+        queryFn: () => getAvailableCapacityForDate(businessPartnerId, date),
+    });
+    if (!data) return null;
+    return <p className="text-xs text-muted-foreground">You have {data.available} {unitLabel} available on {date}.</p>;
+}
 
 function RequestsTab({ businessPartnerId }: { businessPartnerId: string }) {
     const [statusFilter, setStatusFilter] = useState<ItineraryRequestStatus>('pending');
@@ -444,22 +459,27 @@ function RequestsTab({ businessPartnerId }: { businessPartnerId: string }) {
     const { data, isLoading } = useMyItineraryRequests(businessPartnerId, statusFilter);
     const requests = data?.data ?? [];
 
-    const [capacityDrafts, setCapacityDrafts] = useState<Record<string, string>>({});
+    const [unitsDrafts, setUnitsDrafts] = useState<Record<string, string>>({});
+    const [counterDrafts, setCounterDrafts] = useState<Record<string, { units?: string; date?: string; time?: string; notes?: string }>>({});
+    const [counterOpenFor, setCounterOpenFor] = useState<string | null>(null);
+
+    const invalidate = () => queryClient.invalidateQueries({ queryKey: ['business-partners', businessPartnerId, 'requests'] });
 
     const respondMutation = useMutation({
-        mutationFn: ({ requestId, status, capacityConfirmed }: { requestId: string; status: 'confirmed' | 'declined'; capacityConfirmed?: number }) =>
-            respondToItineraryRequest(businessPartnerId, requestId, status, capacityConfirmed),
+        mutationFn: ({ requestId, action, params }: { requestId: string; action: 'hold' | 'confirm' | 'decline' | 'counter'; params?: { units?: number; notes?: string; counterUnits?: number; counterDate?: string; counterTime?: string } }) =>
+            respondToItineraryRequest(businessPartnerId, requestId, action, params),
         onSuccess: () => {
             toast({ title: 'Response saved' });
-            queryClient.invalidateQueries({ queryKey: ['business-partners', businessPartnerId, 'requests'] });
+            setCounterOpenFor(null);
+            invalidate();
         },
         onError: (error: Error) => toast({ title: 'Could not save response', description: error.message, variant: 'destructive' }),
     });
 
     return (
         <div className="space-y-4">
-            <div className="flex gap-2">
-                {(['pending', 'confirmed', 'declined'] as const).map((s) => (
+            <div className="flex gap-2 flex-wrap">
+                {(['pending', 'held', 'countered', 'confirmed', 'declined', 'expired'] as const).map((s) => (
                     <Button key={s} size="sm" variant={statusFilter === s ? 'default' : 'outline'} onClick={() => setStatusFilter(s)} className="capitalize">
                         {s}
                     </Button>
@@ -474,6 +494,7 @@ function RequestsTab({ businessPartnerId }: { businessPartnerId: string }) {
                 requests.map((r) => {
                     const meta = REQUEST_STATUS_META[r.status];
                     const Icon = meta.icon;
+                    const askLabel = r.unitsRequested > 0 ? `${r.unitsRequested} requested` : `${r.headcount} guests`;
                     return (
                         <Card key={r.id}>
                             <CardContent className="py-4 space-y-3">
@@ -481,7 +502,7 @@ function RequestsTab({ businessPartnerId }: { businessPartnerId: string }) {
                                     <div>
                                         <p className="font-medium">{r.tour.title}</p>
                                         <p className="text-sm text-muted-foreground">
-                                            {r.serviceDate}{r.serviceTime && ` · ${r.serviceTime}`} · {r.headcount} guests
+                                            {r.serviceDate}{r.serviceTime && ` · ${r.serviceTime}`} · {askLabel}
                                         </p>
                                     </div>
                                     <Badge variant="outline" className={`gap-1.5 shrink-0 ${meta.className}`}>
@@ -489,35 +510,115 @@ function RequestsTab({ businessPartnerId }: { businessPartnerId: string }) {
                                         {meta.label}
                                     </Badge>
                                 </div>
+
                                 {r.status === 'pending' && (
-                                    <div className="flex items-center gap-2 pt-1">
-                                        <Input
-                                            type="number"
-                                            min={0}
-                                            placeholder="Capacity you can commit"
-                                            className="max-w-[220px]"
-                                            value={capacityDrafts[r.id] ?? ''}
-                                            onChange={(e) => setCapacityDrafts({ ...capacityDrafts, [r.id]: e.target.value })}
-                                        />
-                                        <Button
-                                            size="sm"
-                                            disabled={respondMutation.isPending || !capacityDrafts[r.id]}
-                                            onClick={() => respondMutation.mutate({ requestId: r.id, status: 'confirmed', capacityConfirmed: Number(capacityDrafts[r.id]) })}
-                                        >
+                                    <>
+                                        <AvailableCapacityHint businessPartnerId={businessPartnerId} date={r.serviceDate} unitLabel="units" />
+                                        <div className="flex items-center gap-2 flex-wrap pt-1">
+                                            <Input
+                                                type="number"
+                                                min={0}
+                                                placeholder="Units to commit"
+                                                className="max-w-[160px]"
+                                                value={unitsDrafts[r.id] ?? ''}
+                                                onChange={(e) => setUnitsDrafts({ ...unitsDrafts, [r.id]: e.target.value })}
+                                            />
+                                            <Button
+                                                size="sm"
+                                                variant="secondary"
+                                                disabled={respondMutation.isPending || !unitsDrafts[r.id]}
+                                                onClick={() => respondMutation.mutate({ requestId: r.id, action: 'hold', params: { units: Number(unitsDrafts[r.id]) } })}
+                                            >
+                                                Hold
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                disabled={respondMutation.isPending || !unitsDrafts[r.id]}
+                                                onClick={() => respondMutation.mutate({ requestId: r.id, action: 'confirm', params: { units: Number(unitsDrafts[r.id]) } })}
+                                            >
+                                                Confirm
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="destructive"
+                                                disabled={respondMutation.isPending}
+                                                onClick={() => respondMutation.mutate({ requestId: r.id, action: 'decline' })}
+                                            >
+                                                Decline
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                disabled={respondMutation.isPending}
+                                                onClick={() => setCounterOpenFor(counterOpenFor === r.id ? null : r.id)}
+                                            >
+                                                Counter-offer
+                                            </Button>
+                                        </div>
+                                        {counterOpenFor === r.id && (
+                                            <div className="flex items-end gap-2 flex-wrap pt-1 border-t mt-2 pt-2">
+                                                <div>
+                                                    <Label className="text-xs text-muted-foreground">Units</Label>
+                                                    <Input type="number" min={0} className="h-8 w-24" value={counterDrafts[r.id]?.units ?? ''} onChange={(e) => setCounterDrafts({ ...counterDrafts, [r.id]: { ...counterDrafts[r.id], units: e.target.value } })} />
+                                                </div>
+                                                <div>
+                                                    <Label className="text-xs text-muted-foreground">Date</Label>
+                                                    <Input type="date" className="h-8" value={counterDrafts[r.id]?.date ?? ''} onChange={(e) => setCounterDrafts({ ...counterDrafts, [r.id]: { ...counterDrafts[r.id], date: e.target.value } })} />
+                                                </div>
+                                                <div>
+                                                    <Label className="text-xs text-muted-foreground">Time</Label>
+                                                    <Input type="time" className="h-8" value={counterDrafts[r.id]?.time ?? ''} onChange={(e) => setCounterDrafts({ ...counterDrafts, [r.id]: { ...counterDrafts[r.id], time: e.target.value } })} />
+                                                </div>
+                                                <Input
+                                                    placeholder="e.g. Can provide 6 Deluxe + 4 Standard"
+                                                    className="h-8 flex-1 min-w-[200px]"
+                                                    value={counterDrafts[r.id]?.notes ?? ''}
+                                                    onChange={(e) => setCounterDrafts({ ...counterDrafts, [r.id]: { ...counterDrafts[r.id], notes: e.target.value } })}
+                                                />
+                                                <Button
+                                                    size="sm"
+                                                    disabled={respondMutation.isPending}
+                                                    onClick={() => {
+                                                        const draft = counterDrafts[r.id] || {};
+                                                        respondMutation.mutate({
+                                                            requestId: r.id,
+                                                            action: 'counter',
+                                                            params: {
+                                                                counterUnits: draft.units ? Number(draft.units) : undefined,
+                                                                counterDate: draft.date || undefined,
+                                                                counterTime: draft.time || undefined,
+                                                                notes: draft.notes || undefined,
+                                                            },
+                                                        });
+                                                    }}
+                                                >
+                                                    Send
+                                                </Button>
+                                            </div>
+                                        )}
+                                    </>
+                                )}
+                                {r.status === 'held' && (
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <p className="text-sm text-muted-foreground">
+                                            Holding {r.capacityConfirmed} for this date{r.holdExpiresAt && ` — expires ${new Date(r.holdExpiresAt).toLocaleString()} if not confirmed`}.
+                                        </p>
+                                        <Button size="sm" disabled={respondMutation.isPending} onClick={() => respondMutation.mutate({ requestId: r.id, action: 'confirm', params: { units: r.capacityConfirmed ?? 0 } })}>
                                             Confirm
                                         </Button>
-                                        <Button
-                                            size="sm"
-                                            variant="destructive"
-                                            disabled={respondMutation.isPending}
-                                            onClick={() => respondMutation.mutate({ requestId: r.id, status: 'declined' })}
-                                        >
+                                        <Button size="sm" variant="destructive" disabled={respondMutation.isPending} onClick={() => respondMutation.mutate({ requestId: r.id, action: 'decline' })}>
                                             Decline
                                         </Button>
                                     </div>
                                 )}
+                                {r.status === 'countered' && (
+                                    <p className="text-sm text-muted-foreground">Waiting for the agency to accept or decline your counter-offer.</p>
+                                )}
                                 {r.status === 'confirmed' && (
                                     <p className="text-sm text-muted-foreground">Committed {r.capacityConfirmed} for this date.</p>
+                                )}
+                                {r.status === 'expired' && (
+                                    <p className="text-sm text-muted-foreground">This request went unanswered and expired.</p>
                                 )}
                             </CardContent>
                         </Card>

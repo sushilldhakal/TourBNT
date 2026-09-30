@@ -85,7 +85,7 @@ async function syncTourAuthors(tourId: string, authorIds: string[] | undefined) 
 async function syncTourItineraryPartners(tourId: string, itinerary: unknown[] | undefined) {
   if (itinerary === undefined) return;
 
-  type LinkRow = { tourId: string; dayId: string; role: 'transport' | 'accommodation' | 'guide' | 'meals' | 'other'; businessPartnerId: string | null; name: string; notes: string | null; sortOrder: number };
+  type LinkRow = { tourId: string; dayId: string; role: 'transport' | 'accommodation' | 'guide' | 'meals' | 'other'; businessPartnerId: string | null; name: string; notes: string | null; sortOrder: number; unitsRequested: number | null; unitType: string | null };
   const rows: LinkRow[] = [];
 
   for (const day of itinerary as any[]) {
@@ -101,6 +101,8 @@ async function syncTourItineraryPartners(tourId: string, itinerary: unknown[] | 
         name: p.name,
         notes: p.notes || null,
         sortOrder: idx,
+        unitsRequested: typeof p.unitsRequested === 'number' ? p.unitsRequested : null,
+        unitType: p.unitType || null,
       });
     });
   }

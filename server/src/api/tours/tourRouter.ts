@@ -20,7 +20,11 @@ import {
   getMyTours,
   incrementTourBookings,
   checkTourAvailability,
-  getTourLogisticsStatus
+  getTourLogisticsStatus,
+  sendItineraryPartnerRequest,
+  respondToItineraryCounterOffer,
+  reopenItineraryPartnerRequest,
+  replaceItineraryPartner
 } from './controllers/tourController';
 import {
   validateObjectId,
@@ -593,6 +597,12 @@ router.get('/:tourId/bookings', authenticate, authorizeRoles('admin', 'seller'),
 
 // Read-only per-day partner confirmation status for the tour editor (ownership checked inside the service).
 router.get('/:tourId/logistics-status', authenticate, validateObjectId(), getTourLogisticsStatus);
+
+// Agency orchestrator actions — ownership (tour-author-or-admin) checked inside ItineraryRequestService.
+router.post('/:tourId/itinerary-partners/:linkId/request', authenticate, validateObjectId(), validateObjectId('linkId'), sendItineraryPartnerRequest);
+router.patch('/:tourId/itinerary-partners/:linkId/replace', authenticate, validateObjectId(), validateObjectId('linkId'), replaceItineraryPartner);
+router.patch('/:tourId/itinerary-requests/:requestId/counter-response', authenticate, validateObjectId(), validateObjectId('requestId'), respondToItineraryCounterOffer);
+router.post('/:tourId/itinerary-requests/:requestId/reopen', authenticate, validateObjectId(), validateObjectId('requestId'), reopenItineraryPartnerRequest);
 
 // RESTful update and delete routes (requires authentication and admin/seller role)
 /**

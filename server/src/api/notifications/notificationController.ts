@@ -318,3 +318,71 @@ export const createItineraryRequestDeclinedNotification = async (
   }).returning();
   return notification;
 };
+
+// Neutral wording (tour title, not "partner did X") since this fires in
+// both directions: partner holding a request (recipient = agency) and
+// agency accepting a partner's counter-offer (recipient = partner).
+export const createItineraryRequestHeldNotification = async (
+  recipientId: string,
+  tourTitle: string,
+  serviceDate: string,
+  requestId: string
+) => {
+  const [notification] = await db.insert(notifications).values({
+    recipientId,
+    type: 'itinerary_request_held',
+    title: 'Capacity held',
+    message: `Capacity is tentatively held for "${tourTitle}" on ${serviceDate}, pending final confirmation.`,
+    data: { requestId, tourTitle, serviceDate },
+  }).returning();
+  return notification;
+};
+
+export const createItineraryRequestCounteredNotification = async (
+  recipientId: string,
+  tourTitle: string,
+  serviceDate: string,
+  requestId: string
+) => {
+  const [notification] = await db.insert(notifications).values({
+    recipientId,
+    type: 'itinerary_request_countered',
+    title: 'Alternative offered',
+    message: `A different date, time, or quantity was proposed for "${tourTitle}" on ${serviceDate}. Review and respond.`,
+    data: { requestId, tourTitle, serviceDate },
+  }).returning();
+  return notification;
+};
+
+// System-generated — the expiry sweep, not a person, caused this transition.
+export const createItineraryRequestExpiredNotification = async (
+  recipientId: string,
+  tourTitle: string,
+  serviceDate: string,
+  requestId: string
+) => {
+  const [notification] = await db.insert(notifications).values({
+    recipientId,
+    type: 'itinerary_request_expired',
+    title: 'Request expired',
+    message: `The request for "${tourTitle}" on ${serviceDate} went unanswered and expired. Send a new request or pick another supplier.`,
+    data: { requestId, tourTitle, serviceDate },
+  }).returning();
+  return notification;
+};
+
+export const createItineraryRequestReplacedNotification = async (
+  recipientId: string,
+  tourTitle: string,
+  serviceDate: string,
+  requestId: string
+) => {
+  const [notification] = await db.insert(notifications).values({
+    recipientId,
+    type: 'itinerary_request_replaced',
+    title: 'Replaced by agency',
+    message: `You were replaced by another supplier for "${tourTitle}" on ${serviceDate}.`,
+    data: { requestId, tourTitle, serviceDate },
+  }).returning();
+  return notification;
+};

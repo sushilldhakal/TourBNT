@@ -297,3 +297,48 @@ export const getTourLogisticsStatus = asyncAuthHandler(async (req: Request, res:
   const requests = await ItineraryRequestService.getRequestsForTour(tourId, { id: req.user!.id, isAdmin });
   return sendSuccess(res, requests, 'Logistics status retrieved successfully');
 });
+
+/** Agency sends a request on demand for a day/role link that has no request yet. */
+export const sendItineraryPartnerRequest = asyncAuthHandler(async (req: Request, res: Response) => {
+  const { linkId } = req.params;
+  const { serviceDate, serviceTime } = req.body as { serviceDate?: string; serviceTime?: string };
+  if (!serviceDate) return sendError(res, 'serviceDate is required', HTTP_STATUS.BAD_REQUEST);
+
+  const { ItineraryRequestService } = await import('../services/itineraryRequestService');
+  const isAdmin = req.user?.roles?.includes('admin') ?? false;
+  const created = await ItineraryRequestService.createManualRequest(linkId, { id: req.user!.id, isAdmin }, serviceDate, serviceTime);
+  return sendSuccess(res, created, 'Request sent successfully', HTTP_STATUS.CREATED);
+});
+
+/** Agency accepts or declines a partner's counter-offer. */
+export const respondToItineraryCounterOffer = asyncAuthHandler(async (req: Request, res: Response) => {
+  const { requestId } = req.params;
+  const { accept } = req.body as { accept?: boolean };
+  if (typeof accept !== 'boolean') return sendError(res, 'accept (boolean) is required', HTTP_STATUS.BAD_REQUEST);
+
+  const { ItineraryRequestService } = await import('../services/itineraryRequestService');
+  const isAdmin = req.user?.roles?.includes('admin') ?? false;
+  const updated = await ItineraryRequestService.respondToCounter(requestId, { id: req.user!.id, isAdmin }, accept);
+  return sendSuccess(res, updated, 'Counter-offer response recorded successfully');
+});
+
+/** Agency resurrects a declined/expired request back to pending. */
+export const reopenItineraryPartnerRequest = asyncAuthHandler(async (req: Request, res: Response) => {
+  const { requestId } = req.params;
+  const { ItineraryRequestService } = await import('../services/itineraryRequestService');
+  const isAdmin = req.user?.roles?.includes('admin') ?? false;
+  const updated = await ItineraryRequestService.reopenRequest(requestId, { id: req.user!.id, isAdmin });
+  return sendSuccess(res, updated, 'Request reopened successfully');
+});
+
+/** Agency swaps the business partner linked to a day/role in place. */
+export const replaceItineraryPartner = asyncAuthHandler(async (req: Request, res: Response) => {
+  const { linkId } = req.params;
+  const { businessPartnerId, name } = req.body as { businessPartnerId?: string; name?: string };
+  if (!businessPartnerId || !name) return sendError(res, 'businessPartnerId and name are required', HTTP_STATUS.BAD_REQUEST);
+
+  const { ItineraryRequestService } = await import('../services/itineraryRequestService');
+  const isAdmin = req.user?.roles?.includes('admin') ?? false;
+  const result = await ItineraryRequestService.replaceSupplier(linkId, { id: req.user!.id, isAdmin }, businessPartnerId, name);
+  return sendSuccess(res, result, 'Supplier replaced successfully');
+});
