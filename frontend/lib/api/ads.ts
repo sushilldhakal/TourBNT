@@ -65,7 +65,9 @@ export const updateAdTargeting = async (adId: string, categoryIds: string[], des
 export const getPendingAds = async (page = 1, limit = 10) => {
     try {
         const response = await api.get('/ads/pending', { params: { page, limit } });
-        return response.data as { success: boolean; data: Advertisement[]; pagination: { page: number; limit: number; totalItems: number; totalPages: number } };
+        // sendPaginatedResponse puts the rows under `items`; expose them as `data` for callers.
+        const body = response.data as { success: boolean; items?: Advertisement[]; data?: Advertisement[]; pagination: { page: number; limit: number; totalItems: number; totalPages: number } };
+        return { success: body.success, data: body.items ?? body.data ?? [], pagination: body.pagination };
     } catch (error) {
         throw handleApiError(error, 'fetching pending ads');
     }

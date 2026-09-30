@@ -42,7 +42,8 @@ export function Breadcrumbs() {
                 return null;
             }
 
-            const label = segment
+            // The Applications page keeps its legacy URL; label it by what it shows now.
+            const label = segment === 'seller-applications' ? 'Applications' : segment
                 .split('-')
                 .map(word => word.charAt(0).toUpperCase() + word.slice(1))
                 .join(' ');

@@ -57,6 +57,7 @@ interface NavigationItem {
     icon: any;
     children?: NavigationItem[];
     adminOnly?: boolean; // Flag to mark admin-only items
+    hideForAdmin?: boolean; // Personal/customer pages that mean nothing in the admin view
 }
 
 const baseNavigationItems: NavigationItem[] = [
@@ -95,7 +96,7 @@ const baseNavigationItems: NavigationItem[] = [
         children: [
             { href: '/dashboard/users', label: 'All Users', icon: List, adminOnly: true },
             // Remove the static edit link - users can access edit from the users list page
-            { href: '/dashboard/users/seller-applications', label: 'Seller Applications', icon: Briefcase, adminOnly: true },
+            { href: '/dashboard/users/seller-applications', label: 'Applications', icon: Briefcase, adminOnly: true },
         ]
     },
     {
@@ -103,7 +104,6 @@ const baseNavigationItems: NavigationItem[] = [
         icon: Building2,
         adminOnly: true,
         children: [
-            { href: '/dashboard/business-partners', label: 'Applications', icon: List, adminOnly: true },
             { href: '/dashboard/ads', label: 'Ad Campaigns', icon: Megaphone, adminOnly: true },
         ]
     },
@@ -122,7 +122,8 @@ const baseNavigationItems: NavigationItem[] = [
     {
         href: '/dashboard/bookings',
         label: 'My Bookings',
-        icon: CalendarCheck
+        icon: CalendarCheck,
+        hideForAdmin: true
     },
     {
         href: '/dashboard/gallery',
@@ -182,6 +183,9 @@ export function DashboardSidebar({ isCollapsed, onToggle, mobileMenuOpen = false
         const filtered = baseNavigationItems
             .filter((item) => {
                 if (item.adminOnly && !isUserAdmin) {
+                    return false;
+                }
+                if (item.hideForAdmin && isUserAdmin) {
                     return false;
                 }
 

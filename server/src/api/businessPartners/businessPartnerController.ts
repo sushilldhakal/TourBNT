@@ -297,12 +297,20 @@ export const updateBusinessPartnerTargeting = async (req: Request, res: Response
   }
 };
 
-// Admin: pending applications queue.
+// Admin: applications queue — filterable by approval status, business type and
+// free text, paginated. Defaults to the pending queue.
 export const getPendingBusinessPartners = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { page, limit, skip } = req.pagination || { page: 1, limit: 10, skip: 0 };
     const pageLimit = typeof limit === 'number' ? limit : 10;
-    const where = eq(businessPartners.approvalStatus, 'pending');
+    const { type, status, q } = req.query as { type?: string; status?: string; q?: string };
+
+    const conditions = [];
+    const approvalStatus = status === 'all' ? null : (['pending', 'approved', 'rejected'].includes(status ?? '') ? status : 'pending');
+    if (approvalStatus) conditions.push(eq(businessPartners.approvalStatus, approvalStatus as 'pending' | 'approved' | 'rejected'));
+    if (type && VALID_TYPES.includes(type as BusinessPartnerType)) conditions.push(eq(businessPartners.type, type as BusinessPartnerType));
+    if (q && q.trim()) conditions.push(ilike(businessPartners.name, `%${q.trim()}%`));
+    const where = conditions.length ? and(...conditions) : undefined;
 
     const [rows, [{ value: totalItems }]] = await Promise.all([
       db.select().from(businessPartners).where(where).orderBy(desc(businessPartners.submittedAt)).limit(pageLimit).offset(skip),
@@ -315,7 +323,25 @@ export const getPendingBusinessPartners = async (req: Request, res: Response, ne
       limit: pageLimit,
       totalItems,
       totalPages: Math.ceil(totalItems / pageLimit),
-    }, 'Pending business applications retrieved successfully');
+    }, 'Business applications retrieved successfully');
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Admin: per-type / per-status head-count used for the tab badges on the Applications page.
+export const getBusinessApplicationCounts = async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const rows = await db
+      .select({ type: businessPartners.type, status: businessPartners.approvalStatus, value: count() })
+      .from(businessPartners)
+      .groupBy(businessPartners.type, businessPartners.approvalStatus);
+    const byType: Record<string, { pending: number; approved: number; rejected: number }> = {};
+    for (const r of rows) {
+      byType[r.type] ??= { pending: 0, approved: 0, rejected: 0 };
+      byType[r.type][r.status] = Number(r.value);
+    }
+    return sendSuccess(res, { byType }, 'Application counts retrieved successfully');
   } catch (error) {
     next(error);
   }

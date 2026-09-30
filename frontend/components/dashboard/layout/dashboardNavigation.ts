@@ -52,7 +52,7 @@ export const baseNavigationItems: NavigationItem[] = [
         icon: Users,
         children: [
             { href: '/dashboard/users', label: 'All Users', icon: List, adminOnly: true },
-            { href: '/dashboard/users/seller-applications', label: 'Seller Applications', icon: Briefcase, adminOnly: true },
+            { href: '/dashboard/users/seller-applications', label: 'Applications', icon: Briefcase, adminOnly: true },
             {
                 href: '/dashboard/subscribers',
                 label: 'Subscribers',
@@ -71,7 +71,6 @@ export const baseNavigationItems: NavigationItem[] = [
         icon: Building2,
         adminOnly: true,
         children: [
-            { href: '/dashboard/business-partners', label: 'Applications', icon: List, adminOnly: true },
             { href: '/dashboard/ads', label: 'Ad Campaigns', icon: Megaphone, adminOnly: true },
         ],
     },
@@ -100,6 +99,7 @@ export const baseNavigationItems: NavigationItem[] = [
         href: '/dashboard/bookings',
         label: 'My Bookings',
         icon: CalendarCheck,
+        hideForAdmin: true,
     },
     {
         href: '/dashboard/message',
@@ -121,6 +121,7 @@ export function getFlatNavigationForSearch(
 
     for (const item of items) {
         if (item.adminOnly && !isAdmin) continue;
+        if (item.hideForAdmin && isAdmin) continue;
         if (item.partnerOnly && !isPartner) continue;
 
         if (item.href) {

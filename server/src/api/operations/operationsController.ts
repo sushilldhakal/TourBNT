@@ -69,3 +69,140 @@ export const getOperationsSummary = async (req: Request, res: Response, next: Ne
     next(error);
   }
 };
+
+
+// ---------------------------------------------------------------------------
+// Paginated drill-downs behind the Operations tabs
+// ---------------------------------------------------------------------------
+
+const parsePage = (req: Request) => {
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 10));
+  return { page, limit, offset: (page - 1) * limit };
+};
+const strParam = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
+const REQUEST_STATUSES = ['pending', 'held', 'confirmed', 'countered', 'declined', 'expired'];
+const REQUEST_ROLES = ['transport', 'accommodation', 'guide', 'meals', 'other'];
+const SUPPLIER_TYPES = ['hotel', 'guesthouse', 'restaurant', 'guide', 'transport'];
+
+/**
+ * Supplier requests (every itinerary_partner_requests row) with tour + partner
+ * context. GET /api/v1/operations/requests?status=&role=&q=&page=&limit=
+ */
+export const getOperationsRequests = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { page, limit, offset } = parsePage(req);
+    const status = strParam(req.query.status);
+    const role = strParam(req.query.role);
+    const q = strParam(req.query.q);
+
+    const filters = [sql`true`];
+    if (status && REQUEST_STATUSES.includes(status)) filters.push(sql`r.status = ${status}`);
+    if (role && REQUEST_ROLES.includes(role)) filters.push(sql`r.role = ${role}`);
+    if (q) { const like = `%${q}%`; filters.push(sql`(t.title ilike ${like} or t.code ilike ${like} or bp.name ilike ${like})`); }
+    const where = sql.join(filters, sql` and `);
+
+    const from = sql`from itinerary_partner_requests r
+      join tours t on t.id = r.tour_id
+      join business_partners bp on bp.id = r.business_partner_id
+      left join business_partner_unit_types ut on ut.id = r.unit_type_id`;
+
+    const [rows, totalRows, statusRows] = await Promise.all([
+      db.execute(sql`select r.id, r.tour_id as "tourId", t.title as "tourTitle", t.code as "tourCode", bp.id as "partnerId", bp.name as "partnerName", bp.type as "partnerType",
+          r.role, r.service_date::text as "serviceDate", r.service_time as "serviceTime", r.headcount, r.units_requested as "unitsRequested", ut.name as "unitType",
+          r.status, r.capacity_confirmed as "capacityConfirmed", r.response_notes as "responseNotes", r.counter_units as "counterUnits", r.counter_date::text as "counterDate",
+          r.counter_notes as "counterNotes", r.hold_expires_at as "holdExpiresAt", r.respond_by_at as "respondByAt", r.updated_at as "updatedAt"
+        ${from} where ${where} order by r.service_date asc, r.created_at desc limit ${limit} offset ${offset}`),
+      db.execute(sql`select count(*)::int as value ${from} where ${where}`),
+      db.execute(sql`select r.status, count(*)::int as value from itinerary_partner_requests r group by r.status`),
+    ]);
+
+    const totalItems = Number((totalRows as any)[0]?.value ?? 0);
+    const counts: Record<string, number> = {};
+    for (const r of statusRows as any[]) counts[r.status] = Number(r.value);
+    return res.json({ success: true, items: rows, counts, pagination: { page, limit, totalItems, totalPages: Math.ceil(totalItems / limit) } });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Upcoming trips: one row per (tour, departure date) that has live bookings,
+ * with the tour's supplier-confirmation rollup.
+ * GET /api/v1/operations/trips?q=&page=&limit=
+ */
+export const getOperationsTrips = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { page, limit, offset } = parsePage(req);
+    const q = strParam(req.query.q);
+    const search = q ? sql`and (t.title ilike ${`%${q}%`} or t.code ilike ${`%${q}%`})` : sql``;
+
+    const trips = sql`with trips as (
+        select b.tour_id, b.departure_date::date as departure, count(*)::int as bookings,
+               sum((b.participants->>'adults')::int + (b.participants->>'children')::int + (b.participants->>'infants')::int)::int as pax,
+               sum(coalesce((b.pricing->>'totalPrice')::float, 0)) as revenue,
+               count(*) filter (where b.status = 'confirmed')::int as confirmed_bookings
+        from bookings b
+        where b.status in ('pending', 'confirmed') and b.departure_date >= now()
+        group by b.tour_id, b.departure_date::date
+      )`;
+
+    const [rows, totalRows] = await Promise.all([
+      db.execute(sql`${trips}
+        select tr.tour_id as "tourId", t.title, t.code, t.cover_image as "coverImage", gd.name as destination, tr.departure::text as departure, tr.bookings, tr.pax,
+               tr.revenue, tr.confirmed_bookings as "confirmedBookings",
+               coalesce(rq.total, 0)::int as "requestsTotal", coalesce(rq.confirmed, 0)::int as "requestsConfirmed", coalesce(rq.problems, 0)::int as "requestsProblem"
+        from trips tr
+        join tours t on t.id = tr.tour_id
+        left join global_destinations gd on gd.id = t.destination_id
+        left join lateral (
+          select count(*) as total, count(*) filter (where r.status = 'confirmed') as confirmed, count(*) filter (where r.status in ('declined', 'expired')) as problems
+          from itinerary_partner_requests r where r.tour_id = tr.tour_id
+        ) rq on true
+        where true ${search}
+        order by tr.departure asc limit ${limit} offset ${offset}`),
+      db.execute(sql`${trips} select count(*)::int as value from trips tr join tours t on t.id = tr.tour_id where true ${search}`),
+    ]);
+
+    const totalItems = Number((totalRows as any)[0]?.value ?? 0);
+    return res.json({ success: true, items: rows, pagination: { page, limit, totalItems, totalPages: Math.ceil(totalItems / limit) } });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Approved suppliers with inventory + open-request workload.
+ * GET /api/v1/operations/suppliers?type=&q=&page=&limit=
+ */
+export const getOperationsSuppliers = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { page, limit, offset } = parsePage(req);
+    const type = strParam(req.query.type);
+    const q = strParam(req.query.q);
+
+    const filters = [sql`bp.approval_status = 'approved'`, sql`bp.type in ('hotel','guesthouse','restaurant','guide','transport')`];
+    if (type && SUPPLIER_TYPES.includes(type)) filters.push(sql`bp.type = ${type}`);
+    if (q) filters.push(sql`bp.name ilike ${`%${q}%`}`);
+    const where = sql.join(filters, sql` and `);
+
+    const [rows, totalRows, typeRows] = await Promise.all([
+      db.execute(sql`select bp.id, bp.name, bp.type, bp.address->>'city' as city, bp.average_rating as "averageRating", bp.is_active as "isActive", bp.phone, bp.email,
+          coalesce((select sum(total_units) from business_partner_unit_types ut where ut.business_partner_id = bp.id and ut.is_active), 0)::int as "totalUnits",
+          coalesce((select unit_label from business_partner_capacity c where c.business_partner_id = bp.id), 'unit') as "unitLabel",
+          (select count(*) from itinerary_partner_requests r where r.business_partner_id = bp.id and r.status in ('pending','held','countered'))::int as "openRequests",
+          (select count(*) from itinerary_partner_requests r where r.business_partner_id = bp.id and r.status = 'confirmed')::int as "confirmedRequests",
+          (select count(*) from itinerary_partner_requests r where r.business_partner_id = bp.id and r.status in ('declined','expired'))::int as "problemRequests"
+        from business_partners bp where ${where} order by "openRequests" desc, bp.name asc limit ${limit} offset ${offset}`),
+      db.execute(sql`select count(*)::int as value from business_partners bp where ${where}`),
+      db.execute(sql`select bp.type, count(*)::int as value from business_partners bp where bp.approval_status = 'approved' group by bp.type`),
+    ]);
+
+    const totalItems = Number((totalRows as any)[0]?.value ?? 0);
+    const counts: Record<string, number> = {};
+    for (const r of typeRows as any[]) counts[r.type] = Number(r.value);
+    return res.json({ success: true, items: rows, counts, pagination: { page, limit, totalItems, totalPages: Math.ceil(totalItems / limit) } });
+  } catch (error) {
+    next(error);
+  }
+};

@@ -10,6 +10,7 @@
     "lint": "eslint .",
     "start": "ts-node-dev server.ts",
     "create-admin": "ts-node src/scripts/createAdmin.ts",
+    "seed:demo": "ts-node -T src/scripts/seedDemoData.ts",
     "create-admin:prod": "NODE_ENV=production ts-node src/scripts/createAdmin.ts",
     "add-settings": "ts-node src/scripts/addUserSettings.ts",
     "add-settings:prod": "NODE_ENV=production ts-node src/scripts/addUserSettings.ts"

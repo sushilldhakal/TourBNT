@@ -9,6 +9,7 @@ import {
   deleteUser,
   changeUserRole,
   getSellerApplications,
+  getUserRoleCounts,
   approveSellerApplication,
   rejectSellerApplication,
   deleteSellerApplication,
@@ -420,6 +421,10 @@ userRouter.get('/',
  *       404:
  *         description: User not found
  */
+// Static admin paths — must be registered before '/:userId' or they are swallowed by it.
+userRouter.get('/role-counts', authenticate, authorizeRoles('admin'), getUserRoleCounts);
+userRouter.get('/seller-applications', authenticate, authorizeRoles('admin'), getSellerApplications);
+
 userRouter.get('/:userId', authenticate, authorizeRoles('admin'), getUserById);
 
 /**
@@ -481,8 +486,6 @@ userRouter.patch('/:userId/role', authenticate, authorizeRoles('admin'), changeU
  *       403:
  *         description: Forbidden - Admin access required
  */
-userRouter.get('/seller-applications', authenticate, authorizeRoles('admin'), getSellerApplications);
-
 /**
  * @swagger
  * /api/v1/users/{userId}/approve-seller:

@@ -5,7 +5,7 @@ import jwt, { sign } from "jsonwebtoken";
 import { createHash } from "crypto";
 import { validationResult } from "express-validator";
 import { db, users } from "@tourbnt/db";
-import { eq, desc, asc, count, sql, type SQL } from "drizzle-orm";
+import { eq, desc, asc, count, sql, ilike, or, type SQL } from "drizzle-orm";
 import { config } from "../../config/config";
 import { claimOnce } from "../../config/redisClient";
 import { sendResetPasswordEmail as sendResetPasswordEmailMaileroo, sendVerificationEmail as sendVerificationEmailMaileroo } from "../../controller/maileroo";
@@ -197,6 +197,12 @@ export const getAllUsers = async (req: Request, res: Response, next: NextFunctio
     } else if (req.filters?.sellerStatus === 'rejected') {
       conditions.push(sql`(${users.sellerInfo}->>'rejectionReason') IS NOT NULL`);
     }
+    const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    if (q) {
+      const like = `%${q}%`;
+      const search = or(ilike(users.name, like), ilike(users.email, like), ilike(users.phone, like));
+      if (search) conditions.push(search);
+    }
     const where = conditions.length ? sql.join(conditions, sql` AND `) : undefined;
 
     const sortField = req.sort?.field && SORTABLE.has(req.sort.field) ? req.sort.field : 'createdAt';
@@ -222,6 +228,20 @@ export const getAllUsers = async (req: Request, res: Response, next: NextFunctio
   } catch (err) {
     console.error("Error in getAllUsers:", err);
     return next(createHttpError(500, "Error while getting users"));
+  }
+};
+
+// Per-role head-count for the admin Users tabs (admin only)
+export const getUserRoleCounts = async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const rows = await db.select({ role: users.role, value: count() }).from(users).groupBy(users.role);
+    const counts: Record<string, number> = {};
+    let total = 0;
+    for (const r of rows) { counts[r.role] = Number(r.value); total += Number(r.value); }
+    return sendSuccess(res, { counts, total }, 'User role counts retrieved successfully');
+  } catch (err) {
+    console.error('Error in getUserRoleCounts:', err);
+    return next(createHttpError(500, 'Error while getting user role counts'));
   }
 };
 
@@ -360,11 +380,36 @@ export const getSellerApplications = async (req: Request, res: Response, next: N
       return next(createHttpError(403, "Only admin can view seller applications"));
     }
 
-    const rows = await db
-      .select()
-      .from(users)
-      .where(sql`${users.sellerInfo} IS NOT NULL`)
-      .orderBy(desc(users.createdAt));
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 10));
+    const status = typeof req.query.status === 'string' ? req.query.status : 'pending';
+    const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+
+    const hasApplication = sql`${users.sellerInfo} IS NOT NULL`;
+    const isRejected = sql`(${users.sellerInfo}->>'rejectionReason') IS NOT NULL`;
+    const isApproved = sql`(${users.sellerInfo}->>'isApproved')::boolean IS TRUE`;
+    const isPending = sql`(${users.sellerInfo}->>'isApproved')::boolean IS NOT TRUE AND (${users.sellerInfo}->>'rejectionReason') IS NULL`;
+
+    const conditions: SQL[] = [hasApplication];
+    if (status === 'pending') conditions.push(isPending);
+    else if (status === 'approved') conditions.push(isApproved);
+    else if (status === 'rejected') conditions.push(isRejected);
+    if (q) {
+      const like = `%${q}%`;
+      const search = or(ilike(users.name, like), ilike(users.email, like), sql`${users.sellerInfo}->>'companyName' ILIKE ${like}`);
+      if (search) conditions.push(search);
+    }
+    const where = sql.join(conditions, sql` AND `);
+
+    const [rows, [{ value: totalItems }], [statusCounts]] = await Promise.all([
+      db.select().from(users).where(where).orderBy(desc(users.createdAt)).limit(limit).offset((page - 1) * limit),
+      db.select({ value: count() }).from(users).where(where),
+      db.select({
+        pending: sql<number>`count(*) filter (where ${isPending})`,
+        approved: sql<number>`count(*) filter (where ${isApproved})`,
+        rejected: sql<number>`count(*) filter (where ${isRejected})`,
+      }).from(users).where(hasApplication),
+    ]);
 
     const applications = rows.map((user) => {
       const sellerInfo = user.sellerInfo as SellerInfo | null;
@@ -402,7 +447,12 @@ export const getSellerApplications = async (req: Request, res: Response, next: N
       };
     });
 
-    res.json({ success: true, data: applications });
+    res.json({
+      success: true,
+      items: applications,
+      pagination: { page, limit, totalItems, totalPages: Math.ceil(totalItems / limit) },
+      counts: { pending: Number(statusCounts.pending), approved: Number(statusCounts.approved), rejected: Number(statusCounts.rejected) },
+    });
   } catch (err) {
     console.error('Error while fetching seller applications:', err);
     next(createHttpError(500, "Error while fetching seller applications"));

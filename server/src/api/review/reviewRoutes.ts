@@ -6,6 +6,7 @@ import { simpleViewTracking } from '../../middlewares/viewTracking';
 import { db, reviews } from '@tourbnt/db';
 import { eq, sql } from 'drizzle-orm';
 import {
+  listManagedReviews,
     getAllApprovedReviews,
     getPendingReviews,
     getReviewById,
@@ -110,6 +111,8 @@ router.get('/',
  *         description: Forbidden
  */
 router.get('/pending', authenticate, authorizeRoles('admin', 'seller'), getPendingReviews);
+// Moderation list (all statuses, scoped to the seller's own tours; admin sees all). Must precede '/:reviewId'.
+router.get('/manage', authenticate, authorizeRoles('admin', 'seller'), listManagedReviews);
 
 /**
  * @swagger

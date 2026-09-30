@@ -1,5 +1,5 @@
 import { db, bookings, tours, users, tourAuthors } from '@tourbnt/db';
-import { eq, and, gte, lt, inArray, desc, asc, count, sql } from 'drizzle-orm';
+import { eq, and, or, ilike, gte, lt, inArray, desc, asc, count, sql } from 'drizzle-orm';
 import createHttpError from 'http-errors';
 import { calculateBookingPricing, type PaymentType } from '../utils/pricingCalculator';
 import { ItineraryRequestService, findMatchingFixedDeparture } from '../../tours/services/itineraryRequestService';
@@ -209,11 +209,25 @@ export class BookingService {
         return booking;
     }
 
-    static async getAllBookings(filters: { status?: string; paymentStatus?: string; tourId?: string } = {}, paginationParams: PaginationParams) {
+    /** Bookings on tours this seller authors — the scope every non-admin read is limited to. */
+    private static ownedTourIds(userId: string) {
+        return db.select({ tourId: tourAuthors.tourId }).from(tourAuthors).where(eq(tourAuthors.userId, userId));
+    }
+
+    static async getAllBookings(
+        filters: { status?: string; paymentStatus?: string; tourId?: string; q?: string } = {},
+        paginationParams: PaginationParams,
+        requester?: Requester
+    ) {
         const conditions = [];
+        if (requester && !requester.isAdmin) conditions.push(inArray(bookings.tourId, BookingService.ownedTourIds(requester.id)));
         if (filters.status) conditions.push(eq(bookings.status, filters.status as any));
         if (filters.paymentStatus) conditions.push(eq(bookings.paymentStatus, filters.paymentStatus as any));
         if (filters.tourId) conditions.push(eq(bookings.tourId, filters.tourId));
+        if (filters.q) {
+            const like = `%${filters.q}%`;
+            conditions.push(or(ilike(bookings.bookingReference, like), ilike(bookings.contactName, like), ilike(bookings.contactEmail, like), ilike(bookings.tourTitle, like)));
+        }
         const where = conditions.length > 0 ? and(...conditions) : undefined;
 
         const { page, limit, sortBy, sortOrder } = paginationParams;
@@ -411,7 +425,8 @@ export class BookingService {
         };
     }
 
-    static async getBookingStats() {
+    static async getBookingStats(requester?: Requester) {
+        const scope = requester && !requester.isAdmin ? inArray(bookings.tourId, BookingService.ownedTourIds(requester.id)) : undefined;
         const rows = await db
             .select({
                 status: bookings.status,
@@ -420,6 +435,7 @@ export class BookingService {
                 paidRevenue: sql<number>`COALESCE(SUM(${bookings.paidAmount}), 0)`,
             })
             .from(bookings)
+            .where(scope)
             .groupBy(bookings.status);
 
         return rows.map((r) => ({

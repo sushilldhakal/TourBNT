@@ -12,6 +12,7 @@ import {
   updateMyBusinessPartner,
   updateBusinessPartnerTargeting,
   getPendingBusinessPartners,
+  getBusinessApplicationCounts,
   approveBusinessPartner,
   rejectBusinessPartner,
   deleteBusinessPartner,
@@ -61,6 +62,14 @@ businessPartnerRouter.get(
   authorizeRoles('admin'),
   paginationMiddleware(),
   asyncAuthHandler(getPendingBusinessPartners)
+);
+
+// Admin: tab badges for the Applications page.
+businessPartnerRouter.get(
+  '/application-counts',
+  authenticate,
+  authorizeRoles('admin'),
+  asyncAuthHandler(getBusinessApplicationCounts)
 );
 
 // Public profile lookup by slug (approved + active only).

@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { db, reviews, reviewReplies, tours, tourAuthors, users } from '@tourbnt/db';
-import { eq, and, desc, asc, avg, count, inArray, sql } from 'drizzle-orm';
+import { eq, and, or, ilike, desc, asc, avg, count, inArray, sql } from 'drizzle-orm';
 import { sendSuccess } from '../../utils/apiResponse';
 
 const USER_COLUMNS = { id: users.id, name: users.name, email: users.email, avatar: users.avatar, roles: users.role } as const;
@@ -449,5 +449,59 @@ export const getReviewById = async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error in getReviewById:', error);
     res.status(500).json({ error: { code: 'INTERNAL_SERVER_ERROR', message: 'Failed to get review', details: error instanceof Error ? error.message : String(error), timestamp: new Date().toISOString(), path: req.path } });
+  }
+};
+
+
+/**
+ * Moderation list for the dashboard: every review (any status) on the caller's
+ * tours — or on every tour for an admin — filterable by status and free text,
+ * with per-status counts for the tabs.
+ * GET /api/v1/reviews/manage?status=&q=&page=&limit=
+ */
+export const listManagedReviews = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ message: 'You must be logged in to view reviews' });
+
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 10));
+    const status = typeof req.query.status === 'string' ? req.query.status : 'all';
+    const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    const isAdmin = req.user?.roles.includes('admin') || false;
+
+    const scope = isAdmin ? undefined : inArray(reviews.tourId, db.select({ tourId: tourAuthors.tourId }).from(tourAuthors).where(eq(tourAuthors.userId, userId)));
+    const conditions = [];
+    if (scope) conditions.push(scope);
+    if (['pending', 'approved', 'rejected'].includes(status)) conditions.push(eq(reviews.status, status as 'pending' | 'approved' | 'rejected'));
+    if (q) {
+      const like = `%${q}%`;
+      conditions.push(or(ilike(reviews.comment, like), ilike(tours.title, like), ilike(users.name, like)));
+    }
+    const where = conditions.length ? and(...conditions) : undefined;
+
+    const [rows, [{ value: totalItems }], statusRows] = await Promise.all([
+      db
+        .select({ review: reviews, user: USER_COLUMNS, tour: { id: tours.id, title: tours.title, code: tours.code } })
+        .from(reviews)
+        .leftJoin(users, eq(reviews.userId, users.id))
+        .leftJoin(tours, eq(reviews.tourId, tours.id))
+        .where(where)
+        .orderBy(desc(reviews.createdAt))
+        .limit(limit)
+        .offset((page - 1) * limit),
+      db.select({ value: count() }).from(reviews).leftJoin(users, eq(reviews.userId, users.id)).leftJoin(tours, eq(reviews.tourId, tours.id)).where(where),
+      db.select({ status: reviews.status, value: count() }).from(reviews).where(scope).groupBy(reviews.status),
+    ]);
+
+    const repliesByReview = await withReplies(rows.map((r) => r.review.id));
+    const items = rows.map(({ review, user, tour }) => ({ ...review, user, tourId: tour?.id, tourTitle: tour?.title, tourCode: tour?.code, replies: repliesByReview.get(review.id) || [] }));
+    const counts: Record<string, number> = { pending: 0, approved: 0, rejected: 0 };
+    for (const r of statusRows) counts[r.status] = Number(r.value);
+
+    res.status(200).json({ success: true, items, counts, pagination: { page, limit, totalItems, totalPages: Math.ceil(totalItems / limit) } });
+  } catch (error) {
+    console.error('Error in listManagedReviews:', error);
+    res.status(500).json({ message: 'Failed to get reviews' });
   }
 };

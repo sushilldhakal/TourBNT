@@ -13,6 +13,8 @@ export interface NavigationItem {
     icon: ComponentType<{ className?: string }>;
     children?: NavigationItem[];
     adminOnly?: boolean;
+    /** Personal/customer pages (e.g. My Bookings) that mean nothing in the admin view. */
+    hideForAdmin?: boolean;
     partnerOnly?: boolean;
 }
 

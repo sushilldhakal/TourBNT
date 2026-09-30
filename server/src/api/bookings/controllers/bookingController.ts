@@ -74,12 +74,15 @@ export const getAllBookings = async (req: Request
         const sortBy = req.sort?.field || 'createdAt';
         const sortOrder = req.sort?.order || 'desc';
 
+        const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+        if (q) filters.q = q;
+
         const result = await BookingService.getAllBookings(filters, {
             page,
             limit: pageLimit,
             sortBy,
             sortOrder
-        });
+        }, req.user ? { id: req.user.id, isAdmin: req.user.roles.includes('admin') } : undefined);
 
         sendPaginatedResponse(res, result.items, {
             page: result.page,
@@ -306,7 +309,7 @@ export const cancelBooking = async (req: Request, res: Response, next: NextFunct
  */
 export const getBookingStats = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const stats = await BookingService.getBookingStats();
+        const stats = await BookingService.getBookingStats(req.user ? { id: req.user.id, isAdmin: req.user.roles.includes('admin') } : undefined);
 
         sendSuccess(res, stats, 'Booking statistics retrieved successfully');
     } catch (error) {

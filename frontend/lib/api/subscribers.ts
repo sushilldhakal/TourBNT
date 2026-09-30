@@ -143,9 +143,10 @@ export const getSubscribers = async (params?: { page?: number; limit?: number })
         const url = `/subscribers${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
         const response = await api.get(url);
 
-        // Standard list format: { success, data, message, pagination }
+        // The server's paginated responses carry the rows under `items`
+        // (sendPaginatedResponse); older shapes used `data`.
         return {
-            data: response.data.data ?? [],
+            data: response.data.items ?? response.data.data ?? [],
             pagination: response.data.pagination
         };
     } catch (error) {
