@@ -1,4 +1,4 @@
-import { db, tours, tourCategories, tourAuthors, globalCategories, users, facts as factsTable, tourItineraryPartners, businessPartners } from '@tourbnt/db';
+import { db, tours, tourCategories, tourAuthors, globalCategories, users, facts as factsTable, tourItineraryPartners, businessPartners, businessPartnerUnitTypes } from '@tourbnt/db';
 import { eq, and, or, ilike, gte, lte, gt, desc, asc, sql, inArray, count, type SQL } from 'drizzle-orm';
 import createHttpError from 'http-errors';
 import { Tour } from '../tourTypes';
@@ -85,7 +85,7 @@ async function syncTourAuthors(tourId: string, authorIds: string[] | undefined) 
 async function syncTourItineraryPartners(tourId: string, itinerary: unknown[] | undefined) {
   if (itinerary === undefined) return;
 
-  type LinkRow = { tourId: string; dayId: string; role: 'transport' | 'accommodation' | 'guide' | 'meals' | 'other'; businessPartnerId: string | null; name: string; notes: string | null; sortOrder: number };
+  type LinkRow = { tourId: string; dayId: string; role: 'transport' | 'accommodation' | 'guide' | 'meals' | 'other'; businessPartnerId: string | null; name: string; notes: string | null; sortOrder: number; unitsRequested: number | null; unitType: string | null; unitTypeId: string | null };
   const rows: LinkRow[] = [];
 
   for (const day of itinerary as any[]) {
@@ -101,6 +101,9 @@ async function syncTourItineraryPartners(tourId: string, itinerary: unknown[] | 
         name: p.name,
         notes: p.notes || null,
         sortOrder: idx,
+        unitsRequested: typeof p.unitsRequested === 'number' ? p.unitsRequested : null,
+        unitType: p.unitType || null,
+        unitTypeId: p.unitTypeId || null,
       });
     });
   }
@@ -122,6 +125,24 @@ async function syncTourItineraryPartners(tourId: string, itinerary: unknown[] | 
       const allowedTypes = ITINERARY_ROLE_TO_PARTNER_TYPES[row.role] || [];
       if (!allowedTypes.includes(partner.type)) {
         throw createHttpError(400, `Business type "${partner.type}" is not valid for itinerary role "${row.role}" (day ${row.dayId})`);
+      }
+    }
+  }
+
+  // A row's unitTypeId only makes sense against its own businessPartnerId —
+  // rather than hard-failing a stale/mismatched one (e.g. the client didn't
+  // clear it after a partner swap), just drop it: the free-text unitType
+  // name still carries through either way.
+  const referencedUnitTypeIds = Array.from(new Set(rows.map((r) => r.unitTypeId).filter((id): id is string => !!id)));
+  if (referencedUnitTypeIds.length > 0) {
+    const unitTypeRows = await db
+      .select({ id: businessPartnerUnitTypes.id, businessPartnerId: businessPartnerUnitTypes.businessPartnerId })
+      .from(businessPartnerUnitTypes)
+      .where(inArray(businessPartnerUnitTypes.id, referencedUnitTypeIds));
+    const ownerByUnitTypeId = new Map(unitTypeRows.map((u) => [u.id, u.businessPartnerId]));
+    for (const row of rows) {
+      if (row.unitTypeId && ownerByUnitTypeId.get(row.unitTypeId) !== row.businessPartnerId) {
+        row.unitTypeId = null;
       }
     }
   }

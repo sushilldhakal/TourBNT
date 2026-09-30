@@ -27,6 +27,20 @@ import {
   respondToItineraryRequest,
   getAvailableCapacityForDate,
 } from './capacityController';
+import {
+  getUnitTypes,
+  createUnitType,
+  updateUnitType,
+  deleteUnitType,
+  getUnitTypeInventory,
+  setUnitTypeBlock,
+  getUnitTypeBlocks,
+} from './unitTypeController';
+import {
+  getAvailabilityBlocks,
+  createAvailabilityBlock,
+  deleteAvailabilityBlock,
+} from './availabilityController';
 
 const businessPartnerRouter = express.Router();
 
@@ -104,5 +118,23 @@ businessPartnerRouter.get('/:businessPartnerId/capacity/overrides', authenticate
 businessPartnerRouter.put('/:businessPartnerId/capacity/overrides/:date', authenticate, asyncAuthHandler(setCapacityOverride));
 businessPartnerRouter.get('/:businessPartnerId/requests', authenticate, paginationMiddleware(), asyncAuthHandler(getMyItineraryRequests));
 businessPartnerRouter.patch('/:businessPartnerId/requests/:requestId', authenticate, asyncAuthHandler(respondToItineraryRequest));
+
+// Named unit types (hotel room types today; transport vehicle types reuse
+// this later) with per-date channel blocks — owner-or-admin gated inside
+// each controller except the list, which any authenticated user can read
+// (powers the agency's picker dropdown too — see unitTypeController.ts).
+businessPartnerRouter.get('/:businessPartnerId/unit-types', authenticate, asyncAuthHandler(getUnitTypes));
+businessPartnerRouter.post('/:businessPartnerId/unit-types', authenticate, asyncAuthHandler(createUnitType));
+businessPartnerRouter.patch('/:businessPartnerId/unit-types/:unitTypeId', authenticate, asyncAuthHandler(updateUnitType));
+businessPartnerRouter.delete('/:businessPartnerId/unit-types/:unitTypeId', authenticate, asyncAuthHandler(deleteUnitType));
+businessPartnerRouter.get('/:businessPartnerId/unit-types/:unitTypeId/inventory', authenticate, asyncAuthHandler(getUnitTypeInventory));
+businessPartnerRouter.put('/:businessPartnerId/unit-types/:unitTypeId/blocks/:date', authenticate, asyncAuthHandler(setUnitTypeBlock));
+businessPartnerRouter.get('/:businessPartnerId/unit-types/:unitTypeId/blocks', authenticate, asyncAuthHandler(getUnitTypeBlocks));
+
+// A guide's (or any single-resource partner's) manually marked unavailable
+// windows — owner-or-admin gated inside each controller.
+businessPartnerRouter.get('/:businessPartnerId/availability-blocks', authenticate, asyncAuthHandler(getAvailabilityBlocks));
+businessPartnerRouter.post('/:businessPartnerId/availability-blocks', authenticate, asyncAuthHandler(createAvailabilityBlock));
+businessPartnerRouter.delete('/:businessPartnerId/availability-blocks/:blockId', authenticate, asyncAuthHandler(deleteAvailabilityBlock));
 
 export default businessPartnerRouter;

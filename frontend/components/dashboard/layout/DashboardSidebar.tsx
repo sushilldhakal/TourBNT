@@ -7,7 +7,7 @@ import {
     ChevronDown, ChevronRight, Plus, List, MapPin, FolderTree, Lightbulb,
     HelpCircle, Calendar, Star, Wrench, MessageSquare, UserPlus, Briefcase,
     PanelLeftClose, PanelLeft,
-    UserCog, CalendarCheck, Compass, Utensils, Truck
+    UserCog, CalendarCheck, Compass, Utensils, Truck, Gauge
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState, useMemo } from 'react';
@@ -106,6 +106,12 @@ const baseNavigationItems: NavigationItem[] = [
             { href: '/dashboard/business-partners', label: 'Applications', icon: List, adminOnly: true },
             { href: '/dashboard/ads', label: 'Ad Campaigns', icon: Megaphone, adminOnly: true },
         ]
+    },
+    {
+        href: '/dashboard/operations',
+        label: 'Operations',
+        icon: Gauge,
+        adminOnly: true
     },
     // Add My Profile link at top level (accessible to all authenticated users)
     {

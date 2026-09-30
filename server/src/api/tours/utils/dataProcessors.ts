@@ -413,6 +413,12 @@ export const processTourDatesData = (tourDates: any) => {
             from: new Date(departure.dateRange.from),
             to: new Date(departure.dateRange.to)
           } : undefined,
+          // How many travelers this departure can seat — read by
+          // ItineraryRequestService to ask linked hotels/restaurants/guides/
+          // transport for that much capacity on this departure's dates.
+          // Left undefined (not defaulted to 0) when unset, so callers can
+          // fall back to the tour's overall maxSize instead.
+          capacity: departure.capacity !== undefined && departure.capacity !== null ? safeToNumber(departure.capacity) : undefined,
           isRecurring: convertToBoolean(departure.isRecurring),
           recurrencePattern: departure.recurrencePattern || (departure.isRecurring ? 'weekly' : undefined),
           recurrenceInterval: safeToNumber(departure.recurrenceInterval, 1),

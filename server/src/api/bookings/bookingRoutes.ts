@@ -7,6 +7,7 @@ import {
     createBooking,
     getAllBookings,
     getBookingById,
+    getBookingTimeline,
     getBookingByReference,
     getUserBookings,
     updateBookingStatus,
@@ -329,6 +330,31 @@ bookingRouter.get(
  *               $ref: '#/components/schemas/ErrorResponse'
  */
 bookingRouter.get('/:bookingId', authenticate, asyncAuthHandler(getBookingById));
+
+/**
+ * @swagger
+ * /bookings/{bookingId}/timeline:
+ *   get:
+ *     summary: Get a booking's day-by-day itinerary with supplier confirmation status
+ *     description: The customer's own "My Trip" view — each itinerary day with the live status of every supplier tied to that day's real calendar date.
+ *     tags: [Bookings]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: bookingId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Timeline retrieved successfully
+ *       403:
+ *         description: Not the booking's owner
+ *       404:
+ *         description: Booking not found
+ */
+bookingRouter.get('/:bookingId/timeline', authenticate, asyncAuthHandler(getBookingTimeline));
 
 /**
  * @swagger

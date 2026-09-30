@@ -338,20 +338,43 @@ export const updateTour = async (tourId: string, data: FormData) => {
 /**
  * Delete a tour
  */
-export interface TourItineraryRequestStatus {
+export type ItineraryRequestStatusValue = 'pending' | 'held' | 'confirmed' | 'countered' | 'declined' | 'expired';
+
+export interface ItineraryRequestEvent {
     id: string;
+    fromStatus: ItineraryRequestStatusValue | null;
+    toStatus: ItineraryRequestStatusValue;
+    actorRole: 'agency' | 'partner' | 'system';
+    unitsAtEvent?: number | null;
+    notes?: string | null;
+    createdAt: string;
+}
+
+export interface TourItineraryRequestStatus {
+    /** null for a linked partner with no request sent yet — the agency table shows these with a "Send request" action. */
+    id: string | null;
     tourId: string;
-    businessPartnerId: string;
+    tourItineraryPartnerId: string;
+    businessPartnerId: string | null;
     partnerName: string;
     partnerType: string;
     role: 'transport' | 'accommodation' | 'guide' | 'meals' | 'other';
-    serviceDate: string;
+    serviceDate: string | null;
     serviceTime?: string | null;
     headcount: number;
-    status: 'pending' | 'confirmed' | 'declined';
+    unitsRequested: number;
+    unitType?: string | null;
+    status: ItineraryRequestStatusValue | null;
     capacityConfirmed?: number | null;
     responseNotes?: string | null;
+    holdExpiresAt?: string | null;
+    respondByAt?: string | null;
+    counterUnits?: number | null;
+    counterDate?: string | null;
+    counterTime?: string | null;
+    counterNotes?: string | null;
     sourceDepartureDate?: string | null;
+    events: ItineraryRequestEvent[];
 }
 
 /** Read-only per-day partner confirmation status for the tour editor. */
@@ -361,6 +384,46 @@ export const getTourLogisticsStatus = async (tourId: string) => {
         return extractResponseData<TourItineraryRequestStatus[]>(response);
     } catch (error) {
         throw handleApiError(error, 'fetching logistics status');
+    }
+};
+
+/** Agency sends a request on demand for a day/role link that has no request yet. */
+export const sendItineraryPartnerRequest = async (tourId: string, linkId: string, serviceDate: string, serviceTime?: string) => {
+    try {
+        const response = await api.post(`/tours/${tourId}/itinerary-partners/${linkId}/request`, { serviceDate, serviceTime });
+        return extractResponseData<TourItineraryRequestStatus>(response);
+    } catch (error) {
+        throw handleApiError(error, 'sending itinerary partner request');
+    }
+};
+
+/** Agency accepts or declines a partner's counter-offer. */
+export const respondToItineraryCounterOffer = async (tourId: string, requestId: string, accept: boolean) => {
+    try {
+        const response = await api.patch(`/tours/${tourId}/itinerary-requests/${requestId}/counter-response`, { accept });
+        return extractResponseData<TourItineraryRequestStatus>(response);
+    } catch (error) {
+        throw handleApiError(error, 'responding to counter-offer');
+    }
+};
+
+/** Agency resurrects a declined/expired request back to pending. */
+export const reopenItineraryPartnerRequest = async (tourId: string, requestId: string) => {
+    try {
+        const response = await api.post(`/tours/${tourId}/itinerary-requests/${requestId}/reopen`, {});
+        return extractResponseData<TourItineraryRequestStatus>(response);
+    } catch (error) {
+        throw handleApiError(error, 'reopening itinerary request');
+    }
+};
+
+/** Agency swaps the business partner linked to a day/role in place. */
+export const replaceItineraryPartner = async (tourId: string, linkId: string, businessPartnerId: string, name: string) => {
+    try {
+        const response = await api.patch(`/tours/${tourId}/itinerary-partners/${linkId}/replace`, { businessPartnerId, name });
+        return extractResponseData<{ tourItineraryPartnerId: string; businessPartnerId: string; name: string }>(response);
+    } catch (error) {
+        throw handleApiError(error, 'replacing itinerary partner');
     }
 };
 

@@ -1,0 +1,1 @@
+ALTER TABLE "business_partner_unit_types" ADD COLUMN "default_time" text;

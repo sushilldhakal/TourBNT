@@ -20,7 +20,7 @@ const DEFAULT_UNIT_LABEL: Record<string, string> = {
   advertiser: 'unit',
 };
 
-async function assertOwnerOrAdmin(businessPartnerId: string, req: Request): Promise<boolean> {
+export async function assertOwnerOrAdmin(businessPartnerId: string, req: Request): Promise<boolean> {
   const isAdmin = req.user?.roles?.includes('admin') ?? false;
   if (isAdmin) return true;
   const [partner] = await db.select({ ownerId: businessPartners.ownerId }).from(businessPartners).where(eq(businessPartners.id, businessPartnerId)).limit(1);
@@ -167,16 +167,23 @@ export const respondToItineraryRequest = async (req: Request, res: Response, nex
   try {
     if (!req.user) return handleUnauthorized(res, 'Not authenticated');
     const { requestId } = req.params;
-    const { status, capacityConfirmed, notes } = req.body as { status?: 'confirmed' | 'declined'; capacityConfirmed?: number; notes?: string };
+    const { action, units, notes, counterUnits, counterDate, counterTime } = req.body as {
+      action?: 'hold' | 'confirm' | 'decline' | 'counter';
+      units?: number;
+      notes?: string;
+      counterUnits?: number;
+      counterDate?: string;
+      counterTime?: string;
+    };
 
-    if (!status || !['confirmed', 'declined'].includes(status)) {
-      return sendValidationError(res, 'Validation failed', [{ field: 'status', message: 'status must be "confirmed" or "declined"' }]);
+    if (!action || !['hold', 'confirm', 'decline', 'counter'].includes(action)) {
+      return sendValidationError(res, 'Validation failed', [{ field: 'action', message: 'action must be "hold", "confirm", "decline", or "counter"' }]);
     }
 
     const isAdmin = req.user.roles?.includes('admin') ?? false;
-    const updated = await ItineraryRequestService.respondToRequest(requestId, { id: req.user.id, isAdmin }, status, capacityConfirmed, notes);
+    const updated = await ItineraryRequestService.respondToRequest(requestId, { id: req.user.id, isAdmin }, action, { units, notes, counterUnits, counterDate, counterTime });
 
-    return sendSuccess(res, updated, `Request ${status} successfully`);
+    return sendSuccess(res, updated, `Request ${action} applied successfully`);
   } catch (error) {
     next(error);
   }
@@ -186,12 +193,12 @@ export const respondToItineraryRequest = async (req: Request, res: Response, nex
 export const getAvailableCapacityForDate = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { businessPartnerId } = req.params;
-    const { date } = req.query as { date?: string };
+    const { date, unitTypeId } = req.query as { date?: string; unitTypeId?: string };
     if (!req.user) return handleUnauthorized(res, 'Not authenticated');
     if (!(await assertOwnerOrAdmin(businessPartnerId, req))) return sendForbiddenError(res, 'Not authorized to view this business\'s capacity');
     if (!date) return sendValidationError(res, 'Validation failed', [{ field: 'date', message: 'date is required' }]);
 
-    const available = await ItineraryRequestService.getAvailableCapacity(businessPartnerId, date);
+    const available = await ItineraryRequestService.getAvailableCapacity(businessPartnerId, date, undefined, unitTypeId || undefined);
     return sendSuccess(res, { date, available }, 'Available capacity retrieved successfully');
   } catch (error) {
     next(error);

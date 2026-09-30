@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -13,11 +14,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { toast } from '@/components/ui/use-toast';
 import { DashboardCardHeader } from '@/components/dashboard/layout/CardHeader';
 import type { LucideIcon } from 'lucide-react';
-import { CheckCircle2, Clock, XCircle } from 'lucide-react';
+import { CheckCircle2, Clock, XCircle, Repeat2 } from 'lucide-react';
 import {
     respondToItineraryRequest,
     updateMyCapacity,
     setCapacityOverride,
+    getAvailableCapacityForDate,
     getBusinessReviews,
     addBusinessReviewReply,
     updateMyBusinessPartner,
@@ -28,7 +30,17 @@ import {
 } from '@/lib/api/businessPartners';
 import { getMyAdCampaigns, createAdCampaign, updateAdTargeting, getAdStats, type Advertisement, type AdPlacementSlot } from '@/lib/api/ads';
 import { getApprovedCategories, getApprovedDestinations } from '@/lib/api/globalApi';
-import { useMyBusinessPartners, useMyCapacity, useCapacityOverrides, useMyItineraryRequests } from '@/lib/queries';
+import {
+    createUnitType,
+    updateUnitType,
+    deleteUnitType,
+    setUnitTypeBlock,
+    type BusinessPartnerUnitType,
+    type UnitBlockChannel,
+} from '@/lib/api/unitTypes';
+import { createAvailabilityBlock, deleteAvailabilityBlock } from '@/lib/api/availability';
+import { useMyBusinessPartners, useMyCapacity, useCapacityOverrides, useMyItineraryRequests, useUnitTypes, useUnitTypeInventory, useAvailabilityBlocks } from '@/lib/queries';
+import { queryKeys } from '@/lib/queries/queryKeys';
 import { useDestinationsRoleBased } from '@/lib/queries/useDestinations';
 import type { DestinationTypes } from '@/types/types';
 import AddDestination from '@/components/dashboard/tours/Destination/AddDestination';
@@ -148,7 +160,7 @@ export function BusinessTypeDashboard({ types, title, description, icon, showLog
                 </TabsContent>
                 {showLogistics && (
                     <TabsContent value="capacity" className="mt-4">
-                        <CapacityTab businessPartnerId={business.id} />
+                        <CapacityTab businessPartnerId={business.id} businessType={business.type} />
                     </TabsContent>
                 )}
                 {showLogistics && (
@@ -329,7 +341,282 @@ function ProfileTab({ business }: { business: BusinessPartner }) {
     );
 }
 
-function CapacityTab({ businessPartnerId }: { businessPartnerId: string }) {
+const CHANNEL_LABEL: Record<UnitBlockChannel, string> = {
+    direct: 'Direct',
+    private: 'Private',
+    other: 'Other',
+    maintenance: 'Maintenance',
+};
+
+function todayISO() {
+    return new Date().toISOString().slice(0, 10);
+}
+function addDaysISO(date: string, days: number) {
+    const d = new Date(date);
+    d.setDate(d.getDate() + days);
+    return d.toISOString().slice(0, 10);
+}
+
+function UnitTypeInventoryTable({ businessPartnerId, unitType }: { businessPartnerId: string; unitType: BusinessPartnerUnitType }) {
+    const queryClient = useQueryClient();
+    const [from] = useState(todayISO());
+    const [to] = useState(addDaysISO(todayISO(), 13));
+    const { data: inventory, isLoading } = useUnitTypeInventory(businessPartnerId, unitType.id, from, to);
+    const [blockDrafts, setBlockDrafts] = useState<Record<string, { channel: UnitBlockChannel; count: string }>>({});
+
+    const blockMutation = useMutation({
+        mutationFn: ({ date, channel, count }: { date: string; channel: UnitBlockChannel; count: number }) =>
+            setUnitTypeBlock(businessPartnerId, unitType.id, date, channel, count),
+        onSuccess: () => {
+            toast({ title: 'Block saved' });
+            queryClient.invalidateQueries({ queryKey: queryKeys.businessPartners.unitTypeInventory(businessPartnerId, unitType.id, from, to) });
+        },
+        onError: (error: Error) => toast({ title: 'Save failed', description: error.message, variant: 'destructive' }),
+    });
+
+    if (isLoading) return <p className="text-xs text-muted-foreground">Loading inventory...</p>;
+    if (!inventory) return null;
+
+    return (
+        <div className="space-y-1.5">
+            {inventory.map((day) => {
+                const draft = blockDrafts[day.date] ?? { channel: 'direct' as UnitBlockChannel, count: '' };
+                const breakdown = Object.entries(day.blockedByChannel)
+                    .map(([ch, n]) => `${n} ${CHANNEL_LABEL[ch as UnitBlockChannel]}`)
+                    .concat(day.reservedByTourBnt > 0 ? [`${day.reservedByTourBnt} TourBNT`] : [])
+                    .join(' · ');
+                return (
+                    <div key={day.date} className="flex items-center justify-between gap-3 text-sm border rounded-md px-3 py-2 flex-wrap">
+                        <div className="min-w-0">
+                            <span className="font-medium">{day.date}</span>
+                            <span className="text-muted-foreground"> · {day.total} total · {day.occupied} occupied · {day.available} available</span>
+                            {breakdown && <p className="text-xs text-muted-foreground">{breakdown}</p>}
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                            <select
+                                className="h-8 text-xs border rounded-md px-1.5 bg-background"
+                                value={draft.channel}
+                                onChange={(e) => setBlockDrafts({ ...blockDrafts, [day.date]: { ...draft, channel: e.target.value as UnitBlockChannel } })}
+                            >
+                                {(Object.keys(CHANNEL_LABEL) as UnitBlockChannel[]).map((ch) => (
+                                    <option key={ch} value={ch}>{CHANNEL_LABEL[ch]}</option>
+                                ))}
+                            </select>
+                            <Input
+                                type="number"
+                                min={0}
+                                className="h-8 w-16"
+                                placeholder="qty"
+                                value={draft.count}
+                                onChange={(e) => setBlockDrafts({ ...blockDrafts, [day.date]: { ...draft, count: e.target.value } })}
+                            />
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={blockMutation.isPending || draft.count === ''}
+                                onClick={() => blockMutation.mutate({ date: day.date, channel: draft.channel, count: Number(draft.count) })}
+                            >
+                                Block
+                            </Button>
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+
+type UnitTypeBusinessType = 'hotel' | 'guesthouse' | 'restaurant' | 'transport';
+
+const UNIT_TYPE_COPY: Record<UnitTypeBusinessType, { title: string; itemNoun: string; itemNounPlural: string; unitLabel: string; namePlaceholder: string; showTime: boolean }> = {
+    hotel: { title: 'Room types', itemNoun: 'room type', itemNounPlural: 'room types', unitLabel: 'Total rooms', namePlaceholder: 'e.g. Deluxe', showTime: false },
+    guesthouse: { title: 'Room types', itemNoun: 'room type', itemNounPlural: 'room types', unitLabel: 'Total rooms', namePlaceholder: 'e.g. Deluxe', showTime: false },
+    restaurant: { title: 'Meal slots', itemNoun: 'meal slot', itemNounPlural: 'meal slots', unitLabel: 'Seats', namePlaceholder: 'e.g. Dinner', showTime: true },
+    transport: { title: 'Vehicle types', itemNoun: 'vehicle type', itemNounPlural: 'vehicle types', unitLabel: 'Seats', namePlaceholder: 'e.g. Toyota Hiace', showTime: false },
+};
+
+function UnitTypesSection({ businessPartnerId, businessType }: { businessPartnerId: string; businessType: UnitTypeBusinessType }) {
+    const copy = UNIT_TYPE_COPY[businessType];
+    const queryClient = useQueryClient();
+    const { data: unitTypes, isLoading } = useUnitTypes(businessPartnerId);
+    const [newName, setNewName] = useState('');
+    const [newTotal, setNewTotal] = useState('');
+    const [newTime, setNewTime] = useState('');
+    const [expandedId, setExpandedId] = useState<string | null>(null);
+
+    const invalidate = () => queryClient.invalidateQueries({ queryKey: queryKeys.businessPartners.unitTypes(businessPartnerId) });
+
+    const createMutation = useMutation({
+        mutationFn: () => createUnitType(businessPartnerId, { name: newName.trim(), totalUnits: Number(newTotal) || 0, defaultTime: newTime || undefined }),
+        onSuccess: () => { toast({ title: `${copy.itemNoun} added` }); setNewName(''); setNewTotal(''); setNewTime(''); invalidate(); },
+        onError: (error: Error) => toast({ title: `Could not add ${copy.itemNoun}`, description: error.message, variant: 'destructive' }),
+    });
+
+    const updateTotalMutation = useMutation({
+        mutationFn: ({ id, totalUnits }: { id: string; totalUnits: number }) => updateUnitType(businessPartnerId, id, { totalUnits }),
+        onSuccess: () => { toast({ title: 'Updated' }); invalidate(); },
+        onError: (error: Error) => toast({ title: 'Update failed', description: error.message, variant: 'destructive' }),
+    });
+
+    const deleteMutation = useMutation({
+        mutationFn: (id: string) => deleteUnitType(businessPartnerId, id),
+        onSuccess: () => { toast({ title: `${copy.itemNoun} deleted` }); invalidate(); },
+        onError: (error: Error) => toast({ title: 'Could not delete', description: error.message, variant: 'destructive' }),
+    });
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>{copy.title}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                    Sellers pick one of these when linking you to a tour day, so capacity is tracked per {copy.itemNoun} instead of one pooled number.
+                </p>
+
+                <div className="flex items-end gap-2 max-w-lg flex-wrap">
+                    <div className="flex-1 min-w-[140px]">
+                        <label className="block text-sm font-medium mb-1">Name</label>
+                        <Input placeholder={copy.namePlaceholder} value={newName} onChange={(e) => setNewName(e.target.value)} />
+                    </div>
+                    <div className="w-28">
+                        <label className="block text-sm font-medium mb-1">{copy.unitLabel}</label>
+                        <Input type="number" min={0} value={newTotal} onChange={(e) => setNewTotal(e.target.value)} />
+                    </div>
+                    {copy.showTime && (
+                        <div className="w-32">
+                            <label className="block text-sm font-medium mb-1">Default time</label>
+                            <Input type="time" value={newTime} onChange={(e) => setNewTime(e.target.value)} />
+                        </div>
+                    )}
+                    <Button disabled={createMutation.isPending || !newName.trim()} onClick={() => createMutation.mutate()}>
+                        Add
+                    </Button>
+                </div>
+
+                {isLoading ? (
+                    <p className="text-sm text-muted-foreground">Loading...</p>
+                ) : unitTypes && unitTypes.length > 0 ? (
+                    <div className="space-y-2 pt-2">
+                        {unitTypes.map((ut) => (
+                            <div key={ut.id} className="border rounded-md">
+                                <div className="flex items-center justify-between gap-3 px-3 py-2">
+                                    <button type="button" className="font-medium text-sm text-left" onClick={() => setExpandedId(expandedId === ut.id ? null : ut.id)}>
+                                        {ut.name}{ut.defaultTime && <span className="text-muted-foreground font-normal"> · {ut.defaultTime}</span>}
+                                    </button>
+                                    <div className="flex items-center gap-2">
+                                        <Input
+                                            type="number"
+                                            min={0}
+                                            className="h-8 w-20"
+                                            defaultValue={ut.totalUnits}
+                                            onBlur={(e) => {
+                                                const value = Number(e.target.value);
+                                                if (value !== ut.totalUnits) updateTotalMutation.mutate({ id: ut.id, totalUnits: value });
+                                            }}
+                                        />
+                                        <Button size="sm" variant="ghost" onClick={() => setExpandedId(expandedId === ut.id ? null : ut.id)}>
+                                            {expandedId === ut.id ? 'Hide' : 'Inventory'}
+                                        </Button>
+                                        <Button size="sm" variant="ghost" className="text-destructive" disabled={deleteMutation.isPending} onClick={() => deleteMutation.mutate(ut.id)}>
+                                            Delete
+                                        </Button>
+                                    </div>
+                                </div>
+                                {expandedId === ut.id && (
+                                    <div className="px-3 pb-3 pt-1 border-t">
+                                        <UnitTypeInventoryTable businessPartnerId={businessPartnerId} unitType={ut} />
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <p className="text-sm text-muted-foreground">No {copy.itemNounPlural} yet — add one above.</p>
+                )}
+            </CardContent>
+        </Card>
+    );
+}
+
+function GuideAvailabilitySection({ businessPartnerId }: { businessPartnerId: string }) {
+    const queryClient = useQueryClient();
+    const { data: blocks, isLoading } = useAvailabilityBlocks(businessPartnerId);
+    const [date, setDate] = useState('');
+    const [startTime, setStartTime] = useState('');
+    const [endTime, setEndTime] = useState('');
+    const [reason, setReason] = useState('');
+
+    const invalidate = () => queryClient.invalidateQueries({ queryKey: queryKeys.businessPartners.availabilityBlocks(businessPartnerId) });
+
+    const createMutation = useMutation({
+        mutationFn: () => createAvailabilityBlock(businessPartnerId, date, startTime, endTime, reason || undefined),
+        onSuccess: () => {
+            toast({ title: 'Unavailable window added' });
+            setDate(''); setStartTime(''); setEndTime(''); setReason('');
+            invalidate();
+        },
+        onError: (error: Error) => toast({ title: 'Could not add', description: error.message, variant: 'destructive' }),
+    });
+
+    const deleteMutation = useMutation({
+        mutationFn: (blockId: string) => deleteAvailabilityBlock(businessPartnerId, blockId),
+        onSuccess: () => { toast({ title: 'Removed' }); invalidate(); },
+        onError: (error: Error) => toast({ title: 'Could not remove', description: error.message, variant: 'destructive' }),
+    });
+
+    return (
+        <Card>
+            <CardHeader><CardTitle>Availability</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                    Mark windows you&apos;re unavailable (a day off, another booking) — sellers can request any window you haven&apos;t blocked or already accepted another tour for.
+                </p>
+
+                <div className="flex items-end gap-2 max-w-2xl flex-wrap">
+                    <div>
+                        <label className="block text-sm font-medium mb-1">Date</label>
+                        <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium mb-1">From</label>
+                        <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium mb-1">To</label>
+                        <Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+                    </div>
+                    <div className="flex-1 min-w-[140px]">
+                        <label className="block text-sm font-medium mb-1">Reason (optional)</label>
+                        <Input placeholder="e.g. Day off" value={reason} onChange={(e) => setReason(e.target.value)} />
+                    </div>
+                    <Button disabled={createMutation.isPending || !date || !startTime || !endTime} onClick={() => createMutation.mutate()}>
+                        Add
+                    </Button>
+                </div>
+
+                {isLoading ? (
+                    <p className="text-sm text-muted-foreground">Loading...</p>
+                ) : blocks && blocks.length > 0 ? (
+                    <div className="space-y-1.5 pt-2">
+                        {blocks.map((b) => (
+                            <div key={b.id} className="flex items-center justify-between text-sm border rounded-md px-3 py-2">
+                                <span>{b.date} · {b.startTime}–{b.endTime}{b.reason && ` · ${b.reason}`}</span>
+                                <Button size="sm" variant="ghost" className="text-destructive h-7" disabled={deleteMutation.isPending} onClick={() => deleteMutation.mutate(b.id)}>
+                                    Remove
+                                </Button>
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <p className="text-sm text-muted-foreground">No unavailable windows — you&apos;re open for any date/time a seller requests.</p>
+                )}
+            </CardContent>
+        </Card>
+    );
+}
+
+function CapacityTab({ businessPartnerId, businessType }: { businessPartnerId: string; businessType: BusinessPartnerType }) {
     const queryClient = useQueryClient();
     const { data: capacity, isLoading: capacityLoading } = useMyCapacity(businessPartnerId);
     const { data: overrides } = useCapacityOverrides(businessPartnerId);
@@ -369,13 +656,24 @@ function CapacityTab({ businessPartnerId }: { businessPartnerId: string }) {
 
     if (capacityLoading) return <div className="text-muted-foreground text-sm">Loading...</div>;
 
+    const showUnitTypes = businessType === 'hotel' || businessType === 'guesthouse' || businessType === 'restaurant' || businessType === 'transport';
+    const unitTypeCopy = showUnitTypes ? UNIT_TYPE_COPY[businessType as UnitTypeBusinessType] : null;
+    const isGuide = businessType === 'guide';
+
     return (
         <div className="space-y-6">
+            {showUnitTypes && <UnitTypesSection businessPartnerId={businessPartnerId} businessType={businessType as UnitTypeBusinessType} />}
+            {isGuide && <GuideAvailabilitySection businessPartnerId={businessPartnerId} />}
+
             <Card>
-                <CardHeader><CardTitle>Default capacity</CardTitle></CardHeader>
+                <CardHeader><CardTitle>{isGuide ? 'Group-size limit' : 'Default capacity'}</CardTitle></CardHeader>
                 <CardContent>
                     <p className="text-sm text-muted-foreground mb-4">
-                        How many {unitLabel || 'units'} you can typically offer per day. Sellers see this as how much room they have to work with when planning an itinerary.
+                        {isGuide
+                            ? 'The most tourists you can personally guide in one engagement. Checked in addition to the time-window availability above — leave at 0 for no limit.'
+                            : unitTypeCopy
+                                ? `Fallback capacity for any day a seller links you without picking one of your ${unitTypeCopy.itemNounPlural} above.`
+                                : `How many ${unitLabel || 'units'} you can typically offer per day. Sellers see this as how much room they have to work with when planning an itinerary.`}
                     </p>
                     <div className="flex items-end gap-4 max-w-md">
                         <div className="flex-1">
@@ -434,9 +732,22 @@ function CapacityTab({ businessPartnerId }: { businessPartnerId: string }) {
 
 const REQUEST_STATUS_META: Record<ItineraryRequestStatus, { label: string; icon: LucideIcon; className: string }> = {
     pending: { label: 'Needs response', icon: Clock, className: 'text-amber-600 bg-amber-50 border-amber-200' },
+    held: { label: 'Held by you', icon: Clock, className: 'text-sky-600 bg-sky-50 border-sky-200' },
     confirmed: { label: 'Confirmed', icon: CheckCircle2, className: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
+    countered: { label: 'Awaiting agency', icon: Repeat2, className: 'text-violet-600 bg-violet-50 border-violet-200' },
     declined: { label: 'Declined', icon: XCircle, className: 'text-destructive bg-destructive/5 border-destructive/20' },
+    expired: { label: 'Expired', icon: XCircle, className: 'text-muted-foreground bg-muted border-border' },
 };
+
+/** Live "X available on this date" hint shown while the partner is deciding — finally puts getAvailableCapacityForDate to use. */
+function AvailableCapacityHint({ businessPartnerId, date, unitLabel, unitTypeId }: { businessPartnerId: string; date: string; unitLabel: string; unitTypeId?: string | null }) {
+    const { data } = useQuery({
+        queryKey: ['business-partners', businessPartnerId, 'capacity-available', date, unitTypeId ?? null],
+        queryFn: () => getAvailableCapacityForDate(businessPartnerId, date, unitTypeId ?? undefined),
+    });
+    if (!data) return null;
+    return <p className="text-xs text-muted-foreground">You have {data.available} {unitLabel} available on {date}.</p>;
+}
 
 function RequestsTab({ businessPartnerId }: { businessPartnerId: string }) {
     const [statusFilter, setStatusFilter] = useState<ItineraryRequestStatus>('pending');
@@ -444,22 +755,27 @@ function RequestsTab({ businessPartnerId }: { businessPartnerId: string }) {
     const { data, isLoading } = useMyItineraryRequests(businessPartnerId, statusFilter);
     const requests = data?.data ?? [];
 
-    const [capacityDrafts, setCapacityDrafts] = useState<Record<string, string>>({});
+    const [unitsDrafts, setUnitsDrafts] = useState<Record<string, string>>({});
+    const [counterDrafts, setCounterDrafts] = useState<Record<string, { units?: string; date?: string; time?: string; notes?: string }>>({});
+    const [counterOpenFor, setCounterOpenFor] = useState<string | null>(null);
+
+    const invalidate = () => queryClient.invalidateQueries({ queryKey: ['business-partners', businessPartnerId, 'requests'] });
 
     const respondMutation = useMutation({
-        mutationFn: ({ requestId, status, capacityConfirmed }: { requestId: string; status: 'confirmed' | 'declined'; capacityConfirmed?: number }) =>
-            respondToItineraryRequest(businessPartnerId, requestId, status, capacityConfirmed),
+        mutationFn: ({ requestId, action, params }: { requestId: string; action: 'hold' | 'confirm' | 'decline' | 'counter'; params?: { units?: number; notes?: string; counterUnits?: number; counterDate?: string; counterTime?: string } }) =>
+            respondToItineraryRequest(businessPartnerId, requestId, action, params),
         onSuccess: () => {
             toast({ title: 'Response saved' });
-            queryClient.invalidateQueries({ queryKey: ['business-partners', businessPartnerId, 'requests'] });
+            setCounterOpenFor(null);
+            invalidate();
         },
         onError: (error: Error) => toast({ title: 'Could not save response', description: error.message, variant: 'destructive' }),
     });
 
     return (
         <div className="space-y-4">
-            <div className="flex gap-2">
-                {(['pending', 'confirmed', 'declined'] as const).map((s) => (
+            <div className="flex gap-2 flex-wrap">
+                {(['pending', 'held', 'countered', 'confirmed', 'declined', 'expired'] as const).map((s) => (
                     <Button key={s} size="sm" variant={statusFilter === s ? 'default' : 'outline'} onClick={() => setStatusFilter(s)} className="capitalize">
                         {s}
                     </Button>
@@ -474,6 +790,7 @@ function RequestsTab({ businessPartnerId }: { businessPartnerId: string }) {
                 requests.map((r) => {
                     const meta = REQUEST_STATUS_META[r.status];
                     const Icon = meta.icon;
+                    const askLabel = r.unitsRequested > 0 ? `${r.unitsRequested} requested` : `${r.headcount} guests`;
                     return (
                         <Card key={r.id}>
                             <CardContent className="py-4 space-y-3">
@@ -481,7 +798,7 @@ function RequestsTab({ businessPartnerId }: { businessPartnerId: string }) {
                                     <div>
                                         <p className="font-medium">{r.tour.title}</p>
                                         <p className="text-sm text-muted-foreground">
-                                            {r.serviceDate}{r.serviceTime && ` · ${r.serviceTime}`} · {r.headcount} guests
+                                            {r.serviceDate}{r.serviceTime && ` · ${r.serviceTime}${r.serviceEndTime ? `–${r.serviceEndTime}` : ''}`} · {askLabel}
                                         </p>
                                     </div>
                                     <Badge variant="outline" className={`gap-1.5 shrink-0 ${meta.className}`}>
@@ -489,35 +806,115 @@ function RequestsTab({ businessPartnerId }: { businessPartnerId: string }) {
                                         {meta.label}
                                     </Badge>
                                 </div>
+
                                 {r.status === 'pending' && (
-                                    <div className="flex items-center gap-2 pt-1">
-                                        <Input
-                                            type="number"
-                                            min={0}
-                                            placeholder="Capacity you can commit"
-                                            className="max-w-[220px]"
-                                            value={capacityDrafts[r.id] ?? ''}
-                                            onChange={(e) => setCapacityDrafts({ ...capacityDrafts, [r.id]: e.target.value })}
-                                        />
-                                        <Button
-                                            size="sm"
-                                            disabled={respondMutation.isPending || !capacityDrafts[r.id]}
-                                            onClick={() => respondMutation.mutate({ requestId: r.id, status: 'confirmed', capacityConfirmed: Number(capacityDrafts[r.id]) })}
-                                        >
+                                    <>
+                                        <AvailableCapacityHint businessPartnerId={businessPartnerId} date={r.serviceDate} unitLabel="units" unitTypeId={r.unitTypeId} />
+                                        <div className="flex items-center gap-2 flex-wrap pt-1">
+                                            <Input
+                                                type="number"
+                                                min={0}
+                                                placeholder="Units to commit"
+                                                className="max-w-[160px]"
+                                                value={unitsDrafts[r.id] ?? ''}
+                                                onChange={(e) => setUnitsDrafts({ ...unitsDrafts, [r.id]: e.target.value })}
+                                            />
+                                            <Button
+                                                size="sm"
+                                                variant="secondary"
+                                                disabled={respondMutation.isPending || !unitsDrafts[r.id]}
+                                                onClick={() => respondMutation.mutate({ requestId: r.id, action: 'hold', params: { units: Number(unitsDrafts[r.id]) } })}
+                                            >
+                                                Hold
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                disabled={respondMutation.isPending || !unitsDrafts[r.id]}
+                                                onClick={() => respondMutation.mutate({ requestId: r.id, action: 'confirm', params: { units: Number(unitsDrafts[r.id]) } })}
+                                            >
+                                                Confirm
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="destructive"
+                                                disabled={respondMutation.isPending}
+                                                onClick={() => respondMutation.mutate({ requestId: r.id, action: 'decline' })}
+                                            >
+                                                Decline
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                disabled={respondMutation.isPending}
+                                                onClick={() => setCounterOpenFor(counterOpenFor === r.id ? null : r.id)}
+                                            >
+                                                Counter-offer
+                                            </Button>
+                                        </div>
+                                        {counterOpenFor === r.id && (
+                                            <div className="flex items-end gap-2 flex-wrap pt-1 border-t mt-2 pt-2">
+                                                <div>
+                                                    <Label className="text-xs text-muted-foreground">Units</Label>
+                                                    <Input type="number" min={0} className="h-8 w-24" value={counterDrafts[r.id]?.units ?? ''} onChange={(e) => setCounterDrafts({ ...counterDrafts, [r.id]: { ...counterDrafts[r.id], units: e.target.value } })} />
+                                                </div>
+                                                <div>
+                                                    <Label className="text-xs text-muted-foreground">Date</Label>
+                                                    <Input type="date" className="h-8" value={counterDrafts[r.id]?.date ?? ''} onChange={(e) => setCounterDrafts({ ...counterDrafts, [r.id]: { ...counterDrafts[r.id], date: e.target.value } })} />
+                                                </div>
+                                                <div>
+                                                    <Label className="text-xs text-muted-foreground">Time</Label>
+                                                    <Input type="time" className="h-8" value={counterDrafts[r.id]?.time ?? ''} onChange={(e) => setCounterDrafts({ ...counterDrafts, [r.id]: { ...counterDrafts[r.id], time: e.target.value } })} />
+                                                </div>
+                                                <Input
+                                                    placeholder="e.g. Can provide 6 Deluxe + 4 Standard"
+                                                    className="h-8 flex-1 min-w-[200px]"
+                                                    value={counterDrafts[r.id]?.notes ?? ''}
+                                                    onChange={(e) => setCounterDrafts({ ...counterDrafts, [r.id]: { ...counterDrafts[r.id], notes: e.target.value } })}
+                                                />
+                                                <Button
+                                                    size="sm"
+                                                    disabled={respondMutation.isPending}
+                                                    onClick={() => {
+                                                        const draft = counterDrafts[r.id] || {};
+                                                        respondMutation.mutate({
+                                                            requestId: r.id,
+                                                            action: 'counter',
+                                                            params: {
+                                                                counterUnits: draft.units ? Number(draft.units) : undefined,
+                                                                counterDate: draft.date || undefined,
+                                                                counterTime: draft.time || undefined,
+                                                                notes: draft.notes || undefined,
+                                                            },
+                                                        });
+                                                    }}
+                                                >
+                                                    Send
+                                                </Button>
+                                            </div>
+                                        )}
+                                    </>
+                                )}
+                                {r.status === 'held' && (
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <p className="text-sm text-muted-foreground">
+                                            Holding {r.capacityConfirmed} for this date{r.holdExpiresAt && ` — expires ${new Date(r.holdExpiresAt).toLocaleString()} if not confirmed`}.
+                                        </p>
+                                        <Button size="sm" disabled={respondMutation.isPending} onClick={() => respondMutation.mutate({ requestId: r.id, action: 'confirm', params: { units: r.capacityConfirmed ?? 0 } })}>
                                             Confirm
                                         </Button>
-                                        <Button
-                                            size="sm"
-                                            variant="destructive"
-                                            disabled={respondMutation.isPending}
-                                            onClick={() => respondMutation.mutate({ requestId: r.id, status: 'declined' })}
-                                        >
+                                        <Button size="sm" variant="destructive" disabled={respondMutation.isPending} onClick={() => respondMutation.mutate({ requestId: r.id, action: 'decline' })}>
                                             Decline
                                         </Button>
                                     </div>
                                 )}
+                                {r.status === 'countered' && (
+                                    <p className="text-sm text-muted-foreground">Waiting for the agency to accept or decline your counter-offer.</p>
+                                )}
                                 {r.status === 'confirmed' && (
                                     <p className="text-sm text-muted-foreground">Committed {r.capacityConfirmed} for this date.</p>
+                                )}
+                                {r.status === 'expired' && (
+                                    <p className="text-sm text-muted-foreground">This request went unanswered and expired.</p>
                                 )}
                             </CardContent>
                         </Card>

@@ -81,6 +81,10 @@ export const notificationTypeEnum = pgEnum('notification_type', [
   'itinerary_request_created',
   'itinerary_request_confirmed',
   'itinerary_request_declined',
+  'itinerary_request_held',
+  'itinerary_request_countered',
+  'itinerary_request_expired',
+  'itinerary_request_replaced',
 ]);
 export const mediaKindEnum = pgEnum('media_kind', ['image', 'video', 'pdf']);
 
@@ -122,7 +126,14 @@ export const itineraryPartnerRoleEnum = pgEnum('itinerary_partner_role', [
 // A partner's response to a specific-date service request (see
 // itineraryPartnerRequests below) — separate from businessPartners'
 // onboarding approvalStatus, which only gates the listing itself.
-export const itineraryRequestStatusEnum = pgEnum('itinerary_request_status', ['pending', 'confirmed', 'declined']);
+// 'pending' = agency asked, awaiting response ("Requested" in the UI).
+// 'held' = partner tentatively reserved units, expiring at holdExpiresAt
+// unless promoted to 'confirmed'. 'countered' = partner proposed different
+// units/date/time (see the counter* columns) for the agency to accept or
+// decline. 'expired' = a stale 'pending'/'held' the sweep auto-released.
+export const itineraryRequestStatusEnum = pgEnum('itinerary_request_status', ['pending', 'held', 'confirmed', 'countered', 'declined', 'expired']);
+// Who/what caused an itineraryRequestEvents transition.
+export const itineraryRequestActorRoleEnum = pgEnum('itinerary_request_actor_role', ['agency', 'partner', 'system']);
 // Where on the site an ad campaign is eligible to render.
 export const adPlacementSlotEnum = pgEnum('ad_placement_slot', [
   'tour_detail',
@@ -842,6 +853,20 @@ export const tourItineraryPartners = pgTable('tour_itinerary_partners', {
   name: text('name').notNull(),
   notes: text('notes'),
   sortOrder: integer('sort_order').notNull().default(0),
+  // The agency's own stated quantity for this day/role (e.g. "10" rooms) —
+  // null for roles where a unit count doesn't apply (guide/other). Read by
+  // itineraryRequestService as the ask on generated/manual requests instead
+  // of deriving one purely from departure capacity or booking headcount.
+  unitsRequested: integer('units_requested'),
+  // Free-text override of what unit is being asked for (e.g. "Deluxe room").
+  // Defaults to the partner's own businessPartnerCapacity.unitLabel when unset.
+  unitType: text('unit_type'),
+  // Structured link to one of the partner's own businessPartnerUnitTypes, when
+  // they've configured real named types (hotel room types, transport vehicle
+  // types) — lets capacity be checked per-type instead of pooled per-partner.
+  // Null when the partner has no configured types yet; `unitType` above still
+  // carries the display name either way.
+  unitTypeId: text('unit_type_id').references(() => businessPartnerUnitTypes.id, { onDelete: 'set null' }),
   ...timestamps,
 }, (table) => ({
   tourDayIdx: index('tour_itinerary_partners_tour_day_idx').on(table.tourId, table.dayId),
@@ -883,6 +908,69 @@ export const businessPartnerCapacityOverrides = pgTable('business_partner_capaci
   partnerDateIdx: uniqueIndex('business_partner_capacity_overrides_partner_date_idx').on(table.businessPartnerId, table.date),
 }));
 
+// ---------------------------------------------------------------------------
+// Named unit types with a real per-type count — a hotel's room types today
+// (Deluxe/Standard/Suite), a transport company's vehicle types later, reusing
+// the same shape. Generic on purpose: businessPartnerCapacity/Overrides above
+// stay as the pooled-per-partner fallback for partners with no configured
+// types, or for roles (guide/meals-without-a-type) that never need one.
+// ---------------------------------------------------------------------------
+
+// A hotel/guesthouse (or later, transport) partner's own named inventory type.
+export const businessPartnerUnitTypes = pgTable('business_partner_unit_types', {
+  id: id(),
+  businessPartnerId: text('business_partner_id').notNull().references(() => businessPartners.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  totalUnits: integer('total_units').notNull().default(0),
+  description: text('description'),
+  // "HH:mm" — meaningful for a restaurant meal slot ("Dinner" -> "19:00"),
+  // used to default the sitting time when an agency picks this type; null
+  // for a hotel room type (or a restaurant slot with flexible seating).
+  defaultTime: text('default_time'),
+  sortOrder: integer('sort_order').notNull().default(0),
+  isActive: boolean('is_active').notNull().default(true),
+  ...timestamps,
+}, (table) => ({
+  partnerNameIdx: uniqueIndex('business_partner_unit_types_partner_name_idx').on(table.businessPartnerId, table.name),
+}));
+
+// Where a unit type's inventory is manually blocked out from — anything that
+// ISN'T a TourBNT reservation (those are derived live from
+// itineraryPartnerRequests, never double-recorded here).
+export const unitBlockChannelEnum = pgEnum('unit_block_channel', ['direct', 'private', 'other', 'maintenance']);
+
+// One upsertable row per (unit type, date, channel) — e.g. "15 blocked for
+// Direct bookings on Oct 10". Occupied for a date = SUM of these across every
+// channel + whatever TourBNT has pending/held/confirmed/countered that date.
+export const businessPartnerUnitTypeBlocks = pgTable('business_partner_unit_type_blocks', {
+  id: id(),
+  unitTypeId: text('unit_type_id').notNull().references(() => businessPartnerUnitTypes.id, { onDelete: 'cascade' }),
+  date: date('date').notNull(),
+  channel: unitBlockChannelEnum('channel').notNull(),
+  blockedCount: integer('blocked_count').notNull(),
+  notes: text('notes'),
+  ...timestamps,
+}, (table) => ({
+  unitDateChannelIdx: uniqueIndex('business_partner_unit_type_blocks_unique_idx').on(table.unitTypeId, table.date, table.channel),
+}));
+
+// A guide's (or any single-person/single-resource partner's) manually
+// marked unavailable window — the time-range equivalent of
+// businessPartnerUnitTypeBlocks above, but keyed straight on the partner
+// (no unit-type concept for a single person's calendar) and with no
+// channel: a guide is either free for a window or not, full stop.
+export const businessPartnerAvailabilityBlocks = pgTable('business_partner_availability_blocks', {
+  id: id(),
+  businessPartnerId: text('business_partner_id').notNull().references(() => businessPartners.id, { onDelete: 'cascade' }),
+  date: date('date').notNull(),
+  startTime: text('start_time').notNull(),
+  endTime: text('end_time').notNull(),
+  reason: text('reason'),
+  ...timestamps,
+}, (table) => ({
+  partnerDateIdx: index('business_partner_availability_blocks_partner_date_idx').on(table.businessPartnerId, table.date),
+}));
+
 // A request for a partner to confirm capacity for one real service date.
 // headcount means different things depending on how the request was
 // generated (see itineraryRequestService.ts):
@@ -901,15 +989,54 @@ export const itineraryPartnerRequests = pgTable('itinerary_partner_requests', {
   businessPartnerId: text('business_partner_id').notNull().references(() => businessPartners.id, { onDelete: 'cascade' }),
   role: itineraryPartnerRoleEnum('role').notNull(),
   serviceDate: date('service_date').notNull(),
-  // e.g. "13:00" — meaningful for role='meals' (lunch vs dinner sittings);
-  // left null for accommodation/transport/guide requests.
+  // e.g. "13:00" — a single sitting point for role='meals', or the start of
+  // an engagement window for role='guide' (paired with serviceEndTime
+  // below); left null for accommodation/transport requests.
   serviceTime: text('service_time'),
+  // The end of a guide engagement window (e.g. "17:00" for a 9-5 day) —
+  // isTimeSlotAvailable uses [serviceTime, serviceEndTime) to check for
+  // overlapping bookings instead of the pooled-count capacity check every
+  // other role uses. Null for roles that don't need a window.
+  serviceEndTime: text('service_end_time'),
   headcount: integer('headcount').notNull().default(0),
+  // The quantity actually being asked for (rooms/seats/etc.), distinct from
+  // headcount (people) — snapshotted from tourItineraryPartners.unitsRequested,
+  // falling back to departure capacity/tour.maxSize when the agency didn't
+  // set one. This (not headcount) is what getAvailableCapacity reserves against.
+  unitsRequested: integer('units_requested').notNull().default(0),
+  // Snapshotted from tourItineraryPartners.unitTypeId at generation time.
+  // When set, getAvailableCapacity checks this specific type's own inventory
+  // instead of the partner's pooled capacity — see businessPartnerUnitTypes.
+  unitTypeId: text('unit_type_id').references(() => businessPartnerUnitTypes.id, { onDelete: 'set null' }),
   status: itineraryRequestStatusEnum('status').notNull().default('pending'),
+  // Units the partner has committed, whether tentatively (status='held') or
+  // finally (status='confirmed') — the same field carries both, since a
+  // hold being promoted to confirmed doesn't change how much was committed.
   capacityConfirmed: integer('capacity_confirmed'),
   responseNotes: text('response_notes'),
   respondedAt: timestamp('responded_at', { withTimezone: true }),
   respondedBy: text('responded_by').references(() => users.id),
+  // Set when entering 'held'; past this with no confirm, the expiry sweep
+  // (itineraryRequestExpiry.ts) flips the row to 'expired' and frees the
+  // capacity it was holding.
+  holdExpiresAt: timestamp('hold_expires_at', { withTimezone: true }),
+  // Set on a fresh 'pending' request (createdAt + 72h); an unanswered
+  // request past this is also swept to 'expired' rather than blocking a
+  // fixed-departure date forever.
+  respondByAt: timestamp('respond_by_at', { withTimezone: true }),
+  // Populated when a partner responds with status='countered' — what they
+  // can actually offer instead of the original ask. The agency then either
+  // accepts (copied into the live serviceDate/serviceTime/unitsRequested,
+  // status -> 'held') or declines (status -> 'declined') via
+  // ItineraryRequestService.respondToCounter.
+  counterUnits: integer('counter_units'),
+  counterDate: date('counter_date'),
+  counterTime: text('counter_time'),
+  counterNotes: text('counter_notes'),
+  // Optimistic-concurrency guard: every transition checks-and-increments
+  // this so two racing responses to the same request can't silently clobber
+  // each other.
+  version: integer('version').notNull().default(1),
   // Set only for fixed-departure-sourced requests, so isFixedDepartureDate
   // Confirmed() can find every request belonging to one departure.
   sourceDepartureDate: timestamp('source_departure_date', { withTimezone: true }),
@@ -920,6 +1047,24 @@ export const itineraryPartnerRequests = pgTable('itinerary_partner_requests', {
   // Lets request generation be a plain upsert: one request per (day-link,
   // date, time-slot), regardless of how many bookings/departures feed it.
   dedupeIdx: uniqueIndex('itinerary_partner_requests_dedupe_idx').on(table.tourItineraryPartnerId, table.serviceDate, table.serviceTime),
+}));
+
+// Append-only audit trail — one row per status transition on a request
+// (agency-, partner-, or system/sweep-driven), since itineraryPartnerRequests
+// itself only ever holds the current state. Powers the orchestrator table's
+// per-requirement history (e.g. "Requested -> Held by Hotel A -> Confirmed").
+export const itineraryRequestEvents = pgTable('itinerary_request_events', {
+  id: id(),
+  requestId: text('request_id').notNull().references(() => itineraryPartnerRequests.id, { onDelete: 'cascade' }),
+  fromStatus: itineraryRequestStatusEnum('from_status'),
+  toStatus: itineraryRequestStatusEnum('to_status').notNull(),
+  actorId: text('actor_id').references(() => users.id),
+  actorRole: itineraryRequestActorRoleEnum('actor_role').notNull(),
+  unitsAtEvent: integer('units_at_event'),
+  notes: text('notes'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  requestIdx: index('itinerary_request_events_request_idx').on(table.requestId, table.createdAt),
 }));
 
 // Ledger of which booking contributed how many people to a given
@@ -1310,6 +1455,7 @@ export const businessReviewLikesRelations = relations(businessReviewLikes, ({ on
 export const tourItineraryPartnersRelations = relations(tourItineraryPartners, ({ one }) => ({
   tour: one(tours, { fields: [tourItineraryPartners.tourId], references: [tours.id] }),
   businessPartner: one(businessPartners, { fields: [tourItineraryPartners.businessPartnerId], references: [businessPartners.id] }),
+  unitType: one(businessPartnerUnitTypes, { fields: [tourItineraryPartners.unitTypeId], references: [businessPartnerUnitTypes.id] }),
 }));
 
 export const advertisementsRelations = relations(advertisements, ({ one, many }) => ({
