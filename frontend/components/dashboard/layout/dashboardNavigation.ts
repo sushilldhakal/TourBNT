@@ -2,7 +2,7 @@ import {
     Home, FileText, Users, Image, Settings, Mail, LayoutDashboard,
     List, MapPin, FolderTree, Lightbulb, HelpCircle, Calendar, Star, Wrench,
     MessageSquare, Plus, Briefcase, UserCog, CalendarCheck, Building2, Megaphone,
-    Compass, Utensils, Truck
+    Compass, Utensils, Truck, Gauge
 } from 'lucide-react';
 import type { NavigationItem, FlatNavItem } from '@/types/dashboard';
 
@@ -74,6 +74,12 @@ export const baseNavigationItems: NavigationItem[] = [
             { href: '/dashboard/business-partners', label: 'Applications', icon: List, adminOnly: true },
             { href: '/dashboard/ads', label: 'Ad Campaigns', icon: Megaphone, adminOnly: true },
         ],
+    },
+    {
+        href: '/dashboard/operations',
+        label: 'Operations',
+        icon: Gauge,
+        adminOnly: true,
     },
     // Split by type (see DashboardSidebar for the ownership-driven version
     // that only shows the ones a user actually owns) — the search palette
