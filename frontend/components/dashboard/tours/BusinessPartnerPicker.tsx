@@ -63,10 +63,11 @@ export function BusinessPartnerPicker({ basePath, role, label, placeholder }: Bu
     const partners: ItineraryPartner[] = watch(partnersPath) || [];
     const current = partners.find((p) => p?.role === role);
 
-    // Real, hotel-configured room types (or later, transport vehicle types)
-    // for the linked partner — when they've set any up, the agency picks
-    // from this list instead of typing a free-text guess.
-    const { data: unitTypes } = useUnitTypes(role === 'accommodation' ? current?.businessPartnerId : undefined);
+    // Real, partner-configured unit types (hotel room types, restaurant meal
+    // slots, or later transport vehicle types) for the linked partner — when
+    // they've set any up, the agency picks from this list instead of typing
+    // a free-text guess.
+    const { data: unitTypes } = useUnitTypes(role === 'accommodation' || role === 'meals' ? current?.businessPartnerId : undefined);
 
     const [query, setQuery] = useState(current?.name || '');
     const [results, setResults] = useState<BusinessPartner[]>([]);
@@ -146,7 +147,11 @@ export function BusinessPartnerPicker({ basePath, role, label, placeholder }: Bu
     const setUnitTypeById = (unitTypeId: string) => {
         if (!current) return;
         const picked = unitTypes?.find((t) => t.id === unitTypeId);
-        upsert({ ...current, unitTypeId: unitTypeId || undefined, unitType: picked?.name });
+        // Default the sitting time from the slot's own default (still
+        // editable via the Sitting time input below) — never overwrites a
+        // time the agency already chose deliberately.
+        const time = role === 'meals' && picked?.defaultTime && !current.time ? picked.defaultTime : current.time;
+        upsert({ ...current, unitTypeId: unitTypeId || undefined, unitType: picked?.name, time });
     };
 
     return (

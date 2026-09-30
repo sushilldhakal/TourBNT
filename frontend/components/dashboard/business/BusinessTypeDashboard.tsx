@@ -425,19 +425,27 @@ function UnitTypeInventoryTable({ businessPartnerId, unitType }: { businessPartn
     );
 }
 
-function RoomTypesSection({ businessPartnerId }: { businessPartnerId: string }) {
+const UNIT_TYPE_COPY: Record<'hotel' | 'guesthouse' | 'restaurant', { title: string; itemNoun: string; itemNounPlural: string; unitLabel: string; namePlaceholder: string; showTime: boolean }> = {
+    hotel: { title: 'Room types', itemNoun: 'room type', itemNounPlural: 'room types', unitLabel: 'Total rooms', namePlaceholder: 'e.g. Deluxe', showTime: false },
+    guesthouse: { title: 'Room types', itemNoun: 'room type', itemNounPlural: 'room types', unitLabel: 'Total rooms', namePlaceholder: 'e.g. Deluxe', showTime: false },
+    restaurant: { title: 'Meal slots', itemNoun: 'meal slot', itemNounPlural: 'meal slots', unitLabel: 'Seats', namePlaceholder: 'e.g. Dinner', showTime: true },
+};
+
+function UnitTypesSection({ businessPartnerId, businessType }: { businessPartnerId: string; businessType: 'hotel' | 'guesthouse' | 'restaurant' }) {
+    const copy = UNIT_TYPE_COPY[businessType];
     const queryClient = useQueryClient();
     const { data: unitTypes, isLoading } = useUnitTypes(businessPartnerId);
     const [newName, setNewName] = useState('');
     const [newTotal, setNewTotal] = useState('');
+    const [newTime, setNewTime] = useState('');
     const [expandedId, setExpandedId] = useState<string | null>(null);
 
     const invalidate = () => queryClient.invalidateQueries({ queryKey: queryKeys.businessPartners.unitTypes(businessPartnerId) });
 
     const createMutation = useMutation({
-        mutationFn: () => createUnitType(businessPartnerId, { name: newName.trim(), totalUnits: Number(newTotal) || 0 }),
-        onSuccess: () => { toast({ title: 'Room type added' }); setNewName(''); setNewTotal(''); invalidate(); },
-        onError: (error: Error) => toast({ title: 'Could not add room type', description: error.message, variant: 'destructive' }),
+        mutationFn: () => createUnitType(businessPartnerId, { name: newName.trim(), totalUnits: Number(newTotal) || 0, defaultTime: newTime || undefined }),
+        onSuccess: () => { toast({ title: `${copy.itemNoun} added` }); setNewName(''); setNewTotal(''); setNewTime(''); invalidate(); },
+        onError: (error: Error) => toast({ title: `Could not add ${copy.itemNoun}`, description: error.message, variant: 'destructive' }),
     });
 
     const updateTotalMutation = useMutation({
@@ -448,29 +456,35 @@ function RoomTypesSection({ businessPartnerId }: { businessPartnerId: string }) 
 
     const deleteMutation = useMutation({
         mutationFn: (id: string) => deleteUnitType(businessPartnerId, id),
-        onSuccess: () => { toast({ title: 'Room type deleted' }); invalidate(); },
+        onSuccess: () => { toast({ title: `${copy.itemNoun} deleted` }); invalidate(); },
         onError: (error: Error) => toast({ title: 'Could not delete', description: error.message, variant: 'destructive' }),
     });
 
     return (
         <Card>
             <CardHeader>
-                <CardTitle>Room types</CardTitle>
+                <CardTitle>{copy.title}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
                 <p className="text-sm text-muted-foreground">
-                    Sellers pick one of these when linking you to a tour day, so capacity is tracked per room type instead of one pooled number.
+                    Sellers pick one of these when linking you to a tour day, so capacity is tracked per {copy.itemNoun} instead of one pooled number.
                 </p>
 
-                <div className="flex items-end gap-2 max-w-md">
-                    <div className="flex-1">
+                <div className="flex items-end gap-2 max-w-lg flex-wrap">
+                    <div className="flex-1 min-w-[140px]">
                         <label className="block text-sm font-medium mb-1">Name</label>
-                        <Input placeholder="e.g. Deluxe" value={newName} onChange={(e) => setNewName(e.target.value)} />
+                        <Input placeholder={copy.namePlaceholder} value={newName} onChange={(e) => setNewName(e.target.value)} />
                     </div>
                     <div className="w-28">
-                        <label className="block text-sm font-medium mb-1">Total rooms</label>
+                        <label className="block text-sm font-medium mb-1">{copy.unitLabel}</label>
                         <Input type="number" min={0} value={newTotal} onChange={(e) => setNewTotal(e.target.value)} />
                     </div>
+                    {copy.showTime && (
+                        <div className="w-32">
+                            <label className="block text-sm font-medium mb-1">Default time</label>
+                            <Input type="time" value={newTime} onChange={(e) => setNewTime(e.target.value)} />
+                        </div>
+                    )}
                     <Button disabled={createMutation.isPending || !newName.trim()} onClick={() => createMutation.mutate()}>
                         Add
                     </Button>
@@ -484,7 +498,7 @@ function RoomTypesSection({ businessPartnerId }: { businessPartnerId: string }) 
                             <div key={ut.id} className="border rounded-md">
                                 <div className="flex items-center justify-between gap-3 px-3 py-2">
                                     <button type="button" className="font-medium text-sm text-left" onClick={() => setExpandedId(expandedId === ut.id ? null : ut.id)}>
-                                        {ut.name}
+                                        {ut.name}{ut.defaultTime && <span className="text-muted-foreground font-normal"> · {ut.defaultTime}</span>}
                                     </button>
                                     <div className="flex items-center gap-2">
                                         <Input
@@ -514,7 +528,7 @@ function RoomTypesSection({ businessPartnerId }: { businessPartnerId: string }) 
                         ))}
                     </div>
                 ) : (
-                    <p className="text-sm text-muted-foreground">No room types yet — add one above.</p>
+                    <p className="text-sm text-muted-foreground">No {copy.itemNounPlural} yet — add one above.</p>
                 )}
             </CardContent>
         </Card>
@@ -561,18 +575,19 @@ function CapacityTab({ businessPartnerId, businessType }: { businessPartnerId: s
 
     if (capacityLoading) return <div className="text-muted-foreground text-sm">Loading...</div>;
 
-    const showRoomTypes = businessType === 'hotel' || businessType === 'guesthouse';
+    const showUnitTypes = businessType === 'hotel' || businessType === 'guesthouse' || businessType === 'restaurant';
+    const unitTypeCopy = showUnitTypes ? UNIT_TYPE_COPY[businessType as 'hotel' | 'guesthouse' | 'restaurant'] : null;
 
     return (
         <div className="space-y-6">
-            {showRoomTypes && <RoomTypesSection businessPartnerId={businessPartnerId} />}
+            {showUnitTypes && <UnitTypesSection businessPartnerId={businessPartnerId} businessType={businessType as 'hotel' | 'guesthouse' | 'restaurant'} />}
 
             <Card>
                 <CardHeader><CardTitle>Default capacity</CardTitle></CardHeader>
                 <CardContent>
                     <p className="text-sm text-muted-foreground mb-4">
-                        {showRoomTypes
-                            ? 'Fallback capacity for any day a seller links you without picking one of your room types above.'
+                        {unitTypeCopy
+                            ? `Fallback capacity for any day a seller links you without picking one of your ${unitTypeCopy.itemNounPlural} above.`
                             : `How many ${unitLabel || 'units'} you can typically offer per day. Sellers see this as how much room they have to work with when planning an itinerary.`}
                     </p>
                     <div className="flex items-end gap-4 max-w-md">

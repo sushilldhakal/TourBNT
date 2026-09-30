@@ -28,7 +28,7 @@ export const createUnitType = async (req: Request, res: Response, next: NextFunc
     const { businessPartnerId } = req.params;
     if (!(await assertOwnerOrAdmin(businessPartnerId, req))) return sendForbiddenError(res, 'Not authorized to manage this business\'s unit types');
 
-    const { name, totalUnits, description } = req.body as { name?: string; totalUnits?: number; description?: string };
+    const { name, totalUnits, description, defaultTime } = req.body as { name?: string; totalUnits?: number; description?: string; defaultTime?: string };
     if (!name || !name.trim()) return sendValidationError(res, 'Validation failed', [{ field: 'name', message: 'name is required' }]);
     if (totalUnits !== undefined && (typeof totalUnits !== 'number' || totalUnits < 0)) {
       return sendValidationError(res, 'Validation failed', [{ field: 'totalUnits', message: 'Must be a non-negative number' }]);
@@ -39,6 +39,7 @@ export const createUnitType = async (req: Request, res: Response, next: NextFunc
       name: name.trim(),
       totalUnits: totalUnits ?? 0,
       description: description || null,
+      defaultTime: defaultTime || null,
     }).returning();
     return sendSuccess(res, created, 'Unit type created successfully', 201);
   } catch (error) {
@@ -56,7 +57,7 @@ export const updateUnitType = async (req: Request, res: Response, next: NextFunc
     const [existing] = await db.select().from(businessPartnerUnitTypes).where(eq(businessPartnerUnitTypes.id, unitTypeId)).limit(1);
     if (!existing || existing.businessPartnerId !== businessPartnerId) return sendNotFoundError(res, 'Unit type not found');
 
-    const { name, totalUnits, description, isActive } = req.body as { name?: string; totalUnits?: number; description?: string; isActive?: boolean };
+    const { name, totalUnits, description, isActive, defaultTime } = req.body as { name?: string; totalUnits?: number; description?: string; isActive?: boolean; defaultTime?: string };
     if (totalUnits !== undefined && (typeof totalUnits !== 'number' || totalUnits < 0)) {
       return sendValidationError(res, 'Validation failed', [{ field: 'totalUnits', message: 'Must be a non-negative number' }]);
     }
@@ -66,6 +67,7 @@ export const updateUnitType = async (req: Request, res: Response, next: NextFunc
       ...(totalUnits !== undefined && { totalUnits }),
       ...(description !== undefined && { description: description || null }),
       ...(isActive !== undefined && { isActive }),
+      ...(defaultTime !== undefined && { defaultTime: defaultTime || null }),
       updatedAt: new Date(),
     }).where(eq(businessPartnerUnitTypes.id, unitTypeId)).returning();
     return sendSuccess(res, updated, 'Unit type updated successfully');

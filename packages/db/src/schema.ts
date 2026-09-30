@@ -923,6 +923,10 @@ export const businessPartnerUnitTypes = pgTable('business_partner_unit_types', {
   name: text('name').notNull(),
   totalUnits: integer('total_units').notNull().default(0),
   description: text('description'),
+  // "HH:mm" — meaningful for a restaurant meal slot ("Dinner" -> "19:00"),
+  // used to default the sitting time when an agency picks this type; null
+  // for a hotel room type (or a restaurant slot with flexible seating).
+  defaultTime: text('default_time'),
   sortOrder: integer('sort_order').notNull().default(0),
   isActive: boolean('is_active').notNull().default(true),
   ...timestamps,

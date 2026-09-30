@@ -8,6 +8,8 @@ export interface BusinessPartnerUnitType {
     name: string;
     totalUnits: number;
     description?: string | null;
+    /** "HH:mm" — a restaurant meal slot's default sitting time; null for a hotel room type. */
+    defaultTime?: string | null;
     sortOrder: number;
     isActive: boolean;
     createdAt: string;
@@ -42,7 +44,7 @@ export const getUnitTypes = async (businessPartnerId: string) => {
     }
 };
 
-export const createUnitType = async (businessPartnerId: string, data: { name: string; totalUnits?: number; description?: string }) => {
+export const createUnitType = async (businessPartnerId: string, data: { name: string; totalUnits?: number; description?: string; defaultTime?: string }) => {
     try {
         const response = await api.post(`/business-partners/${businessPartnerId}/unit-types`, data);
         return extractResponseData<BusinessPartnerUnitType>(response);
@@ -51,7 +53,7 @@ export const createUnitType = async (businessPartnerId: string, data: { name: st
     }
 };
 
-export const updateUnitType = async (businessPartnerId: string, unitTypeId: string, data: { name?: string; totalUnits?: number; description?: string; isActive?: boolean }) => {
+export const updateUnitType = async (businessPartnerId: string, unitTypeId: string, data: { name?: string; totalUnits?: number; description?: string; isActive?: boolean; defaultTime?: string }) => {
     try {
         const response = await api.patch(`/business-partners/${businessPartnerId}/unit-types/${unitTypeId}`, data);
         return extractResponseData<BusinessPartnerUnitType>(response);
