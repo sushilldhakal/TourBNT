@@ -21,6 +21,7 @@ import {
   incrementTourBookings,
   checkTourAvailability,
   getTourLogisticsStatus,
+  getTourRouteMap,
   sendItineraryPartnerRequest,
   respondToItineraryCounterOffer,
   reopenItineraryPartnerRequest,
@@ -596,6 +597,9 @@ router.get('/:tourId/rating', validateObjectId(), getTourRating);
 router.get('/:tourId/bookings', authenticate, authorizeRoles('admin', 'seller'), validateObjectId(), paginationMiddleware(), getTourBookings);
 
 // Read-only per-day partner confirmation status for the tour editor (ownership checked inside the service).
+// Public: lettered route for the map on the tour page.
+router.get('/:tourId/route-map', getTourRouteMap);
+
 router.get('/:tourId/logistics-status', authenticate, validateObjectId(), getTourLogisticsStatus);
 
 // Agency orchestrator actions — ownership (tour-author-or-admin) checked inside ItineraryRequestService.

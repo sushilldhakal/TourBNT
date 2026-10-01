@@ -1,6 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import { TourRouteMap } from './TourRouteMap';
 import { Tour } from '@/types/types';
 // Imported statically (not dynamic()): both render Radix Tabs, whose useId-based ids differ between
 // the server render and a lazily-hydrated client tree, causing a hydration mismatch.
@@ -56,6 +57,9 @@ export function TourDetailClient({ tour, destinations }: TourDetailClientProps) 
                 gallery={tour.gallery}
                 title={tour.title}
             />
+
+            {/* Day-by-day route map: always visible, between the gallery and the tabs */}
+            <TourRouteMap tourId={tour.id} />
 
             {/* Tour Tabs with all content */}
             <TourTabs tour={tour} destinations={destinations} />

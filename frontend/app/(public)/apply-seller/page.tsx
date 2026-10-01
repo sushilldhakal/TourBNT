@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { DatePickerField } from '@/components/ui/date-picker';
 import { toast } from '@/components/ui/use-toast';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useCacheManager } from '@/lib/queries';
@@ -17,11 +18,13 @@ import { updateMyProfile } from '@/lib/api/users';
 import { cn } from '@/lib/utils';
 
 const SELLER_TYPES = [
-    { value: 'tour_operator', label: 'Tour operator' },
     { value: 'travel_agency', label: 'Travel agency' },
-    { value: 'trekking_agency', label: 'Trekking agency' },
-    { value: 'independent_guide', label: 'Independent guide' },
-    { value: 'other', label: 'Other' },
+    { value: 'guide', label: 'Guide' },
+    { value: 'hotel', label: 'Hotel' },
+    { value: 'guest_house', label: 'Guest house' },
+    { value: 'restaurant_cafe', label: 'Restaurant/Cafe' },
+    { value: 'transport', label: 'Transport' },
+    { value: 'advertisement_company', label: 'Advertisement company' },
 ];
 
 const COMPANY_TYPES = [
@@ -135,6 +138,11 @@ export default function ApplySellerPage() {
     const [submitting, setSubmitting] = useState(false);
     const [submitted, setSubmitted] = useState(false);
 
+    const registrationMax = useMemo(() => {
+        const today = new Date();
+        today.setHours(23, 59, 59, 999);
+        return today;
+    }, []);
     const set = (name: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setForm((f) => ({ ...f, [name]: e.target.value }));
     const setValue = (name: string) => (value: string) => setForm((f) => ({ ...f, [name]: value }));
 
@@ -245,7 +253,14 @@ export default function ApplySellerPage() {
                                 <SelectContent>{COMPANY_TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
                             </Select>
                         </Field>
-                        <Field label="Registration date" required><Input type="date" value={form.registrationDate} onChange={set('registrationDate')} /></Field>
+                        <Field label="Registration date" required>
+                            <DatePickerField
+                                value={form.registrationDate}
+                                onChange={setValue('registrationDate')}
+                                placeholder="Select date"
+                                max={registrationMax}
+                            />
+                        </Field>
                         <Field label="Tax ID (PAN / VAT)" required><Input value={form.taxId} onChange={set('taxId')} /></Field>
                         <Field label="Seller type" required>
                             <Select value={form.sellerType} onValueChange={setValue('sellerType')}>

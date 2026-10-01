@@ -14,14 +14,6 @@ import {
     AccordionTrigger,
 } from '@/components/ui/accordion';
 import RichTextRenderer from '@/components/RichTextRenderer';
-import dynamic from 'next/dynamic';
-import type { ItineraryMapPoint } from '@/components/tours/ItineraryMap';
-
-// Leaflet touches `window`, so it only loads in the browser.
-const ItineraryMap = dynamic(() => import('@/components/tours/ItineraryMap'), {
-    ssr: false,
-    loading: () => <div className="h-56 w-full animate-pulse rounded-2xl bg-muted sm:h-72" />,
-});
 
 const PARTNER_ROLE_LABEL: Record<string, string> = {
     transport: 'Transport',
@@ -52,29 +44,6 @@ export function ItineraryAccordion({ itinerary, outline, destinations }: Itinera
         const byName = new Map(all.filter((d) => d.name).map((d) => [d.name.trim().toLowerCase(), d]));
         return { byId, byName };
     }, [approvedData, destinations]);
-    // One map pin per consecutive stop: days that share a destination collapse into a single pin.
-    const mapPoints = useMemo<ItineraryMapPoint[]>(() => {
-        const approved = ((approvedData as { data?: Array<{ id?: string; _id?: string; name?: string; latitude?: number | null; longitude?: number | null }> } | undefined)?.data ?? []);
-        const coordsById = new Map<string, { lat: number; lng: number; name: string }>();
-        const coordsByName = new Map<string, { lat: number; lng: number; name: string }>();
-        for (const d of approved) {
-            if (typeof d.latitude !== 'number' || typeof d.longitude !== 'number') continue;
-            const c = { lat: d.latitude, lng: d.longitude, name: d.name ?? '' };
-            coordsById.set(String(d.id ?? d._id ?? ''), c);
-            if (d.name) coordsByName.set(d.name.trim().toLowerCase(), c);
-        }
-        const out: ItineraryMapPoint[] = [];
-        (itinerary ?? []).forEach((day, i) => {
-            const raw = day.destination != null ? String(day.destination).trim() : '';
-            const c = raw ? coordsById.get(raw) ?? coordsByName.get(raw.toLowerCase()) : undefined;
-            if (!c) return;
-            const last = out[out.length - 1];
-            if (last && last.lat === c.lat && last.lng === c.lng) last.days.push(i + 1);
-            else out.push({ name: c.name, lat: c.lat, lng: c.lng, days: [i + 1] });
-        });
-        return out;
-    }, [approvedData, itinerary]);
-
     const resolveDestinationLink = (value: string | undefined): { name: string; href: string; external: boolean } | null => {
         const raw = value != null ? String(value).trim() : '';
         if (!raw) return null;
@@ -107,10 +76,6 @@ export function ItineraryAccordion({ itinerary, outline, destinations }: Itinera
                         />
                     </div>
                 )
-            )}
-
-            {mapPoints.length > 0 && (
-                <ItineraryMap points={mapPoints} onActiveDay={(day) => setActiveDay((prev) => (prev.includes(`day-${day - 1}`) ? prev : [...prev, `day-${day - 1}`]))} />
             )}
 
             {/* Itinerary accordion with timeline */}

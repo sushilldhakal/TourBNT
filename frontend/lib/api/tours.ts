@@ -495,3 +495,38 @@ export const getSingleTourServer = async (tourId: string) => {
         throw handleApiError(error, 'fetching tour (server)');
     }
 };
+
+export interface TourRouteStop {
+    /** "2B", or just "7" when a day has a single stop. */
+    label: string;
+    day: number;
+    kind: 'location' | 'meal' | 'stay';
+    name: string;
+    place: string;
+    lat: number;
+    lng: number;
+}
+
+export interface TourRouteDay {
+    day: number;
+    title: string;
+    place: string;
+    stops: TourRouteStop[];
+}
+
+export interface TourRouteMapData {
+    days: TourRouteDay[];
+    /** Places still being looked up; the map fills in as they resolve. */
+    pending: number;
+    unresolved: string[];
+}
+
+/** Lettered day-by-day route (1A, 1B, 2A…) for the map on the tour page. Public. */
+export const getTourRouteMap = async (tourId: string): Promise<TourRouteMapData> => {
+    try {
+        const response = await api.get(`/tours/${tourId}/route-map`, { timeout: 20000 });
+        return extractResponseData(response) as TourRouteMapData;
+    } catch (error) {
+        throw handleApiError(error, 'fetching route map');
+    }
+};

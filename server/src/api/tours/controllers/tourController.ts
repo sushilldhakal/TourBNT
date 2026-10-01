@@ -344,3 +344,13 @@ export const replaceItineraryPartner = asyncAuthHandler(async (req: Request, res
   const result = await ItineraryRequestService.replaceSupplier(linkId, { id: req.user!.id, isAdmin }, businessPartnerId, name);
   return sendSuccess(res, result, 'Supplier replaced successfully');
 });
+
+/** Public: lettered day-by-day route (1A, 1B, 2A…) with coordinates, for the tour page map. */
+export const getTourRouteMap = async (req: Request, res: Response) => {
+  const { buildTourRouteMap } = await import('../services/tourRouteMapService');
+  try {
+    return sendSuccess(res, await buildTourRouteMap(req.params.tourId), 'Route map retrieved successfully');
+  } catch (err: any) {
+    return sendError(res, err?.message ?? 'Could not build route map', err?.status ?? HTTP_STATUS.INTERNAL_SERVER_ERROR);
+  }
+};
