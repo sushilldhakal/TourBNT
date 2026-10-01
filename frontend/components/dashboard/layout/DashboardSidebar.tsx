@@ -58,6 +58,7 @@ interface NavigationItem {
     children?: NavigationItem[];
     adminOnly?: boolean; // Flag to mark admin-only items
     hideForAdmin?: boolean; // Personal/customer pages that mean nothing in the admin view
+    roles?: string[]; // Roles that see this item; omitted = every signed-in role
 }
 
 const baseNavigationItems: NavigationItem[] = [
@@ -69,6 +70,7 @@ const baseNavigationItems: NavigationItem[] = [
     {
         label: 'Posts',
         icon: FileText,
+        roles: ['admin', 'seller'],
         children: [
             { href: '/dashboard/posts', label: 'All Posts', icon: List },
             { href: '/dashboard/posts/add', label: 'Add Post', icon: Plus },
@@ -78,6 +80,7 @@ const baseNavigationItems: NavigationItem[] = [
     {
         label: 'Tours',
         icon: LayoutDashboard,
+        roles: ['admin', 'seller'],
         children: [
             { href: '/dashboard/tours', label: 'All Tours', icon: List },
             { href: '/dashboard/tours/add', label: 'Add Tour', icon: Plus },
@@ -123,12 +126,14 @@ const baseNavigationItems: NavigationItem[] = [
         href: '/dashboard/bookings',
         label: 'My Bookings',
         icon: CalendarCheck,
+        roles: ['user'],
         hideForAdmin: true
     },
     {
         href: '/dashboard/gallery',
         label: 'Gallery',
-        icon: Image
+        icon: Image,
+        roles: ['admin', 'seller'],
     },
     {
         href: '/dashboard/subscribers',
@@ -144,7 +149,8 @@ const baseNavigationItems: NavigationItem[] = [
     {
         href: '/dashboard/settings',
         label: 'Settings',
-        icon: Settings
+        icon: Settings,
+        roles: ['admin', 'seller'],
     },
 ];
 
@@ -188,6 +194,10 @@ export function DashboardSidebar({ isCollapsed, onToggle, mobileMenuOpen = false
                 if (item.hideForAdmin && isUserAdmin) {
                     return false;
                 }
+                // Per-role visibility: e.g. a hotel owner never sees Tours or Posts.
+                if (item.roles && !(userRole && item.roles.includes(userRole))) {
+                    return false;
+                }
 
                 // If item has children, filter them based on admin status
                 if (item.children) {
@@ -225,7 +235,7 @@ export function DashboardSidebar({ isCollapsed, onToggle, mobileMenuOpen = false
         const profileIndex = filtered.findIndex((item) => item.href === '/dashboard/profile');
         const insertAt = profileIndex === -1 ? filtered.length : profileIndex;
         return [...filtered.slice(0, insertAt), ...businessNavItems, ...filtered.slice(insertAt)];
-    }, [isHydrated, isUserAdmin, userId, businessNavItems]);
+    }, [isHydrated, isUserAdmin, userRole, userId, businessNavItems]);
 
     // Auto-expand parent menu if child is active
     useState(() => {
@@ -375,13 +385,6 @@ export function DashboardSidebar({ isCollapsed, onToggle, mobileMenuOpen = false
                     {navigationItems.map((item) => renderNavItem(item, false, true))}
                 </nav>
 
-                {/* Mobile Footer */}
-                <div className="border-t border-slate-700/50 bg-slate-900/50 backdrop-blur-xs p-4">
-                    <div className="flex items-center gap-3 text-xs text-slate-400">
-                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                        <span>System Online</span>
-                    </div>
-                </div>
             </div>
 
             {/* Desktop Sidebar */}
@@ -469,23 +472,6 @@ export function DashboardSidebar({ isCollapsed, onToggle, mobileMenuOpen = false
                         </Tooltip>
                     </div>
 
-                    {/* System Status */}
-                    <div
-                        className={cn(
-                            'flex items-center gap-3 text-xs text-slate-400',
-                            isCollapsed ? 'justify-center' : 'justify-start'
-                        )}
-                    >
-                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                        <span
-                            className={cn(
-                                'transition-all duration-300',
-                                isCollapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100 w-auto'
-                            )}
-                        >
-                            System Online
-                        </span>
-                    </div>
                 </div>
             </div>
         </TooltipProvider>

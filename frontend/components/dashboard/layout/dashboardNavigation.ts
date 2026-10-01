@@ -21,6 +21,7 @@ export const baseNavigationItems: NavigationItem[] = [
     {
         label: 'Posts',
         icon: FileText,
+        roles: ['admin', 'seller'],
         children: [
             { href: '/dashboard/posts', label: 'All Posts', icon: List },
             { href: '/dashboard/posts/add', label: 'Add Post', icon: Plus },
@@ -30,6 +31,7 @@ export const baseNavigationItems: NavigationItem[] = [
     {
         label: 'Tours',
         icon: LayoutDashboard,
+        roles: ['admin', 'seller'],
         children: [
             { href: '/dashboard/tours', label: 'All Tours', icon: List },
             { href: '/dashboard/tours/add', label: 'Add Tour', icon: Plus },
@@ -46,6 +48,7 @@ export const baseNavigationItems: NavigationItem[] = [
         href: '/dashboard/gallery',
         label: 'Gallery',
         icon: Image,
+        roles: ['admin', 'seller'],
     },
     {
         label: 'Users',
@@ -93,12 +96,14 @@ export const baseNavigationItems: NavigationItem[] = [
         href: '/dashboard/settings',
         label: 'Settings',
         icon: Settings,
+        roles: ['admin', 'seller'],
         adminOnly: true,
     },
     {
         href: '/dashboard/bookings',
         label: 'My Bookings',
         icon: CalendarCheck,
+        roles: ['user'],
         hideForAdmin: true,
     },
     {
@@ -115,7 +120,8 @@ export function getFlatNavigationForSearch(
     items: NavigationItem[],
     isAdmin: boolean,
     userId?: string,
-    isPartner: boolean = false
+    isPartner: boolean = false,
+    role?: string | null
 ): FlatNavItem[] {
     const result: FlatNavItem[] = [];
 
@@ -123,6 +129,7 @@ export function getFlatNavigationForSearch(
         if (item.adminOnly && !isAdmin) continue;
         if (item.hideForAdmin && isAdmin) continue;
         if (item.partnerOnly && !isPartner) continue;
+        if (item.roles && !(role && item.roles.includes(role))) continue;
 
         if (item.href) {
             let href = item.href;

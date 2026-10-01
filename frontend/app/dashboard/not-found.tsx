@@ -28,7 +28,7 @@ export default function DashboardNotFound() {
     // Same navigation as sidebar, flattened for search; admin-only items filtered by role
     const searchItems = useMemo(() => {
         if (!isHydrated) return [];
-        return getFlatNavigationForSearch(baseNavigationItems, isUserAdmin, user?.id ?? undefined);
+        return getFlatNavigationForSearch(baseNavigationItems, isUserAdmin, user?.id ?? undefined, false, userRole ?? displayRole);
     }, [isHydrated, isUserAdmin, user?.id]);
 
 

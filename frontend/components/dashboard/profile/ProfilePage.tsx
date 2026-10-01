@@ -223,6 +223,8 @@ export function ProfilePage() {
     const sellerInfo: SellerInfoShape = (user?.sellerInfo || {}) as SellerInfoShape;
     const roles: string[] = Array.isArray(user?.roles) ? [...(user.roles as string[])] : (user?.roles ? [String(user.roles)] : []);
     const hasSellerInfo = Boolean(sellerInfo.companyName);
+    // Payout banking only exists for tour sellers — admins and business partners never get paid out through it.
+    const isSellerAccount = roles.includes('seller');
 
     return (
         <div className={containerClass}>
@@ -246,10 +248,10 @@ export function ProfilePage() {
                                         <User className="h-4 w-4" />
                                         <span>Profile</span>
                                     </TabsTrigger>
-                                    <TabsTrigger value="banking" className="w-full justify-start gap-2 data-[state=active]:bg-primary/10 data-[state=active]:text-primary">
+                                    {isSellerAccount && <TabsTrigger value="banking" className="w-full justify-start gap-2 data-[state=active]:bg-primary/10 data-[state=active]:text-primary">
                                         <CreditCard className="h-4 w-4" />
                                         <span>Banking</span>
-                                    </TabsTrigger>
+                                    </TabsTrigger>}
                                     {hasSellerInfo && (
                                         <TabsTrigger value="company" className="w-full justify-start gap-2 data-[state=active]:bg-primary/10 data-[state=active]:text-primary">
                                             <Building2 className="h-4 w-4" />
@@ -277,9 +279,11 @@ export function ProfilePage() {
                                 <p className="mb-2">
                                     Your profile data is used to personalize your experience and process bookings.
                                 </p>
-                                <p>
-                                    Banking details are encrypted and used only for seller payouts.
-                                </p>
+                                {isSellerAccount && (
+                                    <p>
+                                        Banking details are encrypted and used only for seller payouts.
+                                    </p>
+                                )}
                             </CardContent>
                         </Card>
                     </div>

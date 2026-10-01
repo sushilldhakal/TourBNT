@@ -598,6 +598,9 @@ async function seed() {
   const nearest = (type: string | string[], destId: string): Partner => {
     const types = Array.isArray(type) ? type : [type];
     const pool = approvedPartners.filter((p) => types.includes(p.type));
+    // Half the time use one of the first three of the type, so the *01–*03 demo
+    // accounts reliably have supplier requests to look at on their dashboard.
+    if (chance(0.5)) return pick(pool.slice(0, 3));
     const local = pool.filter((p) => p.destId === destId);
     return pick(local.length ? local : pool);
   };

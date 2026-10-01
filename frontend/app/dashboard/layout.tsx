@@ -2,10 +2,11 @@
 
 import '../dashboard.css';
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { DashboardLayoutClient } from '@/components/dashboard/layout/DashboardLayoutClient';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { canAccessDashboard } from '@/lib/utils/roles';
+import { canAccessDashboardPath } from '@/lib/config/dashboardAccess';
 import { redirectToLogin } from '@/lib/api/apiClient';
 
 export default function DashboardLayout({
@@ -14,6 +15,7 @@ export default function DashboardLayout({
     children: React.ReactNode;
 }) {
     const router = useRouter();
+    const pathname = usePathname();
     const { user, isAuthenticated, isHydrated } = useAuth();
 
     useEffect(() => {
@@ -33,7 +35,12 @@ export default function DashboardLayout({
             router.push('/?error=unauthorized');
             return;
         }
-    }, [isHydrated, isAuthenticated, user.roles, router, user]);
+
+        // Role may not open this particular dashboard page → back to the dashboard home.
+        if (!canAccessDashboardPath(pathname, user.roles)) {
+            router.replace('/dashboard');
+        }
+    }, [isHydrated, isAuthenticated, user.roles, router, user, pathname]);
 
     // Show loading while useAuth is fetching user data
     if (!isHydrated) {
@@ -45,6 +52,15 @@ export default function DashboardLayout({
     }
 
     // Don't render dashboard if not authenticated (redirect will happen via useEffect)
+    // Never render a page the role isn't allowed to see, even for the instant before the redirect lands.
+    if (isAuthenticated && (!canAccessDashboard(user.roles) || !canAccessDashboardPath(pathname, user.roles))) {
+        return (
+            <div className="min-h-screen flex items-center justify-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            </div>
+        );
+    }
+
     if (!isAuthenticated) {
         return (
             <div className="min-h-screen flex items-center justify-center">

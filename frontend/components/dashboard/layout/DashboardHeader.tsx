@@ -140,8 +140,8 @@ export function DashboardHeader({ onToggleSidebar, onLogout }: DashboardHeaderPr
     // Same navigation as sidebar, flattened for search; admin-only items filtered by role
     const searchItems = useMemo(() => {
         if (!isHydrated) return [];
-        return getFlatNavigationForSearch(baseNavigationItems, isUserAdmin, user?.id ?? undefined, isUserPartner);
-    }, [isHydrated, isUserAdmin, user?.id, isUserPartner]);
+        return getFlatNavigationForSearch(baseNavigationItems, isUserAdmin, user?.id ?? undefined, isUserPartner, userRole ?? displayRole);
+    }, [isHydrated, isUserAdmin, user?.id, isUserPartner, userRole, displayRole]);
 
     // Command+K keyboard shortcut
     useEffect(() => {

@@ -41,7 +41,6 @@ import {
 import { createAvailabilityBlock, deleteAvailabilityBlock } from '@/lib/api/availability';
 import { useMyBusinessPartners, useMyCapacity, useCapacityOverrides, useMyItineraryRequests, useUnitTypes, useUnitTypeInventory, useAvailabilityBlocks } from '@/lib/queries';
 import { queryKeys } from '@/lib/queries/queryKeys';
-import { useDestinationsRoleBased } from '@/lib/queries/useDestinations';
 import type { DestinationTypes } from '@/types/types';
 import AddDestination from '@/components/dashboard/tours/Destination/AddDestination';
 
@@ -141,7 +140,8 @@ export function BusinessTypeDashboard({ types, title, description, icon, showLog
             )}
 
             <div className="flex items-center gap-6 text-sm text-muted-foreground">
-                <span>★ {business.averageRating.toFixed(1)} ({business.approvedReviewCount} reviews)</span>
+                {/* Advertisers aren't reviewed by travellers, so no rating for them. */}
+                {business.type !== 'advertiser' && <span>★ {business.averageRating.toFixed(1)} ({business.approvedReviewCount} reviews)</span>}
                 <span>{business.views} profile views</span>
             </div>
 
@@ -151,7 +151,7 @@ export function BusinessTypeDashboard({ types, title, description, icon, showLog
                     {showLogistics && <TabsTrigger value="capacity">Capacity</TabsTrigger>}
                     {showLogistics && <TabsTrigger value="requests">Requests</TabsTrigger>}
                     <TabsTrigger value="targeting">Visibility</TabsTrigger>
-                    <TabsTrigger value="reviews">Reviews</TabsTrigger>
+                    {business.type !== 'advertiser' && <TabsTrigger value="reviews">Reviews</TabsTrigger>}
                     {!showLogistics && <TabsTrigger value="ads">Ad Campaigns</TabsTrigger>}
                 </TabsList>
 
@@ -171,9 +171,11 @@ export function BusinessTypeDashboard({ types, title, description, icon, showLog
                 <TabsContent value="targeting" className="mt-4">
                     <TargetingTab business={business} />
                 </TabsContent>
-                <TabsContent value="reviews" className="mt-4">
-                    <ReviewsTab business={business} />
-                </TabsContent>
+                {business.type !== 'advertiser' && (
+                    <TabsContent value="reviews" className="mt-4">
+                        <ReviewsTab business={business} />
+                    </TabsContent>
+                )}
                 {!showLogistics && (
                     <TabsContent value="ads" className="mt-4">
                         <AdsTab business={business} />
@@ -205,7 +207,23 @@ function ProfileTab({ business }: { business: BusinessPartner }) {
     );
     const [destinationId, setDestinationId] = useState(business.destinationId || '');
     const [addDestinationOpen, setAddDestinationOpen] = useState(false);
-    const { data: destinations = [], isLoading: destinationsLoading } = useDestinationsRoleBased();
+    // A partner has no destination preferences of their own (that list belongs to sellers), so offer
+    // every approved destination. One the partner just created is still pending approval and not in
+    // that list yet, so it's kept locally so the select can show it.
+    const [createdDestination, setCreatedDestination] = useState<{ _id: string; name: string } | null>(null);
+    const { data: approvedDestinations = [], isLoading: destinationsLoading } = useQuery({
+        queryKey: ['destinations', 'approved-options'],
+        queryFn: async () => {
+            const d = (await getApprovedDestinations()) as unknown;
+            const r = d as { data?: unknown[]; items?: unknown[] };
+            const list = (Array.isArray(d) ? d : (r?.data ?? r?.items ?? [])) as Array<Record<string, unknown>>;
+            return list.map((x) => ({ ...x, _id: String(x._id ?? x.id ?? '') })) as unknown as DestinationTypes[];
+        },
+        staleTime: 5 * 60 * 1000,
+    });
+    const destinations = createdDestination && !approvedDestinations.some((d) => String(d._id) === createdDestination._id)
+        ? [...approvedDestinations, createdDestination as unknown as DestinationTypes]
+        : approvedDestinations;
 
     const mutation = useMutation({
         mutationFn: (fd: FormData) => updateMyBusinessPartner(business.id, fd),
@@ -332,7 +350,10 @@ function ProfileTab({ business }: { business: BusinessPartner }) {
                         onDestinationAdded={(created) => {
                             setAddDestinationOpen(false);
                             const id = created && typeof created === 'object' ? ((created as { _id?: string; id?: string })._id || (created as { _id?: string; id?: string }).id) : undefined;
-                            if (id) setDestinationId(id);
+                            if (id) {
+                                setDestinationId(id);
+                                setCreatedDestination({ _id: id, name: String((created as { name?: string }).name ?? 'New destination') });
+                            }
                         }}
                     />
                 </DialogContent>

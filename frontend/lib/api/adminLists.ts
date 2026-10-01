@@ -256,3 +256,76 @@ export const getManagedReviewsPage = async (params: { status?: string; q?: strin
         throw handleApiError(error, 'fetching reviews');
     }
 };
+
+// ---------------------------------------------------------------------------
+// Role-aware dashboard home summary (GET /dashboard/summary)
+// ---------------------------------------------------------------------------
+export interface BookingBrief {
+    id: string;
+    reference: string;
+    tourTitle: string;
+    contactName: string;
+    status: BookingStatus;
+    paymentStatus: PaymentStatus;
+    departureDate: string;
+    total: number;
+}
+
+export interface PartnerSummary {
+    id: string;
+    name: string;
+    type: 'guide' | 'hotel' | 'guesthouse' | 'restaurant' | 'transport' | 'advertiser';
+    approvalStatus: ApplicationStatus;
+    rejectionReason: string | null;
+    isActive: boolean;
+    averageRating: number;
+    reviewCount: number;
+    views: number;
+    logo: string | null;
+    requests: { pending: number; held: number; countered: number; confirmed: number; declined: number; expired: number; upcomingConfirmed: number };
+    inventory: { totalUnits: number; types: number; unitLabel: string };
+    nextRequests: Array<{ id: string; tourTitle: string; role: string; serviceDate: string; serviceTime: string | null; unitsRequested: number; status: string; respondByAt: string | null; holdExpiresAt: string | null }>;
+    pendingReviews: number;
+    ads: { total: number; active: number; pending: number; impressions: number; clicks: number; ctr: number };
+}
+
+export interface AdminHomeSummary {
+    kind: 'admin';
+    users: { total: number; sellers: number; customers: number; partners: number };
+    pendingApplications: { sellers: number; partners: number; total: number };
+    tours: { total: number; published: number; draft: number };
+    bookings: { total: number; pending: number; confirmed: number; upcoming: number; revenue: number; collected: number };
+    pendingReviews: number;
+    ads: { pending: number; active: number };
+    supplierRequests: { open: number; problems: number };
+    subscribers: number;
+    recentBookings: BookingBrief[];
+    latestApplications: Array<{ id: string; name: string; type: string; submittedAt: string }>;
+}
+
+export interface SellerHomeSummary {
+    kind: 'seller';
+    tours: { total: number; published: number; draft: number; archived: number; views: number };
+    bookings: { total: number; pending: number; confirmed: number; upcoming: number; revenue: number; collected: number };
+    reviews: { pending: number; approved: number; average: number };
+    openEnquiries: number;
+    upcomingDepartures: Array<{ tourId: string; title: string; departure: string; bookings: number; pax: number }>;
+    recentBookings: BookingBrief[];
+    partners: PartnerSummary[];
+}
+
+export interface PartnerHomeSummary {
+    kind: 'partner';
+    partners: PartnerSummary[];
+}
+
+export type DashboardHomeSummary = AdminHomeSummary | SellerHomeSummary | PartnerHomeSummary;
+
+export const getDashboardSummary = async () => {
+    try {
+        const response = await api.get('/dashboard/summary');
+        return response.data.data as DashboardHomeSummary;
+    } catch (error) {
+        throw handleApiError(error, 'fetching dashboard summary');
+    }
+};
