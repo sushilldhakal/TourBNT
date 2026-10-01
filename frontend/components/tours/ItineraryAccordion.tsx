@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Star } from 'lucide-react';
+import { Star, MapPin } from 'lucide-react';
+import { useApprovedDestinations } from '@/lib/queries';
 import { Itinerary } from '@/lib/types';
 import { formatDate, formatTime } from '@/lib/tourUtils';
 import { cn } from '@/lib/utils';
@@ -13,6 +14,14 @@ import {
     AccordionTrigger,
 } from '@/components/ui/accordion';
 import RichTextRenderer from '@/components/RichTextRenderer';
+import dynamic from 'next/dynamic';
+import type { ItineraryMapPoint } from '@/components/tours/ItineraryMap';
+
+// Leaflet touches `window`, so it only loads in the browser.
+const ItineraryMap = dynamic(() => import('@/components/tours/ItineraryMap'), {
+    ssr: false,
+    loading: () => <div className="h-56 w-full animate-pulse rounded-2xl bg-muted sm:h-72" />,
+});
 
 const PARTNER_ROLE_LABEL: Record<string, string> = {
     transport: 'Transport',
@@ -30,14 +39,49 @@ interface ItineraryAccordionProps {
 }
 
 export function ItineraryAccordion({ itinerary, outline, destinations }: ItineraryAccordionProps) {
-    const getDestinationDisplay = (destinationIdOrName: string | undefined): string => {
-        const raw = destinationIdOrName != null ? String(destinationIdOrName).trim() : '';
-        if (!raw) return '';
-        const found = destinations?.find((d) => d.id === raw);
-        const name = found?.name ?? raw;
-        return name || raw;
-    };
     const [activeDay, setActiveDay] = useState<string[]>(['day-0']);
+
+    // Destination links: a day's destination is either an id or free text ("Bahundanda").
+    // If it matches a TourBNT destination (by id or name) it links to that destination's page;
+    // otherwise it falls back to a map search so it is still a useful link.
+    const { data: approvedData } = useApprovedDestinations();
+    const destinationIndex = useMemo(() => {
+        const approved = ((approvedData as { data?: Array<{ id?: string; _id?: string; name?: string }> } | undefined)?.data ?? []).map((d) => ({ id: String(d.id ?? d._id ?? ''), name: d.name ?? '' }));
+        const all = [...(destinations ?? []), ...approved].filter((d) => d.id);
+        const byId = new Map(all.map((d) => [d.id, d]));
+        const byName = new Map(all.filter((d) => d.name).map((d) => [d.name.trim().toLowerCase(), d]));
+        return { byId, byName };
+    }, [approvedData, destinations]);
+    // One map pin per consecutive stop: days that share a destination collapse into a single pin.
+    const mapPoints = useMemo<ItineraryMapPoint[]>(() => {
+        const approved = ((approvedData as { data?: Array<{ id?: string; _id?: string; name?: string; latitude?: number | null; longitude?: number | null }> } | undefined)?.data ?? []);
+        const coordsById = new Map<string, { lat: number; lng: number; name: string }>();
+        const coordsByName = new Map<string, { lat: number; lng: number; name: string }>();
+        for (const d of approved) {
+            if (typeof d.latitude !== 'number' || typeof d.longitude !== 'number') continue;
+            const c = { lat: d.latitude, lng: d.longitude, name: d.name ?? '' };
+            coordsById.set(String(d.id ?? d._id ?? ''), c);
+            if (d.name) coordsByName.set(d.name.trim().toLowerCase(), c);
+        }
+        const out: ItineraryMapPoint[] = [];
+        (itinerary ?? []).forEach((day, i) => {
+            const raw = day.destination != null ? String(day.destination).trim() : '';
+            const c = raw ? coordsById.get(raw) ?? coordsByName.get(raw.toLowerCase()) : undefined;
+            if (!c) return;
+            const last = out[out.length - 1];
+            if (last && last.lat === c.lat && last.lng === c.lng) last.days.push(i + 1);
+            else out.push({ name: c.name, lat: c.lat, lng: c.lng, days: [i + 1] });
+        });
+        return out;
+    }, [approvedData, itinerary]);
+
+    const resolveDestinationLink = (value: string | undefined): { name: string; href: string; external: boolean } | null => {
+        const raw = value != null ? String(value).trim() : '';
+        if (!raw) return null;
+        const match = destinationIndex.byId.get(raw) ?? destinationIndex.byName.get(raw.toLowerCase());
+        if (match) return { name: match.name || raw, href: `/destinations/${match.id}`, external: false };
+        return { name: raw, href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${raw}, Nepal`)}`, external: true };
+    };
 
     if (!itinerary || itinerary.length === 0) {
         return (
@@ -49,14 +93,24 @@ export function ItineraryAccordion({ itinerary, outline, destinations }: Itinera
 
     return (
         <div className="space-y-4 sm:space-y-6">
-            {/* Map embed display */}
+            {/* Outline: the editor saves a rich-text document (JSON); older tours stored a map embed (HTML). */}
             {outline && (
-                <div className="mb-4 sm:mb-6" role="region" aria-label="Tour route map">
-                    <div
-                        className="w-full rounded-lg overflow-hidden border"
-                        dangerouslySetInnerHTML={{ __html: outline }}
-                    />
-                </div>
+                outline.trim().startsWith('{') ? (
+                    <div className="mb-4 sm:mb-6 text-sm sm:text-base text-muted-foreground" role="region" aria-label="Itinerary overview">
+                        <RichTextRenderer content={outline} />
+                    </div>
+                ) : (
+                    <div className="mb-4 sm:mb-6" role="region" aria-label="Tour route map">
+                        <div
+                            className="w-full rounded-lg overflow-hidden border"
+                            dangerouslySetInnerHTML={{ __html: outline }}
+                        />
+                    </div>
+                )
+            )}
+
+            {mapPoints.length > 0 && (
+                <ItineraryMap points={mapPoints} onActiveDay={(day) => setActiveDay((prev) => (prev.includes(`day-${day - 1}`) ? prev : [...prev, `day-${day - 1}`]))} />
             )}
 
             {/* Itinerary accordion with timeline */}
@@ -130,12 +184,25 @@ export function ItineraryAccordion({ itinerary, outline, destinations }: Itinera
                                             )}
 
                                             {/* Destination if available (show name from relatedData.destinations when ID) */}
-                                            {(day.destination != null && day.destination !== '') && (
-                                                <div className="text-xs sm:text-sm">
-                                                    <span className="font-medium text-muted-foreground">Destination: </span>
-                                                    <span className="text-foreground">{getDestinationDisplay(day.destination)}</span>
-                                                </div>
-                                            )}
+                                            {(() => {
+                                                const link = resolveDestinationLink(day.destination);
+                                                if (!link) return null;
+                                                const className = 'inline-flex items-center gap-1 text-primary hover:underline underline-offset-2';
+                                                return (
+                                                    <div className="text-xs sm:text-sm">
+                                                        <span className="font-medium text-muted-foreground">Destination: </span>
+                                                        {link.external ? (
+                                                            <a href={link.href} target="_blank" rel="noopener noreferrer" className={className} title="View on map">
+                                                                <MapPin className="h-3 w-3" />{link.name}
+                                                            </a>
+                                                        ) : (
+                                                            <Link href={link.href} className={className}>
+                                                                <MapPin className="h-3 w-3" />{link.name}
+                                                            </Link>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })()}
 
                                             {/* Logistics: transport/accommodation/guide/meals — linked to the
                                                 provider's TourBNT profile when registered, plain text otherwise */}

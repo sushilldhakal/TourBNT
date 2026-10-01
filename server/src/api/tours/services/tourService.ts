@@ -159,9 +159,40 @@ async function syncTourItineraryPartners(tourId: string, itinerary: unknown[] | 
     }
   }
 
-  await db.delete(tourItineraryPartners).where(eq(tourItineraryPartners.tourId, tourId));
-  if (rows.length > 0) {
-    await db.insert(tourItineraryPartners).values(rows);
+  // Update in place where a (day, role) link already exists, instead of delete-all +
+  // reinsert. Supplier requests hang off the link row with ON DELETE CASCADE, so
+  // re-creating the links on every tour save silently wiped every request (and
+  // each partner's confirm / counter / decline) for the tour.
+  const existing = await db.select().from(tourItineraryPartners).where(eq(tourItineraryPartners.tourId, tourId));
+  const keyOf = (r: { dayId: string; role: string }) => `${r.dayId}|${r.role}`;
+  const existingByKey = new Map<string, typeof existing>();
+  for (const e of existing) {
+    const list = existingByKey.get(keyOf(e)) ?? [];
+    list.push(e);
+    existingByKey.set(keyOf(e), list);
+  }
+
+  const keepIds = new Set<string>();
+  const toInsert: LinkRow[] = [];
+  const updates: Array<PromiseLike<unknown>> = [];
+  for (const row of rows) {
+    // Same day + role + same business = same link. A different business is a new link (its requests belong to the old one).
+    const match = existingByKey.get(keyOf(row))?.find((e) => !keepIds.has(e.id) && (e.businessPartnerId ?? null) === (row.businessPartnerId ?? null) && e.name === row.name);
+    if (match) {
+      keepIds.add(match.id);
+      const changed = (['notes', 'sortOrder', 'unitsRequested', 'unitType', 'unitTypeId'] as const).some((k) => (match[k] ?? null) !== (row[k] ?? null));
+      if (changed) updates.push(db.update(tourItineraryPartners).set({ ...row, updatedAt: new Date() }).where(eq(tourItineraryPartners.id, match.id)));
+    } else {
+      toInsert.push(row);
+    }
+  }
+  await Promise.all(updates);
+  const staleIds = existing.filter((e) => !keepIds.has(e.id)).map((e) => e.id);
+  if (staleIds.length > 0) {
+    await db.delete(tourItineraryPartners).where(inArray(tourItineraryPartners.id, staleIds));
+  }
+  if (toInsert.length > 0) {
+    await db.insert(tourItineraryPartners).values(toInsert);
   }
 }
 

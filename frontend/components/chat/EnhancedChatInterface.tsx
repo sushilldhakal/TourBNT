@@ -39,6 +39,8 @@ import {
 
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/hooks/useAuth"
+import { ContactProfileDialog } from "@/components/chat/ContactProfileDialog"
+import { getConversationPeople } from "@/lib/api/conversations"
 import {
   createBroadcastConversation,
   createDirectConversation,
@@ -47,7 +49,9 @@ import {
   deleteConversation as deleteConversationApi,
   type ConversationMessage,
 } from "@/lib/api/conversations"
-import { getUsers } from "@/lib/api/users"
+import { getUserDirectory } from "@/lib/api/users"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { useDebouncedValue } from "@/lib/hooks/useDebouncedValue"
 
 export interface Message {
   id: string
@@ -88,7 +92,7 @@ interface ChatInterfaceProps {
   initialMessages?: Message[]
   initialSelectedContactId?: string | null
   onSendMessage?: (message: string, contactId?: string) => Promise<void | Message[]>
-  onSelectContact?: (contact: Contact) => void
+  onSelectContact?: (contact: Contact | null) => void
   onLoadMessages?: (contactId: string) => Promise<Message[]>
   /** Called after a new conversation is created (e.g. broadcast or direct). Use to refetch the conversation list. */
   onConversationCreated?: () => void
@@ -239,6 +243,13 @@ export function EnhancedChatInterface({
     }
   }, [input])
 
+  // Tell the parent when no chat is open any more (back to the list / archived / deleted),
+  // so it can start notifying about that conversation again.
+  React.useEffect(() => {
+    if (!selectedContact) onSelectContact?.(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedContact])
+
   const handleSelectContact = async (contact: Contact) => {
     setSelectedContact(contact)
     setShowUserList(false)
@@ -381,6 +392,61 @@ export function EnhancedChatInterface({
     }
   }
 
+  // Live updates: poll the open conversation every few seconds while the tab is visible (and
+  // immediately when the tab regains focus) so new messages show up without a page refresh.
+  const livePollRef = React.useRef({ contactId: "", loader: onLoadMessages })
+  livePollRef.current = { contactId: selectedContact?.id ?? "", loader: onLoadMessages }
+  const isDraftSelected = !!(selectedContact as any)?.directUserId && !!pendingDirectTarget
+  React.useEffect(() => {
+    if (mode !== "dashboard" || !selectedContact?.id || isDraftSelected || !onLoadMessages) return
+    const contactId = selectedContact.id
+    let cancelled = false
+    let inFlight = false
+
+    // Only poll while someone is actually using the page: the tab must be visible AND focused, and
+    // the user must have done something in the last 5 minutes. Otherwise a forgotten open tab would
+    // keep hitting the API (and your terminal) forever.
+    let lastActivity = Date.now()
+    const markActive = () => { lastActivity = Date.now() }
+    const events = ["pointerdown", "keydown", "mousemove", "touchstart", "scroll"] as const
+    events.forEach((e) => window.addEventListener(e, markActive, { passive: true }))
+
+    const tick = async () => {
+      if (cancelled || inFlight || document.hidden || !document.hasFocus() || Date.now() - lastActivity > 5 * 60_000) return
+      const { contactId: current, loader } = livePollRef.current
+      if (current !== contactId || !loader) return
+      inFlight = true
+      try {
+        const loaded = await loader(contactId)
+        if (cancelled || livePollRef.current.contactId !== contactId) return
+        setMessages((prev) => {
+          // Don't clobber an in-progress send, and only re-render when something actually changed.
+          if (prev.some((m) => m.status === "sending")) return prev
+          const lastPrev = prev[prev.length - 1]
+          const lastNew = loaded[loaded.length - 1]
+          if (prev.length === loaded.length && lastPrev?.id === lastNew?.id) return prev
+          return loaded
+        })
+      } catch {
+        /* transient network error — try again on the next tick */
+      } finally {
+        inFlight = false
+      }
+    }
+
+    const timer = setInterval(tick, 5000)
+    const onVisible = () => { if (!document.hidden) { markActive(); void tick() } }
+    document.addEventListener("visibilitychange", onVisible)
+    window.addEventListener("focus", onVisible)
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+      document.removeEventListener("visibilitychange", onVisible)
+      window.removeEventListener("focus", onVisible)
+      events.forEach((e) => window.removeEventListener(e, markActive))
+    }
+  }, [mode, selectedContact?.id, isDraftSelected, onLoadMessages])
+
   const handleCreateBroadcast = async (
     e: React.FormEvent,
     overrides?: { subject?: string }
@@ -414,26 +480,13 @@ export function EnhancedChatInterface({
     }
   }
 
-  const handleLoadUsersForDirect = async () => {
-    if (!isAdmin || directUsers.length > 0 || isLoadingUsers) return
-    setIsLoadingUsers(true)
-    try {
-      const data = (await getUsers({ page: 1, limit: 200 })) as { items?: unknown[]; data?: unknown[] } | undefined
-      const items = (Array.isArray(data?.items) ? data.items : data?.data) ?? []
-      const mapped =
-        items?.map((u: any) => ({
-          id: u.id ?? u._id ?? "",
-          name: u.name ?? u.email ?? "Unknown user",
-          email: u.email,
-          role: Array.isArray(u.roles) ? (u.roles[0] as string) : (u.roles as string),
-        })) ?? []
-      setDirectUsers(mapped)
-    } catch (error) {
-      console.error("Failed to load users for direct message:", error)
-    } finally {
-      setIsLoadingUsers(false)
-    }
-  }
+  const queryClient = useQueryClient()
+  React.useEffect(() => {
+    if (isAdmin) void queryClient.prefetchQuery({ queryKey: ["user-directory", ""], queryFn: () => getUserDirectory(""), staleTime: 60_000 })
+  }, [isAdmin, queryClient])
+
+  // People are now loaded by the drawer itself (grouped + server-side search); kept as a no-op for prop compatibility.
+  const handleLoadUsersForDirect = async () => {}
 
   const filteredDirectUsers = directUsers.filter((u) => {
     const term = directSearch.toLowerCase()
@@ -603,7 +656,14 @@ export function EnhancedChatInterface({
 
   // Dashboard mode
   return (
-    <div className={cn("flex h-full min-h-[600px] rounded-lg border bg-background shadow-lg overflow-hidden", className)}>
+    <div
+      className={cn(
+        // Fill the visible viewport (dashboard header 64px + page padding) instead of a fixed 600px,
+        // so the message input always stays on screen; the contact list and the thread scroll inside.
+        "flex h-[calc(100dvh-6rem)] min-h-[420px] lg:h-[calc(100dvh-7rem)] rounded-lg border bg-background shadow-lg overflow-hidden",
+        className
+      )}
+    >
       {/* Mobile: list vs chat */}
       <div className="flex-1 md:hidden">
         {showMobileList || !selectedContact ? (
@@ -983,6 +1043,14 @@ function ChatView({
   onArchive,
   onDelete,
 }: ChatViewProps) {
+  const [profileOpen, setProfileOpen] = React.useState(false)
+  // Start loading the profile card as soon as a conversation is open, so clicking the name is instant.
+  const profileQueryClient = useQueryClient()
+  React.useEffect(() => {
+    if (contact.id && !contact.directUserId) {
+      void profileQueryClient.prefetchQuery({ queryKey: ["conversation-people", contact.id], queryFn: () => getConversationPeople(contact.id), staleTime: 5 * 60_000 })
+    }
+  }, [contact.id, contact.directUserId, profileQueryClient])
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex shrink-0 items-center justify-between gap-3 border-b bg-primary px-4 py-4 text-primary-foreground">
@@ -998,15 +1066,23 @@ function ChatView({
               <ArrowLeft className="h-5 w-5" />
             </Button>
           )}
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary-foreground/20 font-semibold">
-            {contact.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
-          </div>
-          <div className="flex-1 min-w-0">
-            <h2 className="font-semibold truncate">{contact.name}</h2>
-            <p className="text-xs text-primary-foreground/80">
-              {contact.isOnline ? "online" : contact.isTyping ? "typing..." : `last seen ${formatLastActive(contact.lastActive)}`}
-            </p>
-          </div>
+          <button
+            type="button"
+            onClick={() => setProfileOpen(true)}
+            className="flex flex-1 min-w-0 items-center gap-3 text-left rounded-md hover:bg-primary-foreground/10 -m-1 p-1 transition-colors"
+            aria-label={`View ${contact.name}'s profile`}
+          >
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary-foreground/20 font-semibold">
+              {contact.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+            </div>
+            <div className="flex-1 min-w-0">
+              <h2 className="font-semibold truncate">{contact.name}</h2>
+              <p className="text-xs text-primary-foreground/80">
+                {contact.isOnline ? "online" : contact.isTyping ? "typing..." : `last seen ${formatLastActive(contact.lastActive)}`}
+              </p>
+            </div>
+          </button>
+          <ContactProfileDialog conversationId={contact.id} name={contact.name} open={profileOpen} onOpenChange={setProfileOpen} />
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -1205,11 +1281,11 @@ function ContactItem({ contact, isSelected, onClick, showTime = false, onArchive
       </div>
       <div className="flex-1 overflow-hidden">
         <div className="flex items-center justify-between gap-2">
-          <span className="truncate font-semibold text-sm">
+          <span className={cn("truncate text-sm", contact.unread > 0 ? "font-bold" : "font-semibold")}>
             {contact.groupName || contact.name}
           </span>
           {showTime && (
-            <span className="shrink-0 text-xs text-muted-foreground">
+            <span className={cn("shrink-0 text-xs", contact.unread > 0 ? "font-semibold text-primary" : "text-muted-foreground")}>
               {formatLastActive(contact.lastActive)}
             </span>
           )}
@@ -1220,7 +1296,7 @@ function ContactItem({ contact, isSelected, onClick, showTime = false, onArchive
               GROUP
             </span>
           )}
-          <p className="truncate text-xs text-muted-foreground">
+          <p className={cn("truncate text-xs", contact.unread > 0 ? "font-medium text-foreground" : "text-muted-foreground")}>
             {contact.isTyping ? (
               <span className="italic text-primary">typing...</span>
             ) : (
@@ -1231,8 +1307,11 @@ function ContactItem({ contact, isSelected, onClick, showTime = false, onArchive
       </div>
       <div className="flex items-center gap-2">
         {contact.unread > 0 && (
-          <span className="flex size-6 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground shadow-sm">
-            {contact.unread > 9 ? "9+" : contact.unread}
+          <span
+            aria-label={`${contact.unread} unread message${contact.unread === 1 ? "" : "s"}`}
+            className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-bold leading-none text-primary-foreground shadow-sm"
+          >
+            {contact.unread > 99 ? "99+" : contact.unread}
           </span>
         )}
         {(onArchive || onDelete) && (
@@ -1487,9 +1566,15 @@ function NewMessageDrawer(props: NewMessageDrawerProps) {
   const [drawerView, setDrawerView] = React.useState<DrawerView>("list")
   const [groupName, setGroupName] = React.useState("")
 
-  React.useEffect(() => {
-    void handleLoadUsersForDirect()
-  }, [handleLoadUsersForDirect])
+  // One lightweight grouped request (a few people per account type + totals); the search box
+  // queries the server instead of filtering a pre-downloaded slice of the user table.
+  const debouncedSearch = useDebouncedValue(directSearch.trim())
+  const { data: directoryGroups, isLoading: isLoadingDirectory, isFetching: isFetchingDirectory } = useQuery({
+    queryKey: ["user-directory", debouncedSearch],
+    queryFn: () => getUserDirectory(debouncedSearch),
+    staleTime: 60_000,
+    placeholderData: (prev) => prev,
+  })
 
   React.useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -1502,19 +1587,6 @@ function NewMessageDrawer(props: NewMessageDrawerProps) {
     return () => document.removeEventListener("keydown", handleEscape)
   }, [onClose, drawerView])
 
-  const searchTerm = directSearch.toLowerCase().trim()
-  const sellers = directUsers.filter((u) => String(u.role).toLowerCase() === "seller")
-  const users = directUsers.filter((u) => String(u.role).toLowerCase() !== "seller")
-  const filterBySearch = (list: typeof directUsers) =>
-    searchTerm
-      ? list.filter(
-          (u) =>
-            u.name.toLowerCase().includes(searchTerm) ||
-            (u.email ?? "").toLowerCase().includes(searchTerm)
-        )
-      : list
-  const filteredSellers = filterBySearch(sellers)
-  const filteredUsers = filterBySearch(users)
 
   const handleSelectUser = (u: (typeof directUsers)[0]) => {
     setPendingDirectTarget({ userId: u.id, name: u.name })
@@ -1612,73 +1684,64 @@ function NewMessageDrawer(props: NewMessageDrawerProps) {
                 <span className="font-medium">New group</span>
               </button>
 
-              {/* Sellers */}
-              <div className="border-t px-3 py-2">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-1 py-1">
-                  Sellers
-                </h3>
-                {isLoadingUsers ? (
-                  <p className="px-3 py-4 text-sm text-muted-foreground">Loading...</p>
-                ) : filteredSellers.length === 0 ? (
-                  <p className="px-3 py-3 text-sm text-muted-foreground">No sellers found</p>
-                ) : (
-                  <ul className="space-y-0">
-                    {filteredSellers.map((u) => (
-                      <li key={u.id}>
-                        <button
-                          type="button"
-                          onClick={() => handleSelectUser(u)}
-                          className="flex w-full items-center gap-3 px-3 py-2.5 text-left rounded-lg hover:bg-muted/60 transition-colors"
-                        >
-                          <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary font-medium">
-                            {(u.name || "?").slice(0, 2).toUpperCase()}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-medium">{u.name}</p>
-                            {u.email && (
-                              <p className="truncate text-xs text-muted-foreground">{u.email}</p>
-                            )}
-                          </div>
-                        </button>
-                      </li>
+              {/* People, grouped by account type (sellers, transport, hotels, guides, restaurants, advertisers, customers) */}
+              {isLoadingDirectory && !directoryGroups ? (
+                <div className="space-y-2 px-4 py-4">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <div key={i} className="flex items-center gap-3">
+                      <div className="size-10 rounded-full bg-muted animate-pulse" />
+                      <div className="flex-1 space-y-1.5">
+                        <div className="h-3 w-1/2 rounded bg-muted animate-pulse" />
+                        <div className="h-3 w-2/3 rounded bg-muted animate-pulse" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className={isFetchingDirectory ? "opacity-70 transition-opacity" : "transition-opacity"}>
+                  {(directoryGroups ?? [])
+                    .filter((g) => g.total > 0 || !debouncedSearch)
+                    .map((g) => (
+                      <div key={g.key} className="border-t px-3 py-2">
+                        <h3 className="flex items-center justify-between px-1 py-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                          <span>{g.label}</span>
+                          <span className="tabular-nums font-normal normal-case">{g.total.toLocaleString()}</span>
+                        </h3>
+                        {g.items.length === 0 ? (
+                          <p className="px-3 py-3 text-sm text-muted-foreground">No {g.label.toLowerCase()} yet</p>
+                        ) : (
+                          <ul className="space-y-0">
+                            {g.items.map((u) => (
+                              <li key={u.id}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleSelectUser({ id: u.id, name: u.name, email: u.email, role: u.role })}
+                                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-muted/60"
+                                >
+                                  <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 font-medium text-primary">
+                                    {(u.name || "?").slice(0, 2).toUpperCase()}
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <p className="truncate text-sm font-medium">{u.name}</p>
+                                    {u.email && <p className="truncate text-xs text-muted-foreground">{u.email}</p>}
+                                  </div>
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        {g.total > g.items.length && (
+                          <p className="px-3 pb-2 pt-1 text-xs text-muted-foreground">
+                            Showing {g.items.length} of {g.total.toLocaleString()} — type in the search box to find someone specific.
+                          </p>
+                        )}
+                      </div>
                     ))}
-                  </ul>
-                )}
-              </div>
-
-              {/* Users */}
-              <div className="border-t px-3 py-2">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-1 py-1">
-                  Users
-                </h3>
-                {isLoadingUsers ? (
-                  <p className="px-3 py-4 text-sm text-muted-foreground">Loading...</p>
-                ) : filteredUsers.length === 0 ? (
-                  <p className="px-3 py-3 text-sm text-muted-foreground">No users found</p>
-                ) : (
-                  <ul className="space-y-0">
-                    {filteredUsers.map((u) => (
-                      <li key={u.id}>
-                        <button
-                          type="button"
-                          onClick={() => handleSelectUser(u)}
-                          className="flex w-full items-center gap-3 px-3 py-2.5 text-left rounded-lg hover:bg-muted/60 transition-colors"
-                        >
-                          <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted font-medium text-muted-foreground">
-                            {(u.name || "?").slice(0, 2).toUpperCase()}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-medium">{u.name}</p>
-                            {u.email && (
-                              <p className="truncate text-xs text-muted-foreground">{u.email}</p>
-                            )}
-                          </div>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+                  {debouncedSearch && (directoryGroups ?? []).every((g) => g.total === 0) && (
+                    <p className="px-4 py-8 text-center text-sm text-muted-foreground">Nobody matches “{debouncedSearch}”.</p>
+                  )}
+                </div>
+              )}
             </>
           ) : (
             /* New group view: group name + 3 audience options + message */

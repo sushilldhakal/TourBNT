@@ -28,10 +28,15 @@ function AccordionItem({
 function AccordionTrigger({
     className,
     children,
+    handle,
     ...props
-}: React.ComponentProps<typeof AccordionPrimitive.Trigger>) {
+}: React.ComponentProps<typeof AccordionPrimitive.Trigger> & {
+    /** Rendered beside the button, so a drag handle is not trapped inside it. */
+    handle?: React.ReactNode
+}) {
     return (
-        <AccordionPrimitive.Header className="flex w-full">
+        <AccordionPrimitive.Header className="flex w-full items-center">
+            {handle}
             <AccordionPrimitive.Trigger
                 data-slot="accordion-trigger"
                 className={cn(

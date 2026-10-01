@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { useUserCategories } from '@/lib/queries';
+import { useUserCategories, useApprovedCategories } from '@/lib/queries';
 import { useDestinationsRoleBased } from '@/lib/queries/useDestinations';
 import { DestinationTypes } from '@/types/types';
 import { Paperclip, Trash2, Eye, HelpCircle, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -151,6 +151,12 @@ export function TourBasicInfo() {
     };
 
     const { data: categoriesData, isLoading: categoriesLoading } = useUserCategories();
+    // Name lookup for ids that aren't in the seller's own list (e.g. a category the tour already has).
+    const { data: approvedCategoriesData } = useApprovedCategories();
+    const approvedNameById = React.useMemo(() => {
+        const list = (approvedCategoriesData as { data?: Array<{ id?: string; _id?: string; name?: string }> } | undefined)?.data ?? [];
+        return new Map(list.map((c) => [String(c.id ?? c._id), c.name ?? '']));
+    }, [approvedCategoriesData]);
     const { data: destinations = [], isLoading: destinationsLoading } = useDestinationsRoleBased();
 
     type CategoryOption = { label: string; value: string; disable: boolean };
@@ -223,12 +229,14 @@ export function TourBasicInfo() {
                 const raw = selectedCategories.find(
                     (c: { value?: string } | string) => (typeof c === 'string' ? c : c?.value) === id
                 );
-                const label = typeof raw === 'object' && raw && 'label' in raw ? String((raw as { label?: string }).label || id) : id;
+                const rawObj = (typeof raw === 'object' && raw ? raw : {}) as { label?: string; name?: string };
+                const rawLabel = rawObj.name || (rawObj.label && rawObj.label !== id ? rawObj.label : '');
+                const label = rawLabel || approvedNameById.get(id) || id;
                 byValue.set(id, { label, value: id, disable: false });
             }
         }
         return Array.from(byValue.values());
-    }, [categoryOptions, categoryValueForSelect, selectedCategories]);
+    }, [categoryOptions, categoryValueForSelect, selectedCategories, approvedNameById]);
 
     // Handle category change: MultiSelect passes string[] (IDs); schema expects { label, value, disable }[]
     const handleCategoryChange = (selectedIds: string[]) => {
@@ -236,7 +244,7 @@ export function TourBasicInfo() {
             const opt = categoryOptionsForSelect.find((o) => o.value === id);
             return opt
                 ? { label: opt.label, value: opt.value, disable: opt.disable }
-                : { label: id, value: id, disable: false };
+                : { label: approvedNameById.get(id) || id, value: id, disable: false };
         });
         setValue('category', categoryObjects, { shouldValidate: true });
     };

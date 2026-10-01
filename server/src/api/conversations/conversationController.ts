@@ -134,6 +134,15 @@ export const getConversation = async (req: Request, res: Response, next: NextFun
   }
 };
 
+export const getConversationPeople = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const requester = requireUser(req);
+    sendSuccess(res, await ConversationService.people(req.params.id, requester), 'Conversation people retrieved');
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const getConversationMessages = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const requester = requireUser(req);
@@ -152,6 +161,15 @@ export const sendConversationMessage = async (req: Request, res: Response, next:
 
     const messages = await ConversationService.sendMessage(req.params.id, requester, content.trim());
     sendSuccess(res, messages, 'Reply sent', HTTP_STATUS.CREATED);
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const markConversationRead = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    await ConversationService.markRead(req.params.id, requireUser(req));
+    sendSuccess(res, null, 'Marked as read');
   } catch (err) {
     next(err);
   }

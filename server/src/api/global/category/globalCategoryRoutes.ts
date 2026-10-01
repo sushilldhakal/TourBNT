@@ -1,4 +1,5 @@
 import express from 'express';
+import { makeGetAvailable, makeBulkAdd } from '../bulkAdd';
 import {
   getCategoryById,
   getApprovedCategories,
@@ -301,6 +302,8 @@ router.use(authenticate);
 
 // Seller routes (specific routes must come before parameterized routes)
 router.get('/user-categories', getUserCategories as any); // New route for user-specific categories
+router.get('/available', makeGetAvailable('category') as any);
+router.post('/bulk-add', makeBulkAdd('category') as any);
 router.get('/seller/visible', getSellerCategories as any);
 router.get('/seller/search', searchCategories as any);
 router.get('/seller/enabled', getEnabledCategories as any);

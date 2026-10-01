@@ -73,7 +73,8 @@ const toDateString = (d: Date): string => d.toISOString().slice(0, 10);
 
 const addDays = (d: Date, days: number): Date => {
   const copy = new Date(d);
-  copy.setDate(copy.getDate() + days);
+  // UTC, to match toDateString — local-time setDate repeats/skips a date across a DST change.
+  copy.setUTCDate(copy.getUTCDate() + days);
   return copy;
 };
 
@@ -145,53 +146,59 @@ export class ItineraryRequestService {
     }
 
     if (desired.length > 0) {
-      await db.transaction(async (tx) => {
-        for (const d of desired) {
-          const [existing] = await tx
-            .select({ id: itineraryPartnerRequests.id, status: itineraryPartnerRequests.status })
-            .from(itineraryPartnerRequests)
-            .where(and(
-              eq(itineraryPartnerRequests.tourItineraryPartnerId, d.tourItineraryPartnerId),
-              eq(itineraryPartnerRequests.serviceDate, d.serviceDate),
-              d.serviceTime === null ? sql`${itineraryPartnerRequests.serviceTime} IS NULL` : eq(itineraryPartnerRequests.serviceTime, d.serviceTime),
-            ))
-            .limit(1);
+      // One read of what already exists, then compare in memory and write in bulk.
+      // This used to run a SELECT (plus INSERTs) per link x departure inside one
+      // transaction — ~200 sequential round trips to the remote database for a
+      // 15-day tour, which made every tour save hang for minutes.
+      const existingRows = await db
+        .select({ id: itineraryPartnerRequests.id, status: itineraryPartnerRequests.status, tourItineraryPartnerId: itineraryPartnerRequests.tourItineraryPartnerId, serviceDate: itineraryPartnerRequests.serviceDate, serviceTime: itineraryPartnerRequests.serviceTime, headcount: itineraryPartnerRequests.headcount, unitsRequested: itineraryPartnerRequests.unitsRequested, unitTypeId: itineraryPartnerRequests.unitTypeId })
+        .from(itineraryPartnerRequests)
+        .where(eq(itineraryPartnerRequests.tourId, tourId));
+      const keyOfRow = (r: { tourItineraryPartnerId: string; serviceDate: string; serviceTime: string | null }) => `${r.tourItineraryPartnerId}|${r.serviceDate}|${r.serviceTime ?? ''}`;
+      const existingByKey = new Map(existingRows.map((r) => [keyOfRow(r), r]));
 
-          if (!existing) {
-            const [created] = await tx.insert(itineraryPartnerRequests).values({
-              tourId,
-              tourItineraryPartnerId: d.tourItineraryPartnerId,
-              businessPartnerId: d.link.businessPartnerId!,
-              role: d.link.role,
-              serviceDate: d.serviceDate,
-              serviceTime: d.serviceTime,
-              serviceEndTime: d.serviceEndTime,
-              headcount: d.headcount,
-              unitsRequested: d.unitsRequested,
-              unitTypeId: d.link.unitTypeId,
-              respondByAt: new Date(Date.now() + RESPOND_BY_MS),
-              sourceDepartureDate: d.sourceDepartureDate,
-            }).returning({ id: itineraryPartnerRequests.id });
-
-            await tx.insert(itineraryRequestEvents).values({
-              requestId: created.id, fromStatus: null, toStatus: 'pending',
-              actorRole: 'system', unitsAtEvent: d.unitsRequested, notes: 'Auto-generated from fixed departure',
-            });
-
-            try {
-              await notifyPartnerOfNewRequest(created.id);
-            } catch (err) {
-              console.error('Failed to notify partner of new itinerary request:', err);
-            }
-          } else if (existing.status === 'pending') {
-            // Refresh the ask if the seller changed capacity/maxSize/quantity
-            // since — never touch a request the partner has already responded to.
-            await tx.update(itineraryPartnerRequests)
-              .set({ headcount: d.headcount, unitsRequested: d.unitsRequested, unitTypeId: d.link.unitTypeId, updatedAt: new Date() })
-              .where(eq(itineraryPartnerRequests.id, existing.id));
-          }
-        }
+      const toCreate = desired.filter((d) => !existingByKey.has(keyOfRow(d)));
+      const toRefresh = desired.filter((d) => {
+        const e = existingByKey.get(keyOfRow(d));
+        // Refresh the ask if the seller changed capacity/maxSize/quantity since —
+        // never touch a request the partner has already responded to.
+        return e && e.status === 'pending' && (e.headcount !== d.headcount || e.unitsRequested !== d.unitsRequested || (e.unitTypeId ?? null) !== (d.link.unitTypeId ?? null));
       });
+
+      const createdIds: string[] = [];
+      for (let k = 0; k < toCreate.length; k += 100) {
+        const part = toCreate.slice(k, k + 100);
+        const created = await db.insert(itineraryPartnerRequests).values(part.map((d) => ({
+          tourId,
+          tourItineraryPartnerId: d.tourItineraryPartnerId,
+          businessPartnerId: d.link.businessPartnerId!,
+          role: d.link.role,
+          serviceDate: d.serviceDate,
+          serviceTime: d.serviceTime,
+          serviceEndTime: d.serviceEndTime,
+          headcount: d.headcount,
+          unitsRequested: d.unitsRequested,
+          unitTypeId: d.link.unitTypeId,
+          respondByAt: new Date(Date.now() + RESPOND_BY_MS),
+          sourceDepartureDate: d.sourceDepartureDate,
+        }))).returning({ id: itineraryPartnerRequests.id });
+        await db.insert(itineraryRequestEvents).values(created.map((c, idx) => ({
+          requestId: c.id, fromStatus: null, toStatus: 'pending' as const,
+          actorRole: 'system' as const, unitsAtEvent: part[idx].unitsRequested, notes: 'Auto-generated from fixed departure',
+        })));
+        createdIds.push(...created.map((c) => c.id));
+      }
+
+      await Promise.all(toRefresh.map((d) => db.update(itineraryPartnerRequests)
+        .set({ headcount: d.headcount, unitsRequested: d.unitsRequested, unitTypeId: d.link.unitTypeId, updatedAt: new Date() })
+        .where(eq(itineraryPartnerRequests.id, existingByKey.get(keyOfRow(d))!.id))));
+
+      // Partner notifications are best-effort and must not hold up the save.
+      void (async () => {
+        for (let k = 0; k < createdIds.length; k += 10) {
+          await Promise.all(createdIds.slice(k, k + 10).map((id) => notifyPartnerOfNewRequest(id).catch((err) => console.error('Failed to notify partner of new itinerary request:', err))));
+        }
+      })();
     }
 
     // Clean up requests left over from a removed partner link or removed

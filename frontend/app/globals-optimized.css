@@ -453,41 +453,62 @@ body {
     @apply text-2xl font-bold text-primary;
   }
 
-  /* STATUS PILLS - Tour/Booking Status */
+  /* STATUS PILLS - one chip style for every status badge in the app.
+     Text is the full token and the fill is a wash of that same token, so the
+     label cannot disappear into the background. !important beats Badge's
+     text-foreground, which otherwise paints light text on a light chip. */
   .status-pill {
     @apply inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-all;
   }
 
+  .status-pill svg {
+    color: currentColor !important;
+  }
+
   .status-pill--approved,
-  .status-pill--confirmed {
-    border-color: color-mix(in oklch, var(--success) 30%, transparent) !important;
-    background-color: color-mix(in oklch, var(--success) 10%, transparent) !important;
+  .status-pill--confirmed,
+  .status-pill--good {
+    border-color: color-mix(in oklch, var(--success) 35%, transparent) !important;
+    background-color: color-mix(in oklch, var(--success) 14%, transparent) !important;
     color: var(--success) !important;
   }
 
-  .status-pill--pending {
-    border-color: color-mix(in oklch, var(--warning) 30%, transparent) !important;
-    background-color: color-mix(in oklch, var(--warning) 10%, transparent) !important;
+  .status-pill--pending,
+  .status-pill--requested,
+  .status-pill--warning {
+    border-color: color-mix(in oklch, var(--warning) 35%, transparent) !important;
+    background-color: color-mix(in oklch, var(--warning) 14%, transparent) !important;
     color: var(--warning) !important;
   }
 
+  .status-pill--held,
+  .status-pill--info,
+  .status-pill--active {
+    border-color: color-mix(in oklch, var(--info) 35%, transparent) !important;
+    background-color: color-mix(in oklch, var(--info) 14%, transparent) !important;
+    color: var(--info) !important;
+  }
+
+  .status-pill--countered,
+  .status-pill--featured {
+    border-color: color-mix(in oklch, var(--accent) 35%, transparent) !important;
+    background-color: color-mix(in oklch, var(--accent) 14%, transparent) !important;
+    color: var(--accent) !important;
+  }
+
   .status-pill--rejected,
-  .status-pill--cancelled {
-    border-color: color-mix(in oklch, var(--destructive) 30%, transparent) !important;
-    background-color: color-mix(in oklch, var(--destructive) 10%, transparent) !important;
+  .status-pill--cancelled,
+  .status-pill--declined,
+  .status-pill--critical {
+    border-color: color-mix(in oklch, var(--destructive) 35%, transparent) !important;
+    background-color: color-mix(in oklch, var(--destructive) 14%, transparent) !important;
     color: var(--destructive) !important;
   }
 
-  .status-pill--active {
-    border-color: color-mix(in oklch, var(--info) 30%, transparent) !important;
-    background-color: color-mix(in oklch, var(--info) 10%, transparent) !important;
-    color: var(--info);
-  }
-
-  .status-pill--featured {
-    border-color: color-mix(in oklch, var(--accent) 30%, transparent) !important;
-    background-color: color-mix(in oklch, var(--accent) 10%, transparent) !important;
-    color: var(--accent) !important;
+  .status-pill--expired {
+    border-color: color-mix(in oklch, var(--muted-foreground) 35%, transparent) !important;
+    background-color: color-mix(in oklch, var(--muted-foreground) 12%, transparent) !important;
+    color: var(--muted-foreground) !important;
   }
 
   /* BUTTONS - Context specific */

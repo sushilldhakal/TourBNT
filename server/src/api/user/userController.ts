@@ -5,7 +5,7 @@ import jwt, { sign } from "jsonwebtoken";
 import { createHash } from "crypto";
 import { validationResult } from "express-validator";
 import { db, users } from "@tourbnt/db";
-import { eq, desc, asc, count, sql, ilike, or, type SQL } from "drizzle-orm";
+import { eq, desc, asc, count, sql, ilike, or, and, inArray, type SQL } from "drizzle-orm";
 import { config } from "../../config/config";
 import { claimOnce } from "../../config/redisClient";
 import { sendResetPasswordEmail as sendResetPasswordEmailMaileroo, sendVerificationEmail as sendVerificationEmailMaileroo } from "../../controller/maileroo";
@@ -228,6 +228,65 @@ export const getAllUsers = async (req: Request, res: Response, next: NextFunctio
   } catch (err) {
     console.error("Error in getAllUsers:", err);
     return next(createHttpError(500, "Error while getting users"));
+  }
+};
+
+// Lightweight, grouped people list for the "New chat" picker (admin only): a handful of
+// rows per kind of account plus the true total, returned in one request. Only the columns the
+// picker shows are selected (the full user rows carry seller documents and are much heavier).
+const DIRECTORY_GROUPS: Array<{ key: string; label: string; roles: string[] }> = [
+  { key: 'seller', label: 'Sellers', roles: ['seller'] },
+  { key: 'transport', label: 'Transport', roles: ['transport'] },
+  { key: 'hotel', label: 'Hotels & guesthouses', roles: ['hotel', 'guesthouse'] },
+  { key: 'guide', label: 'Guides', roles: ['guide'] },
+  { key: 'restaurant', label: 'Restaurants', roles: ['restaurant'] },
+  { key: 'advertiser', label: 'Advertisers', roles: ['advertiser'] },
+  { key: 'user', label: 'Customers', roles: ['user'] },
+];
+
+export const getUserDirectory = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    const limit = Math.min(Math.max(parseInt(String(req.query.limit)) || 15, 1), 50);
+    const like = `%${q.replace(/[%_\\]/g, '\\$&')}%`;
+    const roles = DIRECTORY_GROUPS.flatMap((g) => g.roles);
+    // Which group a role belongs to (hotel + guesthouse share one).
+    // Constants from DIRECTORY_GROUPS (never user input), inlined as literals.
+    const groupOf = sql.raw(DIRECTORY_GROUPS.flatMap((g) => g.roles.map((r) => `WHEN '${r}' THEN '${g.key}'`)).join(' '));
+
+    // ONE query: group, count and take the first N per group with window functions —
+    // a single round trip to the remote database instead of one (or two) per group.
+    const rows = (await db.execute(sql`
+      SELECT id, name, email, avatar, role::text AS role, grp, total
+      FROM (
+        SELECT id, name, email, avatar, role, grp,
+               count(*) OVER (PARTITION BY grp) AS total,
+               row_number() OVER (PARTITION BY grp ORDER BY name) AS rn
+        FROM (
+          SELECT id, name, email, avatar, role, CASE role::text ${groupOf} END AS grp
+          FROM users
+          WHERE role::text IN (${sql.raw(roles.map((r) => `'${r}'`).join(','))})
+          ${q ? sql`AND (name ILIKE ${like} OR email ILIKE ${like})` : sql``}
+        ) t
+      ) x
+      WHERE rn <= ${limit}
+      ORDER BY grp, name
+    `)) as unknown as Array<{ id: string; name: string; email: string; avatar: string | null; role: string; grp: string; total: string | number }>;
+
+    const groups = DIRECTORY_GROUPS.map((g) => {
+      const items = rows.filter((r) => r.grp === g.key);
+      return {
+        key: g.key,
+        label: g.label,
+        total: items.length ? Number(items[0].total) : 0,
+        items: items.map(({ id, name, email, avatar, role }) => ({ id, name, email, avatar, role })),
+      };
+    });
+
+    return sendSuccess(res, { groups }, 'User directory retrieved successfully');
+  } catch (err) {
+    console.error('Error in getUserDirectory:', err);
+    return next(createHttpError(500, 'Error while loading the user directory'));
   }
 };
 

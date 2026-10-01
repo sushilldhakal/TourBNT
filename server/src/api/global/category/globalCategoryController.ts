@@ -135,26 +135,27 @@ export const getUserCategories = async (req: Request, res: Response): Promise<vo
       return;
     }
 
-    const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-    if (!user) {
+    // Two independent queries issued together: one network round trip to the
+    // (remote) database instead of three in sequence. No approvalStatus filter —
+    // this is "categories this seller is associated with" including rejected ones.
+    const [[userRow], globalRows] = await Promise.all([
+      db.select({ list: sql<SellerInfo['category']>`${users.sellerInfo}->'category'` }).from(users).where(eq(users.id, userId)).limit(1),
+      db.select().from(globalCategories).where(sql`${globalCategories.id} IN (
+        SELECT e->>'categoryId' FROM users u, jsonb_array_elements(COALESCE(u.seller_info->'category', '[]'::jsonb)) e WHERE u.id = ${userId}
+      )`),
+    ]);
+    if (!userRow) {
       res.status(404).json({ success: false, message: 'User not found' });
       return;
     }
 
-    const sellerInfo = user.sellerInfo as SellerInfo | null;
-    const userCategories = sellerInfo?.category || [];
+    // Stored list can contain duplicates from older racing add-requests; show each once.
+    const userCategories = ((userRow.list as NonNullable<SellerInfo['category']> | null) || []).filter((c, i, arr) => arr.findIndex((x) => x.categoryId === c.categoryId) === i);
     if (userCategories.length === 0) {
       res.json({ success: true, data: [], count: 0 });
       return;
     }
 
-    const categoryIds = userCategories.map((c) => c.categoryId);
-    // No approvalStatus filter here — this is "categories this seller is
-    // associated with" including rejected ones, so a rejection is visible
-    // with its reason and can be edited/resubmitted (see updateCategory).
-    // Filtering rejected ones out used to make them vanish from the seller's
-    // own list entirely, with no way back to them.
-    const globalRows = await db.select().from(globalCategories).where(inArray(globalCategories.id, categoryIds));
     const globalById = new Map(globalRows.map((c) => [c.id, c]));
 
     const validCategories = userCategories

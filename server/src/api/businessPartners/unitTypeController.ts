@@ -5,6 +5,15 @@ import { sendSuccess, sendValidationError, sendNotFoundError, sendForbiddenError
 import { ItineraryRequestService } from '../tours/services/itineraryRequestService';
 import { assertOwnerOrAdmin } from './capacityController';
 
+/** Postgres unique_violation (drizzle wraps it, so check the cause too). */
+const isDuplicateError = (error: unknown) => {
+  const e = error as { code?: string; cause?: { code?: string } };
+  return e?.code === '23505' || e?.cause?.code === '23505';
+};
+
+const duplicateName = (res: Response) =>
+  res.status(409).json({ success: false, message: 'A room/unit type with this name already exists for this business.' });
+
 // GET /business-partners/:businessPartnerId/unit-types — open to any
 // authenticated user: powers both the owner's management UI and the
 // agency's room/vehicle-type picker when linking this partner to a day.
@@ -43,6 +52,7 @@ export const createUnitType = async (req: Request, res: Response, next: NextFunc
     }).returning();
     return sendSuccess(res, created, 'Unit type created successfully', 201);
   } catch (error) {
+    if (isDuplicateError(error)) return duplicateName(res);
     next(error);
   }
 };
@@ -72,6 +82,7 @@ export const updateUnitType = async (req: Request, res: Response, next: NextFunc
     }).where(eq(businessPartnerUnitTypes.id, unitTypeId)).returning();
     return sendSuccess(res, updated, 'Unit type updated successfully');
   } catch (error) {
+    if (isDuplicateError(error)) return duplicateName(res);
     next(error);
   }
 };

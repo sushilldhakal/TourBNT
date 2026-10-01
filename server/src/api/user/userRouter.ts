@@ -10,6 +10,7 @@ import {
   changeUserRole,
   getSellerApplications,
   getUserRoleCounts,
+  getUserDirectory,
   approveSellerApplication,
   rejectSellerApplication,
   deleteSellerApplication,
@@ -423,6 +424,7 @@ userRouter.get('/',
  */
 // Static admin paths — must be registered before '/:userId' or they are swallowed by it.
 userRouter.get('/role-counts', authenticate, authorizeRoles('admin'), getUserRoleCounts);
+userRouter.get('/directory', authenticate, authorizeRoles('admin'), getUserDirectory);
 userRouter.get('/seller-applications', authenticate, authorizeRoles('admin'), getSellerApplications);
 
 userRouter.get('/:userId', authenticate, authorizeRoles('admin'), getUserById);

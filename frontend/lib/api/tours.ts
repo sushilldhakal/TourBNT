@@ -1,4 +1,4 @@
-import { api, serverApi, handleApiError, createFormData, extractResponseData } from './apiClient';
+import { api, serverApi, handleApiError, createFormData, extractResponseData, extractList } from './apiClient';
 import { AxiosError } from 'axios';
 
 /**
@@ -381,7 +381,7 @@ export interface TourItineraryRequestStatus {
 export const getTourLogisticsStatus = async (tourId: string) => {
     try {
         const response = await api.get(`/tours/${tourId}/logistics-status`);
-        return extractResponseData<TourItineraryRequestStatus[]>(response);
+        return extractList<TourItineraryRequestStatus>(response);
     } catch (error) {
         throw handleApiError(error, 'fetching logistics status');
     }

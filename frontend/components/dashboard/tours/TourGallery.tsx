@@ -45,7 +45,7 @@ export function TourGallery() {
     const [galleryPickerOpen, setGalleryPickerOpen] = useState(false);
 
     // Watch gallery from form
-    const gallery = watch('gallery') as GalleryItem[];
+    const gallery = (watch('gallery') ?? []) as GalleryItem[];
 
     // Open gallery picker dialog
     const handleOpenGalleryPicker = () => {

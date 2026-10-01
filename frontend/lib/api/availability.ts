@@ -1,4 +1,4 @@
-import { api, handleApiError, extractResponseData } from './apiClient';
+import { api, handleApiError, extractResponseData, extractList } from './apiClient';
 
 export interface BusinessPartnerAvailabilityBlock {
     id: string;
@@ -12,7 +12,7 @@ export interface BusinessPartnerAvailabilityBlock {
 export const getAvailabilityBlocks = async (businessPartnerId: string, date?: string) => {
     try {
         const response = await api.get(`/business-partners/${businessPartnerId}/availability-blocks`, { params: { date } });
-        return extractResponseData<BusinessPartnerAvailabilityBlock[]>(response);
+        return extractList<BusinessPartnerAvailabilityBlock>(response);
     } catch (error) {
         throw handleApiError(error, 'fetching availability blocks');
     }

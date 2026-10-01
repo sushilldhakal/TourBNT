@@ -62,6 +62,11 @@ interface TourContextType {
     appendFacts: (value?: Partial<any>) => void;
     factsRemove: (index: number) => void;
 
+    galleryFields: any[];
+    appendGallery: (value?: Partial<any>) => void;
+    galleryRemove: (index: number) => void;
+    galleryMove: (from: number, to: number) => void;
+
     faqFields: any[];
     appendFaq: (value?: Partial<any>) => void;
     faqRemove: (index: number) => void;
@@ -140,7 +145,7 @@ export function TourProvider({ children, defaultValues, isEditing = false }: Tou
             pricingOptions: [],
             facts: [],
             faqs: [],
-            itinerary: [],
+            itinerary: { outline: '', options: [[]] },
             dates: {
                 departures: []
             }
@@ -154,7 +159,8 @@ export function TourProvider({ children, defaultValues, isEditing = false }: Tou
         remove: itineraryRemove,
     } = useFieldArray({
         control: form.control,
-        name: 'itinerary',
+        // Same path the Itinerary tab edits: the form keeps days under itinerary.options[0].
+        name: 'itinerary.options.0' as any,
     });
 
     const {
@@ -173,6 +179,16 @@ export function TourProvider({ children, defaultValues, isEditing = false }: Tou
     } = useFieldArray({
         control: form.control,
         name: 'faqs',
+    });
+
+    const {
+        fields: galleryFields,
+        append: galleryAppend,
+        remove: galleryRemove,
+        move: galleryMove,
+    } = useFieldArray({
+        control: form.control,
+        name: 'gallery',
     });
 
     const {
@@ -214,6 +230,10 @@ export function TourProvider({ children, defaultValues, isEditing = false }: Tou
             field_type: 'Plain Text',
         };
         factsAppend(value ? { ...defaultItem, ...value } : defaultItem);
+    };
+
+    const appendGallery = (value?: Partial<any>) => {
+        galleryAppend({ tempId: makeId(), image: '', caption: '', ...value });
     };
 
     const appendFaq = (value?: Partial<any>) => {
@@ -282,11 +302,12 @@ export function TourProvider({ children, defaultValues, isEditing = false }: Tou
             }
         }
         if (Array.isArray(categories)) {
-            return categories.map((cat: Record<string, unknown>) => ({
-                id: cat.value || cat.id,
-                name: cat.label || cat.name,
-                isActive: !cat.disable
-            }));
+            // The category MultiSelect works with { label, value, disable }; keep id/name too for the save path.
+            return categories.map((cat: any) => {
+                const id = typeof cat === 'string' ? cat : (cat.value || cat.id || cat.categoryId || cat._id);
+                const name = typeof cat === 'string' ? '' : (cat.label || cat.name || cat.categoryName || '');
+                return { label: name || String(id), value: id, disable: typeof cat === 'object' ? !!cat.disable : false, id, name };
+            });
         }
         return categories;
     };
@@ -302,15 +323,21 @@ export function TourProvider({ children, defaultValues, isEditing = false }: Tou
             }
         }
         if (Array.isArray(itinerary)) {
-            return itinerary.map((item: Record<string, unknown>) => ({
-                day: item.day,
-                title: item.title,
-                description: item.description,
-                destination: item.destination || '',
-                accommodation: item.accommodation || '',
-                meals: item.meals || '',
-                activities: item.activities || ''
-            }));
+            // API stores a flat list of days; the editor works on { outline, options: [days] }.
+            // Keep each day's id and partners[] — dropping them is what hid every linked
+            // hotel/restaurant/guide/transport and would wipe the links on save.
+            return {
+                outline: '',
+                options: [itinerary.map((item: Record<string, unknown>) => ({
+                    id: item.id,
+                    day: item.day || '',
+                    title: item.title || '',
+                    description: item.description || '',
+                    destination: item.destination || '',
+                    date: item.date,
+                    partners: Array.isArray(item.partners) ? item.partners : [],
+                }))],
+            };
         }
         return itinerary;
     };
@@ -450,7 +477,8 @@ export function TourProvider({ children, defaultValues, isEditing = false }: Tou
     // Update form when data is fetched
     useEffect(() => {
         if (fetchedTourData) {
-            const tourData = fetchedTourData.data?.tour || fetchedTourData;
+            // getSingleTour returns { tour, breadcrumbs, ... }; the old `.data?.tour` lookup never matched, so the form was reset with the wrapper object (every field empty).
+            const tourData = (fetchedTourData as any).tour ?? (fetchedTourData as any).data?.tour ?? fetchedTourData;
 
             // Process data before resetting form
             const processedData = {
@@ -617,7 +645,7 @@ export function TourProvider({ children, defaultValues, isEditing = false }: Tou
 
     // Helper: check if a field has changed
     const hasChanged = (key: string, newValue: unknown): boolean => {
-        const originalTour = fetchedTourData?.data?.tour || fetchedTourData || {};
+        const originalTour = (fetchedTourData as any)?.tour ?? fetchedTourData ?? {};
 
         // Special handling for gallery
         if (key === 'gallery') {
@@ -1001,10 +1029,11 @@ export function TourProvider({ children, defaultValues, isEditing = false }: Tou
         if (values.itinerary !== undefined && shouldIncludeField('itinerary', values.itinerary, isCreating)) {
             changedFieldCount++;
 
-            let itineraryItems = [];
+            let itineraryItems: any[] = [];
 
             if (values.itinerary && typeof values.itinerary === 'object' && Array.isArray(values.itinerary.options)) {
-                itineraryItems = values.itinerary.options;
+                // options is [ [day, day, ...] ] — the days live in the first array.
+                itineraryItems = Array.isArray(values.itinerary.options[0]) ? values.itinerary.options[0] : values.itinerary.options;
             } else if (Array.isArray(values.itinerary)) {
                 itineraryItems = values.itinerary;
             } else if (values.itinerary && values.itinerary.length !== undefined) {
@@ -1013,11 +1042,14 @@ export function TourProvider({ children, defaultValues, isEditing = false }: Tou
 
             const formattedItinerary = itineraryItems.map((item: any) => {
                 return {
+                    ...(item.id ? { id: item.id } : {}),
                     day: item.day || '',
                     title: typeof item.title === 'string' ? item.title : String(item.title || ''),
                     description: typeof item.description === 'string' ? item.description : String(item.description || ''),
                     dateTime: item.dateTime instanceof Date ? item.dateTime : new Date(),
                     destination: item.destination || '',
+                    // Linked hotel / restaurant / guide / transport for the day.
+                    partners: Array.isArray(item.partners) ? item.partners : [],
                 };
             });
 
@@ -1028,7 +1060,7 @@ export function TourProvider({ children, defaultValues, isEditing = false }: Tou
         if (processedValues.location && shouldIncludeField("location", processedValues.location, isCreating)) {
             changedFieldCount++;
             const locationData = processedValues.location as Record<string, unknown>;
-            const originalTour = fetchedTourData?.data?.tour || fetchedTourData || {};
+            const originalTour = (fetchedTourData as any)?.tour ?? fetchedTourData ?? {};
             const fullLocation = {
                 map: locationData.map || originalTour.location?.map || "",
                 zip: locationData.zip || originalTour.location?.zip || "",
@@ -1077,6 +1109,10 @@ export function TourProvider({ children, defaultValues, isEditing = false }: Tou
         appendFacts,
         factsRemove,
 
+        galleryFields,
+        appendGallery,
+        galleryRemove,
+        galleryMove,
         faqFields,
         appendFaq,
         faqRemove,

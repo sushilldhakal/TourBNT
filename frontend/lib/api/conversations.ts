@@ -17,10 +17,18 @@ export interface Conversation {
   subject: string;
   status: 'open' | 'replied' | 'closed';
   assignedTo?: { id: string; name?: string; email?: string };
+  /** Who this conversation is with, from the viewer's point of view (server-computed). */
+  contactName?: string;
+  contactRole?: string;
   isBroadcast?: boolean;
   broadcastAudience?: 'sellers' | 'users' | 'all';
   allowParticipantReplies?: boolean;
   groupName?: string;
+  /** Messages from others since the viewer last opened this thread. */
+  unreadCount?: number;
+  lastMessage?: string;
+  lastMessageAt?: string;
+  lastMessageFromMe?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -152,6 +160,15 @@ export async function addConversationParticipants(
 /**
  * Archive a conversation for the current user.
  */
+/** Marks a conversation as read for the current user (clears its unread badge). */
+export async function markConversationRead(id: string): Promise<void> {
+  try {
+    await api.post(`/conversations/${id}/read`);
+  } catch (error) {
+    throw handleApiError(error, 'marking conversation as read');
+  }
+}
+
 export async function archiveConversation(id: string): Promise<void> {
   try {
     await api.patch(`/conversations/${id}/archive`);
@@ -244,5 +261,39 @@ export async function sendConversationMessage(id: string, content: string): Prom
     return Array.isArray(list) ? list : [];
   } catch (error) {
     throw handleApiError(error, 'sending reply');
+  }
+}
+
+export interface ConversationPerson {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  avatar: string | null;
+  role: string;
+  verified: boolean;
+  company: string | null;
+  businesses: Array<{ name: string; type: string }>;
+  website: string | null;
+  location: string | null;
+  memberSince: string;
+}
+
+export interface ConversationPeople {
+  isBroadcast: boolean;
+  recipientCount: number | null;
+  people: ConversationPerson[];
+  /** Other people in the thread (e.g. the seller handling a visitor's enquiry). */
+  others: ConversationPerson[];
+  guest: { name: string | null; email: string | null } | null;
+}
+
+/** Profile-card details for whoever the requester is talking to in this conversation. */
+export async function getConversationPeople(id: string): Promise<ConversationPeople> {
+  try {
+    const response = await api.get(`/conversations/${id}/people`);
+    return response.data.data as ConversationPeople;
+  } catch (error) {
+    throw handleApiError(error, 'fetching conversation contact');
   }
 }

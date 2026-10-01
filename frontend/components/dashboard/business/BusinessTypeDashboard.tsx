@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { DatePickerField } from '@/components/ui/date-picker';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -117,7 +119,8 @@ export function BusinessTypeDashboard({ types, title, description, icon, showLog
                 title={business.name}
                 description={description}
                 actions={
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 items-center">
+                        <Button asChild variant="outline" size="sm"><Link href="/dashboard/profile">Edit business profile</Link></Button>
                         <Badge variant="secondary" className="capitalize">{business.type}</Badge>
                         <Badge variant={status.variant}>{status.label}</Badge>
                     </div>
@@ -145,19 +148,16 @@ export function BusinessTypeDashboard({ types, title, description, icon, showLog
                 <span>{business.views} profile views</span>
             </div>
 
-            <Tabs defaultValue="profile">
+            <Tabs defaultValue={showLogistics ? 'capacity' : 'ads'}>
                 <TabsList>
-                    <TabsTrigger value="profile">Profile</TabsTrigger>
                     {showLogistics && <TabsTrigger value="capacity">Capacity</TabsTrigger>}
                     {showLogistics && <TabsTrigger value="requests">Requests</TabsTrigger>}
-                    <TabsTrigger value="targeting">Visibility</TabsTrigger>
+                    {/* Hotels/restaurants/guides/transport surface through sellers' day-by-day itineraries — only advertisers need targeting. */}
+                    {business.type === 'advertiser' && <TabsTrigger value="targeting">Visibility</TabsTrigger>}
                     {business.type !== 'advertiser' && <TabsTrigger value="reviews">Reviews</TabsTrigger>}
                     {!showLogistics && <TabsTrigger value="ads">Ad Campaigns</TabsTrigger>}
                 </TabsList>
 
-                <TabsContent value="profile" className="mt-4">
-                    <ProfileTab business={business} />
-                </TabsContent>
                 {showLogistics && (
                     <TabsContent value="capacity" className="mt-4">
                         <CapacityTab businessPartnerId={business.id} businessType={business.type} />
@@ -168,9 +168,11 @@ export function BusinessTypeDashboard({ types, title, description, icon, showLog
                         <RequestsTab businessPartnerId={business.id} />
                     </TabsContent>
                 )}
-                <TabsContent value="targeting" className="mt-4">
-                    <TargetingTab business={business} />
-                </TabsContent>
+                {business.type === 'advertiser' && (
+                    <TabsContent value="targeting" className="mt-4">
+                        <TargetingTab business={business} />
+                    </TabsContent>
+                )}
                 {business.type !== 'advertiser' && (
                     <TabsContent value="reviews" className="mt-4">
                         <ReviewsTab business={business} />
@@ -188,6 +190,22 @@ export function BusinessTypeDashboard({ types, title, description, icon, showLog
 
 function parseListField(value: unknown): string {
     return Array.isArray(value) ? value.join(', ') : typeof value === 'string' ? value : '';
+}
+
+/** One-time-setup business details, shown on /dashboard/profile for every business the user owns. */
+export function BusinessProfileSection() {
+    const { data: businesses } = useMyBusinessPartners();
+    if (!businesses || businesses.length === 0) return null;
+    return (
+        <div className="space-y-4">
+            {businesses.map((b) => (
+                <div key={b.id} className="space-y-2">
+                    <h2 className="text-lg font-semibold">Business profile — {b.name}</h2>
+                    <ProfileTab business={b} />
+                </div>
+            ))}
+        </div>
+    );
 }
 
 function ProfileTab({ business }: { business: BusinessPartner }) {
@@ -374,7 +392,7 @@ function todayISO() {
 }
 function addDaysISO(date: string, days: number) {
     const d = new Date(date);
-    d.setDate(d.getDate() + days);
+    d.setUTCDate(d.getUTCDate() + days); // UTC to match toISOString; local setDate duplicates a day across DST
     return d.toISOString().slice(0, 10);
 }
 
@@ -470,7 +488,11 @@ function UnitTypesSection({ businessPartnerId, businessType }: { businessPartner
     const createMutation = useMutation({
         mutationFn: () => createUnitType(businessPartnerId, { name: newName.trim(), totalUnits: Number(newTotal) || 0, defaultTime: newTime || undefined }),
         onSuccess: () => { toast({ title: `${copy.itemNoun} added` }); setNewName(''); setNewTotal(''); setNewTime(''); invalidate(); },
-        onError: (error: Error) => toast({ title: `Could not add ${copy.itemNoun}`, description: error.message, variant: 'destructive' }),
+        onError: (error: Error & { statusCode?: number; data?: { message?: string } }) => toast({
+            title: error.statusCode === 409 ? `"${newName.trim()}" already exists` : `Could not add ${copy.itemNoun}`,
+            description: error.data?.message ?? error.message,
+            variant: 'destructive',
+        }),
     });
 
     const updateTotalMutation = useMutation({
@@ -597,7 +619,7 @@ function GuideAvailabilitySection({ businessPartnerId }: { businessPartnerId: st
                 <div className="flex items-end gap-2 max-w-2xl flex-wrap">
                     <div>
                         <label className="block text-sm font-medium mb-1">Date</label>
-                        <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+                        <DatePickerField className="w-44" min={new Date()} value={date} onChange={setDate} />
                     </div>
                     <div>
                         <label className="block text-sm font-medium mb-1">From</label>
@@ -687,7 +709,14 @@ function CapacityTab({ businessPartnerId, businessType }: { businessPartnerId: s
             {isGuide && <GuideAvailabilitySection businessPartnerId={businessPartnerId} />}
 
             <Card>
-                <CardHeader><CardTitle>{isGuide ? 'Group-size limit' : 'Default capacity'}</CardTitle></CardHeader>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                    <CardTitle>{isGuide ? 'Group-size limit' : 'Default capacity'}</CardTitle>
+                    {capacity && (
+                        <Badge variant="secondary" className="text-sm">
+                            Saved: {capacity.defaultDailyCapacity} {capacity.unitLabel || unitLabel || 'units'}{isGuide ? '' : ' / day'}
+                        </Badge>
+                    )}
+                </CardHeader>
                 <CardContent>
                     <p className="text-sm text-muted-foreground mb-4">
                         {isGuide
@@ -721,7 +750,7 @@ function CapacityTab({ businessPartnerId, businessType }: { businessPartnerId: s
                     <div className="flex items-end gap-3 max-w-md">
                         <div className="flex-1">
                             <label className="block text-sm font-medium mb-1">Date</label>
-                            <Input type="date" value={overrideDate} onChange={(e) => setOverrideDate(e.target.value)} />
+                            <DatePickerField className="w-44" min={new Date()} value={overrideDate} onChange={setOverrideDate} />
                         </div>
                         <div className="flex-1">
                             <label className="block text-sm font-medium mb-1">Capacity</label>
@@ -752,12 +781,12 @@ function CapacityTab({ businessPartnerId, businessType }: { businessPartnerId: s
 }
 
 const REQUEST_STATUS_META: Record<ItineraryRequestStatus, { label: string; icon: LucideIcon; className: string }> = {
-    pending: { label: 'Needs response', icon: Clock, className: 'text-amber-600 bg-amber-50 border-amber-200' },
-    held: { label: 'Held by you', icon: Clock, className: 'text-sky-600 bg-sky-50 border-sky-200' },
-    confirmed: { label: 'Confirmed', icon: CheckCircle2, className: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
-    countered: { label: 'Awaiting agency', icon: Repeat2, className: 'text-violet-600 bg-violet-50 border-violet-200' },
-    declined: { label: 'Declined', icon: XCircle, className: 'text-destructive bg-destructive/5 border-destructive/20' },
-    expired: { label: 'Expired', icon: XCircle, className: 'text-muted-foreground bg-muted border-border' },
+    pending: { label: 'Needs response', icon: Clock, className: 'status-pill status-pill--pending' },
+    held: { label: 'Held by you', icon: Clock, className: 'status-pill status-pill--held' },
+    confirmed: { label: 'Confirmed', icon: CheckCircle2, className: 'status-pill status-pill--confirmed' },
+    countered: { label: 'Awaiting agency', icon: Repeat2, className: 'status-pill status-pill--countered' },
+    declined: { label: 'Declined', icon: XCircle, className: 'status-pill status-pill--declined' },
+    expired: { label: 'Expired', icon: XCircle, className: 'status-pill status-pill--expired' },
 };
 
 /** Live "X available on this date" hint shown while the partner is deciding — finally puts getAvailableCapacityForDate to use. */
@@ -880,7 +909,7 @@ function RequestsTab({ businessPartnerId }: { businessPartnerId: string }) {
                                                 </div>
                                                 <div>
                                                     <Label className="text-xs text-muted-foreground">Date</Label>
-                                                    <Input type="date" className="h-8" value={counterDrafts[r.id]?.date ?? ''} onChange={(e) => setCounterDrafts({ ...counterDrafts, [r.id]: { ...counterDrafts[r.id], date: e.target.value } })} />
+                                                    <DatePickerField className="h-8" min={new Date()} value={counterDrafts[r.id]?.date ?? ''} onChange={(v) => setCounterDrafts({ ...counterDrafts, [r.id]: { ...counterDrafts[r.id], date: v } })} />
                                                 </div>
                                                 <div>
                                                     <Label className="text-xs text-muted-foreground">Time</Label>

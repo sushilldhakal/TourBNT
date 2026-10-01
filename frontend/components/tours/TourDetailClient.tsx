@@ -2,6 +2,10 @@
 
 import dynamic from 'next/dynamic';
 import { Tour } from '@/types/types';
+// Imported statically (not dynamic()): both render Radix Tabs, whose useId-based ids differ between
+// the server render and a lazily-hydrated client tree, causing a hydration mismatch.
+import { TourTabs } from './TourTabs';
+import { BookingWidget } from './BookingWidget';
 
 // Dynamic imports for heavy client components to optimize bundle size
 // These components are loaded on-demand to reduce initial bundle size
@@ -18,17 +22,6 @@ const TourGallery = dynamic(
     }
 );
 
-const TourTabs = dynamic(
-    () => import('./TourTabs').then(mod => ({ default: mod.TourTabs })),
-    {
-        loading: () => (
-            <div className="bg-card border rounded-lg p-4 sm:p-6">
-                <div className="h-96 bg-muted rounded animate-pulse" />
-            </div>
-        ),
-    }
-);
-
 const ReviewSystem = dynamic(
     () => import('./ReviewSystem').then(mod => ({ default: mod.ReviewSystem })),
     {
@@ -38,24 +31,6 @@ const ReviewSystem = dynamic(
                 <div className="space-y-4">
                     <div className="h-32 bg-muted rounded animate-pulse" />
                     <div className="h-32 bg-muted rounded animate-pulse" />
-                </div>
-            </div>
-        ),
-    }
-);
-
-const BookingWidget = dynamic(
-    () => import('./BookingWidget').then(mod => ({ default: mod.BookingWidget })),
-    {
-        loading: () => (
-            <div className="sticky top-24">
-                <div className="bg-card border rounded-lg overflow-hidden shadow-lg " style={{ marginTop: '-134px', zIndex: 20 }}>
-                    <div className="h-16 bg-primary animate-pulse" />
-                    <div className="p-6 space-y-4">
-                        <div className="h-10 bg-muted rounded animate-pulse" />
-                        <div className="h-10 bg-muted rounded animate-pulse" />
-                        <div className="h-10 bg-muted rounded animate-pulse" />
-                    </div>
                 </div>
             </div>
         ),

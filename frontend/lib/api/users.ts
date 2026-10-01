@@ -488,3 +488,16 @@ export const getUserByIdServer = async (userId: string) => {
         throw handleApiError(error, 'fetching user (server)');
     }
 };
+
+export interface DirectoryPerson { id: string; name: string; email?: string; avatar?: string | null; role: string }
+export interface DirectoryGroup { key: string; label: string; total: number; items: DirectoryPerson[] }
+
+/** Admin: grouped, lightweight people list for the "New chat" picker (a few per account type + totals), one request. */
+export const getUserDirectory = async (q = '', limit = 15): Promise<DirectoryGroup[]> => {
+    try {
+        const response = await api.get('/users/directory', { params: { ...(q ? { q } : {}), limit } });
+        return (response.data?.data?.groups ?? []) as DirectoryGroup[];
+    } catch (error) {
+        throw handleApiError(error, 'fetching people');
+    }
+};

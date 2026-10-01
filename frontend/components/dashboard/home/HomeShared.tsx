@@ -45,22 +45,21 @@ export function Empty({ children }: { children: React.ReactNode }) {
     return <p className="text-sm text-muted-foreground py-2">{children}</p>;
 }
 
-// `!text-*` because Badge's own text-foreground would otherwise win.
 const TONES: Record<string, string> = {
-    pending: 'bg-amber-500/15 border-amber-500/30 !text-amber-700 dark:!text-amber-300',
-    held: 'bg-blue-500/15 border-blue-500/30 !text-blue-700 dark:!text-blue-300',
-    countered: 'bg-amber-500/15 border-amber-500/30 !text-amber-700 dark:!text-amber-300',
-    confirmed: 'bg-emerald-500/15 border-emerald-500/30 !text-emerald-700 dark:!text-emerald-300',
-    approved: 'bg-emerald-500/15 border-emerald-500/30 !text-emerald-700 dark:!text-emerald-300',
-    completed: 'bg-blue-500/15 border-blue-500/30 !text-blue-700 dark:!text-blue-300',
-    declined: 'bg-red-500/15 border-red-500/30 !text-red-700 dark:!text-red-300',
-    rejected: 'bg-red-500/15 border-red-500/30 !text-red-700 dark:!text-red-300',
-    cancelled: 'bg-red-500/15 border-red-500/30 !text-red-700 dark:!text-red-300',
-    expired: 'bg-zinc-500/15 border-zinc-500/30 !text-zinc-600 dark:!text-zinc-300',
-    unpaid: 'bg-red-500/15 border-red-500/30 !text-red-700 dark:!text-red-300',
-    partial: 'bg-amber-500/15 border-amber-500/30 !text-amber-700 dark:!text-amber-300',
-    paid: 'bg-emerald-500/15 border-emerald-500/30 !text-emerald-700 dark:!text-emerald-300',
-    refunded: 'bg-zinc-500/15 border-zinc-500/30 !text-zinc-600 dark:!text-zinc-300',
+    pending: 'status-pill status-pill--pending',
+    held: 'status-pill status-pill--held',
+    countered: 'status-pill status-pill--countered',
+    confirmed: 'status-pill status-pill--confirmed',
+    approved: 'status-pill status-pill--approved',
+    completed: 'status-pill status-pill--held',
+    declined: 'status-pill status-pill--declined',
+    rejected: 'status-pill status-pill--rejected',
+    cancelled: 'status-pill status-pill--cancelled',
+    expired: 'status-pill status-pill--expired',
+    unpaid: 'status-pill status-pill--declined',
+    partial: 'status-pill status-pill--pending',
+    paid: 'status-pill status-pill--confirmed',
+    refunded: 'status-pill status-pill--expired',
 };
 
 export function StatusBadge({ status }: { status: string }) {

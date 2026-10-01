@@ -206,6 +206,19 @@ export const extractResponseData = <T>(response: any): T => {
 };
 
 /**
+ * For endpoints that return a plain list as `{ success, data: [...] }`.
+ * extractResponseData hands back the whole wrapper for those (it only unwraps
+ * non-array `data`), so list callers should use this to get the array itself.
+ */
+export const extractList = <T>(response: any): T[] => {
+    const body = response?.data;
+    if (Array.isArray(body)) return body as T[];
+    if (Array.isArray(body?.data)) return body.data as T[];
+    if (Array.isArray(body?.items)) return body.items as T[];
+    return [];
+};
+
+/**
  * Type-safe API request wrapper
  */
 export async function apiRequest<T>(

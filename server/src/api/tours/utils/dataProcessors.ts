@@ -198,7 +198,7 @@ const ITINERARY_PARTNER_ROLES = new Set(['transport', 'accommodation', 'guide', 
  * transport/accommodation/guide/meals provider to the day, either as a
  * registered business (`businessPartnerId` set) or a plain free-typed name.
  */
-const processItineraryPartners = (partners: any): Array<{ role: string; businessPartnerId?: string; name: string; notes?: string }> => {
+const processItineraryPartners = (partners: any): Array<{ role: string; businessPartnerId?: string; name: string; notes?: string; time?: string; endTime?: string; unitsRequested?: number; unitType?: string; unitTypeId?: string }> => {
   if (!Array.isArray(partners)) return [];
   return partners
     .filter((p: any) => p && p.role && ITINERARY_PARTNER_ROLES.has(p.role) && p.name)
@@ -207,6 +207,13 @@ const processItineraryPartners = (partners: any): Array<{ role: string; business
       ...(p.businessPartnerId && { businessPartnerId: String(p.businessPartnerId) }),
       name: String(p.name),
       ...(p.notes && { notes: String(p.notes) }),
+      // Keep the request details too — syncTourItineraryPartners reads these, and
+      // stripping them here silently reset every room/seat count and time slot on save.
+      ...(p.time && { time: String(p.time) }),
+      ...(p.endTime && { endTime: String(p.endTime) }),
+      ...(p.unitsRequested !== undefined && p.unitsRequested !== null && p.unitsRequested !== '' && !Number.isNaN(Number(p.unitsRequested)) && { unitsRequested: Number(p.unitsRequested) }),
+      ...(p.unitType && { unitType: String(p.unitType) }),
+      ...(p.unitTypeId && { unitTypeId: String(p.unitTypeId) }),
     }));
 };
 

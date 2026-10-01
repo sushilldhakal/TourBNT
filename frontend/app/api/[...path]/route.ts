@@ -51,8 +51,15 @@ async function proxyRequest(request: NextRequest, pathSegments: string[], method
         let body: string | FormData | undefined;
         if (['POST', 'PUT', 'PATCH'].includes(method)) {
             const ct = request.headers.get('content-type');
-            if (ct?.includes('multipart/form-data')) body = await request.formData();
-            else body = await request.text();
+            if (ct?.includes('multipart/form-data')) {
+                body = await request.formData();
+                // The body is re-encoded with a NEW boundary, so the browser's Content-Type (with the
+                // old boundary) must not be forwarded — let fetch generate the matching header.
+                // Forwarding it made the server fail with "Unexpected end of form".
+                delete (headers as Record<string, string>)['Content-Type'];
+            } else {
+                body = await request.text();
+            }
         }
 
         const response = await fetch(fullUrl, { method, headers, body });

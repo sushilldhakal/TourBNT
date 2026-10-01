@@ -10,11 +10,12 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { FileText, FolderPlus, Image as ImageIcon, Save, Trash2, X, Sparkles, Info } from "lucide-react";
-import { useCategoriesRoleBased, useAllCategoriesForSelect } from "@/lib/queries";
+import { useAuth } from '@/lib/hooks/useAuth';
+import { useCacheManager } from "@/lib/queries";
 import { toast } from "@/components/ui/use-toast";
 import { Badge } from "@/components/ui/badge";
-import { MultiSelect } from "@/components/ui/MultiSelect";
-import { addCategory, addExistingCategoryToSeller } from '@/lib/api/categories';
+import { addCategory, getAvailableCategoriesPage, bulkAddCategories } from '@/lib/api/categories';
+import { ExistingItemsPicker } from '@/components/dashboard/shared/ExistingItemsPicker';
 import { Gallery } from "@/components/dashboard/gallery/Gallery";
 import { CategoryData } from "@/types/types";
 import type { CategoryFormData } from "@/types/category";
@@ -23,37 +24,11 @@ import type { JSONContent } from "novel";
 const NovelEditor = dynamic(() => import("@/components/dashboard/editor/NovelEditor"), { ssr: false });
 import Image from "next/image";
 
-// Helper component to render image as icon in MultiSelect
-// Note: MultiSelect applies h-4 w-4 className, so we use inline styles to override
-const OptionImageIcon = ({ imageUrl, alt }: { imageUrl?: string; alt?: string }) => {
-    if (!imageUrl) return null;
-    return (
-        <div
-            className="relative rounded-md overflow-hidden flex-shrink-0"
-            style={{
-                marginRight: '12px',
-                height: '48px',
-                width: '48px',
-            }}
-        >
-            <Image
-                src={imageUrl}
-                alt={alt || "Option"}
-                fill
-                className="object-cover"
-                sizes="48px"
-            />
-        </div>
-    );
-};
 
 const AddCategory = ({ onCategoryAdded }: { onCategoryAdded: (created?: unknown) => void }) => {
+    // Admins manage the global list directly; "add existing" is for sellers building their own list.
+    const isAdmin = useAuth().userRole === 'admin';
     const [dialogOpen, setDialogOpen] = useState(false);
-
-    // Search functionality state
-    const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-    const previousSelectionRef = useRef<string[]>([]);
-    const addTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     // Description content state for NovelEditor
     const [descriptionContent, setDescriptionContent] = useState<JSONContent>({
@@ -66,15 +41,7 @@ const AddCategory = ({ onCategoryAdded }: { onCategoryAdded: (created?: unknown)
     const maxDescriptionLength = 500;
     const remainingChars = maxDescriptionLength - descriptionLength;
 
-    const { data: allCategories = [], isLoading: isLoadingAll } = useAllCategoriesForSelect();
-
-    // User's current categories to filter out already added ones
-    const { data: userCategories } = useCategoriesRoleBased();
-
-    // Filter out categories that user already has
-    const availableCategories = allCategories?.filter(category =>
-        !userCategories?.some(userCat => userCat._id === category._id)
-    ) || [];
+    const { invalidateCategories } = useCacheManager();
     const form = useForm({
         defaultValues: {
             name: '',
@@ -110,63 +77,6 @@ const AddCategory = ({ onCategoryAdded }: { onCategoryAdded: (created?: unknown)
             console.error('Error creating category:', error);
         },
     });
-
-    // Mutation for adding existing categories to seller's list
-    const addExistingCategoryMutation = useMutation({
-        mutationFn: (categoryId: string) => addExistingCategoryToSeller(categoryId),
-        onSuccess: (_data, categoryId) => {
-            toast({
-                title: "Category added successfully",
-                description: "The category has been added to your list.",
-                variant: "default",
-            });
-            onCategoryAdded({ id: categoryId });
-        },
-        onError: (error) => {
-            toast({
-                title: "Failed to add category",
-                description: "An error occurred while adding the category to your list.",
-                variant: "destructive",
-            });
-            console.error('Error adding existing category:', error);
-        },
-    });
-
-    // Batch add categories when selection changes
-    useEffect(() => {
-        // Clear any pending timeout
-        if (addTimeoutRef.current) {
-            clearTimeout(addTimeoutRef.current);
-        }
-
-        // Find newly added categories
-        const newlySelected = selectedCategories.filter(
-            id => !previousSelectionRef.current.includes(id)
-        );
-
-        if (newlySelected.length > 0) {
-            // Debounce: wait 500ms after last selection change before adding
-            addTimeoutRef.current = setTimeout(() => {
-                newlySelected.forEach((categoryId) => {
-                    addExistingCategoryMutation.mutate(categoryId);
-                });
-                // Clear selection after adding
-                setSelectedCategories([]);
-                previousSelectionRef.current = [];
-            }, 500);
-        }
-
-        // Update previous selection
-        previousSelectionRef.current = [...selectedCategories];
-
-        // Cleanup timeout on unmount
-        return () => {
-            if (addTimeoutRef.current) {
-                clearTimeout(addTimeoutRef.current);
-            }
-        };
-    }, [selectedCategories, addExistingCategoryMutation]);
-
 
     const handleSubmit = async (values: CategoryFormData) => {
         // Validate required fields on frontend
@@ -215,58 +125,32 @@ const AddCategory = ({ onCategoryAdded }: { onCategoryAdded: (created?: unknown)
 
     return (
         <Form {...form}>
-            {/* Search Existing Categories Section */}
-            <div className="mb-6 w-full space-y-3">
-                <div className="flex items-center gap-2">
-                    <FolderPlus className="h-5 w-5 text-primary" />
-                    <div>
-                        <h3 className="text-sm font-medium">Add Existing Categories</h3>
-                        <p className="text-xs text-muted-foreground">
-                            Search and add existing approved categories to your list instead of creating duplicates.
-                        </p>
-                    </div>
-                </div>
-                <MultiSelect
-                    popoverClassName="w-full min-w-[400px]"
-                    matchTriggerWidth={true}
-                    options={availableCategories?.map((category) => {
-                        // Generate a simple code from category name (first 3 letters of each word)
-                        const code = category.name
-                            .split(' ')
-                            .map(word => word.substring(0, 3).toUpperCase())
-                            .join('-')
-                            .substring(0, 10);
-                        // Extract description preview (first 50 chars)
-                        const descPreview = category.description
-                            ? (typeof category.description === 'string'
-                                ? category.description.substring(0, 50)
-                                : JSON.stringify(category.description).substring(0, 50))
-                            : '';
+            {/* Add existing categories — search, tick or select all, add in ONE request */}
+            <div className="mb-6 w-full">
+                {!isAdmin && (
+<ExistingItemsPicker
+                    noun="category"
+                    nounPlural="categories"
+                    queryKey="categories"
+                    fetchPage={async (params) => {
+                        const page = await getAvailableCategoriesPage(params);
                         return {
-                            value: category._id,
-                            label: `${category.name}${code ? ` (${code})` : ''}${descPreview ? ` • ${descPreview}...` : ''}`,
-                            icon: () => <OptionImageIcon imageUrl={category.imageUrl} alt={category.name} />,
-                            style: {
-                                badgeColor: "hsl(var(--primary))",
-                            },
+                            ...page,
+                            items: page.items.map((c: any) => ({
+                                id: c.id ?? c._id,
+                                title: c.name,
+                                subtitle: typeof c.description === 'string' ? c.description.slice(0, 80) : undefined,
+                                imageUrl: c.imageUrl,
+                            })),
                         };
-                    }) || []}
-                    defaultValue={selectedCategories}
-                    onValueChange={(selected) => {
-                        setSelectedCategories(selected);
                     }}
-                    placeholder={isLoadingAll ? "Loading categories..." : "Search and select existing categories..."}
-                    emptyIndicator={isLoadingAll ? "Loading categories..." : "No categories found matching your search."}
-                    disabled={isLoadingAll}
-                    className="w-full"
-                    closeOnSelect={false}
+                    bulkAdd={bulkAddCategories}
+                    onAdded={({ added, ids }) => {
+                        invalidateCategories({ my: true, admin: true, approved: true });
+                        if (added > 0) onCategoryAdded(ids && ids.length === 1 ? { id: ids[0] } : undefined);
+                    }}
                 />
-                {selectedCategories.length > 0 && (
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Info className="h-3 w-3" />
-                        <span>Selected categories will be added automatically in a moment...</span>
-                    </div>
-                )}
+)}
             </div>
 
             <form onSubmit={(e) => {

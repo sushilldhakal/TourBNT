@@ -1,6 +1,7 @@
 'use client';
 
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useForm, useFieldArray, Controller } from 'react-hook-form';
+import { DatePickerField } from '@/components/ui/date-picker';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -193,12 +194,19 @@ export function TravelerForm({ numberOfTravelers = 1, onSubmit, onBack }: Travel
                                     <Label htmlFor={`travelers.${index}.dateOfBirth`}>
                                         Date of Birth <span className="text-destructive">*</span>
                                     </Label>
-                                    <Input
-                                        id={`travelers.${index}.dateOfBirth`}
-                                        type="date"
-                                        {...register(`travelers.${index}.dateOfBirth`)}
-                                        className={cn(
-                                            errors.travelers?.[index]?.dateOfBirth && 'border-destructive'
+                                    <Controller
+                                        control={control}
+                                        name={`travelers.${index}.dateOfBirth`}
+                                        render={({ field }) => (
+                                            <DatePickerField
+                                                id={`travelers.${index}.dateOfBirth`}
+                                                value={field.value as string}
+                                                onChange={field.onChange}
+                                                placeholder="Select date of birth"
+                                                min={new Date(1900, 0, 1)}
+                                                max={new Date()}
+                                                className={cn(errors.travelers?.[index]?.dateOfBirth && 'border-destructive')}
+                                            />
                                         )}
                                     />
                                     {errors.travelers?.[index]?.dateOfBirth && (

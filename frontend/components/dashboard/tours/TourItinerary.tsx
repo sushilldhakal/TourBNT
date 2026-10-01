@@ -9,6 +9,8 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { cn } from '@/lib/utils';
 import {
     Dialog,
     DialogContent,
@@ -33,6 +35,8 @@ export function TourItinerary() {
     const [outlineContent, setOutlineContent] = React.useState<any>(null);
     const [isInitialized, setIsInitialized] = React.useState(false);
     const [deleteIndex, setDeleteIndex] = React.useState<number | null>(null);
+    const [openDays, setOpenDays] = React.useState<string[]>([]);
+    const [openNewest, setOpenNewest] = React.useState(false);
 
     // Watch itinerary structure
     const itinerary = watch('itinerary') || {};
@@ -58,6 +62,13 @@ export function TourItinerary() {
             }
         }
     }, [itinerary.outline, isInitialized]);
+
+    React.useEffect(() => {
+        if (!openNewest || fields.length === 0) return;
+        const newestId = fields[fields.length - 1].id;
+        setOpenDays((current) => (current.includes(newestId) ? current : [...current, newestId]));
+        setOpenNewest(false);
+    }, [fields, openNewest]);
 
     // Handle outline content change
     const handleOutlineChange = (content: any) => {
@@ -93,7 +104,9 @@ export function TourItinerary() {
 
     const handleDeleteConfirm = () => {
         if (deleteIndex !== null) {
+            const removedId = fields[deleteIndex]?.id;
             remove(deleteIndex);
+            if (removedId) setOpenDays((current) => current.filter((id) => id !== removedId));
             setDeleteIndex(null);
         }
     };
@@ -137,7 +150,7 @@ export function TourItinerary() {
                 <CardHeader>
                     <CardTitle>Day-by-Day Itinerary</CardTitle>
                     <CardDescription>
-                        Add detailed itinerary items for each day of the tour
+                        Days stay collapsed so you can jump to the one you need. Drag the handle to reorder, then open a day to edit it.
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -147,10 +160,11 @@ export function TourItinerary() {
                             <p>No itinerary items yet. Add your first day to get started.</p>
                         </div>
                     ) : (
-                        <div className="space-y-4">
+                        <Accordion type="multiple" value={openDays} onValueChange={setOpenDays} className="space-y-2">
                             {fields.map((field, index) => (
                                 <ItineraryItem
                                     key={field.id}
+                                    id={field.id}
                                     index={index}
                                     onRemove={() => handleDeleteClick(index)}
                                     onDragStart={(e) => handleDragStart(e, index)}
@@ -158,13 +172,16 @@ export function TourItinerary() {
                                     onDrop={(e) => handleDrop(e, index)}
                                 />
                             ))}
-                        </div>
+                        </Accordion>
                     )}
 
                     <Button
                         type="button"
                         variant="outline"
-                        onClick={() => append(getDefaultItineraryItem({ day: `Day ${fields.length + 1}` }))}
+                        onClick={() => {
+                            append(getDefaultItineraryItem({ day: `Day ${fields.length + 1}` }));
+                            setOpenNewest(true);
+                        }}
                         className="w-full"
                     >
                         <Plus className="h-4 w-4 mr-2" />
@@ -207,6 +224,7 @@ export function TourItinerary() {
  * Individual day item with drag-and-drop support
  */
 interface ItineraryItemProps {
+    id: string;
     index: number;
     onRemove: () => void;
     onDragStart: (e: React.DragEvent) => void;
@@ -214,34 +232,72 @@ interface ItineraryItemProps {
     onDrop: (e: React.DragEvent) => void;
 }
 
-function ItineraryItem({ index, onRemove, onDragStart, onDragOver, onDrop }: ItineraryItemProps) {
+function ItineraryItem({ id, index, onRemove, onDragStart, onDragOver, onDrop }: ItineraryItemProps) {
     const { form } = useTourContext();
-    const { register, formState: { errors } } = form;
+    const { register, watch } = form;
+    const [dragOver, setDragOver] = React.useState(false);
+    const dayLabel = watch(`itinerary.options.0.${index}.day`);
+    const title = watch(`itinerary.options.0.${index}.title`);
+    const destination = watch(`itinerary.options.0.${index}.destination`);
 
     return (
+        <AccordionItem value={id} className="border-none">
         <Card
-            draggable
-            onDragStart={onDragStart}
-            onDragOver={onDragOver}
-            onDrop={onDrop}
-            className="cursor-move hover:shadow-md transition-shadow"
+            onDragOver={(event) => {
+                onDragOver(event);
+                setDragOver(true);
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(event) => {
+                setDragOver(false);
+                onDrop(event);
+            }}
+            className={cn('overflow-hidden py-0 transition-shadow', dragOver && 'ring-2 ring-primary')}
         >
-            <CardContent className="pt-6 space-y-4">
-                <div className="flex items-start justify-between gap-4">
-                    <div className="flex items-center gap-2">
-                        <GripVertical className="h-5 w-5 text-muted-foreground" />
-                        <h4 className="font-semibold">Day {index + 1}</h4>
-                    </div>
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={onRemove}
+            <AccordionTrigger
+                className="px-3 py-3 hover:no-underline hover:bg-muted/40"
+                handle={
+                    <span
+                        draggable
+                        onDragStart={onDragStart}
+                        className="cursor-grab active:cursor-grabbing text-muted-foreground shrink-0 pl-3"
+                        aria-label={`Drag to reorder day ${index + 1}`}
                     >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
+                        <GripVertical className="h-5 w-5" />
+                    </span>
+                }
+            >
+                <div className="flex items-center gap-3 min-w-0 w-full pr-2">
+                    <div className="min-w-0 text-left">
+                        <div className="font-semibold truncate">
+                            {dayLabel || `Day ${index + 1}`}
+                            {title ? <span className="font-normal text-muted-foreground"> · {title}</span> : null}
+                        </div>
+                        {destination ? (
+                            <div className="text-xs font-normal text-muted-foreground truncate">{destination}</div>
+                        ) : null}
+                    </div>
+                    <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={(event) => {
+                            event.stopPropagation();
+                            onRemove();
+                        }}
+                        onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                                event.stopPropagation();
+                                onRemove();
+                            }
+                        }}
+                        className="ml-auto h-8 w-8 shrink-0 flex items-center justify-center rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                    >
+                        <Trash2 className="h-4 w-4" />
+                        <span className="sr-only">Delete day</span>
+                    </span>
                 </div>
-
+            </AccordionTrigger>
+            <AccordionContent className="px-4 pb-4 border-t border-border space-y-4">
                 {/* Day Label */}
                 <div className="space-y-2">
                     <Label htmlFor={`itinerary.options.0.${index}.day`}>
@@ -324,7 +380,8 @@ function ItineraryItem({ index, onRemove, onDragStart, onDragOver, onDrop }: Iti
                         />
                     </div>
                 </div>
-            </CardContent>
+            </AccordionContent>
         </Card>
+        </AccordionItem>
     );
 }

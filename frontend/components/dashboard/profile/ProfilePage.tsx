@@ -16,6 +16,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useCacheManager, useCurrentUserProfile } from '@/lib/queries';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -32,12 +33,46 @@ import type { ProfileFormData, PasswordFormData } from '@/types/app';
 import type { User as UserType } from '@/types/types';
 
 /** Shape of seller info (User.sellerInfo is Record<string, unknown>) */
+type SellerDocument = { secure_url?: string; original_filename?: string };
 type SellerInfoShape = {
     companyName?: string;
     companyRegistrationNumber?: string;
+    companyType?: string;
     registrationDate?: string;
     taxId?: string;
+    website?: string;
+    sellerType?: string;
+    businessDescription?: string;
+    contactPerson?: string;
+    phone?: string;
+    alternatePhone?: string;
+    businessAddress?: { address?: string; city?: string; state?: string; postalCode?: string; country?: string };
+    documents?: Record<string, SellerDocument[]>;
+    isApproved?: boolean;
+    rejectionReason?: string;
+    appliedAt?: string;
 };
+
+const DOCUMENT_LABELS: Record<string, string> = {
+    businessRegistration: 'Business registration',
+    taxRegistration: 'Tax registration',
+    idVerification: 'Owner ID',
+    businessLicense: 'Tourism / operating licence',
+    bankStatement: 'Bank statement',
+    businessInsurance: 'Business insurance',
+};
+
+const humanize = (v?: string) => (v ? v.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase()) : '');
+
+function InfoRow({ label, value, wide }: { label: string; value?: string | null; wide?: boolean }) {
+    if (!value) return null;
+    return (
+        <div className={wide ? 'md:col-span-2' : undefined}>
+            <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</dt>
+            <dd className="mt-1 whitespace-pre-line text-sm">{value}</dd>
+        </div>
+    );
+}
 
 const profileSchema = z.object({
     name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -436,43 +471,66 @@ export function ProfilePage() {
                             <TabsContent value="company" className="mt-0 space-y-6">
                                 <Card>
                                     <CardHeader>
-                                        <CardTitle>Company Information</CardTitle>
-                                        <CardDescription>These details cannot be modified</CardDescription>
-                                    </CardHeader>
-                                    <CardContent>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                                            <FormItem>
-                                                <FormLabel>Company Name</FormLabel>
-                                                <FormControl>
-                                                    <Input value={sellerInfo.companyName || ''} disabled className="bg-muted cursor-not-allowed" />
-                                                </FormControl>
-                                                <FormDescription>Company name cannot be changed after registration.</FormDescription>
-                                            </FormItem>
-                                            {sellerInfo.companyRegistrationNumber && (
-                                                <FormItem>
-                                                    <FormLabel>Registration Number</FormLabel>
-                                                    <FormControl>
-                                                        <Input value={sellerInfo.companyRegistrationNumber || ''} disabled className="bg-muted cursor-not-allowed" />
-                                                    </FormControl>
-                                                </FormItem>
-                                            )}
-                                            {sellerInfo.registrationDate && (
-                                                <FormItem>
-                                                    <FormLabel>Registration Date</FormLabel>
-                                                    <FormControl>
-                                                        <Input value={sellerInfo.registrationDate || ''} disabled className="bg-muted cursor-not-allowed" />
-                                                    </FormControl>
-                                                </FormItem>
-                                            )}
-                                            {sellerInfo.taxId && (
-                                                <FormItem>
-                                                    <FormLabel>Tax ID</FormLabel>
-                                                    <FormControl>
-                                                        <Input value={sellerInfo.taxId || ''} disabled className="bg-muted cursor-not-allowed" />
-                                                    </FormControl>
-                                                </FormItem>
-                                            )}
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div>
+                                                <CardTitle>Company Information</CardTitle>
+                                                <CardDescription>Submitted with your seller application. Contact an administrator to change these details.</CardDescription>
+                                            </div>
+                                            <Badge variant={sellerInfo.rejectionReason ? 'destructive' : sellerInfo.isApproved ? 'default' : 'secondary'}>
+                                                {sellerInfo.rejectionReason ? 'Rejected' : sellerInfo.isApproved ? 'Approved' : 'Pending review'}
+                                            </Badge>
                                         </div>
+                                    </CardHeader>
+                                    <CardContent className="space-y-8">
+                                        {sellerInfo.rejectionReason && (
+                                            <p className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">Reason: {sellerInfo.rejectionReason}</p>
+                                        )}
+                                        <section>
+                                            <h3 className="mb-4 text-sm font-semibold">Business</h3>
+                                            <dl className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                                                <InfoRow label="Company name" value={sellerInfo.companyName} />
+                                                <InfoRow label="Seller type" value={humanize(sellerInfo.sellerType)} />
+                                                <InfoRow label="Company type" value={humanize(sellerInfo.companyType)} />
+                                                <InfoRow label="Registration number" value={sellerInfo.companyRegistrationNumber} />
+                                                <InfoRow label="Registration date" value={sellerInfo.registrationDate} />
+                                                <InfoRow label="Tax ID" value={sellerInfo.taxId} />
+                                                <InfoRow label="Website" value={sellerInfo.website} />
+                                                <InfoRow label="Applied on" value={sellerInfo.appliedAt ? new Date(sellerInfo.appliedAt).toLocaleDateString() : undefined} />
+                                                <InfoRow label="About the business" value={sellerInfo.businessDescription} wide />
+                                            </dl>
+                                        </section>
+                                        <section>
+                                            <h3 className="mb-4 text-sm font-semibold">Contact & address</h3>
+                                            <dl className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                                                <InfoRow label="Contact person" value={sellerInfo.contactPerson} />
+                                                <InfoRow label="Phone" value={sellerInfo.phone} />
+                                                <InfoRow label="Alternate phone" value={sellerInfo.alternatePhone} />
+                                                <InfoRow
+                                                    label="Address"
+                                                    value={[sellerInfo.businessAddress?.address, [sellerInfo.businessAddress?.city, sellerInfo.businessAddress?.state, sellerInfo.businessAddress?.postalCode].filter(Boolean).join(', '), sellerInfo.businessAddress?.country].filter(Boolean).join('\n')}
+                                                />
+                                            </dl>
+                                        </section>
+                                        {Object.values(sellerInfo.documents ?? {}).some((f) => f?.length) && (
+                                            <section>
+                                                <h3 className="mb-4 text-sm font-semibold">Documents</h3>
+                                                <ul className="space-y-2">
+                                                    {Object.entries(sellerInfo.documents ?? {}).flatMap(([key, files]) =>
+                                                        (files ?? []).map((f, i) => (
+                                                            <li key={`${key}-${i}`} className="flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm">
+                                                                <span className="min-w-0">
+                                                                    <span className="font-medium">{DOCUMENT_LABELS[key] ?? humanize(key)}</span>
+                                                                    <span className="ml-2 truncate text-muted-foreground">{f.original_filename}</span>
+                                                                </span>
+                                                                {f.secure_url && (
+                                                                    <a href={f.secure_url} target="_blank" rel="noopener noreferrer" className="shrink-0 text-primary hover:underline">View</a>
+                                                                )}
+                                                            </li>
+                                                        )),
+                                                    )}
+                                                </ul>
+                                            </section>
+                                        )}
                                     </CardContent>
                                 </Card>
                             </TabsContent>

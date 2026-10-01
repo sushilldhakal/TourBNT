@@ -46,9 +46,9 @@ function StatTile({ icon: Icon, label, value }: { icon: LucideIcon; label: strin
 
 function AlertRow({ severity, label, count }: { severity: 'critical' | 'warning' | 'good'; label: string; count: number }) {
     const meta = {
-        critical: { icon: AlertCircle, className: 'text-destructive bg-destructive/5 border-destructive/20' },
-        warning: { icon: AlertTriangle, className: 'text-amber-600 bg-amber-50 border-amber-200' },
-        good: { icon: CheckCircle2, className: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
+        critical: { icon: AlertCircle, className: 'status-pill--critical' },
+        warning: { icon: AlertTriangle, className: 'status-pill--warning' },
+        good: { icon: CheckCircle2, className: 'status-pill--good' },
     }[severity];
     const Icon = meta.icon;
     return (
@@ -61,12 +61,12 @@ function AlertRow({ severity, label, count }: { severity: 'critical' | 'warning'
 }
 
 const REQUEST_STATUS_STYLE: Record<string, string> = {
-    pending: 'bg-slate-500/15 border-slate-500/30 !text-slate-700 dark:!text-slate-300',
-    held: 'bg-blue-500/15 border-blue-500/30 !text-blue-700 dark:!text-blue-300',
-    confirmed: 'bg-emerald-500/15 border-emerald-500/30 !text-emerald-700 dark:!text-emerald-300',
-    countered: 'bg-amber-500/15 border-amber-500/30 !text-amber-700 dark:!text-amber-300',
-    declined: 'bg-red-500/15 border-red-500/30 !text-red-700 dark:!text-red-300',
-    expired: 'bg-zinc-500/15 border-zinc-500/30 !text-zinc-600 dark:!text-zinc-300',
+    pending: 'status-pill status-pill--pending',
+    held: 'status-pill status-pill--held',
+    confirmed: 'status-pill status-pill--confirmed',
+    countered: 'status-pill status-pill--countered',
+    declined: 'status-pill status-pill--declined',
+    expired: 'status-pill status-pill--expired',
 };
 
 const ROLE_LABEL: Record<string, string> = { transport: 'Transport', accommodation: 'Accommodation', guide: 'Guide', meals: 'Meals', other: 'Other' };

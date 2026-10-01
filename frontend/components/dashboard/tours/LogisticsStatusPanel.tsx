@@ -1,7 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { DatePickerField } from '@/components/ui/date-picker';
+import { useEffect, useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useDebouncedValue } from '@/lib/hooks/useDebouncedValue';
 import { CheckCircle2, Clock, XCircle, Building2, RotateCcw, Send, Repeat2, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
@@ -24,12 +26,12 @@ import { queryKeys } from '@/lib/queries/queryKeys';
 import { format } from 'date-fns';
 
 const STATUS_META = {
-    confirmed: { label: 'Confirmed', icon: CheckCircle2, className: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
-    held: { label: 'Held', icon: Clock, className: 'text-sky-600 bg-sky-50 border-sky-200' },
-    pending: { label: 'Requested', icon: Clock, className: 'text-amber-600 bg-amber-50 border-amber-200' },
-    countered: { label: 'Countered', icon: Repeat2, className: 'text-violet-600 bg-violet-50 border-violet-200' },
-    declined: { label: 'Declined', icon: XCircle, className: 'text-destructive bg-destructive/5 border-destructive/20' },
-    expired: { label: 'Expired', icon: XCircle, className: 'text-muted-foreground bg-muted border-border' },
+    confirmed: { label: 'Confirmed', icon: CheckCircle2, className: 'status-pill status-pill--confirmed' },
+    held: { label: 'Held', icon: Clock, className: 'status-pill status-pill--held' },
+    pending: { label: 'Requested', icon: Clock, className: 'status-pill status-pill--pending' },
+    countered: { label: 'Countered', icon: Repeat2, className: 'status-pill status-pill--countered' },
+    declined: { label: 'Declined', icon: XCircle, className: 'status-pill status-pill--declined' },
+    expired: { label: 'Expired', icon: XCircle, className: 'status-pill status-pill--expired' },
 } as const;
 
 const ROLE_LABEL: Record<string, string> = {
@@ -53,69 +55,87 @@ function requirementLabel(row: TourItineraryRequestStatus): string {
     return [ROLE_LABEL[row.role] || row.role, qty].filter(Boolean).join(' · ');
 }
 
-/** Small inline search reused for "Replace supplier" instead of the full BusinessPartnerPicker (which is react-hook-form-bound to the itinerary JSONB, not usable standalone here). */
-function ReplaceSupplierPopover({ row, onReplace }: { row: TourItineraryRequestStatus; onReplace: (partner: BusinessPartner) => void }) {
+/** One request per role (all matching business types at once). Shared by the popover and the prefetch below. */
+const supplierCandidatesQuery = (role: string, destinationId: string | undefined, q: string, excludeId?: string | null) => ({
+    queryKey: ['replace-supplier-candidates', role, destinationId ?? 'all', q] as const,
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+        const res = await searchBusinessPartners({ type: ROLE_TO_TYPES[role] || [], destinationId, q: q || undefined, limit: 50 });
+        return [...res.data].sort((a, b) => (b.averageRating ?? 0) - (a.averageRating ?? 0));
+    },
+    select: (list: BusinessPartner[]) => list.filter((p) => p.id !== excludeId),
+});
+
+/**
+ * "Replace supplier": opens straight onto a list of the matching business type
+ * (travel companies for transport, hotels/guesthouses for stays, restaurants for
+ * meals, guides for guiding) — in the tour's own area by default, with a switch
+ * to widen to every area and a search box to narrow it down.
+ */
+function ReplaceSupplierPopover({ row, tourDestinationId, onReplace }: { row: TourItineraryRequestStatus; tourDestinationId?: string; onReplace: (partner: BusinessPartner) => void }) {
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
-    const [results, setResults] = useState<BusinessPartner[]>([]);
-    const [loading, setLoading] = useState(false);
+    const [areaOnly, setAreaOnly] = useState(!!tourDestinationId);
+    const q = useDebouncedValue(query.trim());
+    const queryClient = useQueryClient();
+    const destinationId = areaOnly ? tourDestinationId : undefined;
 
-    const handleQueryChange = async (value: string) => {
-        setQuery(value);
-        if (value.trim().length < 2) {
-            setResults([]);
-            return;
-        }
-        setLoading(true);
-        try {
-            const types = ROLE_TO_TYPES[row.role] || [];
-            const responses = await Promise.all(types.map((type) => searchBusinessPartners({ type, q: value, limit: 5 })));
-            setResults(responses.flatMap((r) => r.data));
-        } catch {
-            setResults([]);
-        } finally {
-            setLoading(false);
-        }
-    };
+    const { data: results = [], isFetching } = useQuery({ ...supplierCandidatesQuery(row.role, destinationId, q, row.businessPartnerId), enabled: open });
+
+    const noun = row.role === 'transport' ? 'travel companies' : row.role === 'accommodation' ? 'hotels & guesthouses' : row.role === 'meals' ? 'restaurants' : row.role === 'guide' ? 'guides' : 'suppliers';
 
     return (
         <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-1.5">
+                <Button type="button" variant="outline" size="sm" className="gap-1.5" onPointerEnter={() => queryClient.prefetchQuery(supplierCandidatesQuery(row.role, destinationId, '', row.businessPartnerId))}>
                     <Repeat2 className="h-3.5 w-3.5" /> Replace
                 </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-72 p-2" align="end">
-                <Input
-                    autoFocus
-                    placeholder="Search a replacement..."
-                    value={query}
-                    onChange={(e) => handleQueryChange(e.target.value)}
-                    className="h-8 mb-2"
-                />
-                {loading && <p className="text-xs text-muted-foreground px-1">Searching...</p>}
-                {!loading && results.length === 0 && query.trim().length >= 2 && (
-                    <p className="text-xs text-muted-foreground px-1">No matches.</p>
-                )}
-                <div className="max-h-48 overflow-auto space-y-0.5">
-                    {results.map((r) => (
-                        <button
-                            key={r.id}
-                            type="button"
-                            className="w-full text-left px-2 py-1.5 text-sm rounded hover:bg-accent flex items-center justify-between"
-                            onClick={() => { onReplace(r); setOpen(false); setQuery(''); setResults([]); }}
-                        >
-                            <span>{r.name}</span>
-                            <span className="text-xs text-muted-foreground capitalize">{r.type}</span>
-                        </button>
-                    ))}
+            <PopoverContent className="w-96 p-3 space-y-2" align="end">
+                <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium capitalize">Choose a replacement</p>
+                    {tourDestinationId && (
+                        <div className="inline-flex rounded-md border p-0.5 text-xs">
+                            <button type="button" className={`px-2 py-0.5 rounded ${areaOnly ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`} onClick={() => setAreaOnly(true)}>Tour area</button>
+                            <button type="button" className={`px-2 py-0.5 rounded ${!areaOnly ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`} onClick={() => setAreaOnly(false)}>All areas</button>
+                        </div>
+                    )}
                 </div>
+                <Input autoFocus placeholder={`Search ${noun}…`} value={query} onChange={(e) => setQuery(e.target.value)} className="h-8" />
+                <div className="max-h-64 overflow-auto rounded-md border divide-y">
+                    {isFetching && results.length === 0 ? (
+                        <p className="p-3 text-xs text-muted-foreground">Loading {noun}…</p>
+                    ) : results.length === 0 ? (
+                        <p className="p-3 text-xs text-muted-foreground">
+                            No {noun} {q ? `match “${q}”` : 'listed'}{areaOnly ? ' in this tour\'s area' : ''}.
+                            {areaOnly && <> <button type="button" className="underline" onClick={() => setAreaOnly(false)}>Show all areas</button></>}
+                        </p>
+                    ) : (
+                        results.map((r) => (
+                            <button
+                                key={r.id}
+                                type="button"
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-accent flex items-center justify-between gap-3"
+                                onClick={() => { onReplace(r); setOpen(false); setQuery(''); }}
+                            >
+                                <span className="min-w-0">
+                                    <span className="block font-medium truncate">{r.name}</span>
+                                    <span className="block text-xs text-muted-foreground capitalize truncate">{[r.type, r.address?.city].filter(Boolean).join(' · ')}</span>
+                                </span>
+                                {r.reviewCount > 0 || r.averageRating > 0 ? (
+                                    <span className="text-xs text-muted-foreground shrink-0">★ {(r.averageRating ?? 0).toFixed(1)}</span>
+                                ) : null}
+                            </button>
+                        ))
+                    )}
+                </div>
+                <p className="text-[11px] text-muted-foreground">{results.length} {noun}{areaOnly ? ' in this tour\'s area' : ''}</p>
             </PopoverContent>
         </Popover>
     );
 }
 
-function RequestRow({ tourId, row }: { tourId: string; row: TourItineraryRequestStatus }) {
+function RequestRow({ tourId, row, tourDestinationId }: { tourId: string; row: TourItineraryRequestStatus; tourDestinationId?: string }) {
     const queryClient = useQueryClient();
     const [sendDate, setSendDate] = useState('');
     const [historyOpen, setHistoryOpen] = useState(false);
@@ -165,7 +185,7 @@ function RequestRow({ tourId, row }: { tourId: string; row: TourItineraryRequest
                         </Badge>
                     )}
                     {row.events.length > 0 && (
-                        <Button variant="ghost" size="sm" className="h-7 px-1.5" onClick={() => setHistoryOpen((v) => !v)}>
+                        <Button type="button" variant="ghost" size="sm" className="h-7 px-1.5" onClick={() => setHistoryOpen((v) => !v)}>
                             {historyOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
                         </Button>
                     )}
@@ -174,11 +194,11 @@ function RequestRow({ tourId, row }: { tourId: string; row: TourItineraryRequest
 
             {row.status === null && (
                 <div className="flex items-center gap-2">
-                    <Input type="date" className="h-8 w-40" value={sendDate} onChange={(e) => setSendDate(e.target.value)} />
-                    <Button size="sm" disabled={!sendDate || sendMutation.isPending} onClick={() => sendMutation.mutate()} className="gap-1.5">
+                    <DatePickerField className="h-8 w-44" min={new Date()} value={sendDate} onChange={setSendDate} />
+                    <Button type="button" size="sm" disabled={!sendDate || sendMutation.isPending} onClick={() => sendMutation.mutate()} className="gap-1.5">
                         <Send className="h-3.5 w-3.5" /> Send request
                     </Button>
-                    <ReplaceSupplierPopover row={row} onReplace={(p) => replaceMutation.mutate(p)} />
+                    <ReplaceSupplierPopover row={row} tourDestinationId={tourDestinationId} onReplace={(p) => replaceMutation.mutate(p)} />
                 </div>
             )}
 
@@ -192,24 +212,24 @@ function RequestRow({ tourId, row }: { tourId: string; row: TourItineraryRequest
                         {row.counterNotes && ` — "${row.counterNotes}"`}
                     </p>
                     <div className="flex gap-2">
-                        <Button size="sm" disabled={counterMutation.isPending} onClick={() => counterMutation.mutate(true)}>Accept</Button>
-                        <Button size="sm" variant="outline" disabled={counterMutation.isPending} onClick={() => counterMutation.mutate(false)}>Decline</Button>
+                        <Button type="button" size="sm" disabled={counterMutation.isPending} onClick={() => counterMutation.mutate(true)}>Accept</Button>
+                        <Button type="button" size="sm" variant="outline" disabled={counterMutation.isPending} onClick={() => counterMutation.mutate(false)}>Decline</Button>
                     </div>
                 </div>
             )}
 
             {(row.status === 'declined' || row.status === 'expired') && (
                 <div className="flex items-center gap-2">
-                    <Button size="sm" variant="outline" disabled={reopenMutation.isPending} onClick={() => reopenMutation.mutate()} className="gap-1.5">
+                    <Button type="button" size="sm" variant="outline" disabled={reopenMutation.isPending} onClick={() => reopenMutation.mutate()} className="gap-1.5">
                         <RotateCcw className="h-3.5 w-3.5" /> Reopen
                     </Button>
-                    <ReplaceSupplierPopover row={row} onReplace={(p) => replaceMutation.mutate(p)} />
+                    <ReplaceSupplierPopover row={row} tourDestinationId={tourDestinationId} onReplace={(p) => replaceMutation.mutate(p)} />
                 </div>
             )}
 
             {(row.status === 'pending' || row.status === 'held' || row.status === 'confirmed') && (
                 <div className="flex items-center gap-2">
-                    <ReplaceSupplierPopover row={row} onReplace={(p) => replaceMutation.mutate(p)} />
+                    <ReplaceSupplierPopover row={row} tourDestinationId={tourDestinationId} onReplace={(p) => replaceMutation.mutate(p)} />
                 </div>
             )}
 
@@ -289,8 +309,24 @@ function DateVerdict({ rows }: { rows: TourItineraryRequestStatus[] }) {
  * it shows "Confirmed" — see BookingService.checkAvailabilityForTour.
  */
 export function LogisticsStatusPanel() {
-    const { tourId } = useTourContext();
+    const { tourId, form } = useTourContext();
+    // The tour's destination is the "area" suppliers are suggested from.
+    const rawDestination = form.watch('destination') as unknown;
+    const tourDestinationId = typeof rawDestination === 'string' && rawDestination
+        ? rawDestination
+        : (rawDestination as { id?: string; _id?: string } | null | undefined)?.id ?? (rawDestination as { _id?: string } | null | undefined)?._id;
     const { data: requests, isLoading } = useTourLogisticsStatus(tourId, !!tourId);
+
+    // Warm the "Replace" lists (one request per role present, in the tour's area) as soon as the
+    // panel has loaded, so opening the dropdown later is instant instead of a fresh round trip.
+    const queryClient = useQueryClient();
+    const rolesKey = useMemo(() => [...new Set((requests ?? []).map((r) => r.role))].sort().join(','), [requests]);
+    useEffect(() => {
+        if (!rolesKey) return;
+        rolesKey.split(',').forEach((role) => {
+            if (ROLE_TO_TYPES[role] && role !== 'other') queryClient.prefetchQuery(supplierCandidatesQuery(role, tourDestinationId, '', null));
+        });
+    }, [rolesKey, tourDestinationId, queryClient]);
 
     const { dated, undated } = useMemo(() => {
         const dated = new Map<string, TourItineraryRequestStatus[]>();
@@ -330,7 +366,7 @@ export function LogisticsStatusPanel() {
                         <p className="text-sm font-medium text-muted-foreground">Not yet requested</p>
                         <div className="space-y-1.5">
                             {undated.map((r) => (
-                                <RequestRow key={r.tourItineraryPartnerId} tourId={tourId} row={r} />
+                                <RequestRow key={r.tourItineraryPartnerId} tourId={tourId} row={r} tourDestinationId={tourDestinationId} />
                             ))}
                         </div>
                     </div>
@@ -341,7 +377,7 @@ export function LogisticsStatusPanel() {
                         <DateVerdict rows={rows} />
                         <div className="space-y-1.5">
                             {rows.map((r) => (
-                                <RequestRow key={r.id} tourId={tourId} row={r} />
+                                <RequestRow key={r.id} tourId={tourId} row={r} tourDestinationId={tourDestinationId} />
                             ))}
                         </div>
                     </div>

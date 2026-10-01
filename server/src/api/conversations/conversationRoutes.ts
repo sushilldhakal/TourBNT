@@ -8,7 +8,9 @@ import {
   listConversations,
   getConversation,
   getConversationMessages,
+  getConversationPeople,
   sendConversationMessage,
+  markConversationRead,
   assignConversation,
   addConversationParticipants,
   archiveConversation,
@@ -29,8 +31,10 @@ conversationRouter.post('/group', authorizeRoles('admin'), createGroup);
 
 conversationRouter.get('/', listConversations);
 conversationRouter.get('/:id', getConversation);
+conversationRouter.get('/:id/people', getConversationPeople);
 conversationRouter.get('/:id/messages', getConversationMessages);
 conversationRouter.post('/:id/messages', sendConversationMessage);
+conversationRouter.post('/:id/read', markConversationRead);
 conversationRouter.patch('/:id/assign', authorizeRoles('admin'), assignConversation);
 // Only admin can ever add someone to a conversation, whether that's the
 // primary assignee above or an additional participant here.

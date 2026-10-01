@@ -1,4 +1,4 @@
-import { api, handleApiError, extractResponseData } from './apiClient';
+import { api, handleApiError, extractResponseData, extractList } from './apiClient';
 
 export type UnitBlockChannel = 'direct' | 'private' | 'other' | 'maintenance';
 
@@ -38,7 +38,7 @@ export interface BusinessPartnerUnitTypeBlock {
 export const getUnitTypes = async (businessPartnerId: string) => {
     try {
         const response = await api.get(`/business-partners/${businessPartnerId}/unit-types`);
-        return extractResponseData<BusinessPartnerUnitType[]>(response);
+        return extractList<BusinessPartnerUnitType>(response);
     } catch (error) {
         throw handleApiError(error, 'fetching unit types');
     }
@@ -74,7 +74,7 @@ export const deleteUnitType = async (businessPartnerId: string, unitTypeId: stri
 export const getUnitTypeInventory = async (businessPartnerId: string, unitTypeId: string, from: string, to: string) => {
     try {
         const response = await api.get(`/business-partners/${businessPartnerId}/unit-types/${unitTypeId}/inventory`, { params: { from, to } });
-        return extractResponseData<UnitTypeInventoryDay[]>(response);
+        return extractList<UnitTypeInventoryDay>(response);
     } catch (error) {
         throw handleApiError(error, 'fetching unit type inventory');
     }
@@ -92,7 +92,7 @@ export const setUnitTypeBlock = async (businessPartnerId: string, unitTypeId: st
 export const getUnitTypeBlocks = async (businessPartnerId: string, unitTypeId: string, date?: string) => {
     try {
         const response = await api.get(`/business-partners/${businessPartnerId}/unit-types/${unitTypeId}/blocks`, { params: { date } });
-        return extractResponseData<BusinessPartnerUnitTypeBlock[]>(response);
+        return extractList<BusinessPartnerUnitTypeBlock>(response);
     } catch (error) {
         throw handleApiError(error, 'fetching unit type blocks');
     }

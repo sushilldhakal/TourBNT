@@ -857,25 +857,26 @@ export const getUserDestinations = async (req: Request, res: Response) => {
       return res.status(401).json({ success: false, message: 'Authentication required' });
     }
 
-    const [user] = await db.select().from(users).where(eq(users.id, sellerId)).limit(1);
-    if (!user) {
+    // Two independent queries issued together: one network round trip to the
+    // (remote) database instead of three in sequence. No approvalStatus filter —
+    // this is "destinations this seller is associated with", including pending
+    // and rejected ones, so a rejection stays visible and can be resubmitted.
+    const [[userRow], globalRows] = await Promise.all([
+      db.select({ list: sql<SellerInfo['destination']>`${users.sellerInfo}->'destination'` }).from(users).where(eq(users.id, sellerId)).limit(1),
+      db.select().from(globalDestinations).where(sql`${globalDestinations.id} IN (
+        SELECT e->>'destinationId' FROM users u, jsonb_array_elements(COALESCE(u.seller_info->'destination', '[]'::jsonb)) e WHERE u.id = ${sellerId}
+      )`),
+    ]);
+    if (!userRow) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
-    const sellerInfo = user.sellerInfo as SellerInfo | null;
 
-    const destinationList = sellerInfo?.destination || [];
+    // Stored list can contain duplicates from older racing add-requests; show each once.
+    const destinationList = ((userRow.list as NonNullable<SellerInfo['destination']> | null) || []).filter((d, i, arr) => arr.findIndex((x) => x.destinationId === d.destinationId) === i);
     if (destinationList.length === 0) {
       return res.json({ success: true, data: [], count: 0, message: 'User destinations retrieved successfully' });
     }
 
-    const ids = destinationList.map((d) => d.destinationId);
-    // No approvalStatus filter — this is "destinations this seller is
-    // associated with", including pending and rejected ones, so a
-    // rejection stays visible with its reason and can be edited/
-    // resubmitted (see updateDestination). Filtering them out made a
-    // rejected (or even still-pending) destination vanish from the
-    // seller's own list with no way back to it.
-    const globalRows = await db.select().from(globalDestinations).where(inArray(globalDestinations.id, ids));
     const byId = new Map(globalRows.map((d) => [d.id, d]));
 
     const userDestinations = destinationList

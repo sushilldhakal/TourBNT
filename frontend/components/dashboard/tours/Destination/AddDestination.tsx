@@ -11,70 +11,30 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/use-toast";
 import { Save, Trash2, X, FolderPlus } from "lucide-react";
-import { useUserDestinations, useAllDestinationsForSelect, useCacheManager } from '@/lib/queries';
-import { addDestination, addExistingDestinationToSeller } from '@/lib/api/destinations';
+import { useAuth } from '@/lib/hooks/useAuth';
+import { useCacheManager } from '@/lib/queries';
+import { addDestination, getAvailableDestinationsPage, bulkAddDestinations } from '@/lib/api/destinations';
+import { ExistingItemsPicker } from '@/components/dashboard/shared/ExistingItemsPicker';
 import { DestinationTypes, TourTitle } from "@/types/types";
 import type { DestinationFormData } from "@/types/destination";
 import { Gallery } from "@/components/dashboard/gallery/Gallery";
 import type { JSONContent } from "novel";
 
 const NovelEditor = dynamic(() => import("@/components/dashboard/editor/NovelEditor"), { ssr: false });
-import { MultiSelect } from "@/components/ui/MultiSelect";
 import { PlaceResult } from "@/lib/hooks/useGooglePlacesAutocomplete";
 import { GooglePlacesInput } from "@/components/GooglePlacesInput";
 import Image from "next/image";
 
-// Helper component to render image as icon in MultiSelect
-// Note: MultiSelect applies h-4 w-4 className, so we use inline styles to override
-const OptionImageIcon = ({ imageUrl, alt }: { imageUrl?: string; alt?: string }) => {
-    if (!imageUrl) return null;
-    return (
-        <div
-            className="relative rounded-md overflow-hidden flex-shrink-0"
-            style={{
-                marginRight: '12px',
-                height: '48px',
-                width: '48px',
-            }}
-        >
-            <Image
-                src={imageUrl}
-                alt={alt || "Option"}
-                fill
-                className="object-cover"
-                sizes="48px"
-            />
-        </div>
-    );
-};
 
 interface AddDestinationProps {
     onDestinationAdded: (created?: unknown) => void;
 }
 
 const AddDestination = ({ onDestinationAdded }: AddDestinationProps) => {
+    // Admins manage the global list directly; "add existing" is for sellers building their own list.
+    const isAdmin = useAuth().userRole === 'admin';
     const { invalidateDestinations } = useCacheManager();
-    const [selectedDestinations, setSelectedDestinations] = useState<string[]>([]);
-    const [addingDestinationId, setAddingDestinationId] = useState<string | null>(null);
     const [showManualEntry, setShowManualEntry] = useState(false);
-
-    const { data: allDestinations = [], isLoading: isLoadingAll } = useAllDestinationsForSelect();
-    const { data: userDestinations } = useUserDestinations();
-
-    const allDestinationsArray = Array.isArray(allDestinations) ? allDestinations : [];
-
-    // useUserDestinations returns array directly
-    const userDestinationsArray = Array.isArray(userDestinations) ? userDestinations : [];
-
-    // Filter out destinations that user already has
-    // Normalize IDs to handle both _id and id fields
-    const availableDestinations = allDestinationsArray.filter((destination: DestinationTypes) => {
-        const destId = (destination as any)._id || (destination as any).id;
-        return !userDestinationsArray.some((userDest: DestinationTypes) => {
-            const userDestId = (userDest as any)._id || (userDest as any).id;
-            return userDestId === destId;
-        });
-    });
 
     const [dialogOpen, setDialogOpen] = useState(false);
     const [descriptionContent, setDescriptionContent] = useState<JSONContent>({
@@ -132,28 +92,6 @@ const AddDestination = ({ onDestinationAdded }: AddDestinationProps) => {
         }
     }, [form]);
 
-    // Mutation for adding existing destination to seller's list
-    const addExistingDestinationMutation = useMutation({
-        mutationFn: (destinationId: string) => addExistingDestinationToSeller(destinationId),
-        onSuccess: (_data, destinationId) => {
-            toast({
-                title: "Destination added to your list",
-                description: "The existing destination has been added to your destinations.",
-            });
-            setAddingDestinationId(null);
-            invalidateDestinations({ my: true, admin: true, approved: true });
-            onDestinationAdded({ id: destinationId });
-        },
-        onError: () => {
-            toast({
-                title: "Failed to add destination",
-                description: "There was an error adding the existing destination.",
-                variant: "destructive",
-            });
-            setAddingDestinationId(null);
-        }
-    });
-
     // Handle form submission
     const onSubmit = async (values: DestinationFormData) => {
         const formData = new FormData();
@@ -201,90 +139,31 @@ const AddDestination = ({ onDestinationAdded }: AddDestinationProps) => {
                     </CardHeader>
 
                     <CardContent className="grid gap-6">
-                        {/* Search existing destinations */}
-                        <div className="space-y-3">
-                            <div className="flex items-center gap-2">
-                                <FolderPlus className="h-5 w-5 text-primary" />
-                                <div>
-                                    <h3 className="text-sm font-medium">Add Existing Destinations</h3>
-                                    <p className="text-xs text-muted-foreground">
-                                        Search and select existing destinations to add to your list instead of creating duplicates.
-                                    </p>
-                                </div>
-                            </div>
-                            <MultiSelect
-                                popoverClassName="w-full min-w-[400px]"
-                                matchTriggerWidth={true}
-                                options={availableDestinations.map((dest: DestinationTypes) => {
-                                    // Normalize ID - handle both _id and id fields
-                                    const destId = (dest as any)._id || (dest as any).id;
-                                    if (!destId) {
-                                        console.warn('Destination missing ID:', dest);
-                                    }
-                                    const location = [dest.city, dest.region, dest.country].filter(Boolean).join(", ");
-                                    const locationCode = [dest.city, dest.country]
-                                        .filter((s): s is string => Boolean(s))
-                                        .map((s: string) => s.substring(0, 3).toUpperCase())
-                                        .join("-");
-                                    return {
-                                        value: destId || '',
-                                        label: `${dest.name}${location ? ` • ${location}` : ''}${locationCode ? ` (${locationCode})` : ''}`,
-                                        icon: () => <OptionImageIcon imageUrl={dest.coverImage} alt={dest.name} />,
-                                        style: {
-                                            badgeColor: "hsl(var(--primary))",
-                                        },
-                                    };
-                                }).filter(opt => opt.value)} // Filter out options without valid IDs
-                                defaultValue={selectedDestinations}
-                                onValueChange={async (selected) => {
-                                    // Find newly added destinations (difference between new and old selection)
-                                    const newlyAdded = selected.filter(id => !selectedDestinations.includes(id));
-
-                                    if (newlyAdded.length > 0) {
-                                        // Optimistically update selection
-                                        setSelectedDestinations(selected);
-
-                                        for (const destId of newlyAdded) {
-                                            // Validate destinationId before making the API call
-                                            if (!destId || destId === 'undefined' || destId === 'null') {
-                                                console.error('Invalid destination ID:', destId);
-                                                toast({
-                                                    title: "Invalid destination",
-                                                    description: "The selected destination has an invalid ID. Please try again.",
-                                                    variant: "destructive",
-                                                });
-                                                // Revert this id on error
-                                                setSelectedDestinations(prev => prev.filter(id => id !== destId));
-                                                continue;
-                                            }
-
-                                            try {
-                                                await addExistingDestinationMutation.mutateAsync(destId);
-                                            } catch (error) {
-                                                // Revert this id on error
-                                                setSelectedDestinations(prev => prev.filter(id => id !== destId));
-                                                toast({
-                                                    title: "Failed to add destination",
-                                                    description: "Could not add destination. Please try again.",
-                                                    variant: "destructive",
-                                                });
-                                                break;
-                                            }
-                                        }
-                                    } else {
-                                        // Simple removal / reorder case
-                                        setSelectedDestinations(selected);
-                                    }
-                                }}
-                                placeholder={isLoadingAll ? "Loading destinations..." : "Search and select existing destinations..."}
-                                emptyIndicator={isLoadingAll ? "Loading destinations..." : "No destinations found"}
-                                disabled={isLoadingAll}
-                                className="w-full"
-                            />
-                            <div className="mt-3 text-xs text-chart-4 bg-chart-4/10 p-2 rounded border border-chart-4/30">
-                                Selected destinations will be added to your list automatically
-                            </div>
-                        </div>
+                        {/* Add existing destinations — search, tick or select all, add in ONE request */}
+                        {!isAdmin && (
+<ExistingItemsPicker
+                            noun="destination"
+                            nounPlural="destinations"
+                            queryKey="destinations"
+                            fetchPage={async (params) => {
+                                const page = await getAvailableDestinationsPage(params);
+                                return {
+                                    ...page,
+                                    items: page.items.map((d: any) => ({
+                                        id: d.id ?? d._id,
+                                        title: d.name,
+                                        subtitle: [d.city, d.region, d.country].filter(Boolean).join(', '),
+                                        imageUrl: d.coverImage,
+                                    })),
+                                };
+                            }}
+                            bulkAdd={bulkAddDestinations}
+                            onAdded={({ added, ids }) => {
+                                invalidateDestinations({ my: true, admin: true, approved: true });
+                                if (added > 0) onDestinationAdded(ids && ids.length === 1 ? { id: ids[0] } : undefined);
+                            }}
+                        />
+)}
 
                         {/* Split layout */}
                         <div className="grid md:grid-cols-3 gap-6">

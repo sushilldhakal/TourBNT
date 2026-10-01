@@ -6,13 +6,13 @@ import { formatDate } from '@/lib/tourUtils';
 import type { BookingTimelineDay, BookingTimelinePartnerStatus } from '@/lib/api/bookings';
 
 const STATUS_META: Record<BookingTimelinePartnerStatus, { label: string; icon: typeof CheckCircle2; className: string }> = {
-    confirmed: { label: 'Confirmed', icon: CheckCircle2, className: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
-    held: { label: 'Held', icon: Clock, className: 'text-sky-600 bg-sky-50 border-sky-200' },
-    pending: { label: 'Requested', icon: Clock, className: 'text-amber-600 bg-amber-50 border-amber-200' },
-    countered: { label: 'Countered', icon: Repeat2, className: 'text-violet-600 bg-violet-50 border-violet-200' },
-    declined: { label: 'Declined', icon: XCircle, className: 'text-destructive bg-destructive/5 border-destructive/20' },
-    expired: { label: 'Expired', icon: XCircle, className: 'text-muted-foreground bg-muted border-border' },
-    unscheduled: { label: 'Not yet arranged', icon: HelpCircle, className: 'text-muted-foreground bg-muted border-border' },
+    confirmed: { label: 'Confirmed', icon: CheckCircle2, className: 'status-pill status-pill--confirmed' },
+    held: { label: 'Held', icon: Clock, className: 'status-pill status-pill--held' },
+    pending: { label: 'Requested', icon: Clock, className: 'status-pill status-pill--pending' },
+    countered: { label: 'Countered', icon: Repeat2, className: 'status-pill status-pill--countered' },
+    declined: { label: 'Declined', icon: XCircle, className: 'status-pill status-pill--declined' },
+    expired: { label: 'Expired', icon: XCircle, className: 'status-pill status-pill--expired' },
+    unscheduled: { label: 'Not yet arranged', icon: HelpCircle, className: 'status-pill status-pill--expired' },
 };
 
 const ROLE_LABEL: Record<string, string> = {

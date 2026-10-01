@@ -72,9 +72,9 @@ export const getBusinessPartnerBySlug = async (slug: string) => {
     }
 };
 
-export const searchBusinessPartners = async (params: { type?: BusinessPartnerType; destinationId?: string; q?: string; categoryId?: string; page?: number; limit?: number }) => {
+export const searchBusinessPartners = async (params: { type?: BusinessPartnerType | BusinessPartnerType[]; destinationId?: string; q?: string; categoryId?: string; page?: number; limit?: number }) => {
     try {
-        const response = await api.get('/business-partners', { params });
+        const response = await api.get('/business-partners', { params: { ...params, type: Array.isArray(params.type) ? params.type.join(',') : params.type } });
         // Backend uses sendPaginatedResponse, which puts the array under
         // `.items`, not `.data` — normalize to `.data` here for callers.
         const body = response.data as { success: boolean; items: BusinessPartner[]; pagination: { page: number; limit: number; totalItems: number; totalPages: number } };

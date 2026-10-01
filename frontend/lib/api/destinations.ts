@@ -308,3 +308,25 @@ export const getUserToursTitle = async (userId: string) => {
         throw handleApiError(error, 'fetching tour titles');
     }
 };
+
+
+/** Approved destinations the seller doesn't have yet — server-side search + paging. */
+export const getAvailableDestinationsPage = async (params: { search?: string; page: number; limit: number }) => {
+    try {
+        const response = await api.get('/global/destinations/available', { params });
+        const body = response.data as { data?: any[]; pagination?: { totalItems: number; totalPages: number } };
+        return { items: body.data ?? [], totalItems: body.pagination?.totalItems ?? 0, totalPages: body.pagination?.totalPages ?? 1 };
+    } catch (error) {
+        throw handleApiError(error, 'fetching available destinations');
+    }
+};
+
+/** Add many (or ALL matching) to the seller's list in a single request. */
+export const bulkAddDestinations = async (payload: { ids?: string[]; all?: boolean; search?: string }) => {
+    try {
+        const response = await api.post('/global/destinations/bulk-add', payload);
+        return response.data.data as { added: number; alreadyHad: number; total: number };
+    } catch (error) {
+        throw handleApiError(error, 'adding destinations to list');
+    }
+};

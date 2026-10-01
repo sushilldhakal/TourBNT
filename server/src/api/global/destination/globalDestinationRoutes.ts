@@ -1,4 +1,5 @@
 import express from 'express';
+import { makeGetAvailable, makeBulkAdd } from '../bulkAdd';
 import {
   getApprovedDestinations,
   getDestinationById,
@@ -311,6 +312,8 @@ router.get('/seller/search', searchDestinations as any);
 router.get('/seller/enabled', getEnabledDestinations as any);
 router.get('/seller/favorites', getFavoriteDestinations as any);
 router.get('/user-destinations', getUserDestinations as any); // New route for user-specific destinations
+router.get('/available', makeGetAvailable('destination') as any);
+router.post('/bulk-add', makeBulkAdd('destination') as any);
 
 /**
  * @swagger

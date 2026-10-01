@@ -195,7 +195,11 @@ export const searchBusinessPartners = async (req: Request, res: Response, next: 
     const pageLimit = typeof limit === 'number' ? limit : 10;
 
     const conditions = [eq(businessPartners.approvalStatus, 'approved'), eq(businessPartners.isActive, true)];
-    if (type && VALID_TYPES.includes(type as BusinessPartnerType)) conditions.push(eq(businessPartners.type, type as BusinessPartnerType));
+    // `type` may be a comma-separated list ("hotel,guesthouse") so a caller can fetch every
+    // type for a role in a single request instead of one per type.
+    const types = type ? type.split(',').map((t) => t.trim()).filter((t): t is BusinessPartnerType => VALID_TYPES.includes(t as BusinessPartnerType)) : [];
+    if (types.length === 1) conditions.push(eq(businessPartners.type, types[0]));
+    else if (types.length > 1) conditions.push(inArray(businessPartners.type, types));
     if (destinationId) conditions.push(eq(businessPartners.destinationId, destinationId));
     if (q) conditions.push(ilike(businessPartners.name, `%${q}%`));
     if (categoryId) {
