@@ -54,15 +54,15 @@ async function validateUserIds(userIds: string[]): Promise<string[]> {
  * fetched in bulk) instead of three queries per row, and works out who each conversation is
  * "with" from the viewer's point of view — `contactName`.
  */
-async function populateConversations(rows: Array<typeof conversations.$inferSelect>, requester: RequesterUser) {
-  if (rows.length === 0) return [];
-  const convIds = rows.map((r) => r.id);
-  const userIds = [...new Set(rows.flatMap((r) => [r.fromUserId, r.assignedTo]).filter((id): id is string => !!id))];
-  const tourIds = [...new Set(rows.map((r) => r.tourId).filter((id): id is string => !!id))];
-
-  const [userRows, tourRows, participantRows, unreadRows, lastRows, myMemberships] = await Promise.all([
-    userIds.length ? db.select({ ...userSummary, role: users.role }).from(users).where(inArray(users.id, userIds)) : [],
-    tourIds.length ? db.select(tourSummary).from(tours).where(inArray(tours.id, tourIds)) : [],
+/**
+ * Everything a conversation row needs (people, tour, participants, unread count, last message,
+ * membership). `convIds` may be a plain id list OR a sub-select of the page's ids, so list() can run
+ * this in the same round trip as the page query itself.
+ */
+function loadConversationRelations(convIds: string[] | any, requester: RequesterUser) {
+  return Promise.all([
+    db.select({ ...userSummary, role: users.role }).from(users).where(inArray(users.id, db.select({ id: sql<string>`unnest(array[${conversations.fromUserId}, ${conversations.assignedTo}])` }).from(conversations).where(inArray(conversations.id, convIds)))),
+    db.select(tourSummary).from(tours).where(inArray(tours.id, db.select({ id: conversations.tourId }).from(conversations).where(inArray(conversations.id, convIds)))),
     db
       .select({ conversationId: conversationParticipants.conversationId, id: users.id, name: users.name, role: users.role })
       .from(conversationParticipants)
@@ -89,6 +89,15 @@ async function populateConversations(rows: Array<typeof conversations.$inferSele
       .from(conversationParticipants)
       .where(and(eq(conversationParticipants.userId, requester.id), inArray(conversationParticipants.conversationId, convIds))),
   ]);
+}
+
+async function populateConversations(
+  rows: Array<typeof conversations.$inferSelect>,
+  requester: RequesterUser,
+  relations?: Awaited<ReturnType<typeof loadConversationRelations>>,
+) {
+  if (rows.length === 0) return [];
+  const [userRows, tourRows, participantRows, unreadRows, lastRows, myMemberships] = relations ?? (await loadConversationRelations(rows.map((r) => r.id), requester));
   const unreadByConv = new Map(unreadRows.map((r) => [r.conversationId, Number(r.value)]));
   const lastByConv = new Map(lastRows.map((r) => [r.conversationId, r]));
   const memberOf = new Set(myMemberships.map((m) => m.conversationId));
@@ -439,12 +448,15 @@ export const ConversationService = {
     const statusCondition = status && ['open', 'replied', 'closed'].includes(status) ? eq(conversations.status, status as 'open' | 'replied' | 'closed') : undefined;
     const where = accessCondition && statusCondition ? and(accessCondition, statusCondition) : accessCondition ?? statusCondition;
 
-    const [rows, [{ value: totalItems }]] = await Promise.all([
+    // The page's ids as a sub-select, so its relations load in the same round trip as the page.
+    const pageIds = db.select({ id: conversations.id }).from(conversations).where(where).orderBy(desc(conversations.lastMessageAt)).limit(limit).offset(skip);
+    const [rows, [{ value: totalItems }], relations] = await Promise.all([
       db.select().from(conversations).where(where).orderBy(desc(conversations.lastMessageAt)).limit(limit).offset(skip),
       db.select({ value: count() }).from(conversations).where(where),
+      loadConversationRelations(pageIds, requester),
     ]);
 
-    const items = await populateConversations(rows, requester);
+    const items = await populateConversations(rows, requester, relations);
     return { items, page, limit, totalItems, totalPages: Math.ceil(totalItems / limit) };
   },
 

@@ -499,12 +499,33 @@ export class TourService {
     const limit = paginationParams.limit || 10;
     const skip = (page - 1) * limit;
 
-    const [rows, [{ value: totalItems }]] = await Promise.all([
-      db.select(LIST_COLUMNS).from(tours).where(where).orderBy(desc(tours.createdAt)).limit(limit).offset(skip),
-      db.select({ value: count() }).from(tours).where(where),
-    ]);
+    // One round trip: only the columns the dashboard table shows, authors as a JSON sub-select and
+    // the total from a window count (was: full rows + a count, then a second trip for relations).
+    const rows = await db
+      .select({
+        id: tours.id,
+        title: tours.title,
+        code: tours.code,
+        coverImage: tours.coverImage,
+        price: tours.price,
+        tourStatus: tours.tourStatus,
+        createdAt: tours.createdAt,
+        updatedAt: tours.updatedAt,
+        author: sql<unknown[]>`coalesce((select json_agg(json_build_object('id', u.id, 'name', u.name, 'email', u.email, 'roles', u.role)) from tour_authors ta join users u on u.id = ta.user_id where ta.tour_id = "tours"."id"), '[]'::json)`, // qualified: a bare "id" here would bind to users.id
+        total: sql<number>`count(*) over()`,
+      })
+      .from(tours)
+      .where(where)
+      .orderBy(desc(tours.createdAt))
+      .limit(limit)
+      .offset(skip);
 
-    const items = await attachRelations(rows);
+    let totalItems = rows.length ? Number(rows[0].total) : 0;
+    if (!rows.length && page > 1) {
+      const [{ value }] = await db.select({ value: count() }).from(tours).where(where);
+      totalItems = Number(value);
+    }
+    const items = rows.map(({ total: _total, ...rest }) => rest);
     return { items, page, limit, totalItems, totalPages: Math.ceil(totalItems / limit) };
   }
 

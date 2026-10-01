@@ -24,8 +24,9 @@ async function recalculateTourRating(tourId: string) {
     .where(eq(tours.id, tourId));
 }
 
-async function withReplies(reviewIds: string[]) {
-  if (reviewIds.length === 0) return new Map<string, unknown[]>();
+async function withReplies(reviewIds: string[] | any) {
+  // Accepts explicit ids or a sub-select of ids (so it can run in the same round trip as the page).
+  if (Array.isArray(reviewIds) && reviewIds.length === 0) return new Map<string, unknown[]>();
   const rows = await db
     .select({ reply: reviewReplies, user: USER_COLUMNS })
     .from(reviewReplies)
@@ -480,7 +481,19 @@ export const listManagedReviews = async (req: Request, res: Response) => {
     }
     const where = conditions.length ? and(...conditions) : undefined;
 
-    const [rows, [{ value: totalItems }], statusRows] = await Promise.all([
+    // Ids of exactly this page (same joins/filter/order/limit) so the replies can be fetched in the
+    // same round trip as the page itself.
+    const pageIds = db
+      .select({ id: reviews.id })
+      .from(reviews)
+      .leftJoin(users, eq(reviews.userId, users.id))
+      .leftJoin(tours, eq(reviews.tourId, tours.id))
+      .where(where)
+      .orderBy(desc(reviews.createdAt))
+      .limit(limit)
+      .offset((page - 1) * limit);
+
+    const [rows, [{ value: totalItems }], statusRows, repliesByReview] = await Promise.all([
       db
         .select({ review: reviews, user: USER_COLUMNS, tour: { id: tours.id, title: tours.title, code: tours.code } })
         .from(reviews)
@@ -492,9 +505,9 @@ export const listManagedReviews = async (req: Request, res: Response) => {
         .offset((page - 1) * limit),
       db.select({ value: count() }).from(reviews).leftJoin(users, eq(reviews.userId, users.id)).leftJoin(tours, eq(reviews.tourId, tours.id)).where(where),
       db.select({ status: reviews.status, value: count() }).from(reviews).where(scope).groupBy(reviews.status),
+      withReplies(pageIds),
     ]);
 
-    const repliesByReview = await withReplies(rows.map((r) => r.review.id));
     const items = rows.map(({ review, user, tour }) => ({ ...review, user, tourId: tour?.id, tourTitle: tour?.title, tourCode: tour?.code, replies: repliesByReview.get(review.id) || [] }));
     const counts: Record<string, number> = { pending: 0, approved: 0, rejected: 0 };
     for (const r of statusRows) counts[r.status] = Number(r.value);

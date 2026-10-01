@@ -1,2 +1,2 @@
 export * from './schema';
-export { db, closeDb, pingDb, type Db } from './client';
+export { db, closeDb, pingDb, warmDb, startDbKeepAlive, type Db } from './client';

@@ -6,8 +6,9 @@ import { sendSuccess, sendPaginatedResponse } from '../../utils/apiResponse';
 
 const userSelect = { id: users.id, name: users.name, avatar: users.avatar } as const;
 
-const withReplies = async (parentIds: string[]) => {
-  if (parentIds.length === 0) return new Map<string, unknown[]>();
+const withReplies = async (parentIds: string[] | any) => {
+  // Accepts explicit ids or a sub-select of ids (so it can run in the same round trip as the page).
+  if (Array.isArray(parentIds) && parentIds.length === 0) return new Map<string, unknown[]>();
 
   const replies = await db
     .select({ reply: comments, user: userSelect })
@@ -262,9 +263,8 @@ export const getAllComments = async (req: Request, res: Response, next: NextFunc
 
     let where;
     if (!isAdmin) {
-      const ownPosts = await db.select({ id: posts.id }).from(posts).where(eq(posts.authorId, req.user!.id));
-      const postIds = ownPosts.map((p) => p.id);
-      where = postIds.length ? inArray(comments.postId, postIds) : eq(comments.postId, '__none__');
+      // Sub-select instead of a separate query for the seller's post ids (saves a round trip).
+      where = inArray(comments.postId, db.select({ id: posts.id }).from(posts).where(eq(posts.authorId, req.user!.id)));
     }
 
     // Server-side text search so the dashboard can page instead of downloading everything.
@@ -274,7 +274,9 @@ export const getAllComments = async (req: Request, res: Response, next: NextFunc
       where = where ? and(where, match) : match;
     }
 
-    const [rows, [{ value: totalComments }]] = await Promise.all([
+    const pageIds = db.select({ id: comments.id }).from(comments).where(where).orderBy(desc(comments.createdAt)).limit(pageLimit).offset(skip);
+
+    const [rows, [{ value: totalComments }], repliesByParent] = await Promise.all([
       db
         .select({
           comment: comments,
@@ -289,9 +291,9 @@ export const getAllComments = async (req: Request, res: Response, next: NextFunc
         .limit(pageLimit)
         .offset(skip),
       db.select({ value: count() }).from(comments).where(where),
+      withReplies(pageIds),
     ]);
 
-    const repliesByParent = await withReplies(rows.map((r) => r.comment.id));
     const commentsWithReplies = rows.map(({ comment, user, post }) => ({
       ...comment,
       user,

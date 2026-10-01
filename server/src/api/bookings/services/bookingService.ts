@@ -50,6 +50,27 @@ async function attachRelations(rows: BookingRow[], opts: { tour?: boolean; user?
     }));
 }
 
+/**
+ * Page of bookings with their tour and user in ONE query (left joins), instead of fetching the page
+ * and then a second round trip for the related rows. Same output shape as attachRelations.
+ */
+async function selectBookingsPage(where: any, orderBy: any, limit: number, offset: number, opts: { user?: boolean } = { user: true }) {
+    const rows = await db
+        .select({ booking: bookings, tour: TOUR_COLUMNS, user: USER_COLUMNS })
+        .from(bookings)
+        .leftJoin(tours, eq(bookings.tourId, tours.id))
+        .leftJoin(users, eq(bookings.userId, users.id))
+        .where(where)
+        .orderBy(orderBy)
+        .limit(limit)
+        .offset(offset);
+    return rows.map(({ booking, tour, user }) => ({
+        ...booking,
+        tour: tour && (tour as { id?: string }).id ? tour : null,
+        user: opts.user !== false && user && (user as { id?: string }).id ? user : null,
+    }));
+}
+
 function sortColumn(sortBy?: string) {
     switch (sortBy) {
         case 'departureDate':
@@ -233,12 +254,10 @@ export class BookingService {
         const { page, limit, sortBy, sortOrder } = paginationParams;
         const orderFn = sortOrder === 'asc' ? asc : desc;
 
-        const [rows, [{ value: totalItems }]] = await Promise.all([
-            db.select().from(bookings).where(where).orderBy(orderFn(sortColumn(sortBy) as any)).limit(limit).offset((page - 1) * limit),
+        const [items, [{ value: totalItems }]] = await Promise.all([
+            selectBookingsPage(where, orderFn(sortColumn(sortBy) as any), limit, (page - 1) * limit),
             db.select({ value: count() }).from(bookings).where(where),
         ]);
-
-        const items = await attachRelations(rows, { tour: true, user: true });
 
         return {
             items,
@@ -274,12 +293,10 @@ export class BookingService {
 
         const { page, limit } = paginationParams;
 
-        const [rows, [{ value: totalItems }]] = await Promise.all([
-            db.select().from(bookings).where(where).orderBy(desc(bookings.createdAt)).limit(limit).offset((page - 1) * limit),
+        const [items, [{ value: totalItems }]] = await Promise.all([
+            selectBookingsPage(where, desc(bookings.createdAt), limit, (page - 1) * limit, { user: false }),
             db.select({ value: count() }).from(bookings).where(where),
         ]);
-
-        const items = await attachRelations(rows, { tour: true, user: false });
 
         return {
             items,

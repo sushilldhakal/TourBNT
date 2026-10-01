@@ -383,18 +383,28 @@ export class ItineraryRequestService {
    * shows these with a "Send request" action.
    */
   static async getRequestsForTour(tourId: string, requester: { id: string; isAdmin: boolean }) {
-    await ItineraryRequestService.assertTourAuthorOrAdmin(tourId, requester);
+    // All four reads are independent, so they run together — one round trip instead of four in a
+    // row (~3s on the remote DB for a 15-day tour). Events are selected by tour via a sub-select
+    // rather than waiting for the request ids. The access check still gates the response.
+    const [, requestedRows, events, links] = await Promise.all([
+      ItineraryRequestService.assertTourAuthorOrAdmin(tourId, requester),
+      db
+        .select({ request: itineraryPartnerRequests, partnerName: businessPartners.name, partnerType: businessPartners.type })
+        .from(itineraryPartnerRequests)
+        .innerJoin(businessPartners, eq(itineraryPartnerRequests.businessPartnerId, businessPartners.id))
+        .where(eq(itineraryPartnerRequests.tourId, tourId)),
+      db
+        .select()
+        .from(itineraryRequestEvents)
+        .where(inArray(itineraryRequestEvents.requestId, db.select({ id: itineraryPartnerRequests.id }).from(itineraryPartnerRequests).where(eq(itineraryPartnerRequests.tourId, tourId))))
+        .orderBy(itineraryRequestEvents.createdAt),
+      db
+        .select({ link: tourItineraryPartners, partnerName: businessPartners.name, partnerType: businessPartners.type })
+        .from(tourItineraryPartners)
+        .innerJoin(businessPartners, eq(tourItineraryPartners.businessPartnerId, businessPartners.id))
+        .where(and(eq(tourItineraryPartners.tourId, tourId), sql`${tourItineraryPartners.businessPartnerId} IS NOT NULL`)),
+    ]);
 
-    const requestedRows = await db
-      .select({ request: itineraryPartnerRequests, partnerName: businessPartners.name, partnerType: businessPartners.type })
-      .from(itineraryPartnerRequests)
-      .innerJoin(businessPartners, eq(itineraryPartnerRequests.businessPartnerId, businessPartners.id))
-      .where(eq(itineraryPartnerRequests.tourId, tourId));
-
-    const requestIds = requestedRows.map((r) => r.request.id);
-    const events = requestIds.length
-      ? await db.select().from(itineraryRequestEvents).where(inArray(itineraryRequestEvents.requestId, requestIds)).orderBy(itineraryRequestEvents.createdAt)
-      : [];
     const eventsByRequest = new Map<string, typeof events>();
     for (const e of events) {
       const list = eventsByRequest.get(e.requestId) || [];
@@ -402,11 +412,6 @@ export class ItineraryRequestService {
       eventsByRequest.set(e.requestId, list);
     }
 
-    const links = await db
-      .select({ link: tourItineraryPartners, partnerName: businessPartners.name, partnerType: businessPartners.type })
-      .from(tourItineraryPartners)
-      .innerJoin(businessPartners, eq(tourItineraryPartners.businessPartnerId, businessPartners.id))
-      .where(and(eq(tourItineraryPartners.tourId, tourId), sql`${tourItineraryPartners.businessPartnerId} IS NOT NULL`));
     const linkById = new Map(links.map((l) => [l.link.id, l.link]));
 
     const requested = requestedRows.map(({ request, partnerName, partnerType }) => ({

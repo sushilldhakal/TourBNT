@@ -93,17 +93,20 @@ export const getMedia = async (req: Request
       ? eq(mediaAssets.kind, kind)
       : and(eq(mediaAssets.kind, kind), eq(mediaAssets.userId, req.user.id));
 
-    const [{ value: totalMediaCount }] = await db.select({ value: count() }).from(mediaAssets).where(where);
 
     const skip = (page - 1) * limit;
 
-    const rows = await db
-      .select()
-      .from(mediaAssets)
-      .where(where)
-      .orderBy(desc(mediaAssets.uploadedAt))
-      .limit(limit)
-      .offset(skip);
+    // Count and page in parallel — one round trip instead of two.
+    const [[{ value: totalMediaCount }], rows] = await Promise.all([
+      db.select({ value: count() }).from(mediaAssets).where(where),
+      db
+        .select()
+        .from(mediaAssets)
+        .where(where)
+        .orderBy(desc(mediaAssets.uploadedAt))
+        .limit(limit)
+        .offset(skip),
+    ]);
 
     const totalPages = Math.ceil(totalMediaCount / limit);
 
