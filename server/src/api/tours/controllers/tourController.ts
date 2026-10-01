@@ -354,3 +354,13 @@ export const getTourRouteMap = async (req: Request, res: Response) => {
     return sendError(res, err?.message ?? 'Could not build route map', err?.status ?? HTTP_STATUS.INTERNAL_SERVER_ERROR);
   }
 };
+
+/** Public: the business behind a tour (company name, contact details, rating across all its tours). */
+export const getTourBusinessInfo = async (req: Request, res: Response) => {
+  const { getTourBusiness } = await import('../services/tourBusinessService');
+  try {
+    return sendSuccess(res, await getTourBusiness(req.params.tourId), 'Business retrieved successfully');
+  } catch (err: any) {
+    return sendError(res, err?.message ?? 'Could not load business', err?.status ?? HTTP_STATUS.INTERNAL_SERVER_ERROR);
+  }
+};

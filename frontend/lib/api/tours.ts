@@ -1,5 +1,6 @@
 import { api, serverApi, handleApiError, createFormData, extractResponseData, extractList } from './apiClient';
 import { AxiosError } from 'axios';
+import type { Tour } from '@/types/types';
 
 /**
  * Tour API Methods
@@ -530,5 +531,67 @@ export const getTourRouteMap = async (tourId: string): Promise<TourRouteMapData>
         return extractResponseData(response) as TourRouteMapData;
     } catch (error) {
         throw handleApiError(error, 'fetching route map');
+    }
+};
+
+export interface TourBusiness {
+    /** Agency id, for linking to its page. */
+    id: string;
+    /** Company name (the account holder's name only if no company is on file). */
+    name: string;
+    description: string | null;
+    phone: string | null;
+    email: string;
+    website: string | null;
+    location: string | null;
+    /** Weighted across every published tour the business runs; null until it has reviews. */
+    rating: number | null;
+    reviewCount: number;
+    tourCount: number;
+}
+
+/** The business behind a tour, for the contact card on the tour page. Public. */
+export const getTourBusiness = async (tourId: string): Promise<TourBusiness> => {
+    try {
+        const response = await api.get(`/tours/${tourId}/business`);
+        return extractResponseData(response) as TourBusiness;
+    } catch (error) {
+        throw handleApiError(error, 'fetching business info');
+    }
+};
+
+export interface Agency {
+    id: string;
+    name: string;
+    description: string | null;
+    location: string | null;
+    rating: number | null;
+    reviewCount: number;
+    tourCount: number;
+}
+
+export interface AgencyDetail extends Agency {
+    phone: string | null;
+    email: string;
+    website: string | null;
+}
+
+/** Public directory of agencies that currently run at least one published tour. */
+export const getAgencies = async (params?: { page?: number; limit?: number; search?: string }) => {
+    try {
+        const response = await api.get('/agencies', { params });
+        return extractResponseData(response) as { items: Agency[]; page: number; limit: number; totalItems: number; totalPages: number };
+    } catch (error) {
+        throw handleApiError(error, 'fetching agencies');
+    }
+};
+
+/** One agency with its active (published) tours. Public. */
+export const getAgencyById = async (agencyId: string) => {
+    try {
+        const response = await api.get(`/agencies/${agencyId}`);
+        return extractResponseData(response) as { agency: AgencyDetail; tours: Tour[] };
+    } catch (error) {
+        throw handleApiError(error, 'fetching agency');
     }
 };

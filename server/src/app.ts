@@ -4,6 +4,7 @@ import authRouter from "./api/auth/authRouter";
 import userRouter from "./api/user/userRouter";
 import tourSettingsRouter from "./api/tourSettings/tourSettingsRoutes";
 import tourRouter from "./api/tours/tourRouter";
+import agencyRouter from "./api/tours/agencyRouter";
 import tourRouterV2 from "./api/tours/tourRouterV2";
 import tourSearchRouter from "./api/tours/tourSearchRouter";
 import galleryRoutes from "./api/gallery/galleryRoutes";
@@ -117,6 +118,7 @@ app.use('/api/v1/business-partners', businessPartnerRouter);
 app.use('/api/v1/business-reviews', businessReviewRouter);
 app.use('/api/v1/ads', adRouter);
 app.use('/api/v1/conversations', conversationRouter);
+app.use('/api/v1/agencies', agencyRouter);
 
 // API v2 routes - selective endpoint upgrades
 app.use('/api/v2/tours', tourRouterV2);

@@ -482,6 +482,16 @@ export class TourService {
     return attachRelations(rows);
   }
 
+  /** Active (Published) tours a given user/agency is an author of, newest first. */
+  static async getPublishedByAuthor(userId: string) {
+    const rows = await db
+      .select(LIST_COLUMNS)
+      .from(tours)
+      .where(and(eq(tours.tourStatus, 'Published'), inArray(tours.id, db.select({ tourId: tourAuthors.tourId }).from(tourAuthors).where(eq(tourAuthors.userId, userId)))))
+      .orderBy(desc(tours.createdAt));
+    return attachRelations(rows);
+  }
+
   static async getUserTours(userId: string, isAdmin: boolean, paginationParams: TourPaginationParams) {
     const where = isAdmin ? undefined : inArray(tours.id, db.select({ tourId: tourAuthors.tourId }).from(tourAuthors).where(eq(tourAuthors.userId, userId)));
 

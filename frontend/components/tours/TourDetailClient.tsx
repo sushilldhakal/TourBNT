@@ -2,6 +2,7 @@
 
 import dynamic from 'next/dynamic';
 import { TourRouteMap } from './TourRouteMap';
+import { TourBusinessCard } from './TourBusinessCard';
 import { Tour } from '@/types/types';
 // Imported statically (not dynamic()): both render Radix Tabs, whose useId-based ids differ between
 // the server render and a lazily-hydrated client tree, causing a hydration mismatch.
@@ -66,6 +67,9 @@ export function TourDetailClient({ tour, destinations }: TourDetailClientProps) 
 
             {/* Review System */}
             <ReviewSystem tourId={tour.id} />
+
+            {/* Who runs the tour: business name, overall rating, contact + message */}
+            <TourBusinessCard tourId={tour.id} tourTitle={tour.title} />
         </>
     );
 }

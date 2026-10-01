@@ -22,6 +22,7 @@ import {
   checkTourAvailability,
   getTourLogisticsStatus,
   getTourRouteMap,
+  getTourBusinessInfo,
   sendItineraryPartnerRequest,
   respondToItineraryCounterOffer,
   reopenItineraryPartnerRequest,
@@ -599,6 +600,8 @@ router.get('/:tourId/bookings', authenticate, authorizeRoles('admin', 'seller'),
 // Read-only per-day partner confirmation status for the tour editor (ownership checked inside the service).
 // Public: lettered route for the map on the tour page.
 router.get('/:tourId/route-map', getTourRouteMap);
+// Public: the business behind the tour, for the contact card under the reviews.
+router.get('/:tourId/business', cacheRoute('tour-business', 60), getTourBusinessInfo);
 
 router.get('/:tourId/logistics-status', authenticate, validateObjectId(), getTourLogisticsStatus);
 
