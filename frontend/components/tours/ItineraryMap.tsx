@@ -40,6 +40,7 @@ export default function ItineraryMap({ days }: { days: TourRouteDay[] }) {
         if (!el || stops.length === 0) return;
 
         const map = L.map(el, { scrollWheelZoom: false, zoomControl: false, attributionControl: true });
+        L.control.zoom({ position: 'bottomright', zoomInText: '+', zoomOutText: '−' }).addTo(map); // always-visible + / − buttons
         mapRef.current = map;
         L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19,
@@ -65,20 +66,15 @@ export default function ItineraryMap({ days }: { days: TourRouteDay[] }) {
         };
     }, [days]);
 
-    // Expand / collapse: zoom + scroll only when expanded, then re-measure and re-fit.
+    // Expand / collapse: re-measure and re-fit.
     useEffect(() => {
         const map = mapRef.current;
         if (!map) return;
-        let zoomCtl: L.Control.Zoom | null = null;
-        if (expanded) {
-            map.scrollWheelZoom.enable();
-            zoomCtl = L.control.zoom({ position: 'bottomright' }).addTo(map);
-        } else {
-            map.scrollWheelZoom.disable();
-        }
+        // The + / − buttons are always there; the mouse wheel only zooms once expanded (so it never hijacks page scroll).
+        if (expanded) map.scrollWheelZoom.enable();
+        else map.scrollWheelZoom.disable();
         map.invalidateSize();
         if (boundsRef.current && days.flatMap((d) => d.stops).length > 1) map.fitBounds(boundsRef.current, { padding: expanded ? [80, 80] : [40, 40] });
-        return () => { zoomCtl?.remove(); };
     }, [expanded, days]);
 
     useEffect(() => {
