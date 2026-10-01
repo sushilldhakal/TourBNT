@@ -505,6 +505,8 @@ export interface TourRouteStop {
     place: string;
     lat: number;
     lng: number;
+    /** Meal / hotel with no stored location: drawn beside the day's town, not at its real address. */
+    approximate?: boolean;
 }
 
 export interface TourRouteDay {

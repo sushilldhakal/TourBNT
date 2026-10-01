@@ -33,14 +33,21 @@ function persist() {
 }
 
 /** Cached answer, or `undefined` if this place was never looked up. */
-export function getCachedGeocode(query: string): Coord | undefined {
-  const hit = load()[keyOf(query)];
+export interface GeocodeBias {
+  /** Search only inside this box (degrees). */
+  viewbox: { west: number; south: number; east: number; north: number };
+}
+
+const cacheKey = (query: string, bias?: GeocodeBias) => keyOf(query) + (bias ? `@${Object.values(bias.viewbox).map((n) => n.toFixed(1)).join(',')}` : '');
+
+export function getCachedGeocode(query: string, bias?: GeocodeBias): Coord | undefined {
+  const hit = load()[cacheKey(query, bias)];
   return hit === undefined ? undefined : hit;
 }
 
 /** Looks the place up (rate-limited, serialised) and caches the result. */
-export function geocodePlace(query: string): Promise<Coord> {
-  const key = keyOf(query);
+export function geocodePlace(query: string, bias?: GeocodeBias): Promise<Coord> {
+  const key = cacheKey(query, bias);
   const cached = load()[key];
   if (cached !== undefined) return Promise.resolve(cached);
 
@@ -53,7 +60,9 @@ export function geocodePlace(query: string): Promise<Coord> {
     lastCall = Date.now();
 
     try {
-      const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encodeURIComponent(query)}`;
+      // With a bias box the search is restricted to it, so a village name can't resolve to a namesake across the country.
+      const box = bias ? `&viewbox=${bias.viewbox.west},${bias.viewbox.north},${bias.viewbox.east},${bias.viewbox.south}&bounded=1` : '';
+      const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encodeURIComponent(query)}${box}`;
       const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' }, signal: AbortSignal.timeout(8000) });
       if (!res.ok) return null; // transient (rate limit etc.): don't cache, try again later
       const rows = (await res.json()) as Array<{ lat: string; lon: string }>;

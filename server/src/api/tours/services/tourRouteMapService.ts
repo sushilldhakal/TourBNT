@@ -1,7 +1,7 @@
 import { db, tours, globalDestinations, businessPartners } from '@tourbnt/db';
 import { eq, inArray } from 'drizzle-orm';
 import createHttpError from 'http-errors';
-import { geocodePlace, getCachedGeocode } from '../../../services/geocodeService';
+import { geocodePlace, getCachedGeocode, type GeocodeBias } from '../../../services/geocodeService';
 
 export interface RouteStop {
   /** e.g. "2B" (or just "7" when the day has a single stop). */
@@ -14,6 +14,8 @@ export interface RouteStop {
   place: string;
   lat: number;
   lng: number;
+  /** True when this meal / hotel has no stored location and is drawn beside the town. */
+  approximate?: boolean;
 }
 
 export interface RouteDay {
@@ -36,24 +38,6 @@ const NEAR_KM = 25;
 
 const norm = (s: string) => s.trim().toLowerCase();
 
-/** Spread stops that sit on the same coordinates around it, so each letter stays clickable. */
-function spread(stops: RouteStop[]) {
-  const groups = new Map<string, RouteStop[]>();
-  for (const s of stops) {
-    const k = `${s.lat.toFixed(4)},${s.lng.toFixed(4)}`;
-    groups.set(k, [...(groups.get(k) ?? []), s]);
-  }
-  for (const group of groups.values()) {
-    if (group.length < 2) continue;
-    const radius = 0.012; // ~1.3 km
-    group.forEach((s, i) => {
-      const angle = (2 * Math.PI * i) / group.length - Math.PI / 2;
-      s.lat += radius * Math.sin(angle);
-      s.lng += (radius * Math.cos(angle)) / Math.cos((s.lat * Math.PI) / 180);
-    });
-  }
-}
-
 /**
  * Builds the lettered route for a tour: per day, A is the day's location, then each meal
  * partner (B, C…), then the overnight stay last. Locations come from the global destinations
@@ -69,6 +53,11 @@ export async function buildTourRouteMap(tourId: string) {
     tour.destinationId ? db.select({ country: globalDestinations.country }).from(globalDestinations).where(eq(globalDestinations.id, tour.destinationId)).limit(1) : Promise.resolve([]),
   ]);
   const country = tourDest[0]?.country ?? 'Nepal';
+  // Anchor the search on the tour's own region: place names repeat across a country (there is a Tatopani
+  // in far-west Nepal and a "Pisang" that resolves to Kathmandu), so look only around where this tour is.
+  const anchorRow = tour.destinationId ? destinations.find((d) => d.id === tour.destinationId) : undefined;
+  const anchor: Coord | null = anchorRow && typeof anchorRow.lat === 'number' && typeof anchorRow.lng === 'number' ? { lat: anchorRow.lat, lng: anchorRow.lng } : null;
+  const bias: GeocodeBias | undefined = anchor ? { viewbox: { west: anchor.lng - 1.2, east: anchor.lng + 1.2, south: anchor.lat - 1.2, north: anchor.lat + 1.2 } } : undefined;
   const withCoords = destinations.filter((d) => typeof d.lat === 'number' && typeof d.lng === 'number');
 
   const partnerIds = [...new Set(itinerary.flatMap((d) => (d.partners ?? []).map((p: any) => p?.businessPartnerId)).filter(Boolean))] as string[];
@@ -94,18 +83,21 @@ export async function buildTourRouteMap(tourId: string) {
 
     if (!result) {
       const query = `${raw}, ${country}`;
-      const cached = getCachedGeocode(query);
+      const cached = getCachedGeocode(query, bias);
       if (cached !== undefined) result = cached;
       else if (lookups < MAX_LOOKUPS_PER_REQUEST) {
         lookups++;
-        result = await geocodePlace(query);
-        if (!result && getCachedGeocode(query) === undefined) pending++; // lookup failed this time; retry later
+        result = await geocodePlace(query, bias);
+        if (!result && getCachedGeocode(query, bias) === undefined) pending++; // lookup failed this time; retry later
       } else pending++;
+      // Never plot a result that is nowhere near the tour's region — better missing than wrong.
+      if (result && anchor && km(result, anchor) > 250) result = null;
     }
     placeCache.set(key, result);
     return result;
   };
 
+  const townVisits = new Map<string, number>();
   const days: RouteDay[] = [];
   const unresolved: string[] = [];
   for (let i = 0; i < itinerary.length; i++) {
@@ -115,12 +107,12 @@ export async function buildTourRouteMap(tourId: string) {
     if (!place) continue;
     const base = await resolvePlace(placeRaw);
     if (!base) {
-      if (getCachedGeocode(`${placeRaw}, ${country}`) === null) unresolved.push(place);
+      if (getCachedGeocode(`${placeRaw}, ${country}`, bias) === null || (anchor && pending === 0)) unresolved.push(place);
       continue;
     }
 
     const partners = (Array.isArray(d.partners) ? d.partners : []) as Array<Record<string, any>>;
-    const own = (p: Record<string, any>): Coord => {
+    const own = (p: Record<string, any>): Coord | null => {
       const live = p.businessPartnerId ? partnerById.get(p.businessPartnerId) : undefined;
       const det = (live?.details ?? {}) as { latitude?: number; longitude?: number };
       const own: Coord | null =
@@ -130,12 +122,28 @@ export async function buildTourRouteMap(tourId: string) {
             ? { lat: destById.get(live.destinationId)!.lat as number, lng: destById.get(live.destinationId)!.lng as number }
             : null;
       // Only trust a partner's own spot when it is actually near where the day is; otherwise it is at the day's place.
-      return own && km(own, base) <= NEAR_KM ? own : base;
+      return own && km(own, base) <= NEAR_KM ? own : null;
     };
 
-    const pieces: Array<Pick<RouteStop, 'kind' | 'name'> & Coord> = [{ kind: 'location', name: place, ...base }];
-    partners.filter((p) => p.role === 'meals').forEach((p) => pieces.push({ kind: 'meal', name: p.name, ...own(p) }));
-    partners.filter((p) => p.role === 'accommodation').forEach((p) => pieces.push({ kind: 'stay', name: p.name, ...own(p) }));
+    // The A pin stays on the real town. If earlier days were already in this same town (rest day, two
+    // nights), nudge this day's pins sideways so they don't sit exactly on top of each other.
+    const townKey = `${base.lat.toFixed(3)},${base.lng.toFixed(3)}`;
+    const visit = townVisits.get(townKey) ?? 0;
+    townVisits.set(townKey, visit + 1);
+    const dayBase: Coord = { lat: base.lat, lng: base.lng + visit * 0.007 };
+
+    const pieces: Array<Pick<RouteStop, 'kind' | 'name'> & Coord & { approximate?: boolean }> = [{ kind: 'location', name: place, ...dayBase }];
+    const extras = [
+      ...partners.filter((p) => p.role === 'meals').map((p) => ({ kind: 'meal' as const, name: p.name, at: own(p) })),
+      ...partners.filter((p) => p.role === 'accommodation').map((p) => ({ kind: 'stay' as const, name: p.name, at: own(p) })),
+    ];
+    // Partners have no stored coordinates, so a meal / hotel without one is drawn right beside the
+    // day's town (a short fixed offset, in order) and marked approximate.
+    extras.forEach((e, i) => {
+      const angle = Math.PI / 4 + (i * Math.PI) / 2;
+      const spot = e.at ?? { lat: dayBase.lat + 0.006 * Math.sin(angle), lng: dayBase.lng + 0.008 * Math.cos(angle) };
+      pieces.push({ kind: e.kind, name: e.name, ...spot, approximate: !e.at });
+    });
 
     const dayNo = i + 1;
     days.push({
@@ -146,6 +154,5 @@ export async function buildTourRouteMap(tourId: string) {
     });
   }
 
-  spread(days.flatMap((d) => d.stops));
   return { days, pending, unresolved };
 }

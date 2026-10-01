@@ -51,7 +51,7 @@ export default function ItineraryMap({ days }: { days: TourRouteDay[] }) {
         if (latlngs.length > 1) L.polyline(latlngs, { color: '#0f6cbd', weight: 3, opacity: 0.85, dashArray: '2 6', lineCap: 'round' }).addTo(map);
         stops.forEach((s) => {
             L.marker([s.lat, s.lng], { icon: pinIcon(s), zIndexOffset: s.kind === 'location' ? 200 : 0 })
-                .bindTooltip(`<strong>Day ${escapeHtml(s.label)}</strong> · ${escapeHtml(KIND[s.kind].label)}<br/>${escapeHtml(s.name)}${s.kind === 'location' ? '' : ` — ${escapeHtml(s.place)}`}`, { direction: 'top', offset: [0, -12] })
+                .bindTooltip(`<strong>Day ${escapeHtml(s.label)}</strong> · ${escapeHtml(KIND[s.kind].label)}<br/>${escapeHtml(s.name)}${s.kind === 'location' ? '' : ` — ${escapeHtml(s.place)}`}${s.approximate ? '<br/><em>Approximate: shown beside the town</em>' : ''}`, { direction: 'top', offset: [0, -12] })
                 .addTo(map);
         });
 
@@ -103,12 +103,15 @@ export default function ItineraryMap({ days }: { days: TourRouteDay[] }) {
             >
                 {expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
             </button>
-            <div className="absolute bottom-6 left-3 z-[1001] flex flex-wrap gap-x-3 gap-y-1 rounded-lg bg-background/95 px-3 py-1.5 text-xs shadow ring-1 ring-border">
+            <div className="absolute bottom-6 left-3 z-[1001] max-w-[70%] flex flex-wrap gap-x-3 gap-y-1 rounded-lg bg-background/95 px-3 py-1.5 text-xs shadow ring-1 ring-border">
                 {Object.values(KIND).map((k) => (
                     <span key={k.label} className="flex items-center gap-1.5">
                         <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: k.color }} />{k.label}
                     </span>
                 ))}
+                {days.some((d) => d.stops.some((s) => s.approximate)) && (
+                    <span className="basis-full text-[11px] text-muted-foreground">Meal and hotel pins sit beside the town — exact addresses aren&apos;t on file yet.</span>
+                )}
             </div>
         </div>
     );
