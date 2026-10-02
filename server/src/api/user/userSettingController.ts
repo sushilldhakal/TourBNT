@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { db, userSettings } from '@tourbnt/db';
+import { db, userSettings } from '../../db';
 import { eq } from 'drizzle-orm';
 import { encrypt, decrypt } from '../../utils/encryption';
 import createHttpError from 'http-errors';

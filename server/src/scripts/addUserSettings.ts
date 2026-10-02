@@ -1,6 +1,6 @@
 import { config as dotenvConfig } from 'dotenv';
 import path from 'path';
-import { db, userSettings } from '@tourbnt/db';
+import { db, userSettings } from '../db';
 import { eq } from 'drizzle-orm';
 import { encrypt } from '../utils/encryption';
 

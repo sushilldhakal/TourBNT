@@ -4,7 +4,7 @@ import connectDB from "./src/config/db";
 import { startViewCounterFlusher, flushViewCounters } from "./src/services/viewCounterFlusher";
 import { startItineraryRequestExpirySweep } from "./src/services/itineraryRequestExpiry";
 import { closeRedis } from "./src/config/redisClient";
-import { warmDb, startDbKeepAlive } from "@tourbnt/db";
+import { warmDb, startDbKeepAlive } from "./src/db";
 
 const startServer = async () => {
   // Connect database

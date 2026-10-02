@@ -1,4 +1,4 @@
-import { userRoleEnum } from '@tourbnt/db';
+import { userRoleEnum } from '../db';
 
 /**
  * Role strings allowed by the Postgres `user_role` enum.

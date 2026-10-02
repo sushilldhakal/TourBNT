@@ -13,7 +13,7 @@ import {
   businessPartners,
   tourAuthors,
   bookings,
-} from '@tourbnt/db';
+} from '../../../db';
 import { eq, and, or, inArray, sql, ne, lt } from 'drizzle-orm';
 import createHttpError from 'http-errors';
 import * as notifications from '../../notifications/notificationController';

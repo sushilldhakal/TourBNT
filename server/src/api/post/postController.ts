@@ -1,6 +1,6 @@
 import { NextFunction, Request, Response } from 'express';
 import createHttpError from 'http-errors';
-import { db, posts, users } from '@tourbnt/db';
+import { db, posts, users } from '../../db';
 import { eq, and, desc, asc, count, type SQL } from 'drizzle-orm';
 import { HTTP_STATUS, sendSuccess, sendPaginatedResponse, sendNotFoundError, sendForbiddenError } from '../../utils/apiResponse';
 

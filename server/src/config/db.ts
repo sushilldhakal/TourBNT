@@ -1,8 +1,8 @@
-import { pingDb } from "@tourbnt/db";
+import { pingDb } from "../db";
 import { config } from "./config";
 
 /**
- * Connect to Postgres — single source of truth (see packages/db).
+ * Connect to Postgres — single source of truth (see src/db).
  */
 const connectDB = async (retries = 5, delay = 5000) => {
   for (let i = 0; i < retries; i++) {

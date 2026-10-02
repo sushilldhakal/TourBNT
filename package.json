@@ -5,8 +5,7 @@
     "private": true,
     "workspaces": [
         "frontend",
-        "server",
-        "packages/db"
+        "server"
     ],
     "scripts": {
         "build:server": "npm run build --prefix server",
@@ -21,10 +20,10 @@
         "dev:server:lan": "FRONTEND_DOMAIN=\"http://$(ipconfig getifaddr en0):3000,http://localhost:3000,http://localhost:8000\" npm run dev --prefix server",
         "dev:frontend:lan": "NEXT_PUBLIC_BACKEND_URL=\"http://$(ipconfig getifaddr en0):8000\" npm run dev --prefix frontend -- -H 0.0.0.0",
         "dev:lan": "concurrently \"npm run dev:server:lan\" \"npm run dev:frontend:lan\"",
-        "db:generate": "npm run db:generate --workspace=@tourbnt/db",
-        "db:migrate": "npm run db:migrate --workspace=@tourbnt/db",
-        "db:push": "npm run db:push --workspace=@tourbnt/db",
-        "db:studio": "npm run db:studio --workspace=@tourbnt/db"
+        "db:generate": "npm run db:generate --prefix server",
+        "db:migrate": "npm run db:migrate --prefix server",
+        "db:push": "npm run db:push --prefix server",
+        "db:studio": "npm run db:studio --prefix server"
     },
     "engines": {
         "node": ">=22.22.0",

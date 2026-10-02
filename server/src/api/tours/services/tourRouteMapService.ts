@@ -1,4 +1,4 @@
-import { db, tours, globalDestinations, businessPartners } from '@tourbnt/db';
+import { db, tours, globalDestinations, businessPartners } from '../../../db';
 import { eq, inArray } from 'drizzle-orm';
 import createHttpError from 'http-errors';
 import { geocodePlace, getCachedGeocode, type GeocodeBias } from '../../../services/geocodeService';

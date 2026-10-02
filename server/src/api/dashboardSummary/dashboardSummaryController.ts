@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { db } from '@tourbnt/db';
+import { db } from '../../db';
 import { sql } from 'drizzle-orm';
 import { sendSuccess } from '../../utils/apiResponse';
 

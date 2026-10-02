@@ -1,5 +1,5 @@
 import express from 'express';
-import { db, posts } from '@tourbnt/db';
+import { db, posts } from '../../db';
 import { eq, sql } from 'drizzle-orm';
 import { addPost, getPost, deletePost, editPost, getAllPosts, getUserPost, getAllUserPosts } from './postController';
 import { authenticate, authorizeRoles } from '../../middlewares/authenticate';

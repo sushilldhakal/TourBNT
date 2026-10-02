@@ -6,7 +6,7 @@ import {
   businessPartnerCapacityOverrides,
   itineraryPartnerRequests,
   tours,
-} from '@tourbnt/db';
+} from '../../db';
 import { eq, and, desc, count } from 'drizzle-orm';
 import { sendSuccess, sendPaginatedResponse, sendValidationError, sendNotFoundError, sendForbiddenError, handleUnauthorized } from '../../utils/apiResponse';
 import { ItineraryRequestService } from '../tours/services/itineraryRequestService';

@@ -11,7 +11,7 @@
 import { config as dotenvConfig } from 'dotenv';
 import path from 'path';
 import { sql, asc } from 'drizzle-orm';
-import { db, globalDestinations, users } from '@tourbnt/db';
+import { db, globalDestinations, users } from '../db';
 
 dotenvConfig({ path: path.resolve(__dirname, '../../.env') });
 

@@ -1,4 +1,4 @@
-import { db, users } from '@tourbnt/db';
+import { db, users } from '../../db';
 import { eq } from 'drizzle-orm';
 import type { SellerInfo } from './userTypes';
 import { cacheGet, cacheSet, cacheDel } from '../../config/redisClient';

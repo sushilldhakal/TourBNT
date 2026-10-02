@@ -10,7 +10,7 @@ import {
   globalCategories,
   globalDestinations,
   adPlacementSlotEnum,
-} from '@tourbnt/db';
+} from '../../db';
 import { eq, and, desc, count, inArray, gte, sql, type SQL } from 'drizzle-orm';
 import { HTTP_STATUS, sendSuccess, sendPaginatedResponse, sendValidationError, sendNotFoundError, sendForbiddenError, handleUnauthorized } from '../../utils/apiResponse';
 import * as notifications from '../notifications/notificationController';

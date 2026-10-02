@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { db, subscribers } from '@tourbnt/db';
+import { db, subscribers } from '../../db';
 import { count, desc, eq } from 'drizzle-orm';
 import { HTTP_STATUS, sendSuccess, sendPaginatedResponse } from '../../utils/apiResponse';
 

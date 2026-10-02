@@ -2,7 +2,7 @@ import Redis from 'ioredis';
 import { config } from './config';
 
 /**
- * Lazily created Redis client, mirroring packages/db/src/client.ts: only
+ * Lazily created Redis client, mirroring src/db/client.ts: only
  * connects on first use, and every caller treats Redis as best-effort —
  * a miss or connection error must fall back to Postgres, never break the
  * request. Redis is a cache in front of Neon, not a second source of truth.

@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { db, businessReviews, businessReviewReplies, businessReviewLikes, businessPartners, users } from '@tourbnt/db';
+import { db, businessReviews, businessReviewReplies, businessReviewLikes, businessPartners, users } from '../../db';
 import { eq, and, desc, asc, avg, count, inArray, sql } from 'drizzle-orm';
 import * as notifications from '../notifications/notificationController';
 

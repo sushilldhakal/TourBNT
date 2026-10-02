@@ -20,7 +20,7 @@ import path from 'path';
 import fs from 'fs';
 import { randomUUID } from 'crypto';
 import { sql, eq, inArray } from 'drizzle-orm';
-import * as S from '@tourbnt/db';
+import * as S from '../db';
 
 dotenvConfig({ path: path.resolve(__dirname, '../../.env') });
 

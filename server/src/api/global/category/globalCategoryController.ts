@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { db, globalCategories, sellerCategoryPreferences, sellerSettings, users, tours, tourCategories, tourAuthors } from '@tourbnt/db';
+import { db, globalCategories, sellerCategoryPreferences, sellerSettings, users, tours, tourCategories, tourAuthors } from '../../../db';
 import { eq, and, or, ilike, desc, inArray, sql } from 'drizzle-orm';
 import type { SellerInfo } from '../../user/userTypes';
 

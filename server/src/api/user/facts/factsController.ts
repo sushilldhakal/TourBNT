@@ -1,5 +1,5 @@
 import { Response, Request, NextFunction } from 'express';
-import { db, facts, tours } from '@tourbnt/db';
+import { db, facts, tours } from '../../../db';
 import { eq, desc, inArray, count, sql } from 'drizzle-orm';
 import {
   sendSuccess,
