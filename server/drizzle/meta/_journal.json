@@ -127,6 +127,13 @@
       "when": 1790951421151,
       "tag": "0017_ads_require_real_payment",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1790952058272,
+      "tag": "0018_add_preset_tables",
+      "breakpoints": true
     }
   ]
 }
