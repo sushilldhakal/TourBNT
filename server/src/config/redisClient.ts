@@ -30,8 +30,20 @@ function getRedis(): Redis {
   return _redis;
 }
 
+/**
+ * False while the connection is down or reconnecting. Every cache helper below checks this first
+ * and gives up immediately: otherwise each call sits through ioredis's retry cycle (seconds), and
+ * a request that makes a dozen cache calls — or a write that invalidates a dozen families — would
+ * take that long PER OUTAGE instead of simply skipping the cache. 'wait' = lazy client not yet used.
+ */
+function redisUsable(): boolean {
+  const status = getRedis().status;
+  return status === 'ready' || status === 'wait';
+}
+
 /** Returns the cached JSON value for `key`, or undefined on a miss or any Redis failure. */
 export async function cacheGet<T>(key: string): Promise<T | undefined> {
+  if (!redisUsable()) return undefined;
   try {
     const raw = await getRedis().get(key);
     return raw ? (JSON.parse(raw) as T) : undefined;
@@ -43,6 +55,7 @@ export async function cacheGet<T>(key: string): Promise<T | undefined> {
 
 /** Best-effort cache write; a failure here must never fail the caller's request. */
 export async function cacheSet(key: string, value: unknown, ttlSeconds: number): Promise<void> {
+  if (!redisUsable()) return ;
   try {
     await getRedis().set(key, JSON.stringify(value), 'EX', ttlSeconds);
   } catch (err) {
@@ -52,6 +65,7 @@ export async function cacheSet(key: string, value: unknown, ttlSeconds: number):
 
 /** Best-effort cache invalidation; a failure here must never fail the caller's request. */
 export async function cacheDel(key: string): Promise<void> {
+  if (!redisUsable()) return ;
   try {
     await getRedis().del(key);
   } catch (err) {
@@ -62,18 +76,87 @@ export async function cacheDel(key: string): Promise<void> {
 /**
  * Best-effort bulk invalidation of every key matching `pattern` (e.g. `route:tours:*`).
  * Uses SCAN rather than KEYS so it doesn't block Redis on a large keyspace.
+ * Returns how many keys were removed (0 on failure).
  */
-export async function cacheDelPattern(pattern: string): Promise<void> {
+export async function cacheDelPattern(pattern: string): Promise<number> {
+  let removed = 0;
+  if (!redisUsable()) return removed;
   try {
     const redis = getRedis();
     let cursor = '0';
     do {
       const [next, keys] = await redis.scan(cursor, 'MATCH', pattern, 'COUNT', 200);
       cursor = next;
-      if (keys.length) await redis.unlink(...keys);
+      if (keys.length) removed += await redis.unlink(...keys);
     } while (cursor !== '0');
   } catch (err) {
     console.error(`Redis pattern invalidation ${pattern} failed:`, (err as Error).message);
+  }
+  return removed;
+}
+
+/** Best-effort removal of exact keys. Returns how many existed (0 on failure). */
+export async function cacheDelKeys(keys: string[]): Promise<number> {
+  if (keys.length === 0) return 0;
+  if (!redisUsable()) return 0;
+  try {
+    return await getRedis().unlink(...keys);
+  } catch (err) {
+    console.error('Redis key invalidation failed:', (err as Error).message);
+    return 0;
+  }
+}
+
+/**
+ * Stale-write guard. Every invalidation bumps this counter; a cache fill remembers the value it saw
+ * BEFORE it queried the database and is only stored if the counter is unchanged. Without it, a
+ * request that read the old row just before a write could land its (now stale) response in Redis
+ * just AFTER the invalidation and keep serving it until the TTL expires.
+ */
+const EPOCH_KEY = 'cache:epoch';
+
+/** Cached JSON for `key` plus the current epoch, in one round trip. `epoch` is undefined if Redis failed. */
+export async function cacheGetWithEpoch<T>(key: string): Promise<{ value?: T; epoch?: string }> {
+  if (!redisUsable()) return {};
+  try {
+    const [[getErr, raw], [epochErr, epoch]] = (await getRedis().pipeline().get(key).get(EPOCH_KEY).exec()) as [
+      [Error | null, string | null],
+      [Error | null, string | null],
+    ];
+    if (getErr || epochErr) throw getErr || epochErr;
+    return { value: raw ? (JSON.parse(raw) as T) : undefined, epoch: epoch ?? '0' };
+  } catch (err) {
+    console.error(`Redis GET ${key} failed (falling back to Postgres):`, (err as Error).message);
+    return {};
+  }
+}
+
+const SET_IF_EPOCH = `
+if (redis.call('GET', KEYS[2]) or '0') == ARGV[2] then
+  redis.call('SET', KEYS[1], ARGV[1], 'EX', tonumber(ARGV[3]))
+  return 1
+end
+return 0`;
+
+/** Stores `value` only if no invalidation happened since `epoch` was read. Returns whether it was stored. */
+export async function cacheSetIfEpoch(key: string, value: unknown, ttlSeconds: number, epoch: string | undefined): Promise<boolean> {
+  if (epoch === undefined || !redisUsable()) return false;
+  try {
+    const stored = await getRedis().eval(SET_IF_EPOCH, 2, key, EPOCH_KEY, JSON.stringify(value), epoch, ttlSeconds);
+    return stored === 1;
+  } catch (err) {
+    console.error(`Redis SET ${key} failed:`, (err as Error).message);
+    return false;
+  }
+}
+
+/** Marks "something was invalidated" so in-flight fills that started earlier are not stored. */
+export async function bumpCacheEpoch(): Promise<void> {
+  if (!redisUsable()) return ;
+  try {
+    await getRedis().incr(EPOCH_KEY);
+  } catch (err) {
+    console.error('Redis epoch bump failed:', (err as Error).message);
   }
 }
 

@@ -41,6 +41,7 @@ export const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
     max: process.env.NODE_ENV === 'development' ? 100 : 10, // More lenient in development
     store: makeStore('rl:auth:'),
+    passOnStoreError: true, // Redis down => skip limiting, don't 500 the request
     message: 'Too many authentication attempts, please try again later',
     standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
     legacyHeaders: false, // Disable `X-RateLimit-*` headers
@@ -82,6 +83,7 @@ export const generalLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
     max: GENERAL_LIMIT,
     store: makeStore('rl:general:'),
+    passOnStoreError: true,
     message: 'Too many requests, please try again later',
     standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
     legacyHeaders: false, // Disable `X-RateLimit-*` headers

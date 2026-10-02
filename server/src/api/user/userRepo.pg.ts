@@ -2,6 +2,7 @@ import { db, users } from '../../db';
 import { eq } from 'drizzle-orm';
 import type { SellerInfo } from './userTypes';
 import { cacheGet, cacheSet, cacheDel } from '../../config/redisClient';
+import { invalidateUser } from '../../services/cacheInvalidation';
 
 /**
  * Postgres-backed user repository — Drizzle is the single source of truth
@@ -55,13 +56,19 @@ export async function updateUser(
     .set({ ...patch, updatedAt: new Date() })
     .where(eq(users.id, id))
     .returning();
-  if (user) await cacheDel(userCacheKey(id));
+  if (user) {
+    await cacheDel(userCacheKey(id));
+    await invalidateUser(id, Object.keys(patch));
+  }
   return user;
 }
 
 export async function removeUser(id: string): Promise<PgUser | undefined> {
   const [user] = await db.delete(users).where(eq(users.id, id)).returning();
-  if (user) await cacheDel(userCacheKey(id));
+  if (user) {
+    await cacheDel(userCacheKey(id));
+    await invalidateUser(id);
+  }
   return user;
 }
 

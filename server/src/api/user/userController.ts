@@ -16,6 +16,7 @@ import { getAuthCookieOptions, getClearCookieOptions, COOKIE_NAMES, COOKIE_DURAT
 import * as pgUsers from "./userRepo.pg";
 import type { SellerInfo } from "./userTypes";
 import { coerceUserRole, isUserRole } from "../../utils/roles";
+import { invalidateAgency } from '../../services/cacheInvalidation';
 
 const SORTABLE = new Set(['createdAt', 'name', 'email']);
 
@@ -557,6 +558,7 @@ export const approveSellerApplication = async (req: Request, res: Response, next
       .set({ role: nextRole, sellerInfo: updatedSellerInfo, updatedAt: new Date() })
       .where(eq(users.id, userId))
       .returning();
+    await invalidateAgency(userId);
 
     // Create their tour-media R2 folder now, so it's ready before their first upload.
     await ensureMediaFolder(userId, sellerInfo.companyName);
@@ -598,6 +600,7 @@ export const rejectSellerApplication = async (req: Request, res: Response, next:
       .set({ sellerInfo: updatedSellerInfo, updatedAt: new Date() })
       .where(eq(users.id, userId))
       .returning();
+    await invalidateAgency(userId);
 
     res.json({ user: pgUsers.withoutPassword(updatedUser), message: "Seller application rejected" });
   } catch (err) {

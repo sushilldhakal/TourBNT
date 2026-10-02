@@ -11,6 +11,7 @@ import {
   handleResourceNotFound,
   sendValidationError,
 } from '../../../utils/apiResponse';
+import { invalidateTours } from '../../../services/cacheInvalidation';
 
 export const getUserFacts = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -151,6 +152,8 @@ export const updateFacts = async (req: Request, res: Response, next: NextFunctio
       );
       await db.update(tours).set({ facts: updatedTourFacts, updatedAt: new Date() }).where(eq(tours.id, tour.id));
     }
+
+    await invalidateTours(affectedTours.map((t) => t.id));
 
     sendSuccess(res, {
       facts: updatedFact,

@@ -2,6 +2,7 @@ import { Response, Request, NextFunction } from 'express';
 import { db, faqs, tours } from '../../../db';
 import { eq, desc, inArray, count, sql } from 'drizzle-orm';
 import { sendSuccess, sendPaginatedResponse, HTTP_STATUS, handleUnauthorized, handleForbidden, handleResourceNotFound, sendValidationError } from '../../../utils/apiResponse';
+import { invalidateTours } from '../../../services/cacheInvalidation';
 
 export const getUserFaqs = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -127,6 +128,8 @@ export const updateFaqs = async (req: Request, res: Response, next: NextFunction
       );
       await db.update(tours).set({ faqs: updatedTourFaqs, updatedAt: new Date() }).where(eq(tours.id, tour.id));
     }
+
+    await invalidateTours(affectedTours.map((t) => t.id));
 
     sendSuccess(res, {
       faqs: updatedFaq,

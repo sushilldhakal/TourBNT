@@ -29,8 +29,12 @@ import { authenticate, authorizeRoles } from '../../../middlewares/authenticate'
 import { uploadNone } from '../../../middlewares/multer';
 import { paginationMiddleware } from '../../../middlewares/pagination';
 import { cacheRoute } from '../../../middlewares/cacheMiddleware';
+import { invalidateOnWrite, TOUR_LISTING_PREFIXES } from '../../../services/cacheInvalidation';
 
 const router = express.Router();
+
+// Cached category lists, the home feed and every tour listing (tours embed category names) go stale on any write here.
+router.use(invalidateOnWrite(['categories', 'categories-approved', 'categories-by-type', 'category-by-id', 'home-feed', ...TOUR_LISTING_PREFIXES]));
 
 // Wrapper functions to handle :id parameter for RESTful routes
 const updateCategoryById = (req: any, res: any) => {

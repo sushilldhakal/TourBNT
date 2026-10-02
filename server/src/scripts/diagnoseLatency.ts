@@ -86,8 +86,14 @@ async function checkRedis() {
         }
         verdict('PING (median of 10)', median(p), 2, 20);
         const keys = await redis.dbsize();
-        const routeKeys = (await redis.scan('0', 'MATCH', 'route:*', 'COUNT', 1000))[1].length;
-        console.log(`  keys: ${keys} total, ~${routeKeys} cached API responses (route:*) in the first scan page`);
+        let routeKeys = 0;
+        let cursor = '0';
+        do {
+            const [next, found] = await redis.scan(cursor, 'MATCH', 'route:*', 'COUNT', 1000);
+            cursor = next;
+            routeKeys += found.length;
+        } while (cursor !== '0');
+        console.log(`  keys: ${keys} total, ${routeKeys} cached API responses (route:*)`);
         if (routeKeys === 0) console.log('  !! No cached responses — the API response cache is not being used.');
         const mem = (await redis.info('memory')).match(/used_memory_human:(\S+)/)?.[1];
         const maxmem = (await redis.info('memory')).match(/maxmemory_human:(\S+)/)?.[1];
@@ -126,8 +132,9 @@ async function checkApi() {
 async function main() {
     console.log('TourBNT latency diagnosis');
     await checkDatabase().catch((err) => console.log(`  [FAIL] ${(err as Error).message}`));
-    await checkRedis();
+    // API first: cached responses only live 60-120s, so Redis must be inspected right after they are written.
     await checkApi();
+    await checkRedis();
     console.log('\nRule of thumb: same-region DB round trip should be < 5 ms. If it is 150+ ms, the');
     console.log('database is not in the same region as this server, and that alone explains slow pages.');
 }

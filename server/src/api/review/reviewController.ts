@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { db, reviews, reviewReplies, tours, tourAuthors, users } from '../../db';
 import { eq, and, or, ilike, desc, asc, avg, count, inArray, sql } from 'drizzle-orm';
 import { sendSuccess } from '../../utils/apiResponse';
+import { invalidateTour } from '../../services/cacheInvalidation';
 
 const USER_COLUMNS = { id: users.id, name: users.name, email: users.email, avatar: users.avatar, roles: users.role } as const;
 
@@ -22,6 +23,9 @@ async function recalculateTourRating(tourId: string) {
       reviewCount: totalReviews,
     })
     .where(eq(tours.id, tourId));
+
+  // Cards, the home feed and the agency rollup all show this rating.
+  await invalidateTour(tourId, { extraFamilies: ['reviews'] });
 }
 
 async function withReplies(reviewIds: string[] | any) {

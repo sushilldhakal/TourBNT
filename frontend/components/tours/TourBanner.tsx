@@ -43,7 +43,7 @@ export default function TourBanner({ tour }: TourBannerProps) {
     return (
         <>
             {/* Full-width banner with cover image */}
-            <header className="relative w-full h-[300px] md:h-[400px] bg-muted" role="banner">
+            <header className="relative w-full h-[200px] md:h-[200px] bg-muted" role="banner">
                 {/* Cover image */}
                 <Image
                     src={tour.coverImage ?? ''}

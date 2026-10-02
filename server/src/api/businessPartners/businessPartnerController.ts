@@ -19,6 +19,7 @@ import { uploadBusinessDocuments, deleteBusinessDocuments } from '../../services
 import { ensureMediaFolder } from '../../services/mediaFolderService';
 import * as notifications from '../notifications/notificationController';
 import type { BusinessPartnerType } from './businessPartnerTypes';
+import { invalidateBusinessPartner } from '../../services/cacheInvalidation';
 
 type BusinessPartnerRow = typeof businessPartners.$inferSelect;
 
@@ -253,6 +254,7 @@ export const updateMyBusinessPartner = async (req: Request, res: Response, next:
       ...(isActive !== undefined && { isActive: isActive === true || isActive === 'true' }),
       updatedAt: new Date(),
     }).where(eq(businessPartners.id, businessPartnerId)).returning();
+    await invalidateBusinessPartner(businessPartnerId);
 
     const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
     if (files && Object.keys(files).length > 0) {
@@ -374,6 +376,7 @@ export const approveBusinessPartner = async (req: Request, res: Response, next: 
       rejectionReason: null,
       updatedAt: new Date(),
     }).where(eq(businessPartners.id, businessPartnerId)).returning();
+    await invalidateBusinessPartner(businessPartnerId);
 
     // `users.role` is a single column, but ownership of this listing (and
     // therefore access to /dashboard/business, review moderation, ad
@@ -427,6 +430,7 @@ export const rejectBusinessPartner = async (req: Request, res: Response, next: N
       approvedAt: null,
       updatedAt: new Date(),
     }).where(eq(businessPartners.id, businessPartnerId)).returning();
+    await invalidateBusinessPartner(businessPartnerId);
 
     try {
       await notifications.createBusinessPartnerRejectionNotification(existing.ownerId, rejectedBy, existing.name, existing.id, reason);
@@ -450,7 +454,10 @@ export const deleteBusinessPartner = async (req: Request, res: Response, next: N
     if (!isOwnerOrAdmin(existing, req)) return sendForbiddenError(res, 'Not authorized to delete this business');
 
     const docs = await db.select().from(businessDocuments).where(eq(businessDocuments.businessPartnerId, businessPartnerId));
+    // The itinerary links are set to null by the delete, so find the affected tours first.
+    const linkedTours = await db.selectDistinct({ tourId: tourItineraryPartners.tourId }).from(tourItineraryPartners).where(eq(tourItineraryPartners.businessPartnerId, businessPartnerId));
     await db.delete(businessPartners).where(eq(businessPartners.id, businessPartnerId));
+    await invalidateBusinessPartner(businessPartnerId, { tourIds: linkedTours.map((r) => r.tourId) });
 
     if (docs.length > 0) {
       try {

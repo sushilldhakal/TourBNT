@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { db, businessReviews, businessReviewReplies, businessReviewLikes, businessPartners, users } from '../../db';
 import { eq, and, desc, asc, avg, count, inArray, sql } from 'drizzle-orm';
 import * as notifications from '../notifications/notificationController';
+import { invalidateBusinessPartner } from '../../services/cacheInvalidation';
 
 const USER_COLUMNS = { id: users.id, name: users.name, email: users.email, avatar: users.avatar, roles: users.role } as const;
 
@@ -22,6 +23,9 @@ async function recalculateBusinessRating(businessPartnerId: string) {
       reviewCount: totalReviews,
     })
     .where(eq(businessPartners.id, businessPartnerId));
+
+  // Tour pages embed this partner's rating.
+  await invalidateBusinessPartner(businessPartnerId);
 }
 
 async function withReplies(reviewIds: string[]) {

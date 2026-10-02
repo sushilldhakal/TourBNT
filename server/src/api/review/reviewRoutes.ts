@@ -17,8 +17,11 @@ import {
     likeReviewReply,
     incrementReplyView
 } from './reviewController';
+import { invalidateOnWrite } from '../../services/cacheInvalidation';
 
 const router = express.Router({ mergeParams: true }); // mergeParams allows access to params from parent router
+
+router.use(invalidateOnWrite(['reviews', 'home-feed']));
 
 // Public routes
 

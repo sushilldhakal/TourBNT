@@ -19,8 +19,11 @@ import {
   viewComment,
   getCommentWithReplies
 } from './commentController';
+import { invalidateOnWrite } from '../../services/cacheInvalidation';
 
 const postRouter = express.Router();
+
+postRouter.use(invalidateOnWrite(['posts', 'home-feed']));
 
 // Post-related routes - RESTful patterns
 postRouter.get('/',

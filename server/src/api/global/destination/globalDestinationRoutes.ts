@@ -30,8 +30,11 @@ import { authenticate, authorizeRoles } from '../../../middlewares/authenticate'
 import { uploadNone } from '../../../middlewares/multer';
 import { paginationMiddleware } from '../../../middlewares/pagination';
 import { cacheRoute } from '../../../middlewares/cacheMiddleware';
+import { invalidateOnWrite } from '../../../services/cacheInvalidation';
 
 const router = express.Router();
+
+router.use(invalidateOnWrite(['destinations', 'destinations-approved', 'destinations-by-country', 'destination-by-id', 'home-feed']));
 
 // Wrapper functions to handle :id parameter for RESTful routes
 const updateDestinationById = (req: any, res: any) => {

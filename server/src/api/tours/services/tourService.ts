@@ -3,8 +3,10 @@ import { eq, and, or, ilike, gte, lte, gt, desc, asc, sql, inArray, count, getTa
 import createHttpError from 'http-errors';
 import { Tour } from '../tourTypes';
 import { ITINERARY_ROLE_TO_PARTNER_TYPES } from '../../businessPartners/businessPartnerTypes';
-import { cacheGet, cacheSet, cacheDel, cacheDelPattern, getRedisClient } from '../../../config/redisClient';
+import { cacheGetWithEpoch, cacheSetIfEpoch, getRedisClient } from '../../../config/redisClient';
+import { invalidateTour } from '../../../services/cacheInvalidation';
 import { ItineraryRequestService } from './itineraryRequestService';
+import { isUuid } from '../../../utils/uuid';
 
 /** Best-effort — a partner-notification hiccup must never fail the tour save itself. */
 async function reconcileItineraryRequests(tourId: string) {
@@ -331,16 +333,8 @@ export class TourService {
     return `tour:by-id:${tourId}`;
   }
 
-  /** Invalidates a single cached tour plus every cached listing/search page — a tour edit can move it in or out of any of them. */
-  private static async invalidateTourCaches(tourId: string) {
-    await Promise.all([
-      cacheDel(TourService.tourCacheKey(tourId)),
-      cacheDelPattern('route:tour*'),
-    ]);
-  }
-
   static async getTourById(tourId: string) {
-    const cached = await cacheGet<any>(TourService.tourCacheKey(tourId));
+    const { value: cached, epoch } = await cacheGetWithEpoch<any>(TourService.tourCacheKey(tourId));
     if (cached) return cached;
 
     const [tour] = await db.select().from(tours).where(eq(tours.id, tourId)).limit(1);
@@ -368,7 +362,7 @@ export class TourService {
 
     enriched.itinerary = await enrichItineraryPartners(enriched.itinerary);
 
-    await cacheSet(TourService.tourCacheKey(tourId), enriched, 60);
+    await cacheSetIfEpoch(TourService.tourCacheKey(tourId), enriched, 60, epoch);
     return enriched;
   }
 
@@ -386,7 +380,7 @@ export class TourService {
     await reconcileItineraryRequests(newTour.id);
 
     const [enriched] = await attachRelations([newTour]);
-    await cacheDelPattern('route:tour*');
+    await invalidateTour(newTour.id, { authorIds: [authorId] });
     return enriched;
   }
 
@@ -412,7 +406,7 @@ export class TourService {
     await reconcileItineraryRequests(tourId);
 
     const [enriched] = await attachRelations([updatedTour]);
-    await TourService.invalidateTourCaches(tourId);
+    await invalidateTour(tourId);
     return enriched;
   }
 
@@ -421,11 +415,13 @@ export class TourService {
       ? and(eq(tours.id, tourId), inArray(tours.id, db.select({ tourId: tourAuthors.tourId }).from(tourAuthors).where(eq(tourAuthors.userId, authorId))))
       : eq(tours.id, tourId);
 
+    // Read the authors first: deleting the tour cascades their tour_authors rows away.
+    const authorRows = await db.select({ userId: tourAuthors.userId }).from(tourAuthors).where(eq(tourAuthors.tourId, tourId));
     const [deleted] = await db.delete(tours).where(where).returning();
     if (!deleted) {
       throw createHttpError(404, 'Tour not found or unauthorized');
     }
-    await TourService.invalidateTourCaches(tourId);
+    await invalidateTour(tourId, { authorIds: authorRows.map((r) => r.userId) });
     return deleted;
   }
 
@@ -547,6 +543,9 @@ export class TourService {
    * before, if Redis is unavailable — a view is never silently dropped.
    */
   static async incrementTourViews(tourId: string) {
+    // Tour ids are UUIDs. Scanners hit /tours/<anything> (e.g. a literal `${e.id}` lifted out of a
+    // JS bundle); that request 404s, but must not leave a pending-views key behind in Redis.
+    if (!isUuid(tourId)) return;
     try {
       const redis = getRedisClient();
       await redis.incr(`tour:views:pending:${tourId}`);
