@@ -15,10 +15,9 @@ interface BookingWidgetProps {
 /**
  * BookingWidget Component
  * 
- * A sticky sidebar widget that displays booking information and form.
+ * A sidebar widget that displays booking information and form.
  * Features:
- * - Sticky positioning on desktop (top-24)
- * - Non-sticky on mobile screens
+ * - Flows with the page (relative, not sticky)
  * - Call center header with phone number
  * - Integrated FrontBooking component
  * - Accepts pre-filled departure date from departure selection
@@ -30,8 +29,7 @@ export function BookingWidget({ tour, prefilledDate, className }: BookingWidgetP
         <aside
             id="booking-widget"
             className={cn(
-                // Sticky on desktop (lg and above), non-sticky on mobile
-                "lg:sticky lg:top-24 z-20",
+                "relative mt-[-90px]",
                 className
             )}
             aria-label="Tour booking"

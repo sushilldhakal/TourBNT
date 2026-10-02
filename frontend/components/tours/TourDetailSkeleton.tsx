@@ -94,7 +94,7 @@ export function TourDetailSkeleton() {
 
                     {/* Sidebar - 1/3 width */}
                     <div className="lg:col-span-1">
-                        <Card className="sticky top-24">
+                        <Card className="relative">
                             <CardContent className="p-0">
                                 <div className="bg-muted p-4">
                                     <Skeleton className="h-6 w-48 mx-auto" />
