@@ -9,12 +9,9 @@ import { metricsCollector } from '../utils/metrics';
  * Get client IP address from request
  */
 function getClientIp(req: Request): string {
-    return (
-        (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
-        (req.headers['x-real-ip'] as string) ||
-        req.socket.remoteAddress ||
-        'unknown'
-    );
+    // req.ip is already resolved through the trusted proxies (see config/trustProxy.ts). The first
+    // X-Forwarded-For entry is whatever the client typed, so it must not be used directly.
+    return req.ip || req.socket.remoteAddress || 'unknown';
 }
 
 /**

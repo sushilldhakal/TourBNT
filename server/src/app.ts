@@ -34,8 +34,11 @@ import swaggerUi from 'swagger-ui-express';
 import { getSwaggerSpec } from './config/swagger';
 import { logger } from './utils/logger';
 import cookieParser from 'cookie-parser';
+import { TRUST_PROXY } from './config/trustProxy';
 
 const app = express();
+// Believe X-Forwarded-For only from nginx and Cloudflare, so req.ip is the real visitor (see config/trustProxy.ts).
+app.set('trust proxy', TRUST_PROXY);
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

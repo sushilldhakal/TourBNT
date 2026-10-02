@@ -30,10 +30,9 @@ function todayDateString(): string {
 }
 
 function visitorKey(req: Request): string {
-  // The LAST X-Forwarded-For entry is the one our own proxy appended; earlier entries are
-  // whatever the client sent, and would let anyone dodge the dedupe and burn an advertiser's views.
-  const forwarded = (req.headers['x-forwarded-for'] as string | undefined)?.split(',').map((s) => s.trim()).filter(Boolean);
-  const ip = forwarded?.[forwarded.length - 1] || (req.headers['x-real-ip'] as string) || req.socket.remoteAddress || 'unknown';
+  // req.ip is the real visitor, resolved through the trusted proxies (config/trustProxy.ts) — a
+  // client-supplied X-Forwarded-For can't dodge the dedupe and burn an advertiser's views.
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
   return createHash('sha1').update(`${ip}|${req.headers['user-agent'] ?? ''}`).digest('hex').slice(0, 20);
 }
 
