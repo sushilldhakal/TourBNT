@@ -1,10 +1,13 @@
-'use client';
-
-import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useParams } from 'next/navigation';
 import { getCategoryById } from '@/lib/api/categories';
+
+// Serve cached HTML and refresh it in the background at most once a minute (ISR).
+export const revalidate = 60;
+// No pages are built ahead of time; each one is rendered on its first visit and then cached.
+export async function generateStaticParams() {
+    return [];
+}
 
 interface CategoryDetail {
     id?: string;
@@ -18,44 +21,21 @@ interface CategoryDetail {
     tours?: Array<{ _id?: string; id?: string; title?: string; slug?: string }>;
 }
 
-export default function SingleCategoryPage() {
-    const params = useParams();
-    const categoryId = typeof params.categoryId === 'string' ? params.categoryId : '';
-    const [category, setCategory] = useState<CategoryDetail | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-
-    useEffect(() => {
-        if (!categoryId) {
-            setLoading(false);
-            return;
-        }
-        let cancelled = false;
-        getCategoryById(categoryId)
-            .then((data: CategoryDetail) => {
-                if (!cancelled) setCategory(data);
-            })
-            .catch(() => {
-                if (!cancelled) setError('Category not found');
-            })
-            .finally(() => {
-                if (!cancelled) setLoading(false);
-            });
-        return () => { cancelled = true; };
-    }, [categoryId]);
-
-    if (loading) {
-        return (
-            <div className="w-full mx-auto px-4 py-16">
-                <div className="max-w-4xl mx-auto text-center text-muted-foreground">Loading...</div>
-            </div>
-        );
+// Server component: the HTML arrives with the data in it, no client-side fetch round trip.
+export default async function SingleCategoryPage({ params }: { params: Promise<{ categoryId: string }> }) {
+    const { categoryId } = await params;
+    let category: CategoryDetail | null = null;
+    try {
+        category = (await getCategoryById(categoryId)) as CategoryDetail;
+    } catch {
+        category = null;
     }
-    if (error || !category) {
+
+    if (!category) {
         return (
             <div className="w-full mx-auto px-4 py-16">
                 <div className="max-w-4xl mx-auto text-center">
-                    <p className="text-muted-foreground mb-4">{error ?? 'Category not found'}</p>
+                    <p className="text-muted-foreground mb-4">Category not found</p>
                     <Link href="/categories" className="text-primary hover:text-primary/80">← Back to Categories</Link>
                 </div>
             </div>

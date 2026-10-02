@@ -6,6 +6,7 @@
 import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
 import { getTours, getLatestTours, getTourTitlesByIds, getMyTours, getTourLogisticsStatus } from '@/lib/api/tours';
 import { queryKeys } from './queryKeys';
+import { toursInfiniteOptions } from './publicQueryOptions';
 import type { ToursResponse, TourItineraryRequestStatus } from '@/lib/api/tours';
 import type { TourTitle } from '@/types/types';
 
@@ -19,17 +20,7 @@ export function useTours(params?: { pageParam?: number; limit?: number }) {
 
 /** Public tours page: infinite scroll */
 export function useToursInfinite(limit = 12) {
-    return useInfiniteQuery({
-        queryKey: [...queryKeys.tours.all(), 'infinite', limit],
-        queryFn: ({ pageParam }: { pageParam: number }) =>
-            getTours({ pageParam: pageParam - 1, limit }),
-        initialPageParam: 1,
-        getNextPageParam: (lastPage: ToursResponse) =>
-            lastPage?.pagination?.hasNextPage
-                ? (lastPage.pagination.currentPage ?? 0) + 1
-                : undefined,
-        staleTime: 5 * 60 * 1000,
-    });
+    return useInfiniteQuery(toursInfiniteOptions(limit));
 }
 
 /** Seller dashboard: my tours list (paginated) */

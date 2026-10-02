@@ -18,6 +18,7 @@ import type { CategoryData } from '@/types/types';
 
 import { queryKeys, categoryKeys } from './queryKeys';
 import { useCacheManager } from './cacheUtils';
+import { approvedCategoriesOptions } from './publicQueryOptions';
 
 export { categoryKeys };
 
@@ -126,13 +127,7 @@ export const useApprovedCategories = (params?: {
     limit?: number;
     search?: string;
 }) => {
-    return useQuery({
-        queryKey: [...categoryKeys.approved(), params],
-        queryFn: async () => {
-            const response = await categoryApi.getApproved(params);
-            return extractResponseData(response);
-        },
-    });
+    return useQuery(approvedCategoriesOptions(params));
 };
 
 export const useSearchCategories = (

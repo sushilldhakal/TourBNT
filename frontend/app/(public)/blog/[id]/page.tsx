@@ -1,50 +1,30 @@
-'use client';
-
-import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useParams } from 'next/navigation';
 import { getSinglePost } from '@/lib/api/posts';
 import type { Post } from '@/types/types';
 
-export default function SingleBlogPage() {
-    const params = useParams();
-    const blogId = typeof params.id === 'string' ? params.id : '';
-    const [post, setPost] = useState<Post | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+// Serve cached HTML and refresh it in the background at most once a minute (ISR).
+export const revalidate = 60;
+// No pages are built ahead of time; each one is rendered on its first visit and then cached.
+export async function generateStaticParams() {
+    return [];
+}
 
-    useEffect(() => {
-        if (!blogId) {
-            setLoading(false);
-            return;
-        }
-        let cancelled = false;
-        getSinglePost(blogId)
-            .then((data) => {
-                if (!cancelled) setPost(data as Post);
-            })
-            .catch((err) => {
-                if (!cancelled) setError((err as Error)?.message ?? 'Failed to load post');
-            })
-            .finally(() => {
-                if (!cancelled) setLoading(false);
-            });
-        return () => { cancelled = true; };
-    }, [blogId]);
-
-    if (loading) {
-        return (
-            <div className="w-full mx-auto px-4 py-16">
-                <div className="max-w-4xl mx-auto text-center text-muted-foreground">Loading...</div>
-            </div>
-        );
+// Server component: the HTML arrives with the post in it, no client-side fetch round trip.
+export default async function SingleBlogPage({ params }: { params: Promise<{ id: string }> }) {
+    const { id: blogId } = await params;
+    let post: Post | null = null;
+    try {
+        post = (await getSinglePost(blogId)) as Post;
+    } catch {
+        post = null;
     }
-    if (error || !post) {
+
+    if (!post) {
         return (
             <div className="w-full mx-auto px-4 py-16">
                 <div className="max-w-4xl mx-auto text-center">
-                    <p className="text-muted-foreground mb-4">{error ?? 'Post not found'}</p>
+                    <p className="text-muted-foreground mb-4">Post not found</p>
                     <Link href="/blog" className="text-primary hover:text-primary/80">← Back to Blog</Link>
                 </div>
             </div>

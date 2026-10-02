@@ -1,31 +1,21 @@
-'use client';
-
-import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { getPosts } from '@/lib/api/posts';
 import type { PostListItem } from '@/types/post';
 
-export default function BlogPage() {
-    const [posts, setPosts] = useState<PostListItem[]>([]);
-    const [loading, setLoading] = useState(true);
+// Serve cached HTML and refresh it in the background at most once a minute (ISR).
+export const revalidate = 60;
 
-    useEffect(() => {
-        let cancelled = false;
-        getPosts({ limit: 24 })
-            .then((res: { data?: PostListItem[]; items?: PostListItem[]; posts?: PostListItem[] }) => {
-                if (cancelled) return;
-                const list = res?.data ?? res?.items ?? res?.posts ?? [];
-                setPosts(Array.isArray(list) ? list : []);
-            })
-            .catch(() => {
-                if (!cancelled) setPosts([]);
-            })
-            .finally(() => {
-                if (!cancelled) setLoading(false);
-            });
-        return () => { cancelled = true; };
-    }, []);
+// Server component: the HTML arrives with the data in it, no client-side fetch round trip.
+export default async function BlogPage() {
+    let posts: PostListItem[] = [];
+    try {
+        const res: any = await getPosts({ limit: 24 });
+        const list = res?.data ?? res?.items ?? res?.posts ?? [];
+        posts = Array.isArray(list) ? list : [];
+    } catch {
+        posts = [];
+    }
 
     return (
         <div className="w-full mx-auto px-4 py-16 transition-all duration-300">
@@ -36,9 +26,7 @@ export default function BlogPage() {
                 </p>
             </div>
 
-            {loading ? (
-                <div className="text-center py-16 text-muted-foreground">Loading posts...</div>
-            ) : posts.length === 0 ? (
+            {posts.length === 0 ? (
                 <div className="text-center py-16">
                     <p className="text-xl text-muted-foreground mb-4">No blog posts available at the moment</p>
                     <Link href="/" className="text-primary hover:text-primary/80">

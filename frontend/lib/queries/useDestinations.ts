@@ -22,6 +22,7 @@ export type { UserDestination, GlobalDestination, CreateDestinationDTO } from '@
 
 import { queryKeys, destinationKeys } from './queryKeys';
 import { useCacheManager } from './cacheUtils';
+import { approvedDestinationsOptions } from './publicQueryOptions';
 
 export { destinationKeys };
 
@@ -133,13 +134,7 @@ export const useApprovedDestinations = (params?: {
     region?: string;
     search?: string;
 }) => {
-    return useQuery({
-        queryKey: [...destinationKeys.approved(), params],
-        queryFn: async () => {
-            const response = await destinationApi.getApproved(params);
-            return extractResponseData(response);
-        },
-    });
+    return useQuery(approvedDestinationsOptions(params));
 };
 
 /** All destinations for select/dropdown (e.g. AddDestination) */

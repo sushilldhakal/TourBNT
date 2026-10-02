@@ -1,10 +1,13 @@
-'use client';
-
-import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useParams } from 'next/navigation';
 import { getDestinationById } from '@/lib/api/destinations';
+
+// Serve cached HTML and refresh it in the background at most once a minute (ISR).
+export const revalidate = 60;
+// No pages are built ahead of time; each one is rendered on its first visit and then cached.
+export async function generateStaticParams() {
+    return [];
+}
 
 interface DestinationDetail {
     id?: string;
@@ -20,44 +23,21 @@ interface DestinationDetail {
     tours?: Array<{ _id?: string; id?: string; title?: string; slug?: string }>;
 }
 
-export default function SingleDestinationPage() {
-    const params = useParams();
-    const destinationId = typeof params.destinationId === 'string' ? params.destinationId : '';
-    const [destination, setDestination] = useState<DestinationDetail | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-
-    useEffect(() => {
-        if (!destinationId) {
-            setLoading(false);
-            return;
-        }
-        let cancelled = false;
-        getDestinationById(destinationId)
-            .then((data: DestinationDetail) => {
-                if (!cancelled) setDestination(data);
-            })
-            .catch(() => {
-                if (!cancelled) setError('Destination not found');
-            })
-            .finally(() => {
-                if (!cancelled) setLoading(false);
-            });
-        return () => { cancelled = true; };
-    }, [destinationId]);
-
-    if (loading) {
-        return (
-            <div className="w-full mx-auto px-4 py-16">
-                <div className="max-w-4xl mx-auto text-center text-muted-foreground">Loading...</div>
-            </div>
-        );
+// Server component: the HTML arrives with the data in it, no client-side fetch round trip.
+export default async function SingleDestinationPage({ params }: { params: Promise<{ destinationId: string }> }) {
+    const { destinationId } = await params;
+    let destination: DestinationDetail | null = null;
+    try {
+        destination = (await getDestinationById(destinationId)) as DestinationDetail;
+    } catch {
+        destination = null;
     }
-    if (error || !destination) {
+
+    if (!destination) {
         return (
             <div className="w-full mx-auto px-4 py-16">
                 <div className="max-w-4xl mx-auto text-center">
-                    <p className="text-muted-foreground mb-4">{error ?? 'Destination not found'}</p>
+                    <p className="text-muted-foreground mb-4">Destination not found</p>
                     <Link href="/destinations" className="text-primary hover:text-primary/80">← Back to Destinations</Link>
                 </div>
             </div>

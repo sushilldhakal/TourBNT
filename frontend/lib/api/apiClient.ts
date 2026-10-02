@@ -47,7 +47,8 @@ const DIRECT_BACKEND = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost
  * same-origin Next proxy so Set-Cookie lands on the page host.
  */
 function browserApiBaseUrl(): string {
-    if (typeof window === 'undefined') return DIRECT_BACKEND;
+    // On the Next server (server components, generateMetadata) call the API over localhost.
+    if (typeof window === 'undefined') return `${SERVER_BACKEND_URL}/api/v1`;
     try {
         const backendHost = new URL(process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000').hostname;
         if (window.location.hostname !== backendHost) return '/api/v1';

@@ -1,4 +1,5 @@
 import { Metadata } from 'next';
+import { cache } from 'react';
 import { notFound } from 'next/navigation';
 import { getTourById, getLatestTours } from '@/lib/api/tours';
 import { Tour } from '@/lib/types';
@@ -9,6 +10,10 @@ import { TourDetailClient, BookingWidgetClient } from '@/components/tours/TourDe
 import TourCard from '@/components/tours/TourCard';
 import { TourPageLayout } from '@/components/tours/TourPageLayout';
 import { RelevantAdSlot } from '@/components/ads/RelevantAdSlot';
+
+// generateMetadata and the page both need the tour: cache() makes that one API call per
+// request instead of two (the detail endpoint also counts a view, which was counted twice).
+const getTourOnce = cache((id: string) => getTourById(id));
 
 interface PageProps {
     params: Promise<{
@@ -23,7 +28,7 @@ interface PageProps {
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
     try {
         const { id } = await params;
-        const response = await getTourById(id);
+        const response = await getTourOnce(id);
         const tour: Tour = response?.tour;
 
         if (!tour) {
@@ -107,7 +112,7 @@ export default async function SingleTourPage({ params }: PageProps) {
 
         // Parallel data fetching for better performance
         const [tourResponse, relatedResponse] = await Promise.allSettled([
-            getTourById(id),
+            getTourOnce(id),
             getLatestTours(),
         ]);
 

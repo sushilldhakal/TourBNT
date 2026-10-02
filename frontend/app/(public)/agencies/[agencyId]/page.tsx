@@ -1,29 +1,27 @@
-'use client';
-
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
 import { Building2, Globe, Mail, MapPin, Phone, Star } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import TourCard from '@/components/tours/TourCard';
 import { getAgencyById } from '@/lib/api/tours';
 
-export default function SingleAgencyPage() {
-    const params = useParams();
-    const agencyId = typeof params.agencyId === 'string' ? params.agencyId : '';
+// Serve cached HTML and refresh it in the background at most once a minute (ISR).
+export const revalidate = 60;
+// No pages are built ahead of time; each one is rendered on its first visit and then cached.
+export async function generateStaticParams() {
+    return [];
+}
 
-    const { data, isLoading, isError } = useQuery({
-        queryKey: ['agency', agencyId],
-        queryFn: () => getAgencyById(agencyId),
-        enabled: !!agencyId,
-        staleTime: 60_000,
-        retry: false,
-    });
-
-    if (isLoading) {
-        return <div className="w-full mx-auto px-4 py-16"><div className="max-w-4xl mx-auto text-center text-muted-foreground">Loading...</div></div>;
+// Server component: the HTML arrives with the agency and its tours in it.
+export default async function SingleAgencyPage({ params }: { params: Promise<{ agencyId: string }> }) {
+    const { agencyId } = await params;
+    let data: Awaited<ReturnType<typeof getAgencyById>> | null = null;
+    try {
+        data = await getAgencyById(agencyId);
+    } catch {
+        data = null;
     }
-    if (isError || !data) {
+
+    if (!data) {
         return (
             <div className="w-full mx-auto px-4 py-16">
                 <div className="max-w-4xl mx-auto text-center">

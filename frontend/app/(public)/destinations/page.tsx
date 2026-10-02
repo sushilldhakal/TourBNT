@@ -1,9 +1,9 @@
-'use client';
-
-import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { getAllDestinations } from '@/lib/api/destinations';
+
+// Serve cached HTML and refresh it in the background at most once a minute (ISR).
+export const revalidate = 60;
 
 interface DestinationItem {
     id?: string;
@@ -16,27 +16,16 @@ interface DestinationItem {
     coverImage?: string;
 }
 
-export default function DestinationsPage() {
-    const [destinations, setDestinations] = useState<DestinationItem[]>([]);
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        let cancelled = false;
-        getAllDestinations()
-            .then((res: { data?: DestinationItem[]; items?: DestinationItem[] } | DestinationItem[]) => {
-                if (cancelled) return;
-                const raw = Array.isArray(res) ? res : (res as { data?: DestinationItem[]; items?: DestinationItem[] });
-                const list = raw?.data ?? raw?.items ?? (Array.isArray(res) ? res : []);
-                setDestinations(Array.isArray(list) ? list : []);
-            })
-            .catch(() => {
-                if (!cancelled) setDestinations([]);
-            })
-            .finally(() => {
-                if (!cancelled) setLoading(false);
-            });
-        return () => { cancelled = true; };
-    }, []);
+// Server component: the HTML arrives with the data in it, no client-side fetch round trip.
+export default async function DestinationsPage() {
+    let destinations: DestinationItem[] = [];
+    try {
+        const res: any = await getAllDestinations();
+        const list = Array.isArray(res) ? res : (res?.data ?? res?.items ?? []);
+        destinations = Array.isArray(list) ? list : [];
+    } catch {
+        destinations = [];
+    }
 
     return (
         <div className="w-full mx-auto px-4 py-16 transition-all duration-300">
@@ -47,9 +36,7 @@ export default function DestinationsPage() {
                 </p>
             </div>
 
-            {loading ? (
-                <div className="text-center py-16 text-muted-foreground">Loading...</div>
-            ) : destinations.length === 0 ? (
+            {destinations.length === 0 ? (
                 <div className="text-center py-16">
                     <p className="text-xl text-muted-foreground mb-4">No destinations available at the moment</p>
                     <Link href="/" className="text-primary hover:text-primary/80">

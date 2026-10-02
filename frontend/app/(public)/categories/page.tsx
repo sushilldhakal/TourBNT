@@ -1,9 +1,9 @@
-'use client';
-
-import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { getAllCategories } from '@/lib/api/categories';
+
+// Serve cached HTML and refresh it in the background at most once a minute (ISR).
+export const revalidate = 60;
 
 interface CategoryItem {
     id?: string;
@@ -15,27 +15,16 @@ interface CategoryItem {
     coverImage?: string;
 }
 
-export default function CategoriesPage() {
-    const [categories, setCategories] = useState<CategoryItem[]>([]);
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        let cancelled = false;
-        getAllCategories()
-            .then((res: unknown) => {
-                if (cancelled) return;
-                const raw = res as { data?: CategoryItem[]; items?: CategoryItem[] } | CategoryItem[];
-                const list = Array.isArray(raw) ? raw : (raw?.data ?? raw?.items ?? []);
-                setCategories(Array.isArray(list) ? list : []);
-            })
-            .catch(() => {
-                if (!cancelled) setCategories([]);
-            })
-            .finally(() => {
-                if (!cancelled) setLoading(false);
-            });
-        return () => { cancelled = true; };
-    }, []);
+// Server component: the HTML arrives with the data in it, no client-side fetch round trip.
+export default async function CategoriesPage() {
+    let categories: CategoryItem[] = [];
+    try {
+        const res: any = await getAllCategories();
+        const list = Array.isArray(res) ? res : (res?.data ?? res?.items ?? []);
+        categories = Array.isArray(list) ? list : [];
+    } catch {
+        categories = [];
+    }
 
     return (
         <div className="w-full mx-auto px-4 py-16 transition-all duration-300">
@@ -46,9 +35,7 @@ export default function CategoriesPage() {
                 </p>
             </div>
 
-            {loading ? (
-                <div className="text-center py-16 text-muted-foreground">Loading...</div>
-            ) : categories.length === 0 ? (
+            {categories.length === 0 ? (
                 <div className="text-center py-16">
                     <p className="text-xl text-muted-foreground mb-4">No categories available at the moment</p>
                     <Link href="/" className="text-primary hover:text-primary/80">
