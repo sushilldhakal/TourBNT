@@ -63,7 +63,7 @@ export function TourEditorLayout({
     };
 
     return (
-        <div className="container mx-auto px-4 max-w-7xl">
+        <div className="w-full">
             <Tabs value={activeTab} onValueChange={handleTabChange}>
                 <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-8 py-8">
 

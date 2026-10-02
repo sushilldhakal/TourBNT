@@ -1,6 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import { usePathname } from 'next/navigation';
 import { useLayout } from '@/providers/LayoutProvider';
 import { cn } from '@/lib/utils';
 import { Footer } from './Footer';
@@ -44,10 +45,27 @@ export function ContentContainer({
  * Content *inside* each row uses ContentContainer above (max-w-7xl when boxed, w-full when full width).
  */
 export function PublicLayoutClient({ children }: { children: React.ReactNode }) {
+    const pathname = usePathname() ?? '/';
+    // These routes lay out their own full-bleed rows with ContentContainer; every other
+    // page is placed on the same grid line as the header/footer here.
+    const managesOwnWidth =
+        pathname === '/' ||
+        pathname.startsWith('/tours') ||
+        pathname.startsWith('/enquiry') ||
+        /^\/partners\/[^/]+\/[^/]+/.test(pathname);
+
     return (
         <div className="w-full">
             <Navigation />
-            <main>{children}</main>
+            <main>
+                {managesOwnWidth ? (
+                    children
+                ) : (
+                    <ContentContainer className="px-4">
+                        <div data-public-page>{children}</div>
+                    </ContentContainer>
+                )}
+            </main>
             <Footer />
         </div>
     );

@@ -127,12 +127,34 @@
       background-color: var(--dashboard-bg);
     }
   
-    [data-dashboard-layout="full"] [data-dashboard-page] .container,
-    [data-dashboard-layout="full"] [data-dashboard-page] .max-w-4xl,
-    [data-dashboard-layout="full"] [data-dashboard-page] .max-w-5xl,
-    [data-dashboard-layout="full"] [data-dashboard-page] .max-w-6xl,
-    [data-dashboard-layout="full"] [data-dashboard-page] .max-w-7xl {
+    /* Standard dashboard page width: the shell (max-w-7xl, or full when toggled) is the only width
+       control. Page-level containers/max-w wrappers fill it and add no extra padding. */
+    [data-dashboard-page]:not([data-dashboard-fluid]) .container,
+    [data-dashboard-page]:not([data-dashboard-fluid]) .max-w-4xl,
+    [data-dashboard-page]:not([data-dashboard-fluid]) .max-w-5xl,
+    [data-dashboard-page]:not([data-dashboard-fluid]) .max-w-6xl,
+    [data-dashboard-page]:not([data-dashboard-fluid]) .max-w-7xl {
       max-width: 100% !important;
+      width: 100%;
+    }
+    [data-dashboard-page]:not([data-dashboard-fluid]) > .container {
+      padding: 0 !important;
+    }
+
+    /* Public pages sit inside ContentContainer (same grid line as header/footer). */
+    [data-public-page] .container,
+    [data-public-page] .container-fluid,
+    [data-public-page] .max-w-4xl,
+    [data-public-page] .max-w-5xl,
+    [data-public-page] .max-w-6xl,
+    [data-public-page] .max-w-7xl {
+      max-width: 100% !important;
+    }
+    [data-public-page] > .container,
+    [data-public-page] > .container-fluid,
+    [data-public-page] > .w-full {
+      padding-left: 0 !important;
+      padding-right: 0 !important;
     }
   
     .dashboard-card {

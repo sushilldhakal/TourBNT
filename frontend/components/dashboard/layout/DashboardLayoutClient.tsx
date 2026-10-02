@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { DashboardSidebar } from './DashboardSidebar';
 import { DashboardHeader } from './DashboardHeader';
 import { BreadcrumbsProvider } from '@/providers/BreadcrumbsProvider';
@@ -18,9 +18,12 @@ import type { DashboardLayoutClientProps } from '@/types/dashboard';
  */
 export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) {
     const router = useRouter();
+    const pathname = usePathname();
     const { sidebarCollapsed, setSidebarCollapsed, mobileMenuOpen, toggleMobileMenu, setMobileMenuOpen } = useDashboardStore();
     const { logout } = useAuth();
     const { isFullWidth } = useLayout();
+    // Messaging is a fixed-height app view, not a standard page: it keeps its own sizing.
+    const isMessagePage = pathname?.startsWith('/dashboard/message') ?? false;
 
 
     const handleLogout = () => {
@@ -115,12 +118,13 @@ export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) 
                             data-dashboard-shell
                             className={cn(
                                 'flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6 transition-[max-width] duration-300 min-w-0',
-                                isFullWidth ? 'w-full max-w-none' : 'w-full max-w-8xl mx-auto'
+                                isFullWidth || isMessagePage ? 'w-full max-w-none' : 'w-full max-w-7xl mx-auto'
                             )}
                         >
                             {/* Content Container */}
                             <div
                                 data-dashboard-page
+                                data-dashboard-fluid={isMessagePage ? '' : undefined}
                                 className="w-full min-w-0 flex-1 rounded-xl"
                             >
                                 {children}
