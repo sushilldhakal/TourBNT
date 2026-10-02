@@ -24,6 +24,11 @@ import fs from 'fs';
 import { randomUUID } from 'crypto';
 import { sql, eq, inArray } from 'drizzle-orm';
 import * as S from '../db';
+import { TOUR_CATALOG, MASTER_FACTS, CANCELLATION, INSURANCE, type DiscountSpec, type DaySpec } from './seedData/tourCatalog';
+import { AD_CAMPAIGNS, ADVERTISER_SPECS, type AdCampaign } from './seedData/adCatalog';
+import { tourDescription, bulletDoc } from './seedData/richText';
+import { processPricingOptions, processTourDatesData, processItineraryData, processFaqsData, processLocationData, processPaymentOptions } from '../api/tours/utils/dataProcessors';
+import { calculateBookingPricing } from '../api/bookings/utils/pricingCalculator';
 
 dotenvConfig({ path: path.resolve(__dirname, '../../.env') });
 
@@ -103,8 +108,6 @@ const GUIDE_NAMES = ['Pasang Sherpa', 'Tenzing Gurung', 'Dawa Tamang', 'Nima Lam
   'Ang Dorje', 'Rita Adhikari', 'Gopal Poudel', 'Kabita Rai', 'Tashi Wangdi', 'Binod Khadka'];
 const TRANSPORT_NAMES = ['Himalayan Express Transport', 'Kathmandu Airport Shuttle', 'Pokhara Tourist Coaches', 'Sherpa 4x4 Rentals', 'Yeti Mountain Flights Agency', 'Lumbini Link Bus Service', 'Everest Cab Services', 'Valley Van Hire', 'Annapurna Jeep Safari Co.', 'Terai Travels & Transport',
   'Nepal Rapid Shuttle', 'Mountain Wheels Rental', 'Express Bus Nepal', 'Midnight Cabs'];
-const ADVERTISER_NAMES = ['Everest Gear Outfitters', 'Nepal Trekking Supplies', 'TrekLight Headlamps', 'Sherpa Outdoor Apparel', 'Mountain Bites Energy Bars', 'Lakeside Spa & Wellness', 'Himal Travel Insurance', 'NepCab Ride Share', 'Summit Photography Workshops', 'Kathmandu Handicraft Emporium',
-  'PeakFit Gyms', 'Cheap Watches Outlet', 'Global SIM Cards Nepal', 'QuickLoan Nepal'];
 
 // ---------------------------------------------------------------------------
 // reference data
@@ -126,26 +129,6 @@ const CAT_SPECS = [
   { name: 'Family Holidays', desc: 'Relaxed itineraries designed for travelling with children.' },
   { name: 'Luxury Escapes', desc: 'Premium lodges, private guides and helicopter tours.' },
   { name: 'Rafting & Water Sports', desc: 'White-water rafting, kayaking and canoe trips.' },
-];
-
-// tour blueprints (seller index refers to the approved-seller list)
-interface TourSpec { title: string; dest: string; cat: string; days: number; price: number; sale?: number; seller: number; status: 'Published' | 'Draft' | 'Archived'; schedule: 'multiple' | 'fixed' | 'flexible'; highlights: string[]; max: number }
-const TOUR_SPECS: TourSpec[] = [
-  { title: 'Annapurna Base Camp Trek', dest: 'Annapurna Region', cat: 'Trekking & Hiking', days: 12, price: 1150, sale: 990, seller: 0, status: 'Published', schedule: 'multiple', max: 12, highlights: ['Ghandruk village', 'Chomrong stone steps', 'Machapuchare Base Camp', 'Annapurna Sanctuary', 'Hot springs at Jhinu'] },
-  { title: 'Poon Hill Sunrise Trek', dest: 'Annapurna Region', cat: 'Trekking & Hiking', days: 5, price: 520, seller: 0, status: 'Published', schedule: 'multiple', max: 14, highlights: ['Ulleri stairs', 'Ghorepani rhododendron forest', 'Poon Hill sunrise', 'Tadapani'] },
-  { title: 'Pokhara Adventure Weekend', dest: 'Pokhara', cat: 'Adventure Sports', days: 3, price: 340, sale: 299, seller: 1, status: 'Published', schedule: 'flexible', max: 10, highlights: ['Tandem paragliding', 'Phewa Lake boating', 'Zip-line at Sarangkot', 'Ultralight flight'] },
-  { title: 'Langtang Valley Trek', dest: 'Langtang Valley', cat: 'Trekking & Hiking', days: 8, price: 780, seller: 1, status: 'Published', schedule: 'multiple', max: 10, highlights: ['Syabrubesi', 'Lama Hotel', 'Kyanjin Gompa', 'Tserko Ri viewpoint'] },
-  { title: 'Upper Mustang Expedition', dest: 'Upper Mustang', cat: 'Luxury Escapes', days: 10, price: 2400, sale: 2150, seller: 2, status: 'Published', schedule: 'fixed', max: 8, highlights: ['Kagbeni gateway', 'Chele', 'Lo Manthang walled city', 'Cave monasteries'] },
-  { title: 'Lumbini Buddhist Pilgrimage', dest: 'Lumbini', cat: 'Spiritual & Yoga', days: 4, price: 390, seller: 3, status: 'Published', schedule: 'flexible', max: 20, highlights: ['Maya Devi Temple', 'Ashoka Pillar', 'World Peace Pagoda', 'Monastic zone'] },
-  { title: 'Bhaktapur & Nagarkot Photography Tour', dest: 'Nagarkot', cat: 'Photography Tours', days: 3, price: 310, seller: 3, status: 'Published', schedule: 'multiple', max: 8, highlights: ['Bhaktapur Durbar Square', 'Pottery Square', 'Nagarkot sunrise', 'Changu Narayan'] },
-  { title: 'Bardia Tiger Safari', dest: 'Bardia National Park', cat: 'Wildlife Safari', days: 4, price: 480, seller: 4, status: 'Published', schedule: 'multiple', max: 12, highlights: ['Jeep safari', 'Karnali river canoe', 'Tharu culture night', 'Dawn tiger tracking'] },
-  { title: 'Kathmandu Food & Culture Walk', dest: 'Kathmandu Valley', cat: 'Cultural Tours', days: 2, price: 150, seller: 5, status: 'Published', schedule: 'flexible', max: 12, highlights: ['Asan bazaar tasting', 'Patan Durbar Square', 'Momo cooking class', 'Boudhanath kora'] },
-  { title: 'Trishuli River Rafting', dest: 'Kathmandu Valley', cat: 'Rafting & Water Sports', days: 2, price: 220, sale: 190, seller: 5, status: 'Published', schedule: 'flexible', max: 16, highlights: ['Safety briefing', 'Grade III rapids', 'Riverside camp', 'Bonfire dinner'] },
-  { title: 'Everest Helicopter Day Tour', dest: 'Everest Region', cat: 'Luxury Escapes', days: 1, price: 1450, seller: 6, status: 'Published', schedule: 'multiple', max: 5, highlights: ['Kala Patthar landing', 'Everest View Hotel breakfast', 'Khumbu glacier flyover'] },
-  { title: 'Nepal Family Holiday', dest: 'Chitwan National Park', cat: 'Family Holidays', days: 9, price: 1650, seller: 7, status: 'Published', schedule: 'multiple', max: 10, highlights: ['Kathmandu sightseeing', 'Elephant breeding centre', 'Pokhara lakeside', 'Chitwan jungle activities'] },
-  { title: 'Yoga & Meditation Retreat Pokhara', dest: 'Pokhara', cat: 'Spiritual & Yoga', days: 7, price: 690, seller: 8, status: 'Published', schedule: 'fixed', max: 14, highlights: ['Sunrise yoga', 'Silent meditation', 'Ayurvedic massage', 'Peace Stupa hike'] },
-  { title: 'Mardi Himal Trek', dest: 'Annapurna Region', cat: 'Trekking & Hiking', days: 6, price: 560, seller: 9, status: 'Draft', schedule: 'multiple', max: 10, highlights: ['Forest camp', 'High Camp', 'Mardi Himal Base Camp'] },
-  { title: 'Annapurna Circuit Classic', dest: 'Annapurna Region', cat: 'Trekking & Hiking', days: 15, price: 1390, seller: 9, status: 'Archived', schedule: 'multiple', max: 12, highlights: ['Besisahar', 'Manang acclimatisation', 'Thorong La Pass', 'Muktinath temple'] },
 ];
 
 const REVIEW_TEXTS: Record<number, string[]> = {
@@ -285,7 +268,7 @@ async function seed() {
   const allCats = await db.select().from(S.globalCategories).where(eq(S.globalCategories.approvalStatus, 'approved'));
   const destByName = new Map(allDests.map((d) => [d.name, d]));
   const catByName = new Map(allCats.map((c) => [c.name, c]));
-  const partnerDests = allDests.filter((d) => ['Kathmandu Valley', 'Pokhara', 'Annapurna Region', 'Lumbini', 'Chitwan National Park', 'Nagarkot', 'Everest Region', 'Bardia National Park', 'Langtang Valley', 'Bandipur'].includes(d.name));
+  const partnerDests = allDests.filter((d) => ['Kathmandu Valley', 'Pokhara', 'Annapurna Region', 'Lumbini', 'Chitwan National Park', 'Nagarkot', 'Everest Region', 'Bardia National Park', 'Langtang Valley', 'Bandipur', 'Upper Mustang'].includes(d.name));
 
   interface Partner { id: string; ownerId: string; ownerEmail: string; type: string; name: string; destId: string; status: 'approved' | 'pending' | 'rejected'; slug: string }
   const partners: Partner[] = [];
@@ -313,17 +296,22 @@ async function seed() {
     advertiser: `${name} promotes products and services to travellers exploring Nepal, with campaigns across TourBNT tour and search pages.`,
   } as Record<string, string>)[type];
 
+  // A business named after a place belongs there ("Pokhara Palace Hotel" is not in Chitwan); the rest are spread evenly.
+  const NAME_REGION: Array<[string, string]> = [['kathmandu', 'Kathmandu Valley'], ['patan', 'Kathmandu Valley'], ['bhaktapur', 'Kathmandu Valley'], ['thamel', 'Kathmandu Valley'], ['pokhara', 'Pokhara'], ['lakeside', 'Pokhara'], ['annapurna', 'Annapurna Region'], ['lumbini', 'Lumbini'], ['buddha', 'Lumbini'], ['chitwan', 'Chitwan National Park'], ['bardia', 'Bardia National Park'], ['nagarkot', 'Nagarkot'], ['everest', 'Everest Region'], ['langtang', 'Langtang Valley'], ['mustang', 'Upper Mustang'], ['bandipur', 'Bandipur']];
+  const regionOfName = (name: string): string | null => { const n = name.toLowerCase(); return NAME_REGION.find(([k]) => n.includes(k))?.[1] ?? null; };
+
   const makePartners = (
     type: 'hotel' | 'guesthouse' | 'restaurant' | 'guide' | 'transport' | 'advertiser',
-    names: Array<{ name: string; extra?: any }>,
+    names: Array<{ name: string; extra?: any; destName?: string; description?: string }>,
     counts: { approved: number; pending: number; rejected: number },
     groupLabel: string,
   ) => {
+    let rotation = 0;
     names.forEach((n, i) => {
       const status: 'approved' | 'pending' | 'rejected' = i < counts.approved ? 'approved' : i < counts.approved + counts.pending ? 'pending' : 'rejected';
       const idx = status === 'approved' ? i : status === 'pending' ? i - counts.approved : i - counts.approved - counts.pending;
       const prefix = status === 'approved' ? '' : `${status}.`;
-      const dest = partnerDests[(i + type.length) % partnerDests.length];
+      const dest = destByName.get(n.destName ?? regionOfName(n.name) ?? '') || partnerDests[(rotation++ + type.length) % partnerDests.length];
       const ownerName = type === 'guide' ? n.name.replace(/ Guiding Services$/, '') : personName(i + type.length * 13);
       const owner = mkUser({
         email: `${prefix}${type}${pad(idx + 1)}`, name: ownerName, role: status === 'approved' ? type : 'user',
@@ -333,7 +321,7 @@ async function seed() {
       const slug = `${slugify(n.name)}-demo`;
       const submitted = daysFromNow(-int(status === 'approved' ? 20 : 1, status === 'approved' ? 200 : 25));
       partnerRows.push({
-        id, ownerId: owner.id, type, name: n.name, slug, description: descFor(type, n.name, dest.city ?? dest.name),
+        id, ownerId: owner.id, type, name: n.name, slug, description: n.description ?? descFor(type, n.name, dest.city ?? dest.name),
         logo: img(`logo-${slug}`, 256, 256), coverImage: img(`cover-${slug}`), email: `info.${slug}@${DEMO_DOMAIN}`, phone: phone(), website: `https://${slug}.example.com`,
         address: { address: `${int(1, 120)} ${pick(['Main Street', 'Lakeside Road', 'Temple Road', 'Bazaar Lane'])}`, city: dest.city ?? dest.name, state: dest.region, postalCode: `${int(33000, 44999)}`, country: 'Nepal' },
         destinationId: dest.id, details: detailsFor(type, i, n.extra),
@@ -350,11 +338,14 @@ async function seed() {
   };
 
   makePartners('hotel', Array.from({ length: 26 }, (_, i) => ({ name: `${HOTEL_A[i]} ${HOTEL_B[i % HOTEL_B.length]}` })), { approved: 20, pending: 4, rejected: 2 }, 'Hotels');
-  makePartners('guesthouse', GUESTHOUSE_A.map((a) => ({ name: `${a} Guest House` })), { approved: 6, pending: 2, rejected: 2 }, 'Guesthouses');
+  // Trail teahouses sit where the treks do; tours pick the guesthouse in the village they sleep in.
+  const GUESTHOUSE_DESTS = ['Annapurna Region', 'Annapurna Region', 'Langtang Valley', 'Upper Mustang', 'Everest Region', 'Pokhara', 'Nagarkot', 'Bandipur', 'Annapurna Region', 'Langtang Valley'];
+  makePartners('guesthouse', GUESTHOUSE_A.map((a, gi) => ({ name: `${a} Guest House`, destName: GUESTHOUSE_DESTS[gi] })), { approved: 6, pending: 2, rejected: 2 }, 'Guesthouses');
   makePartners('restaurant', RESTAURANTS.map(([name, cuisine]) => ({ name, extra: { cuisine } })), { approved: 30, pending: 5, rejected: 2 }, 'Restaurants');
   makePartners('guide', GUIDE_NAMES.map((g) => ({ name: `${g} Guiding Services` })), { approved: 15, pending: 4, rejected: 2 }, 'Guides');
-  makePartners('transport', TRANSPORT_NAMES.map((name) => ({ name })), { approved: 10, pending: 3, rejected: 1 }, 'Transport');
-  makePartners('advertiser', ADVERTISER_NAMES.map((name) => ({ name, extra: { industry: pick(['Outdoor gear', 'Insurance', 'Wellness', 'Photography', 'Handicrafts', 'Fitness', 'Telecom']) } })), { approved: 10, pending: 3, rejected: 1 }, 'Advertisers');
+  const TRANSPORT_DESTS = ['Kathmandu Valley', 'Kathmandu Valley', 'Pokhara', 'Upper Mustang', 'Everest Region', 'Lumbini', 'Kathmandu Valley', 'Chitwan National Park', 'Annapurna Region', 'Bardia National Park', 'Kathmandu Valley', 'Pokhara', 'Kathmandu Valley', 'Kathmandu Valley'];
+  makePartners('transport', TRANSPORT_NAMES.map((name, ti) => ({ name, destName: TRANSPORT_DESTS[ti] })), { approved: 10, pending: 3, rejected: 1 }, 'Transport');
+  makePartners('advertiser', ADVERTISER_SPECS.map((a) => ({ name: a.name, destName: a.home, description: a.description, extra: { industry: a.industry } })), { approved: 10, pending: 3, rejected: 1 }, 'Advertisers');
 
   // ---- persist users, then partners (FK order) ----
   await insertChunked(S.users, userRows, 100);
@@ -407,15 +398,13 @@ async function seed() {
   const factRows: any[] = [], faqRows: any[] = [];
   const sellerFacts = new Map<string, any[]>(), sellerFaqs = new Map<string, any[]>();
   sellers.forEach((s) => {
-    const f = [
-      { id: uuid(), userId: s.id, name: 'Difficulty', fieldType: 'Single Select', value: [pick(['Easy', 'Moderate', 'Challenging'])], icon: 'fa/FaMountain' },
-      { id: uuid(), userId: s.id, name: 'Group Type', fieldType: 'Multi Select', value: ['Solo', 'Family', 'Group'], icon: 'fa/FaUsers' },
-      { id: uuid(), userId: s.id, name: 'Best Season', fieldType: 'Multi Select', value: ['Spring', 'Autumn'], icon: 'fa/FaSun' },
-    ];
+    // The full master fact list — tours pick their own value for each (see seedData/tourCatalog.ts).
+    const f = MASTER_FACTS.map((m) => ({ id: uuid(), userId: s.id, name: m.name, fieldType: m.fieldType, value: m.options, icon: m.icon }));
     const q = [
-      { id: uuid(), userId: s.id, question: 'What is your cancellation policy?', answer: 'Full refund up to 30 days before departure, 50% up to 14 days, no refund within 14 days.' },
-      { id: uuid(), userId: s.id, question: 'Do I need to be very fit?', answer: 'A moderate fitness level is recommended. Regular cardio for a few weeks before departure helps.' },
-      { id: uuid(), userId: s.id, question: 'Are permits included?', answer: 'Yes — all entry permits and national park fees are included in the price.' },
+      { id: uuid(), userId: s.id, question: CANCELLATION.q, answer: CANCELLATION.a },
+      { id: uuid(), userId: s.id, question: INSURANCE.q, answer: INSURANCE.a },
+      { id: uuid(), userId: s.id, question: 'Do I need to be very fit?', answer: 'A moderate fitness level is recommended for treks. Regular cardio for a few weeks before departure helps.' },
+      { id: uuid(), userId: s.id, question: 'Are permits included?', answer: 'Where a permit is required, it is arranged and included in the price unless the tour page says otherwise.' },
     ];
     factRows.push(...f); faqRows.push(...q); sellerFacts.set(s.id, f); sellerFaqs.set(s.id, q);
   });
@@ -444,63 +433,177 @@ async function seed() {
   console.log('✅ Seller extras (facts, faqs, prefs, media, presets)');
 
   // ---------------------------------------------------------------------
-  // tours
+  // tours — every one fully authored (seedData/tourCatalog.ts), then pushed through the same
+  // processors the real tour editor's save path uses, so each field has exactly the shape the
+  // editor / tour page read back (pricing options, discounts, dates, facts, itinerary, ...).
   // ---------------------------------------------------------------------
-  interface TourRec { id: string; spec: TourSpec; code: string; sellerId: string; destId: string; departures: Date[]; itinerary: any[]; price: number; title: string }
+  interface Link { id: string; tour: TourRec; dayIdx: number; role: string; partner: Partner; unitTypeId: string | null; unitType: string | null; units: number }
+  interface TourRec { id: string; spec: { status: 'Published' | 'Draft' | 'Archived'; max: number; price: number }; code: string; sellerId: string; destId: string; departures: Date[]; itinerary: any[]; price: number; title: string; row: any }
   const tourRecs: TourRec[] = [];
   const tourRows: any[] = [], tourCatRows: any[] = [], tourAuthRows: any[] = [];
+  const linkRows: any[] = [];
+  const links: Link[] = [];
 
-  TOUR_SPECS.forEach((spec, i) => {
+  const quiet = <T,>(fn: () => T): T => { const log = console.log; console.log = () => undefined; try { return fn(); } finally { console.log = log; } };
+  const startOfDay = (offsetDays: number) => { const d = daysFromNow(offsetDays); d.setHours(0, 0, 0, 0); return d; };
+  const dateRangeOf = (ds: DiscountSpec) => ({ from: startOfDay(ds.fromDays), to: startOfDay(ds.toDays) });
+  const discountFields = (ds?: DiscountSpec) => ({
+    discountEnabled: !!ds,
+    percentageOrPrice: ds?.type === 'percent',
+    discountPercentage: ds?.type === 'percent' ? ds.value : 0,
+    discountPrice: ds?.type === 'amount' ? ds.value : 0,
+    ...(ds ? { discountDateRange: dateRangeOf(ds) } : {}),
+  });
+  const isActiveNow = (ds?: DiscountSpec) => !!ds && ds.fromDays <= 0 && ds.toDays >= 0;
+
+  // Nearest approved partner of a type: in the first region that has one, else any. `salt` spreads choices.
+  const pickPartner = (types: string[], regions: string[], salt: number): Partner => {
+    const pool = approvedPartners.filter((p) => types.includes(p.type));
+    for (const r of regions) {
+      const rid = destByName.get(r)?.id;
+      const local = pool.filter((p) => p.destId === rid);
+      if (local.length) return local[salt % local.length];
+    }
+    return pool[salt % pool.length];
+  };
+  const pickUnitType = (partner: Partner, role: string, time: string | null, maxSize: number) => {
+    const uts = unitTypesByPartner.get(partner.id) ?? [];
+    if (!uts.length) return null;
+    const find = (re: RegExp) => uts.find((u) => re.test(u.name));
+    if (role === 'meals') return (time && time >= '17:00' ? find(/dinner/i) : find(/lunch/i)) ?? uts[0];
+    if (role === 'transport') return (maxSize <= 6 ? find(/suv/i) : maxSize <= 24 ? find(/van/i) : find(/bus/i)) ?? uts[0];
+    if (role === 'accommodation') return find(/twin|standard/i) ?? uts[0];
+    return uts[0];
+  };
+
+  TOUR_CATALOG.forEach((e, ti) => {
     const id = uuid();
-    const seller = sellers[spec.seller];
-    const dest = destByName.get(spec.dest)!;
-    const cat = catByName.get(spec.cat)!;
-    const code = `DEMO-${pad(i + 1, 3)}`;
-    const itinerary = Array.from({ length: spec.days }, (_, d) => {
-      const title = d === 0 ? (spec.days === 1 ? `${spec.title} — full day` : 'Arrival & briefing') : d === spec.days - 1 ? 'Final day & departure' : spec.highlights[(d - 1) % spec.highlights.length];
-      return { id: `day-${d + 1}`, day: `Day ${d + 1}`, title, description: d === 0 ? 'Meet your guide, trip briefing and equipment check.' : d === spec.days - 1 ? 'Breakfast, farewell and transfer to the airport or onward destination.' : `Full-day programme: ${spec.highlights[(d - 1) % spec.highlights.length]}. Lunch and refreshments included.`, partners: [] as unknown[] };
-    });
-    const nights = Math.max(0, spec.days - 1);
-    // departures: 4 upcoming dates
-    const departures = spec.schedule === 'flexible' ? [] : spec.schedule === 'fixed' ? [daysFromNow(int(25, 50))] : [daysFromNow(int(10, 18)), daysFromNow(int(35, 50)), daysFromNow(int(65, 85)), daysFromNow(int(110, 140))];
-    departures.forEach((d) => d.setHours(0, 0, 0, 0));
-    const tourDates: any = spec.schedule === 'flexible'
-      ? { scheduleType: 'flexible', type: 'flexible', days: spec.days, nights, defaultDateRange: { from: isoDate(daysFromNow(1)), to: isoDate(daysFromNow(270)) }, capacity: spec.max }
-      : spec.schedule === 'fixed'
-        ? { scheduleType: 'fixed', type: 'fixed', days: spec.days, nights, defaultDateRange: { from: isoDate(departures[0]), to: isoDate(new Date(departures[0].getTime() + (spec.days - 1) * 86400000)) }, capacity: spec.max }
-        : { scheduleType: 'multiple', type: 'multiple', days: spec.days, nights, defaultDateRange: { from: isoDate(departures[0]), to: isoDate(departures[departures.length - 1]) }, capacity: spec.max,
-            departures: departures.map((d, k) => ({ id: `dep-${k + 1}`, label: d.toLocaleString('en-US', { month: 'long', year: 'numeric' }), dateRange: { from: isoDate(d), to: isoDate(new Date(d.getTime() + (spec.days - 1) * 86400000)) }, capacity: spec.max })) };
+    const seller = sellers[e.seller];
+    const dest = destByName.get(e.region);
+    if (!dest) throw new Error(`Destination "${e.region}" is missing (tour ${e.code}).`);
+    const cats = e.categories.map((c) => { const row = catByName.get(c); if (!row) throw new Error(`Category "${c}" is missing (tour ${e.code}).`); return row; });
+    const maxSize = e.maxSize;
+    const days = e.days.length;
+    const leadGuide = pickPartner(['guide'], [e.region], ti);
 
-    const coverImage = img(`tour-${code}`, 1600, 900);
-    const sf = sellerFacts.get(seller.id)!, sq = sellerFaqs.get(seller.id)!;
-    const onSale = !!spec.sale;
-    const created = daysFromNow(-int(30, 200));
-    tourRows.push({
-      id, title: spec.title, code, description: richDoc(`${spec.title}: ${spec.highlights.join(', ')}. Led by experienced local guides with small groups, full logistics support and flexible pacing. Suitable for travellers who want a well-organised and authentic experience in ${spec.dest}.`),
-      excerpt: `${spec.days}-day journey through ${spec.dest} featuring ${spec.highlights.slice(0, 3).join(', ')}.`, tourStatus: spec.status, coverImage, destinationId: dest.id,
-      itinerary, include: CONTENT_INCLUDE, exclude: CONTENT_EXCLUDE,
-      facts: sf.map((f) => ({ factId: f.id, name: f.name, field_type: f.fieldType, value: f.value, icon: f.icon })),
-      faqs: sq.map((f) => ({ faqId: f.id, question: f.question, answer: f.answer })),
-      gallery: [0, 1, 2, 3].map((k) => ({ image: k === 0 ? coverImage : img(`tour-${code}-${k}`), alt: `${spec.title} ${k + 1}`, sortOrder: k, isFeatured: k === 0 })),
-      location: { city: dest.city ?? dest.name, country: 'Nepal' },
-      discount: onSale ? { type: 'percentage', value: Math.round((1 - spec.sale! / spec.price) * 100), dateRange: { from: isoDate(daysFromNow(-20)), to: isoDate(daysFromNow(200)) } } : null,
-      pricingOptions: [
-        { id: 'opt-adult', name: 'Adult', price: spec.price, category: 'adult', paxRange: { min: 1, max: spec.max }, discountEnabled: onSale, discount: onSale ? { type: 'price', value: spec.price - spec.sale! } : undefined, isActive: true },
-        { id: 'opt-child', name: 'Child', price: Math.round(spec.price * 0.6), category: 'child', paxRange: { min: 1, max: spec.max }, discountEnabled: false, isActive: true },
-      ],
-      tourDates, enquiry: true, isSpecialOffer: onSale, price: spec.price, pricePerPerson: true, minSize: 1, maxSize: spec.max, groupSize: 1,
-      saleEnabled: onSale, salePrice: spec.sale ?? null, priceLockDate: daysFromNow(200), pricingOptionsEnabled: true, fixedDeparture: spec.schedule !== 'flexible', multipleDates: spec.schedule === 'multiple',
-      views: int(100, 9000), paymentOptions: { fullPaymentEnabled: true, depositEnabled: true, depositPercentage: 30, payOnArrivalEnabled: i % 3 === 0 },
-      createdAt: created, updatedAt: created,
+    // ---- itinerary: each day names its place and links a real guide / transport / hotel / restaurant ----
+    const itineraryIn = e.days.map((day: DaySpec, di: number) => {
+      const salt = ti * 7 + di;
+      const regions = [day.region, e.region, 'Kathmandu Valley'];
+      const partnersForDay: any[] = [];
+      const add = (role: string, partner: Partner, time: string | null, endTime: string | null, withUnits: boolean) => {
+        const ut = withUnits ? pickUnitType(partner, role, time, maxSize) : null;
+        const units = role === 'accommodation' ? Math.ceil(maxSize / 2) : role === 'meals' ? maxSize : role === 'transport' ? Math.max(1, Math.ceil(maxSize / (maxSize <= 6 ? 4 : 12))) : null;
+        partnersForDay.push({
+          role, businessPartnerId: partner.id, name: partner.name, notes: day.notes?.[role as 'transport' | 'accommodation' | 'meals' | 'guide'],
+          ...(time ? { time } : {}), ...(endTime ? { endTime } : {}),
+          ...(units ? { unitsRequested: units } : {}), ...(ut ? { unitType: ut.name, unitTypeId: ut.id } : {}),
+        });
+      };
+      if (day.drive) add('transport', pickPartner(['transport'], regions, salt), '08:00', null, true);
+      if (day.stay) add('accommodation', pickPartner(day.stay === 'hotel' ? ['hotel'] : ['guesthouse'], regions, salt), '14:00', '11:00', true);
+      if (day.meal) add('meals', pickPartner(['restaurant'], regions, salt), /lunch/i.test(day.notes?.meals ?? '') && !/dinner/i.test(day.notes?.meals ?? '') ? '12:30' : '19:00', null, true);
+      if (day.guide !== false) add('guide', leadGuide, '09:00', '17:00', false);
+      if (di === 0) partnersForDay.push({ role: 'other', name: 'Welcome flower garland (local florist)', notes: 'Arranged by the agency directly' });
+      return { id: `day-${di + 1}`, day: `Day ${di + 1}`, title: day.title, description: day.desc, destination: day.place, partners: partnersForDay };
     });
-    tourCatRows.push({ tourId: id, categoryId: cat.id });
+    const itinerary = processItineraryData(itineraryIn);
+
+    // ---- pricing ----
+    const pr = e.pricing;
+    const optionIds = (pr.options ?? []).map((_, k) => `${e.code.toLowerCase()}-price-${k + 1}`);
+    const pricingOptions = pr.options?.length
+      ? processPricingOptions(pr.options.map((o, k) => ({
+          id: optionIds[k], name: o.name, category: o.category, customCategory: o.customCategory, price: o.price,
+          paxRange: { minPax: o.minPax, maxPax: o.maxPax }, discount: discountFields(o.discount),
+        })))
+      : [];
+    const tourDiscount = { ...discountFields(pr.discount), discountCode: pr.discount?.code ?? '', description: pr.discount?.description ?? '' };
+    const saleActive = isActiveNow(pr.discount);
+    const salePrice = saleActive ? Math.round(pr.discount!.type === 'percent' ? pr.price * (1 - pr.discount!.value / 100) : pr.price - pr.discount!.value) : null;
+    const paymentOptions = processPaymentOptions({ fullPaymentEnabled: pr.payment.full, depositEnabled: pr.payment.deposit, depositPercentage: pr.payment.pct, payOnArrivalEnabled: pr.payment.arrival });
+
+    // ---- dates / departures ----
+    const nights = Math.max(0, days - 1);
+    const spanEnd = (start: Date) => new Date(start.getTime() + (days - 1) * 86400000);
+    const sch = e.schedule;
+    let departures: Date[] = [];
+    let datesIn: any;
+    if (sch.type === 'flexible') {
+      datesIn = { scheduleType: 'flexible', days, nights, dateRange: { from: startOfDay(sch.fromDays), to: startOfDay(sch.toDays) }, pricingCategory: optionIds };
+    } else if (sch.type === 'fixed') {
+      const start = startOfDay(sch.startDays);
+      departures = [start];
+      datesIn = { scheduleType: 'fixed', days, nights, dateRange: { from: start, to: spanEnd(start) }, pricingCategory: optionIds };
+    } else {
+      datesIn = {
+        scheduleType: 'multiple', days, nights,
+        departures: sch.departures.map((dep, k) => {
+          const start = startOfDay(dep.startDays);
+          departures.push(start);
+          const selected = dep.optionNames ? (pr.options ?? []).map((o, oi) => (dep.optionNames!.includes(o.name) ? optionIds[oi] : null)).filter((x): x is string => !!x) : optionIds;
+          return {
+            id: `${e.code.toLowerCase()}-dep-${k + 1}`, label: dep.label, dateRange: { from: start, to: spanEnd(start) }, capacity: dep.capacity,
+            isRecurring: !!dep.recurring, ...(dep.recurring ? { recurrencePattern: dep.recurring.pattern, recurrenceInterval: dep.recurring.interval, recurrenceEndDate: startOfDay(dep.recurring.endDays) } : {}),
+            selectedPricingOptions: selected, pricingCategory: selected,
+          };
+        }),
+      };
+    }
+    const tourDates = quiet(() => processTourDatesData(datesIn));
+
+    // ---- content ----
+    const sFacts = sellerFacts.get(seller.id)!;
+    const factsIn = MASTER_FACTS.map((m) => {
+      const master = sFacts.find((r) => r.name === m.name)!;
+      const v = e.facts[m.name];
+      // Every type is a list of strings: that is what the editor's inputs read (value[0] for text / single,
+      // the whole list for multi), what its zod schema accepts, and what the public page renders.
+      const value = Array.isArray(v) ? v : [String(v ?? '')];
+      return { factId: master.id, title: m.name, field_type: m.fieldType, value, icon: m.icon };
+    });
+    const sFaqs = sellerFaqs.get(seller.id)!;
+    const faqsIn = e.faqs.map((f) => ({ faqId: sFaqs.find((m) => m.question === f.q)?.id, question: f.q, answer: f.a }));
+    const coverImage = img(`tour-${e.code}`, 1600, 900);
+    const created = daysFromNow(-int(30, 200));
+    const priceLockDate = pr.lockDays !== undefined ? startOfDay(pr.lockDays) : null;
+
+    const row = {
+      id, title: e.title, code: e.code, tourStatus: e.status, coverImage, file: DOC_URL, destinationId: dest.id,
+      description: tourDescription({ intro: e.intro, highlights: e.highlights, who: e.who }),
+      excerpt: e.excerpt, outline: e.outline,
+      itinerary, include: bulletDoc(e.include), exclude: bulletDoc(e.exclude),
+      facts: factsIn, faqs: processFaqsData(faqsIn),
+      gallery: e.gallery.map((caption, k) => ({ image: k === 0 ? coverImage : img(`tour-${e.code}-${k}`, 1200, 800), caption })),
+      location: processLocationData({ ...e.location, country: 'Nepal', map: `https://www.google.com/maps?q=${e.location.lat},${e.location.lng}` }),
+      discount: tourDiscount, pricingOptions, pricingGroups: [], tourDates,
+      enquiry: e.enquiry, isSpecialOffer: !!e.specialOffer, price: pr.price, pricePerPerson: pr.perPerson,
+      minSize: e.minSize, maxSize, groupSize: pr.perPerson ? null : (pr.groupSize ?? 1),
+      saleEnabled: saleActive, salePrice, priceLockDate, pricingOptionsEnabled: pricingOptions.length > 0,
+      fixedDeparture: sch.type !== 'flexible', multipleDates: sch.type === 'multiple',
+      views: int(100, 9000), paymentOptions, createdAt: created, updatedAt: created,
+    };
+    tourRows.push(row);
+    cats.forEach((c) => tourCatRows.push({ tourId: id, categoryId: c.id }));
     tourAuthRows.push({ tourId: id, userId: seller.id });
-    tourRecs.push({ id, spec, code, sellerId: seller.id, destId: dest.id, departures, itinerary, price: spec.sale ?? spec.price, title: spec.title });
+    const rec: TourRec = { id, spec: { status: e.status, max: maxSize, price: pr.price }, code: e.code, sellerId: seller.id, destId: dest.id, departures, itinerary, price: salePrice ?? pr.price, title: e.title, row };
+    tourRecs.push(rec);
+
+    // ---- one tour_itinerary_partners row per linked entry (what the editor's save would create) ----
+    (itinerary as any[]).forEach((day, di) => {
+      (day.partners as any[]).forEach((p, order) => {
+        const linkId = uuid();
+        const partner = p.businessPartnerId ? approvedPartners.find((x) => x.id === p.businessPartnerId) : undefined;
+        linkRows.push({ id: linkId, tourId: id, dayId: day.id, role: p.role, businessPartnerId: p.businessPartnerId ?? null, name: p.name, notes: p.notes ?? null, sortOrder: order, unitsRequested: p.unitsRequested ?? null, unitType: p.unitType ?? null, unitTypeId: p.unitTypeId ?? null });
+        if (partner) links.push({ id: linkId, tour: rec, dayIdx: di, role: p.role, partner, unitTypeId: p.unitTypeId ?? null, unitType: p.unitType ?? null, units: p.unitsRequested ?? 1 });
+      });
+    });
   });
   await insertChunked(S.tours, tourRows, 10);
   await insertChunked(S.tourCategories, tourCatRows);
   await insertChunked(S.tourAuthors, tourAuthRows);
-  console.log(`✅ Tours: ${tourRecs.length}`);
+  await insertChunked(S.tourItineraryPartners, linkRows);
+  console.log(`✅ Tours: ${tourRecs.length}   Itinerary partner links: ${linkRows.length}`);
 
   // ---------------------------------------------------------------------
   // bookings
@@ -522,10 +625,15 @@ async function seed() {
       const adults = int(1, 4), children = chance(0.3) ? int(1, 2) : 0, infants = chance(0.1) ? 1 : 0;
       const isGuest = chance(0.15);
       const cust = pick(customers);
-      const adultPrice = tour.price, childPrice = Math.round(tour.price * 0.6);
-      const total = adults * adultPrice + children * childPrice;
-      const paymentType = pick(['full_payment', 'full_payment', 'deposit_percentage', 'pay_on_arrival'] as const);
-      const dueNow = paymentType === 'full_payment' ? total : paymentType === 'deposit_percentage' ? Math.round(total * 0.3) : 0;
+      // Priced by the same calculator the booking API uses, from the tour's own stored pricing, and only
+      // with a payment policy the tour actually offers.
+      const po = tour.row.paymentOptions as { fullPaymentEnabled: boolean; depositEnabled: boolean; payOnArrivalEnabled: boolean };
+      const offered = [...(po.fullPaymentEnabled ? ['full_payment', 'full_payment'] : []), ...(po.depositEnabled ? ['deposit_percentage'] : []), ...(po.payOnArrivalEnabled ? ['pay_on_arrival'] : [])] as Array<'full_payment' | 'deposit_percentage' | 'pay_on_arrival'>;
+      const paymentType = pick(offered);
+      const optionRows = (tour.row.pricingOptions ?? []) as Array<{ id: string; category: string }>;
+      const optId = tour.row.pricingOptionsEnabled ? (optionRows.find((o) => o.category === 'adult') ?? optionRows[0])?.id ?? null : null;
+      const calc = calculateBookingPricing(tour.row as any, { adults, children, infants }, paymentType, optId);
+      const total = calc.totalPrice, dueNow = calc.amountDueNow;
       let paymentStatus: 'unpaid' | 'partial' | 'paid' | 'refunded' = 'unpaid', paid = 0;
       if (status === 'confirmed' || status === 'completed') { if (paymentType === 'full_payment' || status === 'completed') { paymentStatus = 'paid'; paid = total; } else if (paymentType === 'deposit_percentage') { paymentStatus = 'partial'; paid = dueNow; } }
       if (status === 'cancelled') { if (dueNow > 0 && chance(0.6)) { paymentStatus = 'refunded'; paid = 0; } }
@@ -538,8 +646,8 @@ async function seed() {
         id, tourId: tour.id, tourTitle: tour.title, tourCode: tour.code, userId: isGuest ? null : cust.id, isGuestBooking: isGuest, guestInfo,
         departureDate: departure, participants: { adults, children, infants },
         travelers: Array.from({ length: adults + children + infants }, (_, k) => ({ fullName: k === 0 ? contact.fullName : personName(bkSeq + k + 40), type: k < adults ? 'adult' : k < adults + children ? 'child' : 'infant', nationality: pick(COUNTRIES) })),
-        pricingOptionId: 'opt-adult',
-        pricing: { basePrice: tour.spec.price, adultPrice, childPrice, infantPrice: 0, totalPrice: total, currency: 'USD', amountDueNow: dueNow, amountDueLater: total - dueNow, ...(paymentType === 'deposit_percentage' ? { depositPercentage: 30 } : {}) },
+        pricingOptionId: optId,
+        pricing: calc,
         paymentType, contactName: contact.fullName, contactEmail: contact.email!, contactPhone: contact.phone!,
         specialRequests: chance(0.3) ? pick(['Vegetarian meals please', 'Celebrating an anniversary', 'One traveller has a knee injury', 'Early airport pickup needed']) : null,
         status, paymentStatus, paymentMethod: paid > 0 ? pick(['card', 'bank_transfer', 'esewa']) : null, transactionId: paid > 0 ? `TXN${int(10000000, 99999999)}` : null, paidAmount: paid,
@@ -613,42 +721,6 @@ async function seed() {
   // ---------------------------------------------------------------------
   // itinerary partners + supplier requests (drives /dashboard/operations)
   // ---------------------------------------------------------------------
-  const linkRows: any[] = [];
-  interface Link { id: string; tour: TourRec; dayIdx: number; role: string; partner: Partner; unitTypeId: string | null; unitType: string | null; units: number }
-  const links: Link[] = [];
-  const nearest = (type: string | string[], destId: string): Partner => {
-    const types = Array.isArray(type) ? type : [type];
-    const pool = approvedPartners.filter((p) => types.includes(p.type));
-    // Half the time use one of the first three of the type, so the *01–*03 demo
-    // accounts reliably have supplier requests to look at on their dashboard.
-    if (chance(0.5)) return pick(pool.slice(0, 3));
-    const local = pool.filter((p) => p.destId === destId);
-    return pick(local.length ? local : pool);
-  };
-  for (const tour of tourRecs) {
-    const last = tour.itinerary.length - 1;
-    const plan: Array<{ day: number; role: string; types: string[] }> = [
-      { day: 0, role: 'transport', types: ['transport'] },
-      { day: 0, role: 'accommodation', types: ['hotel', 'guesthouse'] },
-      { day: 0, role: 'meals', types: ['restaurant'] },
-      { day: Math.min(1, last), role: 'guide', types: ['guide'] },
-      ...(last >= 2 ? [{ day: Math.floor(last / 2), role: 'accommodation', types: ['hotel', 'guesthouse'] }] : []),
-      ...(last >= 2 ? [{ day: Math.floor(last / 2), role: 'meals', types: ['restaurant'] }] : []),
-      { day: last, role: 'transport', types: ['transport'] },
-    ];
-    plan.forEach((pl, sortOrder) => {
-      const partner = nearest(pl.types, tour.destId);
-      const uts = unitTypesByPartner.get(partner.id) ?? [];
-      const ut = uts.length ? pick(uts) : null;
-      const units = pl.role === 'guide' ? 1 : Math.min(ut ? Math.max(1, ut.totalUnits) : tour.spec.max, Math.max(2, Math.ceil(tour.spec.max / (pl.role === 'accommodation' ? 2 : 1))));
-      const id = uuid();
-      linkRows.push({ id, tourId: tour.id, dayId: `day-${pl.day + 1}`, role: pl.role, businessPartnerId: partner.id, name: partner.name, notes: null, sortOrder, unitsRequested: pl.role === 'guide' ? null : units, unitType: ut?.name ?? null, unitTypeId: ut?.id ?? null });
-      links.push({ id, tour, dayIdx: pl.day, role: pl.role, partner, unitTypeId: ut?.id ?? null, unitType: ut?.name ?? null, units });
-    });
-    // one free-typed (unlinked) partner per tour, like the real editor allows
-    linkRows.push({ id: uuid(), tourId: tour.id, dayId: 'day-1', role: 'other', businessPartnerId: null, name: 'Welcome flower garland (local florist)', notes: 'Arranged by the agency directly', sortOrder: 99 });
-  }
-  await insertChunked(S.tourItineraryPartners, linkRows);
 
   const reqRows: any[] = [], eventRows: any[] = [], contribRows: any[] = [];
   const reqKey = new Set<string>();
@@ -714,51 +786,96 @@ async function seed() {
   console.log(`✅ Itinerary links: ${linkRows.length}   Requests: ${reqRows.length}   Events: ${eventRows.length}`);
 
   // ---------------------------------------------------------------------
-  // advertisements
+  // advertisements — coherent campaigns from seedData/adCatalog.ts, targeted so they really show
   // ---------------------------------------------------------------------
-  // Only placements the site actually renders (there is no homepage ad slot).
-  const SLOTS = ['tour_sidebar', 'search_results', 'tour_detail', 'hotel_page'] as const;
+  // The link is the business's own profile page on this site, so a click always lands on a page that
+  // exists. Override the host for another environment with SEED_SITE_URL.
+  const SITE_URL = (process.env.SEED_SITE_URL || 'https://tourbnt.com').replace(/\/+$/, '');
+  const PRICE_PER_MONTH = 5000;       // Rs — default price list
+  const PRICE_PER_100_VIEWS = 50;     // Rs
   const adRows: any[] = [], adCatRows: any[] = [], adDestRows: any[] = [], adStatRows: any[] = [];
-  const advertisers = partners.filter((p) => p.type === 'advertiser');
-  const adOwners = [...advertisers, ...approvedPartners.filter((p) => ['hotel', 'restaurant', 'transport'].includes(p.type)).slice(0, 6)];
-  const adPitch = ['Gear up for the trail — 15% off for TourBNT travellers', 'Stay hydrated, stay safe: lightweight trekking essentials', 'Relax after your trek with a mountain spa package', 'Travel insurance that covers high-altitude trekking', 'Book your airport ride in advance and save', 'Hand-made Nepali souvenirs shipped worldwide', 'Learn mountain photography from the pros', 'Stay connected — tourist SIM with 30GB data', 'Try our famous dal bhat set — unlimited refills', 'Comfort vans for groups of 6 to 12'];
-  adOwners.forEach((p, pi) => {
-    const nAds = p.status === 'approved' ? int(1, 3) : 1;
-    for (let k = 0; k < nAds; k++) {
-      const id = uuid();
-      const r = rnd();
-      const approval = p.status !== 'approved' ? 'pending' : r < 0.65 ? 'approved' : r < 0.85 ? 'pending' : 'rejected';
-      // Priced like a real order (default price list: Rs 5,000/month or Rs 50 per 100 views), and
-      // only an approved AND paid campaign can be live — same rules the API enforces.
-      const perView = chance(0.4);
-      const durationMonths = perView ? 1 : int(1, 3);
-      const viewQuota = perView ? int(20, 200) * 100 : null;
-      const priceAmount = perView ? (viewQuota! / 100) * 50 : durationMonths * 5000;
-      const paid = approval === 'approved' && chance(0.7);
-      const campaign = !paid ? 'draft' : pick(['active', 'active', 'active', 'paused', 'ended'] as const);
-      const slot = SLOTS[(pi + k) % SLOTS.length];
-      const impressions = campaign === 'draft' ? 0 : Math.min(int(800, 60000), viewQuota ?? Infinity);
-      const clicks = Math.floor(impressions * (0.01 + rnd() * 0.05));
-      const submitted = daysFromNow(-int(5, 60));
-      adRows.push({
-        id, businessPartnerId: p.id, title: `${p.name} — ${pick(['Autumn offer', 'Spring campaign', 'Trek season special', 'Festival promo'])}`, description: pick(adPitch), imageUrl: img(`ad-${id}`, 800, 450),
-        ctaLabel: pick(['Learn more', 'Book now', 'Shop now', 'Get a quote']), ctaUrl: `https://${p.slug}.example.com/promo`, placementSlot: slot, campaignStatus: campaign,
-        startDate: campaign === 'ended' ? daysFromNow(-60) : daysFromNow(-int(1, 30)), endDate: campaign === 'ended' ? daysFromNow(-5) : daysFromNow(int(20, 120)),
-        isApproved: approval === 'approved', approvalStatus: approval, approvedBy: approval === 'approved' ? admin.id : null, approvedAt: approval === 'approved' ? new Date(submitted.getTime() + 86400000) : null,
-        rejectedBy: approval === 'rejected' ? admin.id : null, rejectedAt: approval === 'rejected' ? daysFromNow(-3) : null, rejectionReason: approval === 'rejected' ? 'Creative does not meet advertising guidelines (low-resolution image).' : null,
-        submittedAt: submitted, impressionCount: impressions, clickCount: clicks, isPaid: paid, paidAt: paid ? new Date(submitted.getTime() + 2 * 86400000) : null,
-        billingModel: perView ? 'per_view' : 'monthly', durationMonths, viewQuota, priceAmount, currency: 'NPR', createdAt: submitted, updatedAt: submitted,
-      });
-      shuffle(allCats).slice(0, 2).forEach((c) => adCatRows.push({ adId: id, categoryId: c.id }));
-      shuffle(partnerDests).slice(0, 2).forEach((d) => adDestRows.push({ adId: id, destinationId: d.id }));
-      if (impressions > 0) for (let d = 0; d < 14; d++) { const imp = Math.floor(impressions / 14 * (0.5 + rnd())); adStatRows.push({ id: uuid(), adId: id, date: isoDate(daysFromNow(-d)), impressions: imp, clicks: Math.floor(imp * (0.01 + rnd() * 0.05)) }); }
+  const partnerByName = new Map(partners.map((p) => [p.name, p]));
+  const partnerRowById = new Map(partnerRows.map((r) => [r.id, r]));
+  const placeId = (name: string) => { const d = destByName.get(name); if (!d) throw new Error(`Ad target destination "${name}" is missing.`); return d.id; };
+  const typeId = (name: string) => { const c = catByName.get(name); if (!c) throw new Error(`Ad target category "${name}" is missing.`); return c.id; };
+
+  // Sit-down restaurants advertise on hotel pages ("Nearby places to eat"): one per town, copy built from their own cuisine.
+  const restaurantCampaigns: AdCampaign[] = (['Kathmandu Valley', 'Pokhara', 'Annapurna Region', 'Lumbini', 'Chitwan National Park', 'Nagarkot', 'Everest Region', 'Bardia National Park', 'Langtang Valley', 'Bandipur', 'Upper Mustang'] as const).flatMap((region) => {
+    const p = approvedPartners.find((x) => x.type === 'restaurant' && x.destId === destByName.get(region)?.id);
+    if (!p) return [];
+    const cuisine = ((partnerRowById.get(p.id)?.details as { cuisine?: string[] } | undefined)?.cuisine ?? ['Nepali']);
+    const town = destByName.get(region)?.city ?? region;
+    return [{
+      owner: p.name, title: `${cuisine[0]} dinner a short walk from your hotel`,
+      description: `${p.name} serves ${cuisine.join(' & ')} cooking in ${town}. Groups welcome, vegetarian options on the menu — mention TourBNT when you book a table.`,
+      cta: 'Reserve a table', slot: 'hotel_page' as const, places: [region], tourTypes: [], state: 'live' as const, billing: 'monthly' as const, months: 2,
+    }];
+  });
+
+  // Hotels advertise rooms where tours stay (place-only, so they also show on destination pages) — this
+  // keeps towns like Lumbini, Chitwan and Bandipur from having no local business at all.
+  const stayCampaigns: AdCampaign[] = (['Lumbini', 'Chitwan National Park', 'Bandipur', 'Bardia National Park', 'Nagarkot', 'Everest Region', 'Langtang Valley', 'Upper Mustang'] as const).flatMap((region) => {
+    const p = approvedPartners.find((x) => x.type === 'hotel' && x.destId === destByName.get(region)?.id);
+    if (!p) return [];
+    const d = (partnerRowById.get(p.id)?.details ?? {}) as { starRating?: number; amenities?: string[]; priceFromUSD?: number };
+    const town = destByName.get(region)?.city ?? region;
+    return [{
+      owner: p.name, title: `${d.starRating ?? 3}-star stay in ${town} from US$ ${d.priceFromUSD ?? 60} a night`,
+      description: `${p.name} offers rooms with ${(d.amenities ?? ['WiFi', 'Breakfast']).slice(0, 3).join(', ')} and easy access to the main sights of ${town}. Book direct for the best rate.`,
+      cta: 'See rooms', slot: 'tour_sidebar' as const, places: [region], tourTypes: [], state: 'live' as const, billing: 'monthly' as const, months: 3,
+    }];
+  });
+
+  const clamp = (n: number, lo: number, hi: number) => Math.min(Math.max(n, lo), hi);
+  [...AD_CAMPAIGNS, ...restaurantCampaigns, ...stayCampaigns].forEach((c, ai) => {
+    const owner = partnerByName.get(c.owner);
+    if (!owner) throw new Error(`Ad "${c.title}": business "${c.owner}" is not in the seeded partners.`);
+    const id = uuid();
+    const approved = ['live', 'unpaid', 'paused', 'ended'].includes(c.state);
+    const paid = ['live', 'paused', 'ended'].includes(c.state);
+    const rejected = c.state === 'rejected';
+    const campaignStatus = c.state === 'live' ? 'active' : c.state === 'paused' ? 'paused' : c.state === 'ended' ? 'ended' : 'draft';
+    const viewQuota = c.billing === 'per_view' ? c.views ?? 3000 : null;
+    const priceAmount = c.billing === 'per_view' ? (viewQuota! / 100) * PRICE_PER_100_VIEWS : c.months * PRICE_PER_MONTH;
+    const submitted = daysFromNow(-int(22, 70));
+    const startDate = c.state === 'live' || c.state === 'paused' ? daysFromNow(-int(4, 18)) : c.state === 'ended' ? daysFromNow(-70) : null;
+    const endDate = c.state === 'live' || c.state === 'paused' ? new Date(startDate!.getTime() + c.months * 30 * 86400000) : c.state === 'ended' ? daysFromNow(-12) : null;
+
+    // Delivery history: 14 daily rows; totals on the ad are the sum, so dashboards add up.
+    const daily: Array<{ date: string; impressions: number; clicks: number }> = [];
+    if (campaignStatus !== 'draft') {
+      const lastDay = c.state === 'ended' ? 13 : c.state === 'paused' ? 6 : 0;   // days ago of the most recent row
+      const target = viewQuota ? Math.floor(viewQuota * (0.2 + rnd() * 0.45)) : int(2400, 9000);
+      const perDay = target / 14;
+      for (let k = 0; k < 14; k++) {
+        const imp = Math.max(1, Math.floor(perDay * (0.6 + rnd() * 0.8)));
+        daily.push({ date: isoDate(daysFromNow(-(lastDay + k))), impressions: imp, clicks: Math.floor(imp * (0.012 + rnd() * 0.04)) });
+      }
     }
+    const impressions = daily.reduce((n, r) => n + r.impressions, 0);
+    const clicks = daily.reduce((n, r) => n + r.clicks, 0);
+    // A live per-view campaign must still have views left, or the site would end it on the next sweep.
+    const liveImpressions = viewQuota && c.state === 'live' ? Math.min(impressions, viewQuota - 100) : impressions;
+    daily.forEach((r) => adStatRows.push({ id: uuid(), adId: id, date: r.date, impressions: r.impressions, clicks: r.clicks }));
+
+    adRows.push({
+      id, businessPartnerId: owner.id, title: c.title, description: c.description, imageUrl: img(`ad-${slugify(c.owner)}-${ai}`, 800, 450),
+      ctaLabel: c.cta, ctaUrl: `${SITE_URL}/partners/${owner.type}/${owner.slug}`, placementSlot: c.slot, campaignStatus,
+      startDate, endDate,
+      isApproved: approved, approvalStatus: approved ? 'approved' : rejected ? 'rejected' : 'pending',
+      approvedBy: approved ? admin.id : null, approvedAt: approved ? new Date(submitted.getTime() + 86400000) : null,
+      rejectedBy: rejected ? admin.id : null, rejectedAt: rejected ? daysFromNow(-int(2, 9)) : null, rejectionReason: rejected ? c.rejectionReason ?? 'Does not meet advertising guidelines.' : null,
+      submittedAt: submitted, impressionCount: clamp(liveImpressions, 0, viewQuota ?? Infinity), clickCount: clicks, isPaid: paid, paidAt: paid ? new Date(submitted.getTime() + 2 * 86400000) : null,
+      billingModel: c.billing, durationMonths: c.months, viewQuota, priceAmount, currency: 'NPR', createdAt: submitted, updatedAt: submitted,
+    });
+    [...new Set(c.tourTypes)].forEach((t) => adCatRows.push({ adId: id, categoryId: typeId(t) }));
+    [...new Set(c.places)].forEach((pl) => adDestRows.push({ adId: id, destinationId: placeId(pl) }));
   });
   await insertChunked(S.advertisements, adRows, 40);
   await insertChunked(S.adCategoryTargets, adCatRows);
   await insertChunked(S.adDestinationTargets, adDestRows);
   await insertChunked(S.adDailyStats, adStatRows, 200);
-  console.log(`✅ Ads: ${adRows.length}`);
+  console.log(`✅ Ads: ${adRows.length}  (live: ${adRows.filter((a) => a.campaignStatus === 'active').length})`);
 
   // ---------------------------------------------------------------------
   // messaging

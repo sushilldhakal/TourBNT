@@ -491,7 +491,8 @@ export function TourProvider({ children, defaultValues, isEditing = false }: Tou
                 // the pricing tab's form fields actually read (see TourPricingDates).
                 pricing: processPricingForForm(tourData),
                 // Process tour dates using processTourDates
-                dates: processTourDates(tourData.dates),
+                // The API returns the column name (tourDates); older payloads used `dates`.
+                dates: processTourDates(tourData.tourDates ?? tourData.dates),
                 // Process facts preserving factId
                 facts: Array.isArray(tourData.facts) ? tourData.facts.map((fact: any) => ({
                     factId: fact.factId || fact._id,
