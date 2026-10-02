@@ -20,6 +20,21 @@ const makeStore = (prefix: string) =>
     });
 
 /**
+ * A call made by this server itself — in practice the Next.js server rendering a page and fetching its
+ * data from the API on the same machine. Those are not a visitor hammering the API, and they would all
+ * land in one shared bucket and throttle page renders for everyone.
+ *
+ * Deliberately narrow: the connection must come from this machine's own loopback address AND carry no
+ * X-Forwarded-For. nginx adds that header to every request it relays (see /etc/nginx), so outside
+ * traffic never qualifies, and nobody outside the machine can open a loopback connection.
+ */
+export function isInternalRequest(req: { socket: { remoteAddress?: string }; headers: Record<string, unknown> }): boolean {
+    const addr = req.socket.remoteAddress ?? '';
+    const loopback = addr === '::1' || addr.startsWith('127.') || addr.startsWith('::ffff:127.');
+    return loopback && !req.headers['x-forwarded-for'];
+}
+
+/**
  * Get client IP address from request
  */
 function getClientIp(req: any): string {
@@ -81,6 +96,7 @@ export const generalLimiter = rateLimit({
     max: GENERAL_LIMIT,
     store: makeStore('rl:general:'),
     passOnStoreError: true,
+    skip: isInternalRequest, // server-side page renders; see isInternalRequest
     message: 'Too many requests, please try again later',
     standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
     legacyHeaders: false, // Disable `X-RateLimit-*` headers
