@@ -74,6 +74,16 @@ jobs:
             echo "🔨 Building shared db package..."
             npm run build --prefix packages/db
 
+            # Apply pending SQL migrations (packages/db/drizzle) using server/.env's DATABASE_URL.
+            # Drizzle runs them in one transaction, so a failure changes nothing; it is reported
+            # loudly but doesn't block the deploy (run `npm run db:migrate` by hand to retry).
+            echo "🗄️  Applying database migrations..."
+            if (cd packages/db && DOTENV_CONFIG_PATH=../../server/.env npx tsx src/migrate.ts); then
+              echo "✅ Migrations applied"
+            else
+              echo "⚠️  MIGRATIONS FAILED — new features that need them will error until fixed"
+            fi
+
             echo "🔨 Building server..."
             npm run build --prefix server
 

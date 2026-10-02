@@ -30,7 +30,7 @@ import {
     type BusinessPartnerType,
     type ItineraryRequestStatus,
 } from '@/lib/api/businessPartners';
-import { getMyAdCampaigns, createAdCampaign, updateAdTargeting, getAdStats, type Advertisement, type AdPlacementSlot } from '@/lib/api/ads';
+import { AdCampaignsPanel } from '@/components/dashboard/ads/AdCampaignsPanel';
 import { getApprovedCategories, getApprovedDestinations } from '@/lib/api/globalApi';
 import {
     createUnitType,
@@ -180,7 +180,7 @@ export function BusinessTypeDashboard({ types, title, description, icon, showLog
                 )}
                 {!showLogistics && (
                     <TabsContent value="ads" className="mt-4">
-                        <AdsTab business={business} />
+                        <AdCampaignsPanel business={business} />
                     </TabsContent>
                 )}
             </Tabs>
@@ -1103,119 +1103,3 @@ function ReviewsTab({ business }: { business: BusinessPartner }) {
     );
 }
 
-const AD_SLOTS: { value: AdPlacementSlot; label: string }[] = [
-    { value: 'tour_detail', label: 'Tour Detail Page' },
-    { value: 'tour_sidebar', label: 'Tour Sidebar' },
-    { value: 'hotel_page', label: 'Hotel / Guesthouse Page' },
-    { value: 'search_results', label: 'Search Results' },
-    { value: 'homepage', label: 'Homepage' },
-];
-
-function AdsTab({ business }: { business: BusinessPartner }) {
-    const [ads, setAds] = useState<Advertisement[]>([]);
-
-    useEffect(() => {
-        getMyAdCampaigns().then(setAds).catch(() => setAds([]));
-    }, []);
-
-    const myAds = ads.filter((ad) => ad.businessPartnerId === business.id);
-
-    const [form, setForm] = useState({ title: '', description: '', ctaLabel: '', ctaUrl: '', placementSlot: 'tour_detail' as AdPlacementSlot });
-    const [image, setImage] = useState<File | null>(null);
-
-    const createMutation = useMutation({
-        mutationFn: (fd: FormData) => createAdCampaign(fd),
-        onSuccess: (ad) => {
-            toast({ title: 'Ad campaign submitted for review' });
-            setAds((prev) => [...prev, ad]);
-            setForm({ title: '', description: '', ctaLabel: '', ctaUrl: '', placementSlot: 'tour_detail' });
-            setImage(null);
-        },
-        onError: (error: Error) => toast({ title: 'Failed to submit ad', description: error.message, variant: 'destructive' }),
-    });
-
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        const fd = new FormData();
-        fd.append('businessPartnerId', business.id);
-        Object.entries(form).forEach(([k, v]) => fd.append(k, v));
-        if (image) fd.append('image', image);
-        createMutation.mutate(fd);
-    };
-
-    return (
-        <div className="space-y-6">
-            <Card>
-                <CardHeader><CardTitle>New Ad Campaign</CardTitle></CardHeader>
-                <CardContent>
-                    <form onSubmit={handleSubmit} className="space-y-4 max-w-xl">
-                        <Input placeholder="Ad title" required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-                        <Textarea placeholder="Short description" rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-                        <div className="grid grid-cols-2 gap-4">
-                            <Input placeholder="CTA label (e.g. Shop Now)" value={form.ctaLabel} onChange={(e) => setForm({ ...form, ctaLabel: e.target.value })} />
-                            <Input placeholder="CTA URL" required type="url" value={form.ctaUrl} onChange={(e) => setForm({ ...form, ctaUrl: e.target.value })} />
-                        </div>
-                        <select
-                            value={form.placementSlot}
-                            onChange={(e) => setForm({ ...form, placementSlot: e.target.value as AdPlacementSlot })}
-                            className="w-full px-3 py-2 border border-border rounded-md bg-background text-sm"
-                        >
-                            {AD_SLOTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-                        </select>
-                        <input type="file" accept="image/jpeg,image/png" onChange={(e) => setImage(e.target.files?.[0] || null)} className="text-sm" />
-                        <Button type="submit" disabled={createMutation.isPending}>{createMutation.isPending ? 'Submitting...' : 'Submit for Review'}</Button>
-                    </form>
-                </CardContent>
-            </Card>
-
-            <div className="space-y-4">
-                {myAds.map((ad) => <AdCampaignCard key={ad.id} ad={ad} />)}
-            </div>
-        </div>
-    );
-}
-
-function AdCampaignCard({ ad }: { ad: Advertisement }) {
-    const [categoryIds, setCategoryIds] = useState('');
-    const [destinationIds, setDestinationIds] = useState('');
-    const [stats, setStats] = useState<{ totalImpressions: number; totalClicks: number } | null>(null);
-
-    useEffect(() => {
-        if (ad.approvalStatus === 'approved') {
-            getAdStats(ad.id).then(setStats).catch(() => setStats(null));
-        }
-    }, [ad.id, ad.approvalStatus]);
-
-    const targetingMutation = useMutation({
-        mutationFn: () => updateAdTargeting(
-            ad.id,
-            categoryIds.split(',').map((s) => s.trim()).filter(Boolean),
-            destinationIds.split(',').map((s) => s.trim()).filter(Boolean)
-        ),
-        onSuccess: () => toast({ title: 'Ad targeting updated' }),
-        onError: (error: Error) => toast({ title: 'Update failed', description: error.message, variant: 'destructive' }),
-    });
-
-    const statusVariant = ad.approvalStatus === 'approved' ? 'default' : ad.approvalStatus === 'rejected' ? 'destructive' : 'secondary';
-
-    return (
-        <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                <CardTitle className="text-base">{ad.title}</CardTitle>
-                <div className="flex gap-2">
-                    <Badge variant="secondary" className="capitalize">{ad.placementSlot.replace('_', ' ')}</Badge>
-                    <Badge variant={statusVariant}>{ad.approvalStatus}</Badge>
-                </div>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-                {ad.rejectionReason && <p className="text-destructive">Rejected: {ad.rejectionReason}</p>}
-                {stats && <p className="text-muted-foreground">{stats.totalImpressions} impressions · {stats.totalClicks} clicks</p>}
-                <div className="flex gap-2">
-                    <Input placeholder="Category IDs (comma-separated)" value={categoryIds} onChange={(e) => setCategoryIds(e.target.value)} />
-                    <Input placeholder="Destination IDs (comma-separated)" value={destinationIds} onChange={(e) => setDestinationIds(e.target.value)} />
-                    <Button size="sm" onClick={() => targetingMutation.mutate()} disabled={targetingMutation.isPending}>Save</Button>
-                </div>
-            </CardContent>
-        </Card>
-    );
-}

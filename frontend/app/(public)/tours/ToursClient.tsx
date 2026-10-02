@@ -6,8 +6,29 @@ import { ContentContainer } from '@/components/layout/PublicLayoutClient';
 import TourCard from '@/components/tours/TourCard';
 import TourSearch from '@/components/tours/TourSearch';
 import { useToursInfinite, useApprovedCategories, useApprovedDestinations } from '@/lib/queries';
-import { useRef, useCallback, useEffect, useState, useMemo } from 'react';
+import { RelevantAdSlot } from '@/components/ads/RelevantAdSlot';
+import { useRef, useCallback, useEffect, useState, useMemo, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Tour } from '@/types';
+
+type UrlFilters = { destination: string; category: string; keyword: string };
+
+/**
+ * Applies ?destination= / ?type= / ?keyword= (what the search form and destination links
+ * produce) to the page's filters, including when the search form updates the URL in place.
+ * Rendered inside its own Suspense boundary so only this null-rendering component — not the
+ * whole server-rendered tour grid — waits for the URL on first load.
+ */
+function UrlFilterSync({ onChange }: { onChange: (filters: UrlFilters) => void }) {
+    const params = useSearchParams();
+    const destination = params.get('destination') || 'all';
+    const category = params.get('type') || params.get('category') || 'all';
+    const keyword = params.get('keyword') || '';
+    useEffect(() => {
+        onChange({ destination, category, keyword });
+    }, [destination, category, keyword, onChange]);
+    return null;
+}
 
 export function ToursClient() {
     // Filter state management
@@ -15,6 +36,13 @@ export function ToursClient() {
     const [selectedDestination, setSelectedDestination] = useState<string>('all');
     const [priceRange, setPriceRange] = useState<string>('all');
     const [sortOption, setSortOption] = useState<string>('featured');
+    const [keyword, setKeyword] = useState('');
+
+    const applyUrlFilters = useCallback(({ destination, category, keyword: kw }: UrlFilters) => {
+        setSelectedDestination(destination);
+        setSelectedCategory(category);
+        setKeyword(kw);
+    }, []);
 
     // View mode state
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -182,6 +210,15 @@ export function ToursClient() {
             });
         }
 
+        // Filter by search keyword
+        const term = keyword.trim().toLowerCase();
+        if (term) {
+            filtered = filtered.filter((tour: Tour) =>
+                [tour.title, (tour as { description?: string }).description, (tour as { excerpt?: string }).excerpt]
+                    .some((text) => typeof text === 'string' && text.toLowerCase().includes(term))
+            );
+        }
+
         // Filter by price range
         const priceRangeValues = getPriceRangeValues(priceRange);
         if (priceRangeValues) {
@@ -214,13 +251,14 @@ export function ToursClient() {
         }
 
         return filtered;
-    }, [allTours, selectedCategory, selectedDestination, priceRange, sortOption, getPriceRangeValues]);
+    }, [allTours, selectedCategory, selectedDestination, keyword, priceRange, sortOption, getPriceRangeValues]);
 
 
     // Reset filters function
     const handleResetFilters = useCallback(() => {
         setSelectedCategory('all');
         setSelectedDestination('all');
+        setKeyword('');
         setPriceRange('all');
         setSortOption('featured');
     }, []);
@@ -228,6 +266,10 @@ export function ToursClient() {
 
     return (
         <>
+            <Suspense fallback={null}>
+                <UrlFilterSync onChange={applyUrlFilters} />
+            </Suspense>
+
             {/* Skip to main content link for keyboard users */}
             <a
                 href="#main-content"
@@ -297,6 +339,18 @@ export function ToursClient() {
                                     onReset={handleResetFilters}
                                 />
                             </section>
+
+                            {/* Businesses connected to what the visitor is looking at — the chosen
+                                destination/tour type or their search words. None when nothing is chosen. */}
+                            <RelevantAdSlot
+                                placementSlot="search_results"
+                                layout="row"
+                                limit={3}
+                                destinationIds={selectedDestination !== 'all' ? [selectedDestination] : undefined}
+                                categoryIds={selectedCategory !== 'all' ? [selectedCategory] : undefined}
+                                q={keyword || undefined}
+                                title="Sponsored · local businesses"
+                            />
 
                             {/* Loading state during initial load */}
                             {isLoadingTours && (

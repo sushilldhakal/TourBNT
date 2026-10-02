@@ -206,11 +206,9 @@ export default async function SingleTourPage({ params }: PageProps) {
                     {/* Sidebar Column (1/3 width on desktop) - appears below content on mobile */}
                     <div className="lg:col-span-1 order-first lg:order-last space-y-6">
                         <BookingWidgetClient tour={tour} />
-                        <RelevantAdSlot
-                            placementSlot="tour_sidebar"
-                            categoryId={Array.isArray(tour.category) ? (tour.category[0] as any)?.id : undefined}
-                            destinationId={typeof tour.destination === 'object' ? (tour.destination as any)?.id : (tour.destination as string | undefined)}
-                        />
+                        {/* The server works out every place this tour touches (main destination,
+                            itinerary stops, linked businesses' towns) and its tour types. */}
+                        <RelevantAdSlot placementSlot="tour_sidebar" tourId={tour.id} limit={3} />
                     </div>
                 </div>
 

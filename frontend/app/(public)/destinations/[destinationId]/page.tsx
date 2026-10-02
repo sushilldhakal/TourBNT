@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { getDestinationById } from '@/lib/api/destinations';
+import { RelevantAdSlot } from '@/components/ads/RelevantAdSlot';
 
 // Serve cached HTML and refresh it in the background at most once a minute (ISR).
 export const revalidate = 60;
@@ -104,6 +105,13 @@ export default async function SingleDestinationPage({ params }: { params: Promis
                             )}
                         </div>
                     </div>
+                    <RelevantAdSlot
+                        className="mt-6"
+                        placementSlot="search_results"
+                        destinationIds={[destinationId]}
+                        limit={3}
+                        title={`Local businesses in ${name}`}
+                    />
                 </div>
             </div>
 

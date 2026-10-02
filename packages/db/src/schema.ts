@@ -143,6 +143,9 @@ export const adPlacementSlotEnum = pgEnum('ad_placement_slot', [
   'homepage',
 ]);
 export const adCampaignStatusEnum = pgEnum('ad_campaign_status', ['draft', 'active', 'paused', 'ended']);
+// How an ad campaign is charged: a flat price per month it runs, or a bought
+// bundle of views (served until the views are used up or the run period ends).
+export const adBillingModelEnum = pgEnum('ad_billing_model', ['monthly', 'per_view']);
 
 // ---------------------------------------------------------------------------
 // Users
@@ -1114,6 +1117,16 @@ export const advertisements = pgTable('advertisements', {
   impressionCount: integer('impression_count').notNull().default(0),
   clickCount: integer('click_count').notNull().default(0),
   isPaid: boolean('is_paid').notNull().default(false),
+  paidAt: timestamp('paid_at', { withTimezone: true }),
+  // Billing — priced at submission from adPricingSettings and frozen on the row,
+  // so a later price change never re-prices a campaign already sold.
+  billingModel: adBillingModelEnum('billing_model').notNull().default('monthly'),
+  // Run length. Monthly: what's paid for. Per-view: how long the bought views may take to deliver.
+  durationMonths: integer('duration_months').notNull().default(1),
+  // Per-view only: views bought. Serving stops once impressionCount reaches it.
+  viewQuota: integer('view_quota'),
+  priceAmount: integer('price_amount').notNull().default(0),
+  currency: text('currency').notNull().default('NPR'),
   ...timestamps,
 }, (table) => ({
   partnerIdx: index('advertisements_partner_idx').on(table.businessPartnerId),
@@ -1125,6 +1138,7 @@ export const adCategoryTargets = pgTable('ad_category_targets', {
   categoryId: text('category_id').notNull().references(() => globalCategories.id, { onDelete: 'cascade' }),
 }, (table) => ({
   pk: primaryKey({ columns: [table.adId, table.categoryId] }),
+  categoryIdx: index('ad_category_targets_category_idx').on(table.categoryId),
 }));
 
 export const adDestinationTargets = pgTable('ad_destination_targets', {
@@ -1132,7 +1146,18 @@ export const adDestinationTargets = pgTable('ad_destination_targets', {
   destinationId: text('destination_id').notNull().references(() => globalDestinations.id, { onDelete: 'cascade' }),
 }, (table) => ({
   pk: primaryKey({ columns: [table.adId, table.destinationId] }),
+  destinationIdx: index('ad_destination_targets_destination_idx').on(table.destinationId),
 }));
+
+// Single-row price list for ad campaigns (id = 'default'), editable by admins.
+export const adPricingSettings = pgTable('ad_pricing_settings', {
+  id: text('id').primaryKey(),
+  monthlyPrice: integer('monthly_price').notNull().default(5000),
+  pricePer100Views: integer('price_per_100_views').notNull().default(50),
+  currency: text('currency').notNull().default('NPR'),
+  updatedBy: text('updated_by').references(() => users.id, { onDelete: 'set null' }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
 
 export const adDailyStats = pgTable('ad_daily_stats', {
   id: id(),
