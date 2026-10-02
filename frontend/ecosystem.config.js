@@ -24,7 +24,10 @@ module.exports = {
     env: {
       NODE_ENV: 'production',
       PORT: 3000,
-      HOSTNAME: '0.0.0.0'
+      HOSTNAME: '0.0.0.0',
+      // Server-side calls to the API (SSR, the /api proxy route) stay on this machine instead of
+      // looping out through https://tourbnt.com. Must match the API's port in server/ecosystem.config.js.
+      BACKEND_INTERNAL_URL: 'http://127.0.0.1:8000'
     },
     error_file: './logs/err.log',
     out_file: './logs/out.log',

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+import { SERVER_BACKEND_URL as BACKEND_URL } from '@/lib/config/backendUrl';
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
     const { path } = await params;
@@ -47,6 +46,10 @@ async function proxyRequest(request: NextRequest, pathSegments: string[], method
         if (authorization) headers['Authorization'] = authorization;
         const cookie = request.headers.get('cookie');
         if (cookie) headers['Cookie'] = cookie;
+        // Keep the visitor's IP for the API's per-IP rate limits; otherwise every proxied visitor
+        // shares one bucket (the server's own address).
+        const forwardedFor = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip');
+        if (forwardedFor) headers['X-Forwarded-For'] = forwardedFor;
 
         let body: string | FormData | undefined;
         if (['POST', 'PUT', 'PATCH'].includes(method)) {

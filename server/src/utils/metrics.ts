@@ -136,8 +136,14 @@ class MetricsCollector {
     /**
      * Check error rate and alert if threshold exceeded
      */
+    private lastErrorRateCheck = 0;
+
     private checkErrorRate(): void {
         const now = Date.now();
+        // This scans every request from the last hour; doing that on every request made each
+        // request slower as traffic grew. Once every 30s is plenty for an alert.
+        if (now - this.lastErrorRateCheck < 30_000) return;
+        this.lastErrorRateCheck = now;
         const recentRequests = this.requestMetrics.filter(
             r => now - new Date(r.timestamp).getTime() < this.ALERT_CHECK_WINDOW
         );

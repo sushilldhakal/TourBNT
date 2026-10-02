@@ -14,7 +14,13 @@ function getRedis(): Redis {
     _redis = new Redis(config.redisUrl, {
       lazyConnect: true,
       maxRetriesPerRequest: 1,
-      retryStrategy: () => null, // don't keep retrying a down Redis; caller falls back to Postgres
+      connectTimeout: 2000,
+      // A hung Redis must never stall a request longer than a cache miss would.
+      commandTimeout: 500,
+      // Keep reconnecting with a capped backoff. Returning null here (the old behaviour) made a
+      // single dropped connection disable the cache — and the Redis rate-limit store — until the
+      // next restart, silently sending every request to the database.
+      retryStrategy: (attempt) => Math.min(attempt * 200, 5000),
     });
     _redis.on('error', (err) => {
       console.error('Redis error (falling back to Postgres):', err.message);

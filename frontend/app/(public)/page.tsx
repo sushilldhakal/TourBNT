@@ -2,9 +2,10 @@ import { HydrationBoundary, QueryClient, dehydrate } from '@tanstack/react-query
 import { HomePageContent } from '@/components/home/HomePageContent';
 import { queryKeys } from '@/lib/queries/queryKeys';
 import type { HomeFeed } from '@/lib/api/home';
+import { SERVER_BACKEND_URL } from '@/lib/config/backendUrl';
 
 async function loadHomeFeed(): Promise<HomeFeed | null> {
-    const base = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+    const base = SERVER_BACKEND_URL;
     try {
         const response = await fetch(`${base}/api/v1/home`, {
             next: { revalidate: 60 },

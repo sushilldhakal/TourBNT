@@ -53,11 +53,12 @@ async function syncAdDestinationTargets(adId: string, destinationIds: string[] |
 async function bumpImpressions(adIds: string[]) {
   if (adIds.length === 0) return;
   const today = todayDateString();
-  await db.update(advertisements).set({ impressionCount: sql`${advertisements.impressionCount} + 1` }).where(inArray(advertisements.id, adIds));
-  for (const adId of adIds) {
-    await db.insert(adDailyStats).values({ adId, date: today, impressions: 1, clicks: 0 })
-      .onConflictDoUpdate({ target: [adDailyStats.adId, adDailyStats.date], set: { impressions: sql`${adDailyStats.impressions} + 1` } });
-  }
+  await Promise.all([
+    db.update(advertisements).set({ impressionCount: sql`${advertisements.impressionCount} + 1` }).where(inArray(advertisements.id, adIds)),
+    // One multi-row upsert instead of one round trip per ad.
+    db.insert(adDailyStats).values(adIds.map((adId) => ({ adId, date: today, impressions: 1, clicks: 0 })))
+      .onConflictDoUpdate({ target: [adDailyStats.adId, adDailyStats.date], set: { impressions: sql`${adDailyStats.impressions} + 1` } }),
+  ]);
 }
 
 // Owner (or admin) creates an ad campaign for one of their businesses.
@@ -362,7 +363,8 @@ export const getAdsForPlacement = async (req: Request, res: Response, next: Next
       .limit(limit);
 
     const ads = rows.map(({ ad, business }) => ({ ...ad, business }));
-    await bumpImpressions(ads.map((a) => a.id));
+    // Impression counting must not hold up the page that's showing the ads.
+    void bumpImpressions(ads.map((a) => a.id)).catch((err) => console.error('Ad impression count failed:', (err as Error).message));
 
     return sendSuccess(res, ads, 'Ads retrieved successfully');
   } catch (error) {

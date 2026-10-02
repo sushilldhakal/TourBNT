@@ -3,6 +3,7 @@ import { getApiTimeout } from '../performanceConfig';
 import useUserStore from '@/lib/store/useUserStore';
 import { useAuthRedirectStore } from '@/lib/store/useAuthRedirectStore';
 import { devLog } from '@/lib/devLogger';
+import { SERVER_BACKEND_URL } from '@/lib/config/backendUrl';
 
 // Flag to prevent multiple simultaneous redirects
 let isRedirecting = false;
@@ -69,7 +70,7 @@ export const api = axios.create({
 
 // Server-side API client (for SSR and public endpoints)
 export const serverApi = axios.create({
-    baseURL: DIRECT_BACKEND,
+    baseURL: typeof window === 'undefined' ? `${SERVER_BACKEND_URL}/api/v1` : DIRECT_BACKEND,
     timeout: getApiTimeout('default'),
     withCredentials: true,
     decompress: true,

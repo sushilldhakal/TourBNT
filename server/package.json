@@ -10,6 +10,7 @@
     "lint": "eslint .",
     "start": "ts-node-dev server.ts",
     "create-admin": "ts-node src/scripts/createAdmin.ts",
+    "diagnose:latency": "ts-node -T src/scripts/diagnoseLatency.ts",
     "seed:demo": "ts-node -T src/scripts/seedDemoData.ts",
     "create-admin:prod": "NODE_ENV=production ts-node src/scripts/createAdmin.ts",
     "add-settings": "ts-node src/scripts/addUserSettings.ts",
@@ -64,6 +65,7 @@
     "multer": "^2.0.2",
     "nodemailer": "^7.0.11",
     "openai": "^4.55.0",
+    "postgres": "^3.4.5",
     "rate-limit-redis": "^4.2.0",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1"
