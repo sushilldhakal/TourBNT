@@ -166,6 +166,31 @@ export function ToursClient() {
         []
     );
 
+    // What the ad strip is "about". An explicit filter wins; otherwise it is the destinations and
+    // tour types of the first tours shown, so the default /tours view still gets relevant local ads.
+    const adContext = useMemo(() => {
+        if (selectedDestination !== 'all' || selectedCategory !== 'all') {
+            return {
+                destinationIds: selectedDestination !== 'all' ? [selectedDestination] : undefined,
+                categoryIds: selectedCategory !== 'all' ? [selectedCategory] : undefined,
+            };
+        }
+        if (keyword.trim()) return { destinationIds: undefined, categoryIds: undefined };
+        const shown = allTours.slice(0, 12) as any[];
+        const dests = new Set<string>();
+        const cats = new Set<string>();
+        for (const t of shown) {
+            const d = t.destinationId ?? (typeof t.destination === 'string' ? t.destination : t.destination?.id);
+            if (d) dests.add(String(d));
+            const list = Array.isArray(t.category) ? t.category : t.category ? [t.category] : [];
+            for (const c of list) {
+                const id = typeof c === 'string' ? c : c?.id ?? c?.value;
+                if (id) cats.add(String(id));
+            }
+        }
+        return { destinationIds: dests.size ? [...dests] : undefined, categoryIds: cats.size ? [...cats] : undefined };
+    }, [allTours, selectedDestination, selectedCategory, keyword]);
+
     // Client-side filtering logic
     const filteredTours = useMemo(() => {
         let filtered = [...allTours];
@@ -340,14 +365,15 @@ export function ToursClient() {
                                 />
                             </section>
 
-                            {/* Businesses connected to what the visitor is looking at — the chosen
-                                destination/tour type or their search words. None when nothing is chosen. */}
+                            {/* Businesses connected to what the visitor is looking at: the chosen
+                                destination / tour type / search words or, when nothing is chosen, the places
+                                and tour types of the tours on screen. Never generic filler. */}
                             <RelevantAdSlot
                                 placementSlot="search_results"
                                 layout="row"
                                 limit={3}
-                                destinationIds={selectedDestination !== 'all' ? [selectedDestination] : undefined}
-                                categoryIds={selectedCategory !== 'all' ? [selectedCategory] : undefined}
+                                destinationIds={adContext.destinationIds}
+                                categoryIds={adContext.categoryIds}
                                 q={keyword || undefined}
                                 title="Sponsored · local businesses"
                             />
