@@ -16,7 +16,7 @@ import { HTTP_STATUS, sendSuccess, sendPaginatedResponse, sendValidationError, s
 import * as notifications from '../notifications/notificationController';
 import { uploadAdImage as uploadAdImageFile } from '../../services/adImageService';
 import { claimOnce } from '../../config/redisClient';
-import { findMatchingAds, invalidateLiveAds, previewAdPlacements, resolveSearchContext, resolveTourContext, type AdContext } from './adTargeting';
+import { findMatchingAds, invalidateLiveAds, previewAdPlacements, resolveNearbyContext, resolveSearchContext, resolveTourContext, type AdContext } from './adTargeting';
 import { addMonths, getAdPricing, normaliseAdOrder, priceAdOrder, updateAdPricing } from './adPricing';
 
 type AdRow = typeof advertisements.$inferSelect;
@@ -524,6 +524,16 @@ export const getAdsForPlacement = async (req: Request, res: Response, next: Next
       if (!extra) continue;
       ctx.destinationIds.push(...extra.destinationIds);
       ctx.categoryIds.push(...extra.categoryIds);
+    }
+
+    // "Near me": the visitor's coordinates (sent only when they allowed location access). Where the
+    // visitor actually is beats a guess from what is on screen, so nearby places replace the
+    // destinations — but only when some destination really is nearby.
+    const lat = Number(req.query.lat);
+    const lng = Number(req.query.lng);
+    if (req.query.lat !== undefined && req.query.lng !== undefined && Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
+      const nearby = await resolveNearbyContext(lat, lng);
+      if (nearby.destinationIds.length > 0) ctx.destinationIds = nearby.destinationIds;
     }
 
     const ads = await findMatchingAds(placementSlot, ctx, limit);

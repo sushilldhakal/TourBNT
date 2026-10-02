@@ -7,6 +7,7 @@ import TourCard from '@/components/tours/TourCard';
 import TourSearch from '@/components/tours/TourSearch';
 import { useToursInfinite, useApprovedCategories, useApprovedDestinations } from '@/lib/queries';
 import { RelevantAdSlot } from '@/components/ads/RelevantAdSlot';
+import { useUserLocation } from '@/lib/hooks/useUserLocation';
 import { useRef, useCallback, useEffect, useState, useMemo, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Tour } from '@/types';
@@ -37,6 +38,7 @@ export function ToursClient() {
     const [priceRange, setPriceRange] = useState<string>('all');
     const [sortOption, setSortOption] = useState<string>('featured');
     const [keyword, setKeyword] = useState('');
+    const { coords: userCoords, status: locationStatus, request: requestLocation } = useUserLocation();
 
     const applyUrlFilters = useCallback(({ destination, category, keyword: kw }: UrlFilters) => {
         setSelectedDestination(destination);
@@ -166,16 +168,18 @@ export function ToursClient() {
         []
     );
 
-    // What the ad strip is "about". An explicit filter wins; otherwise it is the destinations and
-    // tour types of the first tours shown, so the default /tours view still gets relevant local ads.
+    // What the ad strip is "about". An explicit filter or search wins. With nothing chosen it is where the
+    // visitor is (if they allowed location) and the places / tour types of the first tours shown — the
+    // server uses the location when a destination is really nearby and the on-screen guess otherwise.
     const adContext = useMemo(() => {
         if (selectedDestination !== 'all' || selectedCategory !== 'all') {
             return {
                 destinationIds: selectedDestination !== 'all' ? [selectedDestination] : undefined,
                 categoryIds: selectedCategory !== 'all' ? [selectedCategory] : undefined,
+                near: undefined,
             };
         }
-        if (keyword.trim()) return { destinationIds: undefined, categoryIds: undefined };
+        if (keyword.trim()) return { destinationIds: undefined, categoryIds: undefined, near: undefined };
         const shown = allTours.slice(0, 12) as any[];
         const dests = new Set<string>();
         const cats = new Set<string>();
@@ -188,8 +192,9 @@ export function ToursClient() {
                 if (id) cats.add(String(id));
             }
         }
-        return { destinationIds: dests.size ? [...dests] : undefined, categoryIds: cats.size ? [...cats] : undefined };
-    }, [allTours, selectedDestination, selectedCategory, keyword]);
+        return { destinationIds: dests.size ? [...dests] : undefined, categoryIds: cats.size ? [...cats] : undefined, near: userCoords ?? undefined };
+    }, [allTours, selectedDestination, selectedCategory, keyword, userCoords]);
+    const nothingChosen = selectedDestination === 'all' && selectedCategory === 'all' && !keyword.trim();
 
     // Client-side filtering logic
     const filteredTours = useMemo(() => {
@@ -368,15 +373,28 @@ export function ToursClient() {
                             {/* Businesses connected to what the visitor is looking at: the chosen
                                 destination / tour type / search words or, when nothing is chosen, the places
                                 and tour types of the tours on screen. Never generic filler. */}
+                            {nothingChosen && locationStatus === 'prompt' && (
+                                <button
+                                    type="button"
+                                    onClick={requestLocation}
+                                    className="mb-3 text-sm text-primary underline-offset-4 hover:underline"
+                                >
+                                    📍 Show businesses near me
+                                </button>
+                            )}
+                            {/* Wait for the location check so the strip doesn't show one set of ads and then swap. */}
+                            {locationStatus !== 'checking' && locationStatus !== 'loading' && (
                             <RelevantAdSlot
                                 placementSlot="search_results"
                                 layout="row"
                                 limit={3}
                                 destinationIds={adContext.destinationIds}
                                 categoryIds={adContext.categoryIds}
+                                near={adContext.near}
                                 q={keyword || undefined}
                                 title="Sponsored · local businesses"
                             />
+                            )}
 
                             {/* Loading state during initial load */}
                             {isLoadingTours && (

@@ -206,6 +206,43 @@ export async function resolveTourContext(tourId: string): Promise<AdContext> {
   return ctx;
 }
 
+// Destinations with coordinates, for "near me". The list is a dozen rows that rarely change, so it is
+// held in memory for 10 minutes instead of being queried per request.
+const NEARBY_RADIUS_KM = 100;
+const NEARBY_MAX = 3;
+let destCoordsCache: { at: number; rows: { id: string; lat: number; lng: number }[] } | null = null;
+
+async function getDestinationCoords() {
+  if (destCoordsCache && Date.now() - destCoordsCache.at < 10 * 60_000) return destCoordsCache.rows;
+  const rows = await db
+    .select({ id: globalDestinations.id, lat: globalDestinations.latitude, lng: globalDestinations.longitude })
+    .from(globalDestinations)
+    .where(and(eq(globalDestinations.approvalStatus, 'approved'), isNotNull(globalDestinations.latitude), isNotNull(globalDestinations.longitude)));
+  destCoordsCache = { at: Date.now(), rows: rows.map((r) => ({ id: r.id, lat: r.lat!, lng: r.lng! })) };
+  return destCoordsCache.rows;
+}
+
+function distanceKm(aLat: number, aLng: number, bLat: number, bLng: number): number {
+  const rad = (d: number) => (d * Math.PI) / 180;
+  const h = Math.sin(rad(bLat - aLat) / 2) ** 2 + Math.cos(rad(aLat)) * Math.cos(rad(bLat)) * Math.sin(rad(bLng - aLng) / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.sqrt(h));
+}
+
+/**
+ * The destinations within a day trip (100 km) of a visitor, nearest first, at most 3. Empty when the
+ * visitor is nowhere near any (e.g. browsing from abroad) — callers then fall back to other context.
+ * The coordinates are used for this lookup only; they are not stored or logged.
+ */
+export async function resolveNearbyContext(lat: number, lng: number): Promise<AdContext> {
+  const rows = await getDestinationCoords();
+  const near = rows
+    .map((r) => ({ id: r.id, km: distanceKm(lat, lng, r.lat, r.lng) }))
+    .filter((r) => r.km <= NEARBY_RADIUS_KM)
+    .sort((x, y) => x.km - y.km)
+    .slice(0, NEARBY_MAX);
+  return { destinationIds: near.map((r) => r.id), categoryIds: [] };
+}
+
 /** Destinations and categories whose name matches a search phrase ("pokhara", "trek"). */
 export async function resolveSearchContext(q: string): Promise<AdContext> {
   const term = q.trim().slice(0, 80);

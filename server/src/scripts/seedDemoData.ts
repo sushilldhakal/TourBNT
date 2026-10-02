@@ -358,7 +358,16 @@ async function seed() {
 
   // seller docs / directory targeting
   await insertChunked(S.businessPartnerCategories, approvedPartners.flatMap((p) => shuffle(allCats).slice(0, 2).map((c) => ({ businessPartnerId: p.id, categoryId: c.id }))));
-  await insertChunked(S.businessPartnerDestinations, approvedPartners.flatMap((p) => [p.destId, pick(partnerDests).id].filter((v, i, a) => a.indexOf(v) === i).map((d) => ({ businessPartnerId: p.id, destinationId: d }))));
+  // Listed in its own town plus the nearest neighbouring destination — a business serves the area around it, and a
+  // random second place made e.g. a Pokhara spa show up in Langtang.
+  const nearestOther = (destId: string): string => {
+    const me = allDests.find((d) => d.id === destId);
+    const others = partnerDests.filter((d) => d.id !== destId && d.latitude != null && d.longitude != null);
+    if (!me || me.latitude == null || me.longitude == null || others.length === 0) return destId;
+    const dist = (d: { latitude: number | null; longitude: number | null }) => Math.hypot(d.latitude! - me.latitude!, (d.longitude! - me.longitude!) * Math.cos((me.latitude! * Math.PI) / 180));
+    return others.reduce((best, d) => (dist(d) < dist(best) ? d : best)).id;
+  };
+  await insertChunked(S.businessPartnerDestinations, approvedPartners.flatMap((p) => [p.destId, nearestOther(p.destId)].filter((v, i, arr) => arr.indexOf(v) === i).map((d) => ({ businessPartnerId: p.id, destinationId: d }))));
 
   // ---- capacity, unit types, blocks, overrides, guide availability ----
   const capRows: any[] = [], unitTypeRows: any[] = [], blockRows: any[] = [], overrideRows: any[] = [], availRows: any[] = [];

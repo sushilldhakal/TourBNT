@@ -33,6 +33,7 @@ export function RelevantAdSlot({
     destinationIds,
     categoryIds,
     q,
+    near,
     categoryId,
     destinationId,
     limit = 2,
@@ -43,11 +44,11 @@ export function RelevantAdSlot({
     const dests = [...(destinationIds ?? []), ...(destinationId ? [destinationId] : [])].filter(Boolean).sort();
     const cats = [...(categoryIds ?? []), ...(categoryId ? [categoryId] : [])].filter(Boolean).sort();
     const search = q?.trim() || undefined;
-    const hasContext = !!tourId || dests.length > 0 || cats.length > 0 || !!search;
+    const hasContext = !!tourId || dests.length > 0 || cats.length > 0 || !!search || !!near;
 
     const { data: ads } = useQuery({
-        queryKey: ['ads-placement', placementSlot, tourId ?? null, dests, cats, search ?? null, limit],
-        queryFn: () => getAdsForPlacement({ placementSlot, tourId, destinationIds: dests, categoryIds: cats, q: search, limit }),
+        queryKey: ['ads-placement', placementSlot, tourId ?? null, dests, cats, search ?? null, near?.lat ?? null, near?.lng ?? null, limit],
+        queryFn: () => getAdsForPlacement({ placementSlot, tourId, destinationIds: dests, categoryIds: cats, q: search, near, limit }),
         enabled: hasContext,
         staleTime: 5 * 60 * 1000,
     });
@@ -75,7 +76,7 @@ function AdCard({ ad, compact }: { ad: Advertisement; compact: boolean }) {
 
     return (
         <div ref={ref} className="h-full">
-            <Card className="overflow-hidden h-full py-0 gap-0">
+            <Card className="overflow-hidden h-full py-0 gap-0 pt-0" >
                 <button type="button" onClick={handleClick} className="w-full h-full text-left flex flex-col">
                     {ad.imageUrl && (
                         // eslint-disable-next-line @next/next/no-img-element

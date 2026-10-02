@@ -194,6 +194,8 @@ export interface AdContextParams {
     categoryIds?: string[];
     /** A search phrase, matched against destination/category names. */
     q?: string;
+    /** The visitor's approximate location (only with their consent); the server maps it to nearby destinations. */
+    near?: { lat: number; lng: number };
 }
 
 /** The public ad-serving call — used by <RelevantAdSlot>. */
@@ -207,6 +209,8 @@ export const getAdsForPlacement = async (params: { placementSlot: AdPlacementSlo
                 destinationIds: params.destinationIds?.length ? params.destinationIds.join(',') : undefined,
                 categoryIds: params.categoryIds?.length ? params.categoryIds.join(',') : undefined,
                 q: params.q?.trim() || undefined,
+                lat: params.near?.lat,
+                lng: params.near?.lng,
             },
         });
         // extractResponseData only unwraps `data.data` when it isn't itself
