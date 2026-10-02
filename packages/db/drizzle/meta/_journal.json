@@ -120,6 +120,13 @@
       "when": 1790920695736,
       "tag": "0016_ad_billing_and_pricing",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1790951421151,
+      "tag": "0017_ads_require_real_payment",
+      "breakpoints": true
     }
   ]
 }

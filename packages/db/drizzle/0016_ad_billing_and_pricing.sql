@@ -17,6 +17,4 @@ ALTER TABLE "advertisements" ADD COLUMN "currency" text DEFAULT 'NPR' NOT NULL;-
 ALTER TABLE "ad_pricing_settings" ADD CONSTRAINT "ad_pricing_settings_updated_by_users_id_fk" FOREIGN KEY ("updated_by") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "ad_category_targets_category_idx" ON "ad_category_targets" USING btree ("category_id");--> statement-breakpoint
 CREATE INDEX "ad_destination_targets_destination_idx" ON "ad_destination_targets" USING btree ("destination_id");--> statement-breakpoint
-INSERT INTO "ad_pricing_settings" ("id", "monthly_price", "price_per_100_views", "currency") VALUES ('default', 5000, 50, 'NPR') ON CONFLICT ("id") DO NOTHING;--> statement-breakpoint
--- Ads approved before billing existed keep running: count them as paid.
-UPDATE "advertisements" SET "is_paid" = true, "paid_at" = COALESCE("approved_at", now()) WHERE "approval_status" = 'approved' AND "is_paid" = false;
+INSERT INTO "ad_pricing_settings" ("id", "monthly_price", "price_per_100_views", "currency") VALUES ('default', 5000, 50, 'NPR') ON CONFLICT ("id") DO NOTHING;

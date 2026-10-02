@@ -1,8 +1,11 @@
 /**
  * Full demo dataset for admin/seller/partner/customer testing.
  *
- *   npm run seed:demo --prefix server          # wipe previous demo rows, re-seed
- *   npm run seed:demo --prefix server -- --wipe # only remove demo rows
+ *   SEED_DEMO_CONFIRM=<db host> npm run seed:demo --prefix server   # wipe previous demo rows, re-seed
+ *   npm run demo:wipe --prefix server                                 # only remove demo rows
+ *
+ * Seeding refuses to run unless SEED_DEMO_CONFIRM equals the DATABASE_URL host, so it can't
+ * be pointed at a real database by accident. Never seed production.
  *
  * Everything this script creates is tagged so it can be removed again:
  *   - users:          email ends with @demo.tourbnt.test
@@ -187,9 +190,24 @@ type Acct = { id: string; name: string; email: string; role: string; group: stri
 const accounts: Acct[] = [];
 
 async function seed() {
-  console.log('Seeding against:', process.env.DATABASE_URL?.replace(/:[^:@]+@/, ':***@'));
+  const wipeOnly = process.argv.includes('--wipe');
+  const dbHost = (() => { try { return new URL(process.env.DATABASE_URL ?? '').hostname; } catch { return ''; } })();
+  console.log('Database:', process.env.DATABASE_URL?.replace(/:[^:@]+@/, ':***@'));
+
+  // Seeding writes hundreds of fake users, tours, businesses and LIVE-looking ads with fake
+  // links. It must never hit a real site by accident, so it only runs when you name the exact
+  // database host you mean. Wiping (removing demo rows only) needs no confirmation.
+  if (!wipeOnly && process.env.SEED_DEMO_CONFIRM !== dbHost) {
+    console.error(
+      `\nRefusing to seed demo data into ${dbHost || '(DATABASE_URL not set)'}.\n` +
+      `This creates fake users, tours, businesses and ads. Never run it against production.\n` +
+      `If this really is a throwaway/dev database, run:\n\n  SEED_DEMO_CONFIRM=${dbHost} npm run seed:demo\n`
+    );
+    process.exit(1);
+  }
+
   await wipe();
-  if (process.argv.includes('--wipe')) { console.log('Wiped. Done.'); return; }
+  if (wipeOnly) { console.log('Demo data removed. Real users, tours and businesses were not touched.'); return; }
 
   const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
 
@@ -251,7 +269,10 @@ async function seed() {
   // business partners — owners + listings
   // ---------------------------------------------------------------------
   // pre-fetch reference data: destinations + categories (create what's missing)
-  await insertChunked(S.globalDestinations, DEST_SPECS.map((d) => ({
+  // Destination names have no unique constraint, so only add the ones that don't exist yet —
+  // otherwise every re-run duplicated them (three "Pokhara"s, ...).
+  const existingDestNames = new Set((await db.select({ name: S.globalDestinations.name }).from(S.globalDestinations)).map((d) => d.name));
+  await insertChunked(S.globalDestinations, DEST_SPECS.filter((d) => !existingDestNames.has(d.name)).map((d) => ({
     name: d.name, description: d.desc, coverImage: img(`dest-${d.name}`), country: 'Nepal', region: d.region, city: d.city, latitude: d.lat, longitude: d.lng,
     isActive: true, isApproved: true, approvalStatus: 'approved', createdBy: admin.id, approvedBy: admin.id, approvedAt: new Date(), popularity: int(30, 95),
     metadata: { timezone: 'Asia/Kathmandu', currency: 'NPR', bestTimeToVisit: ['Mar-May', 'Oct-Nov'] },
@@ -695,7 +716,8 @@ async function seed() {
   // ---------------------------------------------------------------------
   // advertisements
   // ---------------------------------------------------------------------
-  const SLOTS = ['tour_detail', 'tour_sidebar', 'hotel_page', 'search_results', 'homepage'] as const;
+  // Only placements the site actually renders (there is no homepage ad slot).
+  const SLOTS = ['tour_sidebar', 'search_results', 'tour_detail', 'hotel_page'] as const;
   const adRows: any[] = [], adCatRows: any[] = [], adDestRows: any[] = [], adStatRows: any[] = [];
   const advertisers = partners.filter((p) => p.type === 'advertiser');
   const adOwners = [...advertisers, ...approvedPartners.filter((p) => ['hotel', 'restaurant', 'transport'].includes(p.type)).slice(0, 6)];
@@ -706,9 +728,16 @@ async function seed() {
       const id = uuid();
       const r = rnd();
       const approval = p.status !== 'approved' ? 'pending' : r < 0.65 ? 'approved' : r < 0.85 ? 'pending' : 'rejected';
-      const campaign = approval !== 'approved' ? 'draft' : pick(['active', 'active', 'active', 'paused', 'ended'] as const);
+      // Priced like a real order (default price list: Rs 5,000/month or Rs 50 per 100 views), and
+      // only an approved AND paid campaign can be live — same rules the API enforces.
+      const perView = chance(0.4);
+      const durationMonths = perView ? 1 : int(1, 3);
+      const viewQuota = perView ? int(20, 200) * 100 : null;
+      const priceAmount = perView ? (viewQuota! / 100) * 50 : durationMonths * 5000;
+      const paid = approval === 'approved' && chance(0.7);
+      const campaign = !paid ? 'draft' : pick(['active', 'active', 'active', 'paused', 'ended'] as const);
       const slot = SLOTS[(pi + k) % SLOTS.length];
-      const impressions = campaign === 'draft' ? 0 : int(800, 60000);
+      const impressions = campaign === 'draft' ? 0 : Math.min(int(800, 60000), viewQuota ?? Infinity);
       const clicks = Math.floor(impressions * (0.01 + rnd() * 0.05));
       const submitted = daysFromNow(-int(5, 60));
       adRows.push({
@@ -717,7 +746,8 @@ async function seed() {
         startDate: campaign === 'ended' ? daysFromNow(-60) : daysFromNow(-int(1, 30)), endDate: campaign === 'ended' ? daysFromNow(-5) : daysFromNow(int(20, 120)),
         isApproved: approval === 'approved', approvalStatus: approval, approvedBy: approval === 'approved' ? admin.id : null, approvedAt: approval === 'approved' ? new Date(submitted.getTime() + 86400000) : null,
         rejectedBy: approval === 'rejected' ? admin.id : null, rejectedAt: approval === 'rejected' ? daysFromNow(-3) : null, rejectionReason: approval === 'rejected' ? 'Creative does not meet advertising guidelines (low-resolution image).' : null,
-        submittedAt: submitted, impressionCount: impressions, clickCount: clicks, isPaid: approval === 'approved' && chance(0.7), createdAt: submitted, updatedAt: submitted,
+        submittedAt: submitted, impressionCount: impressions, clickCount: clicks, isPaid: paid, paidAt: paid ? new Date(submitted.getTime() + 2 * 86400000) : null,
+        billingModel: perView ? 'per_view' : 'monthly', durationMonths, viewQuota, priceAmount, currency: 'NPR', createdAt: submitted, updatedAt: submitted,
       });
       shuffle(allCats).slice(0, 2).forEach((c) => adCatRows.push({ adId: id, categoryId: c.id }));
       shuffle(partnerDests).slice(0, 2).forEach((d) => adDestRows.push({ adId: id, destinationId: d.id }));
@@ -883,7 +913,7 @@ function writeCredentials() {
     '',
     `Generated by \`server/src/scripts/seedDemoData.ts\`. **Password for every account: \`${DEMO_PASSWORD}\`**`,
     '',
-    'Remove all demo data again with `npm run seed:demo --prefix server -- --wipe`.',
+    'Remove all demo data again with `npm run demo:wipe --prefix server`.',
     '',
     '| Group | Count |', '|---|---|',
     ...[...groups.entries()].map(([g, a]) => `| ${g} | ${a.length} |`),

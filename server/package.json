@@ -12,6 +12,7 @@
     "create-admin": "ts-node src/scripts/createAdmin.ts",
     "diagnose:latency": "ts-node -T src/scripts/diagnoseLatency.ts",
     "seed:demo": "ts-node -T src/scripts/seedDemoData.ts",
+    "demo:wipe": "ts-node -T src/scripts/seedDemoData.ts --wipe",
     "create-admin:prod": "NODE_ENV=production ts-node src/scripts/createAdmin.ts",
     "add-settings": "ts-node src/scripts/addUserSettings.ts",
     "add-settings:prod": "NODE_ENV=production ts-node src/scripts/addUserSettings.ts"

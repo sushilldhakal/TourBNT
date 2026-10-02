@@ -13,7 +13,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from '@/components/ui/use-toast';
 import { DashboardCardHeader } from '@/components/dashboard/layout/CardHeader';
-import { AdStatsPanel, AdStatusBadges, describePlan } from '@/components/dashboard/ads/AdStatsPanel';
+import { AdStatsPanel, AdStatusBadges, AdWhereItShows, describePlan } from '@/components/dashboard/ads/AdStatsPanel';
 import {
     approveAd,
     formatPrice,
@@ -42,6 +42,7 @@ export default function AdsAdminPage() {
     const [rejectTarget, setRejectTarget] = useState<Advertisement | null>(null);
     const [rejectReason, setRejectReason] = useState('');
     const [statsTarget, setStatsTarget] = useState<Advertisement | null>(null);
+    const [whereTarget, setWhereTarget] = useState<Advertisement | null>(null);
 
     const { data, isLoading } = useQuery({
         queryKey: ['ads', 'admin', filter, page],
@@ -63,6 +64,7 @@ export default function AdsAdminPage() {
         onSuccess: (ad) => {
             toast({ title: ad?.approvalStatus === 'approved' ? 'Payment recorded — campaign is live' : 'Payment recorded' });
             refresh();
+            queryClient.invalidateQueries({ queryKey: ['ad-where'] });
         },
         onError: (error: Error) => toast({ title: 'Failed to record payment', description: error.message, variant: 'destructive' }),
     });
@@ -125,13 +127,6 @@ export default function AdsAdminPage() {
                                 <span className="text-muted-foreground">Link:</span> {ad.ctaLabel || 'Learn more'} →{' '}
                                 <a href={ad.ctaUrl} target="_blank" rel="noreferrer" className="underline text-primary break-all">{ad.ctaUrl}</a>
                             </p>
-                            <p className="text-muted-foreground">
-                                <span className="text-foreground font-medium">Places:</span>{' '}
-                                {ad.targets?.destinations.length ? ad.targets.destinations.map((d) => d.name).join(', ') : 'business location only'}
-                                {' · '}
-                                <span className="text-foreground font-medium">Tour types:</span>{' '}
-                                {ad.targets?.categories.length ? ad.targets.categories.map((c) => c.name).join(', ') : 'any'}
-                            </p>
                             <p className="text-muted-foreground tabular-nums">
                                 {ad.impressionCount.toLocaleString('en-IN')} views · {ad.clickCount.toLocaleString('en-IN')} clicks
                                 {ad.billingModel === 'per_view' && ad.viewQuota ? ` · ${ad.viewQuota.toLocaleString('en-IN')} bought` : ''}
@@ -144,12 +139,13 @@ export default function AdsAdminPage() {
                                 )}
                                 {!ad.isPaid && ad.approvalStatus !== 'rejected' && (
                                     <Button size="sm" variant="outline" onClick={() => paidMutation.mutate(ad.id)} disabled={paidMutation.isPending}>
-                                        Mark paid ({formatPrice(ad.priceAmount, ad.currency)})
+                                        {ad.priceAmount > 0 ? `Mark paid (${formatPrice(ad.priceAmount, ad.currency)})` : 'Mark paid (priced at current rates)'}
                                     </Button>
                                 )}
                                 {ad.approvalStatus !== 'rejected' && (
                                     <Button size="sm" variant="destructive" onClick={() => setRejectTarget(ad)}>Reject</Button>
                                 )}
+                                <Button size="sm" variant="outline" onClick={() => setWhereTarget(ad)}>Where it shows</Button>
                                 <Button size="sm" variant="ghost" onClick={() => setStatsTarget(ad)}>View stats</Button>
                             </div>
                         </CardContent>
@@ -179,6 +175,13 @@ export default function AdsAdminPage() {
                             Reject ad
                         </Button>
                     </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={!!whereTarget} onOpenChange={(open) => !open && setWhereTarget(null)}>
+                <DialogContent className="max-w-2xl">
+                    <DialogHeader><DialogTitle>Where &quot;{whereTarget?.title}&quot; shows</DialogTitle></DialogHeader>
+                    {whereTarget && <AdWhereItShows adId={whereTarget.id} />}
                 </DialogContent>
             </Dialog>
 

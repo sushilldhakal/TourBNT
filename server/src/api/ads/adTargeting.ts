@@ -236,3 +236,127 @@ function itineraryPlaceTexts(itinerary: unknown): string[] {
   }
   return [...out].slice(0, 60);
 }
+
+// ---------------------------------------------------------------------------
+// "Where does this ad show?" — for the advertiser and admin dashboards.
+// Mirrors the serving rules above, so what it reports is what visitors get.
+// ---------------------------------------------------------------------------
+
+export interface AdPlacementPreview {
+  serving: boolean;
+  /** Why it is not on the site right now (empty when serving). */
+  blockers: string[];
+  places: { id: string; name: string; source: 'business location' | 'business listing' | 'ad targeting' }[];
+  tourTypes: { id: string; name: string }[];
+  /** Published tours whose pages show this ad (first 50). */
+  tours: { id: string; title: string }[];
+  tourCount: number;
+  /** Other surfaces, in plain words. */
+  surfaces: string[];
+}
+
+export async function previewAdPlacements(ad: typeof advertisements.$inferSelect): Promise<AdPlacementPreview> {
+  const now = new Date();
+  const [business] = await db
+    .select({ id: businessPartners.id, isActive: businessPartners.isActive, destinationId: businessPartners.destinationId })
+    .from(businessPartners)
+    .where(eq(businessPartners.id, ad.businessPartnerId))
+    .limit(1);
+
+  const [adDests, listed, cats] = await Promise.all([
+    db.select({ id: globalDestinations.id, name: globalDestinations.name })
+      .from(adDestinationTargets).innerJoin(globalDestinations, eq(adDestinationTargets.destinationId, globalDestinations.id))
+      .where(eq(adDestinationTargets.adId, ad.id)),
+    db.select({ id: globalDestinations.id, name: globalDestinations.name })
+      .from(businessPartnerDestinations).innerJoin(globalDestinations, eq(businessPartnerDestinations.destinationId, globalDestinations.id))
+      .where(eq(businessPartnerDestinations.businessPartnerId, ad.businessPartnerId)),
+    db.select({ id: globalCategories.id, name: globalCategories.name })
+      .from(adCategoryTargets).innerJoin(globalCategories, eq(adCategoryTargets.categoryId, globalCategories.id))
+      .where(eq(adCategoryTargets.adId, ad.id)),
+  ]);
+  const home = business?.destinationId
+    ? await db.select({ id: globalDestinations.id, name: globalDestinations.name }).from(globalDestinations).where(eq(globalDestinations.id, business.destinationId)).limit(1)
+    : [];
+
+  const places = new Map<string, AdPlacementPreview['places'][number]>();
+  home.forEach((p) => places.set(p.id, { ...p, source: 'business location' }));
+  listed.forEach((p) => places.has(p.id) || places.set(p.id, { ...p, source: 'business listing' }));
+  adDests.forEach((p) => places.has(p.id) || places.set(p.id, { ...p, source: 'ad targeting' }));
+  const placeList = [...places.values()];
+  const placeIds = placeList.map((p) => p.id);
+  const catIds = cats.map((c) => c.id);
+
+  const blockers: string[] = [];
+  if (ad.approvalStatus !== 'approved') blockers.push(ad.approvalStatus === 'rejected' ? 'Rejected by admin' : 'Waiting for admin review');
+  if (!ad.isPaid) blockers.push('Payment not confirmed (admin must click "Mark paid")');
+  if (ad.campaignStatus === 'paused') blockers.push('Paused');
+  if (ad.campaignStatus === 'draft') blockers.push('Not started');
+  if (ad.campaignStatus === 'ended') blockers.push('Campaign has ended');
+  if (ad.startDate && ad.startDate > now) blockers.push(`Starts ${ad.startDate.toISOString().slice(0, 10)}`);
+  if (ad.endDate && ad.endDate < now) blockers.push(`Ended ${ad.endDate.toISOString().slice(0, 10)}`);
+  if (ad.billingModel === 'per_view' && ad.viewQuota != null && ad.impressionCount >= ad.viewQuota) blockers.push('All bought views used');
+  if (business && !business.isActive) blockers.push('Business is deactivated');
+  if (placeIds.length === 0 && catIds.length === 0) blockers.push('No places or tour types — nothing to match');
+
+  const surfaces: string[] = [];
+  let matchedTours: { id: string; title: string }[] = [];
+  let tourCount = 0;
+  const contextual = slotsServedBy(ad.placementSlot).length > 1;
+  const placeNames = placeList.map((p) => p.name).join(', ');
+  const typeNames = cats.map((c) => c.name).join(' or ');
+
+  if (contextual && (placeIds.length > 0 || catIds.length > 0)) {
+    const placeArr = sql`ARRAY[${sql.join(placeIds.map((id) => sql`${id}`), sql`, `)}]::text[]`;
+    const catArr = sql`ARRAY[${sql.join(catIds.map((id) => sql`${id}`), sql`, `)}]::text[]`;
+    // Same connection rules as resolveTourContext + findMatchingAds: the tour's main destination,
+    // an approved destination named in an itinerary day, or an itinerary business's town — and,
+    // if the ad has tour types, one of them.
+    const placeMatch = placeIds.length === 0 ? sql`true` : sql`(
+      ${tours.destinationId} = ANY(${placeArr})
+      OR EXISTS (SELECT 1 FROM ${tourItineraryPartners} tip JOIN ${businessPartners} bp ON bp.id = tip.business_partner_id
+                 WHERE tip.tour_id = ${tours.id} AND bp.destination_id = ANY(${placeArr}))
+      OR EXISTS (SELECT 1 FROM jsonb_path_query(COALESCE(${tours.itinerary}, '[]'::jsonb), 'lax $.**.destination') AS v(place)
+                 JOIN ${globalDestinations} g ON g.id = ANY(${placeArr}) AND length(g.name) >= 3
+                 WHERE jsonb_typeof(v.place) = 'string' AND (v.place #>> '{}') ILIKE '%' || g.name || '%')
+    )`;
+    const typeMatch = catIds.length === 0 ? sql`true` : sql`EXISTS (
+      SELECT 1 FROM ${tourCategories} tc WHERE tc.tour_id = ${tours.id} AND tc.category_id = ANY(${catArr})
+    )`;
+    const where = sql`${tours.tourStatus} = 'Published' AND ${placeMatch} AND ${typeMatch}`;
+    const [rows, [{ n }]] = await Promise.all([
+      db.select({ id: tours.id, title: tours.title }).from(tours).where(where).orderBy(tours.title).limit(50),
+      db.select({ n: sql<number>`count(*)::int` }).from(tours).where(where),
+    ]);
+    matchedTours = rows;
+    tourCount = n;
+
+    surfaces.push(tourCount > 0
+      ? `Sidebar of ${tourCount} tour page${tourCount === 1 ? '' : 's'} (listed below)`
+      : 'Tour pages: no published tour matches yet');
+    if (placeIds.length > 0) {
+      surfaces.push(catIds.length > 0
+        ? `Tours listing when filtered by ${placeNames} together with ${typeNames}`
+        : `Tours listing filtered by ${placeNames}, and searches for those names`);
+      surfaces.push(catIds.length > 0
+        ? 'Not on destination pages (those have no tour type to match)'
+        : `Destination pages: ${placeNames}`);
+    } else {
+      surfaces.push(`Tours listing filtered by ${typeNames}`);
+    }
+  } else if (ad.placementSlot === 'hotel_page') {
+    surfaces.push(placeIds.length > 0 ? `Business profile pages of hotels/guesthouses in ${placeNames}` : 'Business profile pages: no places to match');
+  } else if (ad.placementSlot === 'homepage') {
+    surfaces.push('Placement "homepage": the site has no homepage ad slot, so this ad is never shown. Edit it to a tour placement.');
+    blockers.push('Placement "homepage" is not shown anywhere on the site');
+  }
+
+  return {
+    serving: blockers.length === 0 && (tourCount > 0 || surfaces.length > 0) && !surfaces.some((s) => s.includes('never shown')),
+    blockers,
+    places: placeList,
+    tourTypes: cats,
+    tours: matchedTours,
+    tourCount,
+    surfaces,
+  };
+}

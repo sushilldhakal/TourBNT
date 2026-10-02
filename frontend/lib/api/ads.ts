@@ -238,3 +238,23 @@ export const recordAdClick = async (adId: string) => {
         return null;
     }
 };
+
+export interface AdPlacementPreview {
+    serving: boolean;
+    blockers: string[];
+    places: { id: string; name: string; source: 'business location' | 'business listing' | 'ad targeting' }[];
+    tourTypes: { id: string; name: string }[];
+    tours: { id: string; title: string }[];
+    tourCount: number;
+    surfaces: string[];
+}
+
+/** Where an ad appears right now, or why it doesn't. Owner or admin. */
+export const getAdPlacementPreview = async (adId: string) => {
+    try {
+        const response = await api.get(`/ads/${adId}/where`);
+        return extractResponseData<AdPlacementPreview>(response);
+    } catch (error) {
+        throw handleApiError(error, 'checking where the ad shows');
+    }
+};

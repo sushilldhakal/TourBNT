@@ -16,7 +16,7 @@ import { HTTP_STATUS, sendSuccess, sendPaginatedResponse, sendValidationError, s
 import * as notifications from '../notifications/notificationController';
 import { uploadAdImage as uploadAdImageFile } from '../../services/adImageService';
 import { claimOnce } from '../../config/redisClient';
-import { findMatchingAds, invalidateLiveAds, resolveSearchContext, resolveTourContext, type AdContext } from './adTargeting';
+import { findMatchingAds, invalidateLiveAds, previewAdPlacements, resolveSearchContext, resolveTourContext, type AdContext } from './adTargeting';
 import { addMonths, getAdPricing, normaliseAdOrder, priceAdOrder, updateAdPricing } from './adPricing';
 
 type AdRow = typeof advertisements.$inferSelect;
@@ -425,8 +425,19 @@ export const markAdPaid = async (req: Request, res: Response, next: NextFunction
     if (!existing) return sendNotFoundError(res, 'Ad not found');
     if (existing.isPaid) return sendSuccess(res, existing, 'Already marked paid');
 
+    // Campaigns created before billing existed carry price 0. Price them at today's rates
+    // so "paid" never means "free".
+    let pricing: Partial<AdRow> = {};
+    if (existing.priceAmount === 0) {
+      const order = normaliseAdOrder({ billingModel: existing.billingModel, durationMonths: existing.durationMonths, viewQuota: existing.viewQuota ?? 10_000 });
+      if (typeof order === 'string') return sendValidationError(res, `Cannot price this campaign: ${order}`);
+      const rates = await getAdPricing();
+      pricing = { ...order, priceAmount: priceAdOrder(order, rates), currency: rates.currency };
+    }
+
     const now = new Date();
     const [updated] = await db.update(advertisements).set({
+      ...pricing,
       isPaid: true,
       paidAt: now,
       ...(existing.approvalStatus === 'approved' ? goLiveFields(existing, now) : {}),
@@ -619,6 +630,19 @@ export const getAdStats = async (req: Request, res: Response, next: NextFunction
       isPaid: ad.isPaid,
       daily,
     }, 'Ad stats retrieved successfully');
+  } catch (error) {
+    next(error);
+  }
+};
+
+/** Where this ad appears right now (or why it doesn't). Owner or admin. */
+export const getAdPlacementPreview = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { adId } = req.params;
+    const [ad] = await db.select().from(advertisements).where(eq(advertisements.id, adId)).limit(1);
+    if (!ad) return sendNotFoundError(res, 'Ad not found');
+    if (!(await isAdOwnerOrAdmin(ad, req))) return sendForbiddenError(res, 'Not authorized to view this ad');
+    return sendSuccess(res, await previewAdPlacements(ad), 'Ad placement preview');
   } catch (error) {
     next(error);
   }

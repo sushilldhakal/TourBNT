@@ -19,6 +19,7 @@ import {
   recordAdImpressions,
   recordAdClick,
   getAdStats,
+  getAdPlacementPreview,
   getPricing,
   putPricing,
 } from './adController';
@@ -48,5 +49,6 @@ adRouter.delete('/:adId', authenticate, asyncAuthHandler(deleteAdCampaign));
 
 adRouter.post('/:adId/click', asyncAuthHandler(recordAdClick));
 adRouter.get('/:adId/stats', authenticate, asyncAuthHandler(getAdStats));
+adRouter.get('/:adId/where', authenticate, asyncAuthHandler(getAdPlacementPreview));
 
 export default adRouter;

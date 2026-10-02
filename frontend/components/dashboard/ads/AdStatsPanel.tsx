@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { formatPrice, getAdStats, type Advertisement, type AdStats } from '@/lib/api/ads';
+import { formatPrice, getAdPlacementPreview, getAdStats, type Advertisement, type AdStats } from '@/lib/api/ads';
 
 /** Plan summary line, e.g. "Monthly · 2 months · Rs 10,000" or "10,000 views · Rs 5,000". */
 export function describePlan(ad: Pick<Advertisement, 'billingModel' | 'durationMonths' | 'viewQuota' | 'priceAmount' | 'currency'>): string {
@@ -19,9 +19,10 @@ export function AdStatusBadges({ ad }: { ad: Advertisement }) {
     const review = ad.approvalStatus;
     const now = Date.now();
     const scheduled = ad.campaignStatus === 'active' && ad.startDate && new Date(ad.startDate).getTime() > now;
+    const viewsUsedUp = ad.billingModel === 'per_view' && ad.viewQuota != null && ad.impressionCount >= ad.viewQuota;
     const delivery = review !== 'approved' || !ad.isPaid
         ? null
-        : ad.campaignStatus === 'ended'
+        : ad.campaignStatus === 'ended' || viewsUsedUp
             ? 'Ended'
             : ad.campaignStatus === 'paused'
                 ? 'Paused'
@@ -127,6 +128,73 @@ function DailyChart({ stats, days }: { stats: AdStats; days: number }) {
                 <span>{series[0].date}</span>
                 <span>{series[series.length - 1].date}</span>
             </div>
+        </div>
+    );
+}
+
+/** Plain answer to "where is this ad on the site?" — live status, places (and where each
+ *  comes from), tour types, and the actual tour pages showing it. */
+export function AdWhereItShows({ adId }: { adId: string }) {
+    const { data, isLoading, isError } = useQuery({
+        queryKey: ['ad-where', adId],
+        queryFn: () => getAdPlacementPreview(adId),
+        staleTime: 30_000,
+    });
+
+    if (isLoading) return <p className="text-sm text-muted-foreground">Checking where this ad shows…</p>;
+    if (isError || !data) return <p className="text-sm text-destructive">Couldn&apos;t check placements.</p>;
+
+    return (
+        <div className="space-y-4 text-sm">
+            {data.serving ? (
+                <p className="rounded-md border border-green-600/30 bg-green-600/10 px-3 py-2 text-green-700 dark:text-green-400">
+                    Live on the site now.
+                </p>
+            ) : (
+                <div className="rounded-md border border-amber-600/30 bg-amber-500/10 px-3 py-2 text-amber-800 dark:text-amber-300">
+                    <p className="font-medium">Not showing to visitors right now</p>
+                    <ul className="list-disc pl-5 mt-1">
+                        {data.blockers.map((b) => <li key={b}>{b}</li>)}
+                        {data.blockers.length === 0 && <li>No page on the site matches it yet</li>}
+                    </ul>
+                </div>
+            )}
+
+            <div>
+                <p className="font-medium mb-1">Places</p>
+                {data.places.length === 0 ? <p className="text-muted-foreground">None</p> : (
+                    <div className="flex flex-wrap gap-2">
+                        {data.places.map((p) => (
+                            <Badge key={p.id} variant="secondary" title={`From ${p.source}`}>{p.name} · {p.source}</Badge>
+                        ))}
+                    </div>
+                )}
+            </div>
+            <div>
+                <p className="font-medium mb-1">Tour types</p>
+                <p className="text-muted-foreground">{data.tourTypes.length ? data.tourTypes.map((t) => t.name).join(', ') : 'Any (not restricted)'}</p>
+            </div>
+
+            <div>
+                <p className="font-medium mb-1">{data.serving ? 'Shows on' : 'Would show on (once live)'}</p>
+                <ul className="list-disc pl-5 text-muted-foreground space-y-0.5">
+                    {data.surfaces.map((s) => <li key={s}>{s}</li>)}
+                </ul>
+            </div>
+
+            {data.tours.length > 0 && (
+                <div>
+                    <p className="font-medium mb-1">Tour pages ({data.tourCount})</p>
+                    <ul className="space-y-1 max-h-56 overflow-y-auto pr-2">
+                        {data.tours.map((t) => (
+                            <li key={t.id}>
+                                <a href={`/tours/${t.id}`} target="_blank" rel="noreferrer" className="text-primary underline underline-offset-2">{t.title}</a>
+                            </li>
+                        ))}
+                    </ul>
+                    {data.tourCount > data.tours.length && <p className="text-xs text-muted-foreground mt-1">…and {data.tourCount - data.tours.length} more</p>}
+                </div>
+            )}
         </div>
     );
 }

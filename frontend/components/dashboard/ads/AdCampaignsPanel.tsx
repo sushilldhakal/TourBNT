@@ -21,7 +21,7 @@ import {
     type AdBillingModel,
     type Advertisement,
 } from '@/lib/api/ads';
-import { AdStatsPanel, AdStatusBadges, describePlan } from './AdStatsPanel';
+import { AdStatsPanel, AdStatusBadges, AdWhereItShows, describePlan } from './AdStatsPanel';
 
 type Option = { id: string; name: string };
 
@@ -283,6 +283,7 @@ function CampaignCard({ ad, business }: { ad: Advertisement; business: BusinessL
     const queryClient = useQueryClient();
     const { categories, destinations } = usePickerOptions();
     const [editing, setEditing] = useState(false);
+    const [showWhere, setShowWhere] = useState(false);
     const [destinationIds, setDestinationIds] = useState<string[]>(ad.targets?.destinations.map((d) => d.id) ?? []);
     const [categoryIds, setCategoryIds] = useState<string[]>(ad.targets?.categories.map((c) => c.id) ?? []);
     const home = destinations.find((d) => d.id === business.destinationId);
@@ -293,6 +294,7 @@ function CampaignCard({ ad, business }: { ad: Advertisement; business: BusinessL
             toast({ title: 'Targeting saved' });
             setEditing(false);
             queryClient.invalidateQueries({ queryKey: ['my-ads'] });
+            queryClient.invalidateQueries({ queryKey: ['ad-where', ad.id] });
         },
         onError: (error: Error) => toast({ title: 'Update failed', description: error.message, variant: 'destructive' }),
     });
@@ -344,7 +346,10 @@ function CampaignCard({ ad, business }: { ad: Advertisement; business: BusinessL
                     </div>
                 )}
 
+                {showWhere && <div className="rounded-lg border p-3"><AdWhereItShows adId={ad.id} /></div>}
+
                 <div className="flex flex-wrap gap-2">
+                    <Button size="sm" variant="outline" onClick={() => setShowWhere((v) => !v)}>{showWhere ? 'Hide where it shows' : 'Where it shows'}</Button>
                     {!editing && <Button size="sm" variant="outline" onClick={() => setEditing(true)}>Edit targeting</Button>}
                     {canToggle && (
                         ad.campaignStatus === 'active'
