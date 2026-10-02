@@ -15,8 +15,9 @@ function getRedis(): Redis {
       lazyConnect: true,
       maxRetriesPerRequest: 1,
       connectTimeout: 2000,
-      // A hung Redis must never stall a request longer than a cache miss would.
-      commandTimeout: 500,
+      // No commandTimeout: rate-limit-redis sends SCRIPT LOAD at module load, while startup is
+      // still blocking the event loop, and a timed-out command there is an unhandled rejection
+      // that crashes the API on boot.
       // Keep reconnecting with a capped backoff. Returning null here (the old behaviour) made a
       // single dropped connection disable the cache — and the Redis rate-limit store — until the
       // next restart, silently sending every request to the database.
