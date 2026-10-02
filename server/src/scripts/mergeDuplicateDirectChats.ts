@@ -9,7 +9,7 @@
 import { config as dotenvConfig } from 'dotenv';
 import path from 'path';
 import { eq, and, inArray, ne } from 'drizzle-orm';
-import { db, conversations, conversationParticipants, conversationMessages } from '@tourbnt/db';
+import { db, conversations, conversationParticipants, conversationMessages } from '../db';
 
 dotenvConfig({ path: path.resolve(__dirname, '../../.env') });
 

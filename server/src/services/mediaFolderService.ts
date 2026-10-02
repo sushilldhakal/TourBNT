@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { db, users, businessPartners } from '@tourbnt/db';
+import { db, users, businessPartners } from '../db';
 import { eq } from 'drizzle-orm';
 
 /** Turns a company/display name into a URL- and R2-key-safe slug. */

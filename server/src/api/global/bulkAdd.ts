@@ -6,7 +6,7 @@ import {
   globalDestinations,
   sellerCategoryPreferences,
   sellerDestinationPreferences,
-} from '@tourbnt/db';
+} from '../../db';
 import { and, eq, ilike, inArray, sql } from 'drizzle-orm';
 
 /**

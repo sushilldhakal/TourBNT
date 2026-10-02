@@ -10,7 +10,7 @@
  * Idempotent: re-running rebuilds the itinerary links and re-applies the demo
  * statuses (pending requests for departures are recreated by the generator).
  */
-import { db, tours, businessPartners, businessPartnerUnitTypes, itineraryPartnerRequests, itineraryRequestEvents, tourItineraryPartners } from '@tourbnt/db';
+import { db, tours, businessPartners, businessPartnerUnitTypes, itineraryPartnerRequests, itineraryRequestEvents, tourItineraryPartners } from '../db';
 import { eq, and, inArray } from 'drizzle-orm';
 import { processItineraryData } from '../api/tours/utils/dataProcessors';
 import { randomUUID } from 'crypto';

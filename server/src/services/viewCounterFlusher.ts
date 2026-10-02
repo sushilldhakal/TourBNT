@@ -1,4 +1,4 @@
-import { db, tours } from '@tourbnt/db';
+import { db, tours } from '../db';
 import { eq, sql } from 'drizzle-orm';
 import { getRedisClient } from '../config/redisClient';
 

@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { db, bookings, businessPartners, businessPartnerUnitTypes, itineraryPartnerRequests } from '@tourbnt/db';
+import { db, bookings, businessPartners, businessPartnerUnitTypes, itineraryPartnerRequests } from '../../db';
 import { and, eq, inArray, gte, sql } from 'drizzle-orm';
 import { sendSuccess } from '../../utils/apiResponse';
 

@@ -1,6 +1,6 @@
 /**
  * Single frontend role list. Values match the Postgres `user_role` enum
- * in packages/db. Import from here or from lib/utils/roles — they are the same module.
+ * in server/src/db/schema.ts. Import from here or from lib/utils/roles — they are the same module.
  */
 export {
     UserRole,

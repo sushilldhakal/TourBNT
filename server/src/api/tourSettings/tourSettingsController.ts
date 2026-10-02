@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import createHttpError from 'http-errors';
-import { db, paxPresets, discountPresets, pricingOptionPresets, datePresets, contentPresets, itineraryPresets, tourTemplatePresets } from '@tourbnt/db';
+import { db, paxPresets, discountPresets, pricingOptionPresets, datePresets, contentPresets, itineraryPresets, tourTemplatePresets } from '../../db';
 import { eq, and, sql } from 'drizzle-orm';
 import { sendSuccess, HTTP_STATUS } from '../../utils/apiResponse';
 

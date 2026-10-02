@@ -1,5 +1,5 @@
 import { Response, NextFunction } from 'express';
-import { db, mediaAssets } from '@tourbnt/db';
+import { db, mediaAssets } from '../../db';
 import { eq, and, inArray, desc, count } from 'drizzle-orm';
 import createHttpError from 'http-errors';
 import {

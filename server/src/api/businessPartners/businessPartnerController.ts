@@ -12,7 +12,7 @@ import {
   globalCategories,
   globalDestinations,
   businessPartnerTypeEnum,
-} from '@tourbnt/db';
+} from '../../db';
 import { eq, and, ilike, desc, count, inArray, sql } from 'drizzle-orm';
 import { HTTP_STATUS, sendSuccess, sendPaginatedResponse, sendValidationError, sendNotFoundError, sendForbiddenError, handleUnauthorized } from '../../utils/apiResponse';
 import { uploadBusinessDocuments, deleteBusinessDocuments } from '../../services/businessDocumentService';

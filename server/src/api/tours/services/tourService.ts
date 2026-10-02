@@ -1,4 +1,4 @@
-import { db, tours, tourCategories, tourAuthors, globalCategories, users, facts as factsTable, tourItineraryPartners, businessPartners, businessPartnerUnitTypes } from '@tourbnt/db';
+import { db, tours, tourCategories, tourAuthors, globalCategories, users, facts as factsTable, tourItineraryPartners, businessPartners, businessPartnerUnitTypes } from '../../../db';
 import { eq, and, or, ilike, gte, lte, gt, desc, asc, sql, inArray, count, getTableColumns, type SQL } from 'drizzle-orm';
 import createHttpError from 'http-errors';
 import { Tour } from '../tourTypes';

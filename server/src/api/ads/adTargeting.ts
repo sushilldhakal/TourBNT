@@ -10,7 +10,7 @@ import {
   tours,
   tourCategories,
   tourItineraryPartners,
-} from '@tourbnt/db';
+} from '../../db';
 import { and, eq, gte, inArray, isNotNull, isNull, lt, lte, or, sql } from 'drizzle-orm';
 import { cacheGet, cacheSet } from '../../config/redisClient';
 

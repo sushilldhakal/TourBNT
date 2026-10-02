@@ -1,4 +1,4 @@
-import { db, adPricingSettings } from '@tourbnt/db';
+import { db, adPricingSettings } from '../../db';
 import { eq } from 'drizzle-orm';
 
 export type AdBillingModel = 'monthly' | 'per_view';

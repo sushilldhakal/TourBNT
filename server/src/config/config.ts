@@ -27,7 +27,7 @@ if (missingVars.length > 0) {
 
 const _config = {
   port: Number(process.env.PORT) || 4000,
-  // Postgres — single source of truth (see packages/db for the shared Drizzle schema).
+  // Postgres — single source of truth (see src/db for the Drizzle schema).
   postgresUrl: process.env.DATABASE_URL!,
   // Redis — cache in front of Postgres (see src/config/redisClient.ts). Optional:
   // defaults to a local instance so dev works without extra setup.

@@ -19,9 +19,8 @@ import {
 /**
  * TourBNT Postgres schema — the single source of truth for data access.
  *
- * The Express API is the only writer. The Next.js app calls that API.
- * Both sides share this schema via `@tourbnt/db`. There is one Postgres
- * database and one schema definition.
+ * The Express API is the only thing that talks to Postgres; the Next.js app
+ * calls that API. Migrations live in server/drizzle.
  *
  * IDs: stored as `text` (not native uuid) so that documents migrated from
  * the existing MongoDB deployment can keep their original ObjectId strings

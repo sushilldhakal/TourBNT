@@ -71,14 +71,11 @@ jobs:
             echo "📦 Installing dependencies (all workspaces)..."
             npm install --legacy-peer-deps
 
-            echo "🔨 Building shared db package..."
-            npm run build --prefix packages/db
-
-            # Apply pending SQL migrations (packages/db/drizzle) using server/.env's DATABASE_URL.
+            # Apply pending SQL migrations (server/drizzle) using server/.env's DATABASE_URL.
             # Drizzle runs them in one transaction, so a failure changes nothing; it is reported
             # loudly but doesn't block the deploy (run `npm run db:migrate` by hand to retry).
             echo "🗄️  Applying database migrations..."
-            if (cd packages/db && DOTENV_CONFIG_PATH=../../server/.env npx tsx src/migrate.ts); then
+            if (cd server && DOTENV_CONFIG_PATH=.env npx tsx src/db/migrate.ts); then
               echo "✅ Migrations applied"
             else
               echo "⚠️  MIGRATIONS FAILED — new features that need them will error until fixed"

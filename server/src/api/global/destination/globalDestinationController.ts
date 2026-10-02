@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { db, globalDestinations, sellerDestinationPreferences, sellerSettings, users, tours, tourAuthors } from '@tourbnt/db';
+import { db, globalDestinations, sellerDestinationPreferences, sellerSettings, users, tours, tourAuthors } from '../../../db';
 import { eq, and, or, ilike, ne, desc, isNull, isNotNull, inArray, sql } from 'drizzle-orm';
 import type { SellerInfo } from '../../user/userTypes';
 import * as notifications from '../../notifications/notificationController';

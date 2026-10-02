@@ -1,4 +1,4 @@
-import { db, conversations, conversationParticipants, conversationMessages, users, tours, tourAuthors, businessPartners } from '@tourbnt/db';
+import { db, conversations, conversationParticipants, conversationMessages, users, tours, tourAuthors, businessPartners } from '../../db';
 import { eq, and, or, inArray, desc, asc, count, sql } from 'drizzle-orm';
 import createHttpError from 'http-errors';
 import { USER_ROLES, type UserRole } from '../../utils/roles';

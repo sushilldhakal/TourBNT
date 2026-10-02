@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { db, businessPartnerAvailabilityBlocks } from '@tourbnt/db';
+import { db, businessPartnerAvailabilityBlocks } from '../../db';
 import { eq } from 'drizzle-orm';
 import { sendSuccess, sendValidationError, sendNotFoundError, sendForbiddenError, handleUnauthorized } from '../../utils/apiResponse';
 import { ItineraryRequestService } from '../tours/services/itineraryRequestService';

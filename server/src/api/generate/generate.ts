@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import rateLimit from 'express-rate-limit';
 import { config } from "../../config/config";
 import OpenAI from "openai";
-import { db, userSettings } from "@tourbnt/db";
+import { db, userSettings } from "../../db";
 import { eq } from "drizzle-orm";
 import { decrypt } from "../../utils/encryption";
 import { sendValidationError, sendError } from "../../utils/apiResponse";

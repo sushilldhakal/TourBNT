@@ -4,7 +4,7 @@ import bcrypt from "bcrypt";
 import jwt, { sign } from "jsonwebtoken";
 import { createHash } from "crypto";
 import { validationResult } from "express-validator";
-import { db, users } from "@tourbnt/db";
+import { db, users } from "../../db";
 import { eq, desc, asc, count, sql, ilike, or, and, inArray, type SQL } from "drizzle-orm";
 import { config } from "../../config/config";
 import { claimOnce } from "../../config/redisClient";

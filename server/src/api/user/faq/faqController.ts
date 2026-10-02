@@ -1,5 +1,5 @@
 import { Response, Request, NextFunction } from 'express';
-import { db, faqs, tours } from '@tourbnt/db';
+import { db, faqs, tours } from '../../../db';
 import { eq, desc, inArray, count, sql } from 'drizzle-orm';
 import { sendSuccess, sendPaginatedResponse, HTTP_STATUS, handleUnauthorized, handleForbidden, handleResourceNotFound, sendValidationError } from '../../../utils/apiResponse';
 

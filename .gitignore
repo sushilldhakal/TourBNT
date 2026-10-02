@@ -71,9 +71,6 @@ frontend/docs/
 /server/dist/
 /server/build/
 
-# Shared db package build (rebuilt by its "prepare"/"build" script on install)
-/packages/db/dist/
-
 # Production builds
 /build
 /dist

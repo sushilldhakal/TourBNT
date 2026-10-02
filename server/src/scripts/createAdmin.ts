@@ -1,7 +1,7 @@
 import bcrypt from 'bcrypt';
 import { config as dotenvConfig } from 'dotenv';
 import path from 'path';
-import { db, users } from '@tourbnt/db';
+import { db, users } from '../db';
 import { eq } from 'drizzle-orm';
 
 // Load environment variables based on NODE_ENV

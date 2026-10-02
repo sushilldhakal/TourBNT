@@ -11,7 +11,7 @@ let _db: Db | undefined;
  * Lazily create the Postgres connection + Drizzle client.
  *
  * Lazy on purpose: DATABASE_URL is not set up yet (it will be provided
- * later), and both the Next.js app and the Express API need to be able to
+ * later), and the Express API needs to be able to
  * boot / build without a live database. The connection is only opened the
  * first time a route handler or controller actually queries the database.
  */
@@ -75,7 +75,7 @@ function createDb(): Db {
 }
 
 /**
- * Proxy so `import { db } from '@tourbnt/db'` works everywhere, while the
+ * Proxy so `import { db } from './db'` works everywhere, while the
  * real connection is only established on first use (see createDb above).
  */
 export const db: Db = new Proxy({} as Db, {

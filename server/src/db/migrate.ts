@@ -5,7 +5,7 @@ import { migrate } from 'drizzle-orm/postgres-js/migrator';
 
 /**
  * Runs pending SQL migrations from ./drizzle against DATABASE_URL.
- * Usage: npm run db:migrate --workspace=@tourbnt/db
+ * Usage: npm run db:migrate (from server/, or the repo root)
  */
 async function main() {
   const connectionString = process.env.DATABASE_URL;

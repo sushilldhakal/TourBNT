@@ -1,4 +1,4 @@
-import { db, bookings, tours, users, tourAuthors } from '@tourbnt/db';
+import { db, bookings, tours, users, tourAuthors } from '../../../db';
 import { eq, and, or, ilike, gte, lt, inArray, desc, asc, count, sql } from 'drizzle-orm';
 import createHttpError from 'http-errors';
 import { calculateBookingPricing, type PaymentType } from '../utils/pricingCalculator';

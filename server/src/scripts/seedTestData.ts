@@ -15,7 +15,7 @@ import {
   reviewReplies,
   posts,
   comments,
-} from '@tourbnt/db';
+} from '../db';
 import { sql } from 'drizzle-orm';
 
 dotenvConfig({ path: path.resolve(__dirname, '../../.env') });

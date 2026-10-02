@@ -1,4 +1,4 @@
-import { db, tours, tourAuthors, users } from '@tourbnt/db';
+import { db, tours, tourAuthors, users } from '../../../db';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import createHttpError from 'http-errors';
 import { TourService } from './tourService';

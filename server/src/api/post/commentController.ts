@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import createHttpError from 'http-errors';
-import { db, comments, commentLikes, posts, users } from '@tourbnt/db';
+import { db, comments, commentLikes, posts, users } from '../../db';
 import { eq, and, inArray, count, desc, sql, ilike } from 'drizzle-orm';
 import { sendSuccess, sendPaginatedResponse } from '../../utils/apiResponse';
 

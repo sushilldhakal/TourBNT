@@ -1,7 +1,7 @@
 import express from 'express';
 import { authenticate, authorizeRoles } from '../../middlewares/authenticate';
 import { simpleViewTracking } from '../../middlewares/viewTracking';
-import { db, businessReviews } from '@tourbnt/db';
+import { db, businessReviews } from '../../db';
 import { eq, sql } from 'drizzle-orm';
 import {
   getPendingBusinessReviews,

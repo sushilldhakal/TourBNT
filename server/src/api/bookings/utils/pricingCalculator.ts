@@ -1,5 +1,5 @@
 import createHttpError from 'http-errors';
-import type { tours } from '@tourbnt/db';
+import type { tours } from '../../../db';
 
 type TourRow = typeof tours.$inferSelect;
 

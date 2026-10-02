@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { db, reviews, reviewReplies, tours, tourAuthors, users } from '@tourbnt/db';
+import { db, reviews, reviewReplies, tours, tourAuthors, users } from '../../db';
 import { eq, and, or, ilike, desc, asc, avg, count, inArray, sql } from 'drizzle-orm';
 import { sendSuccess } from '../../utils/apiResponse';
 
