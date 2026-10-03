@@ -1,4 +1,4 @@
-import { Departure, PricingOption, TourDates } from './types';
+import type { Departure, PricingOption, TourDates } from '@/types/types';
 
 // ---------------------------------------------------------------------------
 // Booking pricing preview
@@ -462,7 +462,7 @@ export function generateDepartureInstances(tourDates: TourDates): Departure[] {
 
     // Handle fixed schedule with recurrence
     else if (tourDates.scheduleType === 'fixed' && tourDates.isRecurring) {
-        const baseDate = tourDates.singleDateRange || tourDates.defaultDateRange;
+        const baseDate = tourDates.defaultDateRange;
         if (baseDate && tourDates.recurrencePattern && tourDates.recurrenceEndDate) {
             const baseDeparture: Departure = {
                 label: 'Fixed Schedule',
@@ -483,7 +483,7 @@ export function generateDepartureInstances(tourDates: TourDates): Departure[] {
 
     // Handle flexible or fixed without recurrence
     else if (tourDates.scheduleType === 'flexible' || tourDates.scheduleType === 'fixed') {
-        const dateRange = tourDates.singleDateRange || tourDates.defaultDateRange;
+        const dateRange = tourDates.defaultDateRange;
         if (dateRange) {
             instances.push({
                 label: tourDates.scheduleType === 'flexible' ? 'Flexible Schedule' : 'Fixed Schedule',

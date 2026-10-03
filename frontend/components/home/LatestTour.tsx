@@ -41,7 +41,7 @@ const LatestTour = () => {
                 displayPrice = firstOption.price;
 
                 const discountData = firstOption.discount;
-                if (discountData?.discountEnabled && discountData.discountDateRange) {
+                if (discountData?.discountEnabled && discountData.discountDateRange?.from && discountData.discountDateRange.to) {
                     const now = new Date();
                     const discountStart = new Date(discountData.discountDateRange.from);
                     const discountEnd = new Date(discountData.discountDateRange.to);

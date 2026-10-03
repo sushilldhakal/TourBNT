@@ -2,7 +2,7 @@
 
 import { useTourQuery, useLatestTours } from '@/lib/queries';
 import { Tour } from '@/types/types';
-import type { SimilarTourRelated } from '@/types';
+import type { SimilarTourRelated } from '@/types/types';
 import TourBanner from '@/components/tours/TourBanner';
 import { TourHeader } from '@/components/tours/TourHeader';
 import { TourFacts } from '@/components/tours/TourFacts';

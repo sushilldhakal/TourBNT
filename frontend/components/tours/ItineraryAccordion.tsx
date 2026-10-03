@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Star, MapPin } from 'lucide-react';
 import { useApprovedDestinations } from '@/lib/queries';
-import { Itinerary } from '@/lib/types';
+import type { Itinerary } from '@/types/types';
 import { formatDate, formatTime } from '@/lib/tourUtils';
 import { cn } from '@/lib/utils';
 import {

@@ -89,7 +89,7 @@ function PricingOptionCard({ option, currency }: PricingOptionCardProps) {
             ? option.customCategory
             : option.category?.charAt(0).toUpperCase() + option.category?.slice(1) || '';
 
-    const paxRange = option.paxRange || { min: 1, max: 99 };
+    const paxRange = option.paxRange ?? { minPax: 1, maxPax: 99 };
 
     return (
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between p-3 sm:p-4 border rounded-lg hover:bg-accent/50 transition-colors gap-3" role="listitem">
@@ -107,14 +107,14 @@ function PricingOptionCard({ option, currency }: PricingOptionCardProps) {
                     <div className="flex items-center gap-1">
                         <Users className="h-3 w-3 sm:h-4 sm:w-4" aria-hidden="true" />
                         <span>
-                            {paxRange.min === paxRange.max
-                                ? `${paxRange.min} pax`
-                                : `${paxRange.min}-${paxRange.max} pax`}
+                            {paxRange.minPax === paxRange.maxPax
+                                ? `${paxRange.minPax} pax`
+                                : `${paxRange.minPax}-${paxRange.maxPax} pax`}
                         </span>
                     </div>
 
                     {/* Discount date range */}
-                    {hasDiscount && option.discount?.discountDateRange && (
+                    {hasDiscount && option.discount?.discountDateRange?.to && (
                         <div className="flex items-center gap-1 text-green-600 dark:text-green-400">
                             <Calendar className="h-3 w-3 sm:h-4 sm:w-4" aria-hidden="true" />
                             <span className="text-xs">

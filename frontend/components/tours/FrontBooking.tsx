@@ -16,7 +16,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { CalendarIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
-import type { Tour } from '@/lib/types';
+import type { Tour } from '@/types/types';
 import type { PriceableOption } from '@/lib/tourUtils';
 import {
     generateDepartureInstances,

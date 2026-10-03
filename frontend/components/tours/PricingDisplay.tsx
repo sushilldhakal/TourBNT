@@ -35,7 +35,7 @@ export function PricingDisplay({ tour, currency = '$' }: PricingDisplayProps) {
                 saleEnabled={tour.saleEnabled}
                 salePrice={tour.salePrice}
                 pricePerPerson={tour.pricePerPerson}
-                priceLockDate={tour.priceLockDate}
+                priceLockDate={tour.priceLockDate ?? undefined}
                 currency={currency}
             />
 

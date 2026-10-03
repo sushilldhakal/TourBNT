@@ -1,6 +1,6 @@
 'use client';
 
-import { Tour } from '@/types/types';
+import type { RichText, Tour } from '@/types/types';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import RichTextRenderer from '@/components/RichTextRenderer';
 import { ItineraryAccordion } from './ItineraryAccordion';
@@ -84,7 +84,7 @@ export function TourTabs({ tour, onBookNow, destinations }: TourTabsProps) {
                     {tour.itinerary && tour.itinerary.length > 0 ? (
                         <ItineraryAccordion
                             itinerary={tour.itinerary}
-                            outline={tour.outline}
+                            outline={tour.outline ?? undefined}
                             destinations={destinations}
                         />
                     ) : (
@@ -103,7 +103,7 @@ export function TourTabs({ tour, onBookNow, destinations }: TourTabsProps) {
                     saleEnabled={tour.saleEnabled}
                     salePrice={tour.salePrice}
                     pricePerPerson={tour.pricePerPerson}
-                    priceLockDate={tour.priceLockDate}
+                    priceLockDate={tour.priceLockDate ?? undefined}
                 />
 
                 {/* Advanced Pricing Options */}
@@ -161,12 +161,12 @@ export function TourTabs({ tour, onBookNow, destinations }: TourTabsProps) {
 }
 
 interface InclusionsExclusionsProps {
-    inclusions?: string | string[];
-    exclusions?: string | string[];
+    inclusions?: RichText;
+    exclusions?: RichText;
 }
 
 /** Rich text (string) or a list; an empty list (the database default) means nothing to show. */
-const hasContent = (v?: string | string[]) => (Array.isArray(v) ? v.length > 0 : !!v);
+const hasContent = (v?: RichText) => (Array.isArray(v) ? v.length > 0 : !!v);
 
 function InclusionsExclusions({ inclusions: rawInclusions, exclusions: rawExclusions }: InclusionsExclusionsProps) {
     const inclusions = hasContent(rawInclusions) ? rawInclusions : undefined;
