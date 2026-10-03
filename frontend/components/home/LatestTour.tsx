@@ -13,6 +13,7 @@ import {
 import { useEffect, useState } from "react";
 import Image from 'next/image';
 import type { Tour } from "@/types/types";
+import { Price } from '@/components/common/Price';
 
 const LatestTour = () => {
     const [api, setApi] = useState<CarouselApi | null>(null);
@@ -158,20 +159,20 @@ const LatestTour = () => {
                                                             <div className="flex flex-col items-end">
                                                                 <div className="flex items-center gap-2 mb-1">
                                                                     <span className="text-muted-foreground line-through text-sm">
-                                                                        ${originalPrice.toFixed(0)}
+                                                                        <Price usd={originalPrice} />
                                                                     </span>
                                                                     <span className="bg-green-600 text-white text-xs px-1.5 py-0.5 rounded">
                                                                         -{discountPercentage}%
                                                                     </span>
                                                                 </div>
                                                                 <span className="text-green-600 font-bold text-xl">
-                                                                    ${displayPrice.toFixed(0)}
+                                                                    <Price usd={displayPrice} />
                                                                 </span>
                                                             </div>
                                                         ) : (
                                                             <div className="flex items-center">
                                                                 <span className="text-primary font-bold text-xl">
-                                                                    ${displayPrice.toFixed(0)}
+                                                                    <Price usd={displayPrice} />
                                                                 </span>
                                                             </div>
                                                         )}

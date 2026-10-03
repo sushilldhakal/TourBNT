@@ -54,7 +54,17 @@ export const loginUser = async (credentials: {
     keepMeSignedIn?: boolean;
 }): Promise<User> => {
     const response = await api.post('/auth/login', credentials);
+    return storeUserFromAuthResponse(response);
+};
 
+/** Sign in (or sign up) with a Google ID token; the server verifies it and starts the session like a password login. */
+export const loginWithGoogle = async (credential: string, keepMeSignedIn = false): Promise<User> => {
+    const response = await api.post('/auth/google', { credential, keepMeSignedIn });
+    return storeUserFromAuthResponse(response);
+};
+
+/** Reads the user out of a login response, puts them in the store, and returns them. */
+function storeUserFromAuthResponse(response: any): User {
     const body = response?.data;
     let userData: any = null;
     if (body?.data) {
@@ -85,7 +95,7 @@ export const loginUser = async (credentials: {
     
     // IMPORTANT: Return the normalized user so handleLogin can verify it
     return normalizedUser;
-};
+}
 
 /**
  * Logout user

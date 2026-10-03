@@ -49,7 +49,7 @@ subscriberRouter.get('/', authenticate as any, authorizeRoles('admin'), paginati
  */
 subscriberRouter.post(
     '/',
-    requireHuman(),
+    requireHuman({ skipIfSignedIn: true }), // signed-in people (e.g. the admin bulk-add tool) are not bots
     [body('email').notEmpty().withMessage('Email is required')],
     createSubscriber
 );

@@ -76,6 +76,8 @@ export interface BookingData {
     // chose — must be one the tour has enabled, enforced server-side.
     paymentType: 'full_payment' | 'deposit_percentage' | 'pay_on_arrival';
     pricingOptionId?: string;
+    /** A promo code the traveller entered; the server validates it and prices the booking with it. */
+    promoCode?: string;
     contactInfo: {
         fullName: string;
         email: string;
@@ -84,6 +86,38 @@ export interface BookingData {
     };
     specialRequests?: string;
 }
+
+export interface QuotedPricing {
+    basePrice: number;
+    adultPrice: number;
+    childPrice: number;
+    totalPrice: number;
+    currency: string;
+    amountDueNow: number;
+    amountDueLater: number;
+    depositPercentage?: number;
+    promo?: { code: string; amount: number };
+}
+
+/**
+ * The exact total the server will charge for a booking, with an optional promo code. Rejects with a friendly
+ * message (e.g. "This promo code has expired.") when the code can't be used.
+ */
+export const quoteBooking = async (input: {
+    tourId: string;
+    participants: { adults: number; children: number; infants?: number };
+    paymentType: BookingData['paymentType'];
+    pricingOptionId?: string;
+    promoCode?: string;
+}): Promise<QuotedPricing> => {
+    try {
+        const response = await api.post('/bookings/quote', input);
+        return (response.data?.data ?? response.data) as QuotedPricing;
+    } catch (error: any) {
+        const message = error?.response?.data?.error?.message ?? error?.response?.data?.message ?? error?.message;
+        throw new Error(message || 'Could not check that promo code.');
+    }
+};
 
 /**
  * Create a new booking

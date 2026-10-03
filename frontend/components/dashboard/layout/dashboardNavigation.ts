@@ -2,7 +2,7 @@ import {
     Home, FileText, Users, Image, Settings, Mail, LayoutDashboard,
     List, MapPin, FolderTree, Lightbulb, HelpCircle, Calendar, Star, Wrench,
     MessageSquare, Plus, Briefcase, UserCog, CalendarCheck, Building2, Megaphone,
-    Compass, Utensils, Truck, Gauge
+    Compass, Utensils, Truck, Gauge, Tag, Banknote
 } from 'lucide-react';
 import type { NavigationItem, FlatNavItem } from '@/types/dashboard';
 
@@ -40,6 +40,7 @@ export const baseNavigationItems: NavigationItem[] = [
             { href: '/dashboard/tours/facts', label: 'Facts', icon: Lightbulb },
             { href: '/dashboard/tours/faq', label: 'FAQ', icon: HelpCircle },
             { href: '/dashboard/tours/bookings', label: 'Bookings', icon: Calendar },
+            { href: '/dashboard/tours/promo-codes', label: 'Promo codes', icon: Tag },
             { href: '/dashboard/tours/reviews', label: 'Reviews', icon: Star },
             { href: '/dashboard/tours/settings', label: 'Settings', icon: Wrench },
         ],
@@ -49,6 +50,18 @@ export const baseNavigationItems: NavigationItem[] = [
         label: 'Gallery',
         icon: Image,
         roles: ['admin', 'seller'],
+    },
+    {
+        href: '/dashboard/earnings',
+        label: 'Earnings',
+        icon: Banknote,
+        roles: ['admin', 'seller'],
+    },
+    {
+        href: '/dashboard/payouts',
+        label: 'Payouts',
+        icon: Banknote,
+        adminOnly: true,
     },
     {
         label: 'Users',

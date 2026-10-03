@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useMutation } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { createBooking, BookingData } from '@/lib/api/bookings';
+import { createBooking, quoteBooking, BookingData, type QuotedPricing } from '@/lib/api/bookings';
 import { createConversation } from '@/lib/api/conversations';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { Button } from '@/components/ui/button';
@@ -186,6 +186,63 @@ export function FrontBooking({ tourData, prefilledDate }: FrontBookingProps) {
         return price.toFixed(2);
     };
 
+    // ---- promo code -------------------------------------------------------------------------------
+    // The server prices the booking, so a code is checked there (POST /bookings/quote) and the summary shows
+    // exactly what will be charged. The quote refreshes if travellers or payment option change, since a
+    // percentage code is worth a different amount.
+    const [promoInput, setPromoInput] = useState('');
+    const [appliedCode, setAppliedCode] = useState<string | null>(null);
+    const [promoQuote, setPromoQuote] = useState<QuotedPricing | null>(null);
+    const [promoError, setPromoError] = useState<string | null>(null);
+    const [promoChecking, setPromoChecking] = useState(false);
+
+    const quoteWithCode = async (code: string) => {
+        return quoteBooking({
+            tourId: tourData._id,
+            participants: { adults: bookingForm.adults, children: bookingForm.children, infants: 0 },
+            paymentType,
+            promoCode: code,
+        });
+    };
+
+    const applyPromo = async () => {
+        const code = promoInput.trim();
+        if (!code) return;
+        setPromoChecking(true);
+        setPromoError(null);
+        try {
+            const quote = await quoteWithCode(code);
+            if (!quote.promo) throw new Error('This promo code is not valid.');
+            setAppliedCode(quote.promo.code);
+            setPromoQuote(quote);
+            setPromoInput('');
+        } catch (err) {
+            setPromoError((err as Error).message);
+        } finally {
+            setPromoChecking(false);
+        }
+    };
+
+    const removePromo = () => {
+        setAppliedCode(null);
+        setPromoQuote(null);
+        setPromoError(null);
+    };
+
+    // Keep the applied code's amount right when the booking changes underneath it.
+    useEffect(() => {
+        if (!appliedCode) return;
+        let cancelled = false;
+        quoteWithCode(appliedCode)
+            .then((q) => { if (!cancelled) setPromoQuote(q); })
+            .catch((err) => { if (!cancelled) { setPromoError((err as Error).message); removePromo(); } });
+        return () => { cancelled = true; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [appliedCode, bookingForm.adults, bookingForm.children, paymentType]);
+
+    // What the summary shows: the server's quote when a code is applied, otherwise the local preview.
+    const summary = promoQuote?.promo ? { ...pricing, ...promoQuote } : pricing;
+
     // Booking mutation
     const bookingMutation = useMutation({
         mutationFn: (bookingData: BookingData) => createBooking(bookingData),
@@ -286,6 +343,7 @@ export function FrontBooking({ tourData, prefilledDate }: FrontBookingProps) {
                 infants: 0,
             },
             paymentType,
+            promoCode: appliedCode ?? undefined,
             contactInfo: {
                 fullName: bookingForm.fullName,
                 email: bookingForm.email,
@@ -560,22 +618,59 @@ export function FrontBooking({ tourData, prefilledDate }: FrontBookingProps) {
                                 <span>${formatPrice(pricing.childPrice)}</span>
                             </div>
                         )}
+                        {promoQuote?.promo && (
+                            <div className="flex justify-between mb-2 text-green-600">
+                                <span>Promo {promoQuote.promo.code}:</span>
+                                <span>-${formatPrice(promoQuote.promo.amount)}</span>
+                            </div>
+                        )}
                         <div className="flex justify-between font-bold text-lg pt-2 border-t border-border">
                             <span>Total:</span>
-                            <span className="text-primary">${formatPrice(pricing.totalPrice)}</span>
+                            <span className="text-primary">${formatPrice(summary.totalPrice)}</span>
                         </div>
                         {paymentType !== 'full_payment' && (
                             <div className="mt-2 pt-2 border-t border-dashed border-border space-y-1">
                                 <div className="flex justify-between text-sm">
                                     <span>Due now{pricing.depositPercentage ? ` (${pricing.depositPercentage}%)` : ''}:</span>
-                                    <span className="font-semibold">${formatPrice(pricing.amountDueNow)}</span>
+                                    <span className="font-semibold">${formatPrice(summary.amountDueNow)}</span>
                                 </div>
                                 <div className="flex justify-between text-sm text-muted-foreground">
                                     <span>Due later:</span>
-                                    <span>${formatPrice(pricing.amountDueLater)}</span>
+                                    <span>${formatPrice(summary.amountDueLater)}</span>
                                 </div>
                             </div>
                         )}
+                    </div>
+
+                    {/* Promo code */}
+                    <div className="space-y-2">
+                        {appliedCode ? (
+                            <div className="flex items-center justify-between rounded-md border border-green-600/40 bg-green-600/10 px-3 py-2 text-sm">
+                                <span>
+                                    <strong>{appliedCode}</strong> applied
+                                    {promoQuote?.promo ? ` — you save $${formatPrice(promoQuote.promo.amount)}` : ''}
+                                </span>
+                                <button type="button" onClick={removePromo} className="text-xs underline text-muted-foreground hover:text-foreground">Remove</button>
+                            </div>
+                        ) : (
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    value={promoInput}
+                                    onChange={(e) => { setPromoInput(e.target.value.toUpperCase()); setPromoError(null); }}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void applyPromo(); } }}
+                                    placeholder="Promo code"
+                                    aria-label="Promo code"
+                                    maxLength={32}
+                                    className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm uppercase placeholder:normal-case"
+                                />
+                                <Button type="button" variant="outline" onClick={applyPromo} disabled={promoChecking || !promoInput.trim()}>
+                                    {promoChecking ? 'Checking…' : 'Apply'}
+                                </Button>
+                            </div>
+                        )}
+                        {promoError && <p className="text-sm text-destructive" role="alert">{promoError}</p>}
+                        <p className="text-xs text-muted-foreground">Prices are set and charged in US dollars.</p>
                     </div>
 
                     <Button

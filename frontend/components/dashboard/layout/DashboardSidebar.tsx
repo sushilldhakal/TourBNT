@@ -21,7 +21,7 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { isAdmin } from '@/lib/utils/roles';
 import { useMyBusinessPartners } from '@/lib/queries';
 import type { BusinessPartnerType } from '@/lib/api/businessPartners';
-import { Megaphone, Building2 } from 'lucide-react';
+import { Megaphone, Building2, Tag, Banknote } from 'lucide-react';
 
 /**
  * Which nav link each business-partner type resolves to. A user can own
@@ -89,6 +89,7 @@ const baseNavigationItems: NavigationItem[] = [
             { href: '/dashboard/tours/facts', label: 'Facts', icon: Lightbulb },
             { href: '/dashboard/tours/faq', label: 'FAQ', icon: HelpCircle },
             { href: '/dashboard/tours/bookings', label: 'Bookings', icon: Calendar },
+            { href: '/dashboard/tours/promo-codes', label: 'Promo codes', icon: Tag },
             { href: '/dashboard/tours/reviews', label: 'Reviews', icon: Star },
             { href: '/dashboard/tours/settings', label: 'Settings', icon: Wrench },
         ]
@@ -134,6 +135,18 @@ const baseNavigationItems: NavigationItem[] = [
         label: 'Gallery',
         icon: Image,
         roles: ['admin', 'seller'],
+    },
+    {
+        href: '/dashboard/earnings',
+        label: 'Earnings',
+        icon: Banknote,
+        roles: ['admin', 'seller'],
+    },
+    {
+        href: '/dashboard/payouts',
+        label: 'Payouts',
+        icon: Banknote,
+        adminOnly: true,
     },
     {
         href: '/dashboard/subscribers',

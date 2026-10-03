@@ -3,6 +3,7 @@
 import { formatPrice } from '@/lib/tourUtils';
 import { Badge } from '@/components/ui/badge';
 import { AlertCircle } from 'lucide-react';
+import { Price } from '@/components/common/Price';
 
 interface BasePricingProps {
     basePrice: number;
@@ -37,12 +38,12 @@ export function BasePricing({
                 {/* Price display */}
                 <div className="flex items-baseline gap-2 sm:gap-3 flex-wrap">
                     <div className="text-3xl sm:text-4xl font-bold text-primary">
-                        {formatPrice(displayPrice, currency)}
+                        <Price usd={displayPrice} decimals={2} />
                     </div>
                     {hasDiscount && (
                         <>
                             <div className="text-xl sm:text-2xl text-muted-foreground line-through">
-                                {formatPrice(basePrice, currency)}
+                                <Price usd={basePrice} decimals={2} />
                             </div>
                             <Badge variant="destructive" className="text-xs sm:text-sm">
                                 Save {discountPercentage}%

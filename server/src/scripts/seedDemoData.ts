@@ -157,6 +157,8 @@ async function wipe() {
   await run(sql`delete from reviews where tour_id in ${demoTours} or user_id in ${demoUsers}`);
   await run(sql`delete from business_reviews where user_id in ${demoUsers}`);
   await run(sql`delete from bookings where tour_id in ${demoTours} or user_id in ${demoUsers}`);
+  // payouts reference their seller with ON DELETE RESTRICT, so they must go before the demo sellers do
+  await run(sql`delete from payouts where seller_id in ${demoUsers}`);
   await run(sql`delete from tours where code like 'DEMO-%'`);
   await run(sql`delete from posts where author_id in ${demoUsers}`);
   await run(sql`delete from conversations where from_user_id in ${demoUsers} or assigned_to in ${demoUsers} or guest_email like ${'%@' + DEMO_DOMAIN}

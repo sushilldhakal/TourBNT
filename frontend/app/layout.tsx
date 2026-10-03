@@ -12,6 +12,7 @@ import { Suspense } from "react";
 import { CookieConsent } from "@/components/consent/CookieConsent";
 import { Analytics } from "@/components/consent/Analytics";
 import { SITE_URL } from "@/lib/seo";
+import { CurrencyProvider } from "@/providers/CurrencyProvider";
 
 
 const nunitoSans = Nunito_Sans({
@@ -58,6 +59,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <QueryProvider>
+            <CurrencyProvider>
             <LayoutProvider>
               <AuthBootstrap />
               <AuthRedirect />
@@ -67,6 +69,7 @@ export default function RootLayout({
               <CookieConsent />
               <Suspense fallback={null}><Analytics /></Suspense>
             </LayoutProvider>
+            </CurrencyProvider>
           </QueryProvider>
         </ThemeProvider>
       </body>

@@ -5,6 +5,7 @@ import { PricingOption } from '@/types/types';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Users, Calendar } from 'lucide-react';
+import { Price } from '@/components/common/Price';
 
 interface PricingOptionsProps {
     pricingOptions?: PricingOption[];
@@ -135,7 +136,7 @@ function PricingOptionCard({ option, currency }: PricingOptionCardProps) {
             <div className="text-left sm:text-right space-y-1 sm:ml-4">
                 <div className="flex items-baseline gap-2">
                     <div className="text-xl sm:text-2xl font-bold text-primary">
-                        {formatPrice(displayPrice, currency)}
+                        <Price usd={displayPrice} decimals={2} />
                     </div>
                     {hasDiscount && (
                         <Badge variant="destructive" className="text-xs">
@@ -145,7 +146,7 @@ function PricingOptionCard({ option, currency }: PricingOptionCardProps) {
                 </div>
                 {hasDiscount && (
                     <div className="text-xs sm:text-sm text-muted-foreground line-through">
-                        {formatPrice(option.price, currency)}
+                        <Price usd={option.price} decimals={2} />
                     </div>
                 )}
             </div>

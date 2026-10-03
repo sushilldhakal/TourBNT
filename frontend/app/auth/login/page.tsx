@@ -15,6 +15,7 @@ import { Mail, Lock, UserIcon, Phone, CheckCircle2, Loader2, EyeIcon, EyeOffIcon
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 import { TurnstileWidget } from '@/components/security/TurnstileWidget';
+import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton';
 
 function LoginPageContent() {
     const router = useRouter();
@@ -309,10 +310,15 @@ function LoginPageContent() {
                             <CardDescription>Sign in to your account</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
+                            <GoogleSignInButton
+                                keepMeSignedIn={keepMeSignedIn}
+                                onSuccess={() => { toast({ title: 'Signed in', description: 'Welcome!' }); router.replace('/dashboard'); }}
+                                onError={(description) => toast({ title: 'Google sign-in failed', description, variant: 'destructive' })}
+                            />
 
                             <div className="space-y-2">
                                 <Label htmlFor="email">Email</Label>
-                                <div className="relative">
+                            <div className="relative">
                                     <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                                     <Input
                                         id="email"

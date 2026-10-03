@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import RichTextRenderer from '@/components/RichTextRenderer';
 import { Tour, Category, TourPricing } from '@/types/types';
+import { Price } from '@/components/common/Price';
 
 interface TourCardProps {
     tour: Tour;
@@ -174,15 +175,15 @@ export default function TourCard({ tour, viewMode }: TourCardProps) {
                                 {pricing.hasDiscount ? (
                                     <div className="flex items-center gap-1 sm:gap-2 flex-wrap">
                                         <span className="text-muted-foreground line-through text-xs sm:text-sm">
-                                            ${pricing.originalPrice.toFixed(0)}
+                                            <Price usd={pricing.originalPrice} />
                                         </span>
                                         <span className="text-green-600 font-bold text-lg sm:text-xl">
-                                            ${pricing.displayPrice.toFixed(0)}
+                                            <Price usd={pricing.displayPrice} />
                                         </span>
                                     </div>
                                 ) : (
                                     <span className="text-primary font-bold text-lg sm:text-xl">
-                                        ${pricing.displayPrice.toFixed(0)}
+                                        <Price usd={pricing.displayPrice} />
                                     </span>
                                 )}
                             </div>
@@ -291,15 +292,15 @@ export default function TourCard({ tour, viewMode }: TourCardProps) {
                         {pricing.hasDiscount ? (
                             <div className="flex flex-col items-center">
                                 <span className="text-muted-foreground line-through text-xs sm:text-sm">
-                                    ${pricing.originalPrice.toFixed(0)}
+                                    <Price usd={pricing.originalPrice} />
                                 </span>
                                 <span className="text-green-600 font-bold text-xl sm:text-2xl">
-                                    ${pricing.displayPrice.toFixed(0)}
+                                    <Price usd={pricing.displayPrice} />
                                 </span>
                             </div>
                         ) : (
                             <span className="text-primary font-bold text-xl sm:text-2xl">
-                                ${pricing.displayPrice.toFixed(0)}
+                                <Price usd={pricing.displayPrice} />
                             </span>
                         )}
                     </div>

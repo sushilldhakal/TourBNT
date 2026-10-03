@@ -11,6 +11,7 @@ import {
     CarouselItem,
 } from "@/components/ui/carousel-with-plugins-lazy";
 import type { Tour } from "@/types/types";
+import { Price } from '@/components/common/Price';
 
 const TourByPricing = () => {
     const [progress, setProgress] = useState(0);
@@ -95,7 +96,7 @@ const TourByPricing = () => {
                                                                 : ''}
                                                     </p>
                                                     <p className="text-sm font-bold">
-                                                        ${tour.price}
+                                                        <Price usd={tour.price} />
                                                     </p>
                                                 </div>
                                             </div>

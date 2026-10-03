@@ -10,6 +10,7 @@ import Logo from '@/components/icons/Logo';
 import { useRole } from '@/lib/hooks/useRole';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { ContentContainer } from './PublicLayoutClient';
+import { CurrencySwitcher } from '@/components/layout/CurrencySwitcher';
 
 const menuItems = [
     { id: 'home', title: 'Home', url: '/' },
@@ -139,6 +140,7 @@ export function MainHeader({ onSearchToggle }: MainHeaderProps) {
                         {/* Right side buttons */}
                         <div className="absolute inset-y-0 right-0 flex items-center pr-2 md:static md:inset-auto md:ml-6 md:pr-0">
                             {/* Theme Toggle */}
+                            <CurrencySwitcher />
                             <ModeToggle />
 
                             {isHydrated && isAuthenticated ? (
