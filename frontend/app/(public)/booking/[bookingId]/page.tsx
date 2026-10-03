@@ -151,6 +151,12 @@ export default function SingleBookingPage() {
                                     </span>
                                 </div>
                             </div>
+                            <Link
+                                href={`/booking/${bookingId}/invoice`}
+                                className="mb-3 block w-full text-center border border-border py-2 rounded-lg hover:bg-muted transition"
+                            >
+                                View invoice
+                            </Link>
                             {canCancel && (
                                 <button
                                     type="button"

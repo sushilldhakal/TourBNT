@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { BookingService } from '../services/bookingService';
 import { ItineraryRequestService } from '../../tours/services/itineraryRequestService';
+import { getBookingInvoice as getInvoice } from '../services/invoiceService';
 import { HTTP_STATUS, sendSuccess, sendPaginatedResponse } from '../../../utils/apiResponse';
 import createHttpError from 'http-errors';
 
@@ -328,6 +329,19 @@ export const getBookingStats = async (req: Request, res: Response, next: NextFun
         const stats = await BookingService.getBookingStats(req.user ? { id: req.user.id, isAdmin: req.user.roles.includes('admin') } : undefined);
 
         sendSuccess(res, stats, 'Booking statistics retrieved successfully');
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * The traveller's invoice for a booking (the traveller, the tour's seller, or an admin).
+ */
+export const getBookingInvoice = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        if (!req.user) throw createHttpError(401, 'Authentication required');
+        const invoice = await getInvoice(req.params.bookingId, { id: req.user.id, isAdmin: req.user.roles.includes('admin') });
+        sendSuccess(res, invoice, 'Invoice retrieved successfully');
     } catch (error) {
         next(error);
     }

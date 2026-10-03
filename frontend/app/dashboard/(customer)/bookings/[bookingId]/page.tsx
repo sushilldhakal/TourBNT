@@ -10,7 +10,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { DashboardCardHeader } from '@/components/dashboard/layout/CardHeader';
 import { BookingTimeline } from '@/components/booking/BookingTimeline';
 import { formatDate } from '@/lib/tourUtils';
-import { MapPin, AlertCircle, ArrowLeft } from 'lucide-react';
+import { MapPin, AlertCircle, ArrowLeft, FileText } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 const STATUS_BADGE_VARIANT: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
     confirmed: 'default',
@@ -83,7 +84,10 @@ export default function MyTripPage() {
                             <p className="text-sm font-medium">{booking.pricing.currency ?? ''} {booking.pricing.totalPrice}</p>
                         </div>
                     )}
-                    <div className="ml-auto">
+                    <div className="ml-auto flex items-center gap-3">
+                        <Button variant="outline" size="sm" asChild>
+                            <Link href={`/booking/${bookingId}/invoice`}><FileText className="h-4 w-4 mr-1.5" />Invoice</Link>
+                        </Button>
                         <Badge variant={STATUS_BADGE_VARIANT[booking.status] ?? 'secondary'} className="capitalize">
                             {booking.status}
                         </Badge>

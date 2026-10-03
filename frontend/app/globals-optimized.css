@@ -677,3 +677,11 @@ body {
   75% { transform: translateX(0px) scale(1) rotateY(180deg); }
   100% { transform: translateX(0px) scale(1) rotateY(360deg); }
 }
+
+/* Printable documents (invoices, payout statements): print only the element marked data-print-root,
+   without the site's header, footer or the dashboard sidebar. */
+@media print {
+    body * { visibility: hidden; }
+    [data-print-root], [data-print-root] * { visibility: visible; }
+    [data-print-root] { position: absolute; inset: 0 auto auto 0; width: 100%; border: 0; box-shadow: none; }
+}

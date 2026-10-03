@@ -15,7 +15,8 @@ import {
     updatePaymentStatus,
     cancelBooking,
     getBookingStats,
-    downloadVoucher
+    downloadVoucher,
+    getBookingInvoice,
 } from './controllers/bookingController';
 
 const bookingRouter = express.Router();
@@ -358,6 +359,9 @@ bookingRouter.get('/:bookingId', authenticate, asyncAuthHandler(getBookingById))
  *         description: Booking not found
  */
 bookingRouter.get('/:bookingId/timeline', authenticate, asyncAuthHandler(getBookingTimeline));
+
+// The traveller's invoice (the traveller, the tour's seller, or an admin). See services/invoiceService.ts.
+bookingRouter.get('/:bookingId/invoice', authenticate, asyncAuthHandler(getBookingInvoice));
 
 /**
  * @swagger

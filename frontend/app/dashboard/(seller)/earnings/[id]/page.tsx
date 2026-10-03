@@ -30,7 +30,7 @@ export default function PayoutStatementPage({ params }: { params: Promise<{ id: 
                 {isLoading ? <p className="text-muted-foreground">Loading…</p> : error || !p ? (
                     <p className="text-destructive">{(error as Error)?.message ?? 'Statement not found.'}</p>
                 ) : (
-                    <Card>
+                    <Card data-print-root>
                         <CardContent className="p-6 sm:p-8 space-y-6">
                             <div className="flex flex-wrap justify-between gap-4">
                                 <div>

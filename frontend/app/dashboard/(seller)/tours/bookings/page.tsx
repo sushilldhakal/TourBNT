@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { format } from 'date-fns';
+import Link from 'next/link';
 import { CalendarCheck, Search, MoreHorizontal, Users, DollarSign, Wallet, Clock } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { DashboardCardHeader } from '@/components/dashboard/layout/CardHeader';
@@ -196,6 +197,8 @@ export default function TourBookingsPage() {
                                                             {(['paid', 'partial', 'unpaid', 'refunded'] as const).filter((p) => p !== b.paymentStatus).map((p) => (
                                                                 <DropdownMenuItem key={p} className="capitalize" onClick={() => paymentMutation.mutate({ b, next: p })}>Mark {p}</DropdownMenuItem>
                                                             ))}
+                                                            <DropdownMenuSeparator />
+                                                            <DropdownMenuItem asChild><Link href={`/booking/${b.id}/invoice`}>View invoice</Link></DropdownMenuItem>
                                                         </DropdownMenuContent>
                                                     </DropdownMenu>
                                                 </TableCell>

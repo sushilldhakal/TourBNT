@@ -301,3 +301,44 @@ export const validatePromoCode = async (promoCode: string) => {
         throw handleApiError(error, 'validating promo code');
     }
 };
+
+export interface BookingInvoice {
+    invoiceNumber: string;
+    issuedAt: string;
+    bookingId: string;
+    bookingReference: string;
+    status: string;
+    paymentStatus: 'unpaid' | 'partial' | 'paid' | 'refunded';
+    paymentType: 'full_payment' | 'deposit_percentage' | 'pay_on_arrival';
+    paymentMethod: string | null;
+    transactionId: string | null;
+    paidAt: string | null;
+    cancelledAt: string | null;
+    currency: string;
+    tour: { title: string; code: string | null };
+    departureDate: string;
+    participants: { adults: number; children: number; infants: number };
+    billTo: { name: string; email: string; phone: string; country: string | null };
+    seller: { name: string; email: string; phone: string | null; taxId: string | null; registrationNumber: string | null; address: string | null } | null;
+    lines: Array<{ description: string; quantity: number; unitPrice: number; amount: number }>;
+    subtotal: number;
+    promo: { code: string; amount: number } | null;
+    total: number;
+    amountPaid: number;
+    balanceDue: number;
+    depositPercentage: number | null;
+    amountDueNow: number;
+    amountDueLater: number;
+}
+
+/**
+ * The traveller's invoice for a booking (the traveller, the tour's seller, or an admin).
+ */
+export const getBookingInvoice = async (bookingId: string) => {
+    try {
+        const response = await api.get(`/bookings/${bookingId}/invoice`);
+        return extractResponseData<BookingInvoice>(response);
+    } catch (error) {
+        throw handleApiError(error, 'fetching invoice');
+    }
+};
