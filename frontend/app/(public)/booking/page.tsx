@@ -55,7 +55,7 @@ export default function BookingsPage() {
             {authError ? (
                 <div className="text-center py-16 bg-card border border-border rounded-lg">
                     <p className="text-xl text-muted-foreground mb-4">Sign in to view your bookings</p>
-                    <Link href="/login" className="text-primary hover:text-primary/80">
+                    <Link href="/auth/login?redirect=/booking" className="text-primary hover:text-primary/80">
                         Sign in
                     </Link>
                     <span className="text-muted-foreground mx-2">or</span>

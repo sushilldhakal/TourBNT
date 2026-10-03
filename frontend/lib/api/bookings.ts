@@ -1,4 +1,4 @@
-import { api, handleApiError, extractResponseData } from './apiClient';
+import { api, handleApiError, extractResponseData, extractList } from './apiClient';
 
 /**
  * Booking API Methods
@@ -192,7 +192,7 @@ export const getBookingById = async (bookingId: string) => {
 export const getBookingTimeline = async (bookingId: string) => {
     try {
         const response = await api.get(`/bookings/${bookingId}/timeline`);
-        return extractResponseData<BookingTimeline>(response);
+        return extractList<BookingTimelineDay>(response);
     } catch (error) {
         throw handleApiError(error, 'fetching booking timeline');
     }

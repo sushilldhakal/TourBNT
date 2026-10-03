@@ -206,7 +206,7 @@ export default function ApplySellerPage() {
                 <p>You need an account to apply as a seller.</p>
                 <div className="flex justify-center gap-3">
                     <Button asChild><Link href="/auth/login">Log in</Link></Button>
-                    <Button asChild variant="outline"><Link href="/auth/register">Create account</Link></Button>
+                    <Button asChild variant="outline"><Link href="/auth/login?form=signup&redirect=/apply-seller">Create account</Link></Button>
                 </div>
             </CardContent></Card>
         );

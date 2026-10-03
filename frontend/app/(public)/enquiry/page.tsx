@@ -133,7 +133,7 @@ export default function EnquiriesPage() {
                                     to previous conversations.
                                 </p>
                                 <Button asChild variant="outline" className="mt-2">
-                                    <Link href="/login">Sign in</Link>
+                                    <Link href="/auth/login?redirect=/enquiry">Sign in</Link>
                                 </Button>
                             </CardContent>
                         </Card>

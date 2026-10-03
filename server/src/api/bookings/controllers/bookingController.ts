@@ -20,6 +20,9 @@ export const createBooking = async (req: Request
         if (!tourId || !departureDate || !participants || !contactInfo) {
             throw createHttpError(400, 'Missing required booking information');
         }
+        if (!contactInfo.fullName || !contactInfo.email || !contactInfo.phone) {
+            throw createHttpError(400, 'Contact name, email and phone are required');
+        }
 
         // Determine if this is a guest booking
         const isGuestBooking = !req.user;
