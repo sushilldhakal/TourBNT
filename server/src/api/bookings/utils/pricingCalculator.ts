@@ -36,6 +36,8 @@ export interface CalculatedBookingPricing {
   amountDueNow: number;
   amountDueLater: number;
   depositPercentage?: number;
+  /** A promo code taken off the total (totalPrice and the amounts due already reflect it). */
+  promo?: { code: string; amount: number };
 }
 
 /** Children are priced at this fraction of the adult price when the tour
@@ -75,6 +77,32 @@ function baseUnitPrice(tour: TourRow, now: Date): number {
  * is the source of truth for) the preview shown in FrontBooking.tsx.
  */
 export function calculateBookingPricing(
+  tour: TourRow,
+  participants: Participants,
+  paymentType: PaymentType,
+  pricingOptionId?: string | null,
+  /** A promo discount already validated and sized by the promo service (see api/promo/promoService.ts). */
+  promo?: { code: string; amount: number } | null
+): CalculatedBookingPricing {
+  const base = calculateBasePricing(tour, participants, paymentType, pricingOptionId);
+  if (!promo || promo.amount <= 0) return base;
+
+  // Take the promo off the total and recompute what is due now / later against the new total. The line items
+  // shrink proportionally so they still add up to the total (same approach as the tour's own discounts).
+  const amount = Math.min(promo.amount, base.totalPrice);
+  const totalPrice = Math.max(0, base.totalPrice - amount);
+  const ratio = base.totalPrice > 0 ? totalPrice / base.totalPrice : 1;
+  return {
+    ...base,
+    adultPrice: base.adultPrice * ratio,
+    childPrice: base.childPrice * ratio,
+    totalPrice,
+    ...computeDueAmounts(totalPrice, paymentType, tour),
+    promo: { code: promo.code, amount: Math.round(amount * 100) / 100 },
+  };
+}
+
+function calculateBasePricing(
   tour: TourRow,
   participants: Participants,
   paymentType: PaymentType,

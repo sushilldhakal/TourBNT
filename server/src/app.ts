@@ -36,6 +36,12 @@ import { logger } from './utils/logger';
 import cookieParser from 'cookie-parser';
 import { TRUST_PROXY } from './config/trustProxy';
 import helmet from 'helmet';
+import { Sentry, sentryEnabled } from './config/sentry';
+import healthRouter from "./api/health/healthRoutes";
+import promoRouter from "./api/promo/promoRoutes";
+import payoutRouter from "./api/payouts/payoutRoutes";
+import newsletterRouter from "./api/newsletter/newsletterRoutes";
+import currencyRouter from "./api/currency/currencyRoutes";
 
 const app = express();
 // Believe X-Forwarded-For only from nginx and Cloudflare, so req.ip is the real visitor (see config/trustProxy.ts).
@@ -126,6 +132,11 @@ app.use('/api/v1/global', globalRoutes);
 app.use('/api/v1/bookings', bookingRouter);
 app.use('/api/v1/notifications', notificationRouter);
 app.use('/api/v1/monitoring', monitoringRouter);
+app.use('/api/v1/health', healthRouter);
+app.use('/api/v1/promo-codes', promoRouter);
+app.use('/api/v1/payouts', payoutRouter);
+app.use('/api/v1/newsletters', newsletterRouter);
+app.use('/api/v1/currency', currencyRouter);
 app.use('/api/v1/operations', operationsRouter);
 app.use('/api/v1/dashboard', dashboardSummaryRouter);
 app.use('/api/v1/business-partners', businessPartnerRouter);
@@ -173,6 +184,9 @@ app.get('/debug/routes', (req, res) => {
   res.json(routes);
 });
 }
+
+// Report unhandled route errors (5xx) to Sentry — no-op unless SENTRY_DSN is set. Must precede our own error handler.
+if (sentryEnabled) Sentry.setupExpressErrorHandler(app);
 
 // 404 Not Found handler (must be before error handler)
 app.use(notFoundHandler);

@@ -1,3 +1,4 @@
+import "./src/config/sentry"; // first: error tracking must start before the rest of the app loads
 import app from "./src/app";
 import { config } from "./src/config/config";
 import connectDB from "./src/config/db";

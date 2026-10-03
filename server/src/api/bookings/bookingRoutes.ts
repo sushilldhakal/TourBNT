@@ -5,6 +5,7 @@ import { filterSortMiddleware } from '../../middlewares/filterSort';
 import { asyncAuthHandler } from '../../utils/routeWrapper';
 import {
     createBooking,
+    quoteBooking,
     getAllBookings,
     getBookingById,
     getBookingTimeline,
@@ -89,6 +90,8 @@ const bookingRouter = express.Router();
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
+// Price a booking (with an optional promo code) without creating it — for the checkout form.
+bookingRouter.post('/quote', asyncAuthHandler(quoteBooking));
 bookingRouter.post('/', asyncAuthHandler(createBooking));
 
 /**

@@ -4,6 +4,7 @@ import { authLimiter } from '../../middlewares/rateLimiter';
 import {
     createUser,
     loginUser,
+    googleLogin,
     verifyUser,
     forgotPassword,
     resetPassword
@@ -197,6 +198,9 @@ authRouter.post(
  *       429:
  *         $ref: '#/components/responses/TooManyRequests'
  */
+// Sign in / sign up with a Google ID token (see googleLogin). No human check: Google already did one.
+authRouter.post('/google', authLimiter, googleLogin);
+
 authRouter.post(
     '/verify-email',
     authLimiter,

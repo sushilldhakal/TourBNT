@@ -2,7 +2,7 @@ import express from "express";
 import { body } from "express-validator";
 import { authenticate, authorizeRoles } from "../../middlewares/authenticate";
 import { paginationMiddleware } from "../../middlewares/pagination";
-import { createSubscriber, deleteSubscriber, getAllSubscribers } from "./subscriberController";
+import { createSubscriber, deleteSubscriber, getAllSubscribers, unsubscribeByToken } from "./subscriberController";
 import { requireHuman } from '../../middlewares/turnstile';
 
 const subscriberRouter = express.Router();
@@ -73,6 +73,10 @@ subscriberRouter.post(
  *       404:
  *         description: Email not found
  */
-subscriberRouter.delete('/:email', deleteSubscriber);
+// Unsubscribe with the secret link from a newsletter email (public; the token is the credential).
+subscriberRouter.post('/unsubscribe', unsubscribeByToken);
+
+// Removing an address by name is an admin action: it used to be public, so anyone could unsubscribe anyone.
+subscriberRouter.delete('/:email', authenticate as any, authorizeRoles('admin'), deleteSubscriber);
 
 export default subscriberRouter;

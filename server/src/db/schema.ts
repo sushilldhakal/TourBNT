@@ -167,9 +167,15 @@ export const users = pgTable('users', {
   paymentMethods: jsonb('payment_methods').$type<unknown[]>().default([]),
   // Seller application/profile info (was `sellerInfo` embedded doc in Mongo).
   sellerInfo: jsonb('seller_info').$type<Record<string, unknown> | null>(),
+  // Google account id (the `sub` claim) for people who signed in with Google; null for password accounts.
+  googleId: text('google_id'),
+  // Platform commission for this seller, as a percentage of each booking. Null = the platform default
+  // (app_settings 'commission').
+  commissionRate: doublePrecision('commission_rate'),
   ...timestamps,
 }, (table) => ({
   emailIdx: uniqueIndex('users_email_idx').on(table.email),
+  googleIdIdx: uniqueIndex('users_google_id_idx').on(table.googleId),
   mediaFolderIdx: uniqueIndex('users_media_folder_idx').on(table.mediaFolder),
 }));
 
@@ -445,6 +451,8 @@ export const bookings = pgTable('bookings', {
     amountDueNow: number;
     amountDueLater: number;
     depositPercentage?: number;
+    // A promo code applied on top of the tour's own pricing; totalPrice already has it taken off.
+    promo?: { code: string; amount: number };
   }>().notNull(),
   // The payment policy the traveler chose (full payment / deposit / pay on
   // arrival) — must be one of the tour's enabled paymentOptions.
@@ -464,6 +472,16 @@ export const bookings = pgTable('bookings', {
     paidAt?: string;
   } | null>(),
   bookingDate: timestamp('booking_date', { withTimezone: true }).defaultNow().notNull(),
+  // Promo code the traveller applied (the amount taken off is in pricing.promo).
+  promoCode: text('promo_code'),
+  // Who gets paid for this booking (the tour's primary seller when it was made) and the platform's cut,
+  // frozen at booking time so a later commission change never rewrites history. See services/payouts.ts.
+  sellerId: text('seller_id').references(() => users.id, { onDelete: 'set null' }),
+  commissionRate: doublePrecision('commission_rate'),
+  commissionAmount: doublePrecision('commission_amount').notNull().default(0),
+  sellerEarning: doublePrecision('seller_earning').notNull().default(0),
+  // Set once this booking's earning has been included in a payout.
+  payoutId: text('payout_id').references((): AnyPgColumn => payouts.id, { onDelete: 'set null' }),
   confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
   cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
   cancellationReason: text('cancellation_reason'),
@@ -682,9 +700,75 @@ export const subscribers = pgTable('subscribers', {
   id: id(),
   email: text('email').notNull(),
   subscribedAt: timestamp('subscribed_at', { withTimezone: true }).defaultNow().notNull(),
+  // Secret in every newsletter's unsubscribe link, so only the inbox owner can unsubscribe an address.
+  unsubscribeToken: text('unsubscribe_token').notNull().default(sql`replace(gen_random_uuid()::text, '-', '')`),
+  unsubscribedAt: timestamp('unsubscribed_at', { withTimezone: true }),
   ...timestamps,
 }, (table) => ({
   emailIdx: uniqueIndex('subscribers_email_idx').on(table.email),
+  tokenIdx: uniqueIndex('subscribers_unsubscribe_token_idx').on(table.unsubscribeToken),
+}));
+
+// Newsletters sent from the admin dashboard (a log of campaigns, not a draft store).
+export const newsletters = pgTable('newsletters', {
+  id: id(),
+  subject: text('subject').notNull(),
+  body: text('body').notNull(),
+  sentBy: text('sent_by').references(() => users.id, { onDelete: 'set null' }),
+  status: text('status').notNull().default('sending'), // sending | sent | failed
+  recipientCount: integer('recipient_count').notNull().default(0),
+  sentCount: integer('sent_count').notNull().default(0),
+  failedCount: integer('failed_count').notNull().default(0),
+  sentAt: timestamp('sent_at', { withTimezone: true }),
+  ...timestamps,
+});
+
+// Small key/value store for platform-wide settings an admin can change (e.g. the default commission rate).
+export const appSettings = pgTable('app_settings', {
+  key: text('key').primaryKey(),
+  value: jsonb('value').$type<Record<string, unknown>>().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Promo codes a traveller can enter at checkout. Created by a seller (their own tours only) or an admin
+// (platform-wide, or limited to certain tours).
+export const promoCodes = pgTable('promo_codes', {
+  id: id(),
+  code: text('code').notNull(), // stored uppercase
+  description: text('description'),
+  discountType: text('discount_type').notNull(), // 'percentage' | 'fixed'
+  discountValue: doublePrecision('discount_value').notNull(),
+  maxDiscountAmount: doublePrecision('max_discount_amount'),
+  minBookingAmount: doublePrecision('min_booking_amount'),
+  startsAt: timestamp('starts_at', { withTimezone: true }),
+  expiresAt: timestamp('expires_at', { withTimezone: true }),
+  maxUses: integer('max_uses'),
+  usedCount: integer('used_count').notNull().default(0),
+  isActive: boolean('is_active').notNull().default(true),
+  ownerId: text('owner_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  // null = every tour the owner may discount; otherwise only these tours.
+  tourIds: jsonb('tour_ids').$type<string[] | null>(),
+  ...timestamps,
+}, (table) => ({
+  codeIdx: uniqueIndex('promo_codes_code_idx').on(table.code),
+  ownerIdx: index('promo_codes_owner_idx').on(table.ownerId),
+}));
+
+// A transfer of earnings to a seller. Bookings point at it through bookings.payout_id.
+export const payouts = pgTable('payouts', {
+  id: id(),
+  sellerId: text('seller_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
+  amount: doublePrecision('amount').notNull(),
+  currency: text('currency').notNull().default('USD'),
+  bookingCount: integer('booking_count').notNull().default(0),
+  status: text('status').notNull().default('pending'), // pending | paid
+  reference: text('reference'), // bank transfer / transaction reference, set when marked paid
+  notes: text('notes'),
+  createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+  paidAt: timestamp('paid_at', { withTimezone: true }),
+  ...timestamps,
+}, (table) => ({
+  sellerIdx: index('payouts_seller_idx').on(table.sellerId),
 }));
 
 // ---------------------------------------------------------------------------

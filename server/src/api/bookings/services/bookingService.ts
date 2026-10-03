@@ -4,6 +4,8 @@ import createHttpError from 'http-errors';
 import { calculateBookingPricing, type PaymentType } from '../utils/pricingCalculator';
 import { ItineraryRequestService, findMatchingFixedDeparture } from '../../tours/services/itineraryRequestService';
 import { notifyBookingCreated, notifyBookingConfirmed, notifyBookingCancelled, notifyPaymentReceived } from '../../../services/emailService';
+import { checkPromo, redeemPromo, releasePromo } from '../../promo/promoService';
+import { earningsForNewBooking } from '../../../services/payouts';
 
 type BookingRow = typeof bookings.$inferSelect;
 
@@ -161,6 +163,34 @@ export class BookingService {
         return BookingService.checkAvailabilityForTour(tour, departureDate);
     }
 
+    /**
+     * The authoritative price of a booking, including a promo code if one was entered. Used both to quote a price
+     * to the checkout form and to price the booking itself, so the two can never disagree. Throws a friendly 400
+     * if the code can't be used. Does not use the code up (createBooking does that).
+     */
+    private static async priceBooking(
+        tour: typeof tours.$inferSelect,
+        participants: { adults: number; children: number; infants: number },
+        paymentType: PaymentType,
+        pricingOptionId: string | null,
+        promoCode?: unknown,
+    ): Promise<{ pricing: ReturnType<typeof calculateBookingPricing>; promoId: string | null }> {
+        const withoutPromo = calculateBookingPricing(tour, participants, paymentType, pricingOptionId);
+        if (!promoCode || !String(promoCode).trim()) return { pricing: withoutPromo, promoId: null };
+        const check = await checkPromo({ code: promoCode, tourId: tour.id, subtotal: withoutPromo.totalPrice });
+        return {
+            pricing: calculateBookingPricing(tour, participants, paymentType, pricingOptionId, { code: check.promo.code, amount: check.amount }),
+            promoId: check.promo.id,
+        };
+    }
+
+    /** Price a booking without creating it (checkout preview). */
+    static async quoteBooking(input: { tour: string; participants: { adults?: number; children?: number; infants?: number }; paymentType?: PaymentType; pricingOptionId?: string | null; promoCode?: unknown }) {
+        const tour = await BookingService.getTourForBooking(input.tour);
+        const participants = { adults: input.participants?.adults || 0, children: input.participants?.children || 0, infants: input.participants?.infants || 0 };
+        return (await BookingService.priceBooking(tour, participants, input.paymentType || 'full_payment', input.pricingOptionId ?? null, input.promoCode)).pricing;
+    }
+
     static async createBooking(bookingData: any): Promise<BookingRow> {
         if (!bookingData.tour || !bookingData.departureDate || !bookingData.participants) {
             throw createHttpError(400, 'Tour, departure date, and participants are required');
@@ -186,9 +216,21 @@ export class BookingService {
         // Pricing is always computed server-side from the tour's own stored
         // configuration — a client-submitted price/total is never trusted.
         const paymentType: PaymentType = bookingData.paymentType || 'full_payment';
-        const pricing = calculateBookingPricing(tour, participants, paymentType, bookingData.pricingOptionId ?? null);
+        const quote = await BookingService.priceBooking(tour, participants, paymentType, bookingData.pricingOptionId ?? null, bookingData.promoCode);
+        const pricing = quote.pricing;
 
-        const [booking] = await db
+        // Use up the promo code now (atomically, so the last redemption can't be taken twice); give it back if the
+        // booking can't be saved.
+        if (quote.promoId && !(await redeemPromo(quote.promoId))) {
+            throw createHttpError(400, 'This promo code has just reached its usage limit.');
+        }
+
+        // Who is paid for this booking, and the platform's cut — frozen now (see services/payouts.ts).
+        const earnings = await earningsForNewBooking(bookingData.tour, pricing.totalPrice);
+
+        let booking: BookingRow;
+        try {
+          [booking] = await db
             .insert(bookings)
             .values({
                 tourId: bookingData.tour,
@@ -212,8 +254,17 @@ export class BookingService {
                 contactPhone: bookingData.contactPhone,
                 specialRequests: bookingData.specialRequests ?? null,
                 bookingReference: bookingData.bookingReference || generateBookingReference(),
+                promoCode: pricing.promo?.code ?? null,
+                sellerId: earnings.sellerId,
+                commissionRate: earnings.commissionRate,
+                commissionAmount: earnings.commissionAmount,
+                sellerEarning: earnings.sellerEarning,
             })
             .returning();
+        } catch (err) {
+            if (quote.promoId) await releasePromo({ id: quote.promoId }).catch(() => undefined);
+            throw err;
+        }
 
         // Fixed-departure dates already have their partner requests from
         // reconcileFixedDepartureRequests (checked above via
@@ -366,6 +417,10 @@ export class BookingService {
         if (before?.status !== status) {
             if (status === 'confirmed') void notifyBookingConfirmed(booking.id);
             if (status === 'cancelled') void notifyBookingCancelled(booking.id);
+        }
+
+        if (status === 'cancelled' && before?.status !== 'cancelled' && booking.promoCode) {
+            await releasePromo({ code: booking.promoCode }).catch((err) => console.error(`Failed to release promo ${booking.promoCode} for cancelled booking ${booking.id}:`, err));
         }
 
         if (status === 'cancelled') {

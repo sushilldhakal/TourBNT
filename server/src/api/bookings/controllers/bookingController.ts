@@ -10,7 +10,7 @@ import createHttpError from 'http-errors';
 export const createBooking = async (req: Request
 , res: Response, next: NextFunction) => {
     try {
-        const { tourId, tourTitle, tourCode, departureDate, participants, contactInfo, specialRequests, paymentType, pricingOptionId } = req.body;
+        const { tourId, tourTitle, tourCode, departureDate, participants, contactInfo, specialRequests, paymentType, pricingOptionId, promoCode } = req.body;
 
         // Validate required fields. Pricing is computed server-side from the
         // tour's own stored configuration — the client never supplies it.
@@ -29,6 +29,7 @@ export const createBooking = async (req: Request
             participants,
             paymentType,
             pricingOptionId,
+            promoCode,
             contactName: contactInfo.fullName,
             contactEmail: contactInfo.email,
             contactPhone: contactInfo.phone,
@@ -52,6 +53,21 @@ export const createBooking = async (req: Request
         const booking = await BookingService.createBooking(bookingData);
 
         sendSuccess(res, booking, 'Booking created successfully', HTTP_STATUS.CREATED);
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Price a booking without creating it — the checkout form's "your total" (with an optional promo code).
+ * Returns the same numbers createBooking will charge. Public, like booking itself.
+ */
+export const quoteBooking = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { tourId, participants, paymentType, pricingOptionId, promoCode } = req.body ?? {};
+        if (!tourId || !participants) throw createHttpError(400, 'tourId and participants are required');
+        const pricing = await BookingService.quoteBooking({ tour: tourId, participants, paymentType, pricingOptionId, promoCode });
+        sendSuccess(res, pricing, 'Booking quoted');
     } catch (error) {
         next(error);
     }

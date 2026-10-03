@@ -10,6 +10,7 @@ import { TourDetailClient, BookingWidgetClient } from '@/components/tours/TourDe
 import TourCard from '@/components/tours/TourCard';
 import { TourPageLayout } from '@/components/tours/TourPageLayout';
 import { RelevantAdSlot } from '@/components/ads/RelevantAdSlot';
+import { richToPlainText, jsonLdString, tourJsonLd, breadcrumbJsonLd } from '@/lib/seo';
 
 // generateMetadata and the page both need the tour: cache() makes that one API call per
 // request instead of two (the detail endpoint also counts a view, which was counted twice).
@@ -51,17 +52,21 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
             }
         }
 
-        // Create description from tour data
-        const description = tour.description
-            ? tour.description.replace(/<[^>]*>/g, '').substring(0, 160)
-            : `Explore ${tour.title}${locationString ? ` in ${locationString}` : ''}. Book your adventure today!`;
+        // The description is stored as editor JSON, so build a plain-text summary: the seller's excerpt first,
+        // then the start of the description. (Stripping HTML tags used to leave raw JSON in link previews.)
+        const description =
+            richToPlainText((tour as { excerpt?: string }).excerpt, 160) ||
+            richToPlainText(tour.description, 160) ||
+            `Explore ${tour.title}${locationString ? ` in ${locationString}` : ''}. Book your adventure today!`;
 
         return {
-            title: `${tour.title} | Tour Details`,
+            title: `${tour.title} | TourBNT`,
             description,
+            alternates: { canonical: `/tours/${tour.id}` },
             openGraph: {
                 title: tour.title,
                 description,
+                url: `/tours/${tour.id}`,
                 images: tour.coverImage ? [tour.coverImage] : [],
                 type: 'website',
             },
@@ -178,6 +183,16 @@ export default async function SingleTourPage({ params }: PageProps) {
 
     return (
         <div className="min-h-screen">
+            {/* Structured data: price and rating can show directly in search results. */}
+            <script
+                type="application/ld+json"
+                dangerouslySetInnerHTML={{
+                    __html: jsonLdString([
+                        tourJsonLd(tour as Parameters<typeof tourJsonLd>[0]),
+                        breadcrumbJsonLd([{ name: 'Home', path: '/' }, { name: 'Tours', path: '/tours' }, { name: tour.title, path: `/tours/${tour.id}` }]),
+                    ]),
+                }}
+            />
             {/* Full-width banner */}
             <TourBanner tour={tour} />
 

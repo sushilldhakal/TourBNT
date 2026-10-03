@@ -1,6 +1,6 @@
 import nodemailer, { type Transporter } from 'nodemailer';
 import { asc, eq, inArray } from 'drizzle-orm';
-import { db, bookings, tours, tourAuthors, users, conversations, conversationMessages } from '../db';
+import { db, bookings, tours, tourAuthors, users, conversations, conversationMessages, payouts } from '../db';
 import { config } from '../config/config';
 
 /**
@@ -55,6 +55,8 @@ export interface OutgoingEmail {
   html: string;
   text: string;
   replyTo?: string;
+  /** Extra headers, e.g. List-Unsubscribe for newsletters. */
+  headers?: Record<string, string>;
 }
 
 /** Sends one email. Returns whether it was handed to the mail server; never throws. */
@@ -64,7 +66,7 @@ export async function sendEmail(mail: OutgoingEmail): Promise<boolean> {
   const t = getTransporter();
   if (!t) return false;
   try {
-    await t.sendMail({ from: `"TourBNT" <${fromAddress()}>`, to, subject: mail.subject, text: mail.text, html: mail.html, replyTo: mail.replyTo });
+    await t.sendMail({ from: `"TourBNT" <${fromAddress()}>`, to, subject: mail.subject, text: mail.text, html: mail.html, replyTo: mail.replyTo, headers: mail.headers });
     return true;
   } catch (err) {
     console.error(`[email] Failed to send "${mail.subject}" to ${to.join(', ')}:`, (err as Error).message);
@@ -99,6 +101,8 @@ interface Layout {
   rows?: Row[];
   cta?: { label: string; url: string };
   outro?: string;
+  /** Replaces the default "you are receiving this because..." footer (HTML). */
+  footer?: string;
 }
 
 /** One consistent look for every email; returns matching HTML and plain-text bodies. */
@@ -121,8 +125,8 @@ ${l.cta ? `<p style="margin:0 0 24px;text-align:center;"><a href="${esc(l.cta.ur
 ${l.outro ? `<p style="margin:0;color:#777777;font-size:14px;line-height:1.6;">${l.outro}</p>` : ''}
 </td></tr>
 <tr><td style="padding:18px 30px;background:#fafafa;text-align:center;color:#999999;font-size:12px;line-height:1.6;">
-You are receiving this because of activity on your TourBNT account or a booking made with this email address.<br>
-<a href="${esc(siteUrl())}" style="color:#667eea;text-decoration:none;">${esc(siteUrl().replace(/^https?:\/\//, ''))}</a>
+${l.footer ?? `You are receiving this because of activity on your TourBNT account or a booking made with this email address.<br>
+<a href="${esc(siteUrl())}" style="color:#667eea;text-decoration:none;">${esc(siteUrl().replace(/^https?:\/\//, ''))}</a>`}
 </td></tr></table></td></tr></table></body></html>`;
 
   const strip = (s: string) => s.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
@@ -289,6 +293,30 @@ export async function notifyPaymentReceived(bookingId: string): Promise<void> {
   }
 }
 
+/** A payout was transferred: tell the seller, with the reference and a link to the statement. */
+export async function notifyPayoutPaid(payoutId: string): Promise<void> {
+  try {
+    const [row] = await db
+      .select({ payout: payouts, name: users.name, email: users.email })
+      .from(payouts)
+      .innerJoin(users, eq(users.id, payouts.sellerId))
+      .where(eq(payouts.id, payoutId))
+      .limit(1);
+    if (!row) return;
+    const p = row.payout;
+    const m = render({
+      heading: 'Your payout is on its way',
+      intro: `Hi ${esc(row.name)}, we have sent your payout of <strong>${esc(money(p.amount, p.currency))}</strong> covering ${p.bookingCount} booking${p.bookingCount === 1 ? '' : 's'}.`,
+      rows: [['Amount', esc(money(p.amount, p.currency))], ['Bookings', String(p.bookingCount)], ['Transfer reference', esc(p.reference ?? '')], ['Date', esc(dateLong(p.paidAt ?? new Date()))]],
+      cta: { label: 'View statement', url: `${siteUrl()}/dashboard/earnings/${p.id}` },
+      outro: 'The statement lists every booking in this payout with the commission taken.',
+    });
+    await sendEmail({ to: row.email, subject: `Payout sent: ${money(p.amount, p.currency)}`, ...m });
+  } catch (err) {
+    console.error('[email] notifyPayoutPaid failed:', (err as Error).message);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // enquiries and contact form
 // ---------------------------------------------------------------------------
@@ -348,6 +376,26 @@ export async function notifyEnquiryCreated(conversationId: string): Promise<void
   } catch (err) {
     console.error('[email] notifyEnquiryCreated failed:', (err as Error).message);
   }
+}
+
+/** The email for one newsletter recipient: the admin's text as paragraphs, plus that subscriber's own unsubscribe link. */
+export function renderNewsletter(opts: { subject: string; body: string; unsubscribeToken: string }): OutgoingEmail {
+  const paragraphs = opts.body.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+  const unsubscribePage = `${siteUrl()}/unsubscribe?token=${encodeURIComponent(opts.unsubscribeToken)}`;
+  const oneClick = `${siteUrl()}/api/v1/subscribers/unsubscribe?token=${encodeURIComponent(opts.unsubscribeToken)}`;
+  const { html, text } = render({
+    heading: opts.subject,
+    intro: paragraphs.map((p) => `<span style="display:block;margin-bottom:14px;white-space:pre-wrap;">${esc(p)}</span>`).join(''),
+    footer: `You are receiving this because you subscribed to the TourBNT newsletter.<br><a href="${esc(unsubscribePage)}" style="color:#667eea;text-decoration:none;">Unsubscribe</a> · <a href="${esc(siteUrl())}" style="color:#667eea;text-decoration:none;">${esc(siteUrl().replace(/^https?:\/\//, ''))}</a>`,
+  });
+  return {
+    to: '',
+    subject: opts.subject,
+    html,
+    text: `${text}\n\nUnsubscribe: ${unsubscribePage}`,
+    // One-click unsubscribe (RFC 8058): mail apps show their own "Unsubscribe" button, which helps deliverability.
+    headers: { 'List-Unsubscribe': `<${oneClick}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' },
+  };
 }
 
 /** Exposed for tests and for previewing templates without a database. */

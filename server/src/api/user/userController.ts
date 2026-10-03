@@ -2,7 +2,8 @@ import { NextFunction, Request, Response } from "express";
 import createHttpError from "http-errors";
 import bcrypt from "bcrypt";
 import jwt, { sign } from "jsonwebtoken";
-import { createHash } from "crypto";
+import { createHash, randomBytes } from "crypto";
+import { OAuth2Client } from "google-auth-library";
 import { validationResult } from "express-validator";
 import { db, users } from "../../db";
 import { eq, desc, asc, count, sql, ilike, or, and, inArray, type SQL } from "drizzle-orm";
@@ -102,32 +103,77 @@ export const loginUser = async (req: Request, res: Response, next: NextFunction)
       return next(createHttpError(400, "Username or password incorrect!"));
     }
 
-    const expiresIn = keepMeSignedIn ? '30d' : '2h';
-
-    const token = sign(
-      { sub: user.id, roles: user.role, keepMeSignedIn },
-      config.jwtSecret,
-      { expiresIn }
-    );
-
-    const maxAge = keepMeSignedIn ? COOKIE_DURATIONS.LONG_SESSION : COOKIE_DURATIONS.SHORT_SESSION;
-    const cookieOptions = getAuthCookieOptions(maxAge);
-    res.cookie(COOKIE_NAMES.AUTH_TOKEN, token, cookieOptions);
-
-    const userResponse = {
-      id: user.id,
-      roles: user.role,
-      email: user.email,
-      name: user.name,
-      phone: user.phone,
-      verified: user.verified,
-      avatar: user.avatar,
-    };
-
-    return sendSuccess(res, { user: userResponse }, 'Login successful');
+    return sendSuccess(res, { user: startSession(res, user, keepMeSignedIn) }, 'Login successful');
   } catch (err) {
     console.error('Error while logging in user:', err);
     next(createHttpError(500, "Error while logging in user"));
+  }
+};
+
+/** Signs the user in: sets the auth cookie and returns the user fields the app keeps in its store. */
+function startSession(res: Response, user: pgUsers.PgUser, keepMeSignedIn: boolean) {
+  const expiresIn = keepMeSignedIn ? '30d' : '2h';
+  const token = sign({ sub: user.id, roles: user.role, keepMeSignedIn }, config.jwtSecret, { expiresIn });
+  const maxAge = keepMeSignedIn ? COOKIE_DURATIONS.LONG_SESSION : COOKIE_DURATIONS.SHORT_SESSION;
+  res.cookie(COOKIE_NAMES.AUTH_TOKEN, token, getAuthCookieOptions(maxAge));
+  return {
+    id: user.id,
+    roles: user.role,
+    email: user.email,
+    name: user.name,
+    phone: user.phone,
+    verified: user.verified,
+    avatar: user.avatar,
+  };
+}
+
+/**
+ * Sign in (or sign up) with Google. The browser gets a signed ID token from Google; we check its signature and that it
+ * was issued for OUR client id, then use the verified email. Off until GOOGLE_CLIENT_ID is set.
+ *  - known Google account            -> sign in
+ *  - existing account, same email    -> link it (Google has verified the mailbox) and sign in
+ *  - new person                      -> create a verified account (no usable password)
+ */
+export const googleLogin = async (req: Request, res: Response, next: NextFunction) => {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  if (!clientId) return next(createHttpError(503, 'Google sign-in is not available right now.'));
+  const { credential, keepMeSignedIn = false } = req.body ?? {};
+  if (!credential || typeof credential !== 'string') return next(createHttpError(400, 'Missing Google credential.'));
+
+  let payload: { sub?: string; email?: string; email_verified?: boolean; name?: string; picture?: string } | undefined;
+  try {
+    const ticket = await new OAuth2Client(clientId).verifyIdToken({ idToken: credential, audience: clientId });
+    payload = ticket.getPayload();
+  } catch {
+    return next(createHttpError(401, 'Google sign-in could not be verified. Please try again.'));
+  }
+  if (!payload?.sub || !payload.email || payload.email_verified !== true) {
+    return next(createHttpError(400, 'Your Google account needs a verified email address.'));
+  }
+
+  try {
+    const email = payload.email.trim().toLowerCase();
+    let user = (await db.select().from(users).where(eq(users.googleId, payload.sub)).limit(1))[0];
+    if (!user) {
+      const byEmail = await pgUsers.findUserByEmail(email);
+      if (byEmail) {
+        user = (await pgUsers.updateUser(byEmail.id, { googleId: payload.sub, verified: true, avatar: byEmail.avatar ?? payload.picture ?? null }))!;
+      } else {
+        user = await pgUsers.createUser({
+          name: payload.name?.trim() || email.split('@')[0],
+          email,
+          // Nobody knows this password; the account is entered through Google (or a password reset).
+          password: await bcrypt.hash(randomBytes(32).toString('hex'), 10),
+          verified: true,
+          avatar: payload.picture ?? null,
+          googleId: payload.sub,
+        });
+      }
+    }
+    return sendSuccess(res, { user: startSession(res, user, !!keepMeSignedIn) }, 'Login successful');
+  } catch (err: any) {
+    console.error('Error while signing in with Google:', err);
+    next(createHttpError(500, 'Error while signing in with Google'));
   }
 };
 

@@ -11,6 +11,7 @@ import AuthBootstrap from "@/providers/AuthBootstrap";
 import { Suspense } from "react";
 import { CookieConsent } from "@/components/consent/CookieConsent";
 import { Analytics } from "@/components/consent/Analytics";
+import { SITE_URL } from "@/lib/seo";
 
 
 const nunitoSans = Nunito_Sans({
@@ -29,8 +30,14 @@ const fraunces = Fraunces({
 });
 
 export const metadata: Metadata = {
-  title: "TourBnT - Explore Amazing Destinations",
-  description: "Discover and book amazing travel tours around the world",
+  // Makes every relative canonical / Open Graph URL absolute.
+  metadataBase: new URL(SITE_URL),
+  title: { default: "TourBNT - Explore Amazing Destinations", template: "%s" },
+  description: "Discover and book guided tours, treks and cultural trips from trusted local operators.",
+  applicationName: "TourBNT",
+  openGraph: { siteName: "TourBNT", type: "website", locale: "en_US" },
+  twitter: { card: "summary_large_image" },
+  robots: { index: true, follow: true },
 };
 
 export default function RootLayout({
