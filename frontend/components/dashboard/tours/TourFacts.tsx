@@ -51,8 +51,8 @@ export function TourFacts() {
     const [currentFactIndex, setCurrentFactIndex] = useState<number | null>(null);
     const [openPopovers, setOpenPopovers] = useState<Record<number, boolean>>({});
 
-    const { data: masterFacts } = useFacts(userId, !!userId) as { data: { data: FactData[] } };
-    const masterFactsData = (masterFacts as { data?: FactData[] })?.data || [];
+    const { data: masterFacts } = useFacts(userId, !!userId);
+    const masterFactsData = masterFacts?.data || [];
 
     const hasManuallyAddedFacts = useMemo(() => {
         return Array.isArray(factsFields) && factsFields.length > 0;
@@ -164,7 +164,11 @@ export function TourFacts() {
     const getMasterFactOptions = (factId?: string): string[] => {
         if (!factId || !masterFactsData) return [];
         const masterFact = Array.isArray(masterFactsData) ? masterFactsData.find((f: FactData) => f.id === factId) : undefined;
-        return masterFact?.value || [];
+        const values = masterFact?.value;
+        if (!values) return [];
+        return (Array.isArray(values) ? values : [values])
+            .map((v) => (typeof v === 'object' ? v.value : v))
+            .filter(Boolean);
     };
 
     // ✅ HELPER: Render value input based on field type
@@ -267,7 +271,10 @@ export function TourFacts() {
                     name={`facts.${index}.value`}
                     render={({ field }) => {
                         const options = masterOptions.map(opt => ({ value: opt, label: opt }));
-                        const currentValues = (field.value || []).map((val: string) => ({ value: val, label: val }));
+                        // Saved values are plain strings or { label, value } pairs.
+                        const currentValues: string[] = (Array.isArray(field.value) ? field.value : field.value ? [field.value] : [])
+                            .map((val: string | { value?: string }) => (typeof val === 'object' ? val?.value ?? '' : val))
+                            .filter(Boolean);
 
                         return (
                             <FormItem>
@@ -275,16 +282,11 @@ export function TourFacts() {
                                 <FormControl>
                                     <MultiSelect
                                         options={options}
-                                        value={currentValues}
-                                        onValueChange={(selectedValues) => {
-                                            const stringValues = selectedValues.map(item =>
-                                                typeof item === 'object' ? item.value : item
-                                            );
-                                            field.onChange(stringValues);
-                                        }}
+                                        defaultValue={currentValues}
+                                        onValueChange={(selectedValues) => field.onChange(selectedValues)}
                                         placeholder="Select options"
                                         className="w-full"
-                                        maxdisplayvalues={10}
+                                        maxCount={10}
                                     />
                                 </FormControl>
                                 <FormMessage />

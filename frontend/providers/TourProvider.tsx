@@ -61,6 +61,7 @@ interface TourContextType {
     factsFields: any[];
     appendFacts: (value?: Partial<any>) => void;
     factsRemove: (index: number) => void;
+    factsMove: (from: number, to: number) => void;
 
     galleryFields: any[];
     appendGallery: (value?: Partial<any>) => void;
@@ -70,6 +71,7 @@ interface TourContextType {
     faqFields: any[];
     appendFaq: (value?: Partial<any>) => void;
     faqRemove: (index: number) => void;
+    faqMove: (from: number, to: number) => void;
 
     pricingOptionsFields: any[];
     appendPricingOptions: (value?: Partial<any>) => void;
@@ -167,6 +169,7 @@ export function TourProvider({ children, defaultValues, isEditing = false }: Tou
         fields: factsFields,
         append: factsAppend,
         remove: factsRemove,
+        move: factsMove,
     } = useFieldArray({
         control: form.control,
         name: 'facts',
@@ -176,6 +179,7 @@ export function TourProvider({ children, defaultValues, isEditing = false }: Tou
         fields: faqFields,
         append: faqAppend,
         remove: faqRemove,
+        move: faqMove,
     } = useFieldArray({
         control: form.control,
         name: 'faqs',
@@ -285,7 +289,7 @@ export function TourProvider({ children, defaultValues, isEditing = false }: Tou
 
     // Helper function to generate unique tour code
     const handleGenerateCode = () => {
-        const generatedCode = makeId(6);
+        const generatedCode = makeId();
         form.setValue('code', generatedCode);
         return generatedCode;
     };
@@ -581,7 +585,7 @@ export function TourProvider({ children, defaultValues, isEditing = false }: Tou
             });
             queryClient.invalidateQueries({ queryKey: ['tours'] });
             // Handle different response structures
-            const tourId = data?.tour?._id || data?._id;
+            const tourId = data?.tour?.id || data?.id || data?.tour?._id || data?._id;
             if (tourId) {
                 router.push(`/dashboard/tours/edit/${tourId}`);
             } else {
@@ -1109,6 +1113,7 @@ export function TourProvider({ children, defaultValues, isEditing = false }: Tou
         factsFields,
         appendFacts,
         factsRemove,
+        factsMove,
 
         galleryFields,
         appendGallery,
@@ -1117,6 +1122,7 @@ export function TourProvider({ children, defaultValues, isEditing = false }: Tou
         faqFields,
         appendFaq,
         faqRemove,
+        faqMove,
 
         pricingOptionsFields,
         appendPricingOptions,

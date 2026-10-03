@@ -125,9 +125,9 @@ export function TourPricingDates() {
     // Local state for pricing preset selector (multi-select)
     const [pricingPresetSelectorValue, setPricingPresetSelectorValue] = useState<string>('');
 
-    const { data: pricingPresets = [], isLoading: isLoadingPricingPresets } = usePricingPresets(user?.id, !!user?.id);
-    const { data: paxPresets = [], isLoading: isLoadingPaxPresets } = usePaxPresets(user?.id, !!user?.id);
-    const { data: discountPresets = [], isLoading: isLoadingDiscountPresets } = useDiscountPresets(user?.id, !!user?.id);
+    const { data: pricingPresets = [], isLoading: isLoadingPricingPresets } = usePricingPresets(user?.id ?? undefined, !!user?.id);
+    const { data: paxPresets = [], isLoading: isLoadingPaxPresets } = usePaxPresets(user?.id ?? undefined, !!user?.id);
+    const { data: discountPresets = [], isLoading: isLoadingDiscountPresets } = useDiscountPresets(user?.id ?? undefined, !!user?.id);
 
     const paxPresetOptions = React.useMemo(() => {
         const extras = extraPaxPresets.filter((preset) => !paxPresets.some((item) => presetIdOf(item) === presetIdOf(preset)));
@@ -1145,7 +1145,7 @@ function PricingOptionItem({ index, onRemove }: PricingOptionItemProps) {
     const discountEnabled = option.discountEnabled || false;
     const paxRange = option.paxRange || { min: 1, max: 22 };
 
-    const { data: discountPresets = [], isLoading: isLoadingDiscountPresets } = useDiscountPresets(user?.id, !!user?.id);
+    const { data: discountPresets = [], isLoading: isLoadingDiscountPresets } = useDiscountPresets(user?.id ?? undefined, !!user?.id);
 
     // Local state for discount preset selection
     const [localDiscountPresetId, setLocalDiscountPresetId] = useState<string | undefined>(undefined);
@@ -2130,7 +2130,7 @@ function CreatePaxPresetDialog({ open, onOpenChange, onCreated }: CreatePaxPrese
                 pricePerPerson: preset.pricePerPerson ?? payload.pricePerPerson,
                 userId: preset.userId || user?.id || '',
             };
-            cacheCreatedPreset(queryClient, queryKeys.presets.pax(user?.id), normalized);
+            cacheCreatedPreset(queryClient, queryKeys.presets.pax(user?.id ?? undefined), normalized);
             queryClient.invalidateQueries({ queryKey: queryKeys.presets.pax(user?.id ?? undefined) });
             toast.success('Group size preset created');
             onCreated(normalized);
@@ -2221,7 +2221,7 @@ function CreateDiscountPresetDialog({ open, onOpenChange, onCreated }: CreateDis
                 value: Number(preset.value ?? payload.value),
                 userId: preset.userId || user?.id || '',
             };
-            cacheCreatedPreset(queryClient, queryKeys.presets.discount(user?.id), normalized);
+            cacheCreatedPreset(queryClient, queryKeys.presets.discount(user?.id ?? undefined), normalized);
             queryClient.invalidateQueries({ queryKey: queryKeys.presets.discount(user?.id ?? undefined) });
             toast.success('Discount preset created');
             onCreated(normalized);
@@ -2322,7 +2322,7 @@ function CreatePricingPresetDialog({ open, onOpenChange, onCreated }: CreatePric
                 options: preset.options?.length ? preset.options : payload.options,
                 userId: preset.userId || user?.id || '',
             };
-            cacheCreatedPreset(queryClient, queryKeys.presets.pricing(user?.id), normalized);
+            cacheCreatedPreset(queryClient, queryKeys.presets.pricing(user?.id ?? undefined), normalized);
             queryClient.invalidateQueries({ queryKey: queryKeys.presets.pricing(user?.id ?? undefined) });
             toast.success('Pricing preset created');
             onCreated(normalized);

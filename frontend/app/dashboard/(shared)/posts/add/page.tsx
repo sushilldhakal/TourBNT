@@ -225,7 +225,7 @@ export default function AddPostPage() {
                                                             field.onChange(JSON.stringify(content));
                                                         }}
                                                         placeholder="Start writing your post content..."
-                                                        className="min-h-[400px]"
+                                                        minHeight="400px"
                                                     />
                                                 </FormControl>
                                                 <FormMessage />
@@ -324,7 +324,6 @@ export default function AddPostPage() {
                                                             mode="picker"
                                                             onMediaSelect={(image) => handleImageSelect(image, field.onChange)}
                                                             allowMultiple={false}
-                                                            mediaType="images"
                                                             initialTab="images"
                                                         />
                                                     </div>

@@ -6,7 +6,7 @@ import { Category } from '@/types/types';
 interface TourHeaderProps {
     title: string;
     code: string;
-    categories?: string | Array<Category | { label?: string; value?: string; name?: string; _id?: string }>;
+    categories?: string | string[] | Array<Category | { label?: string; value?: string; name?: string; _id?: string }>;
 }
 
 export function TourHeader({ title, code, categories }: TourHeaderProps) {

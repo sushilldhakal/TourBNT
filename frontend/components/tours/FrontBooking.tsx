@@ -16,7 +16,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { CalendarIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { Tour, PricingOption } from '@/lib/types';
+import type { Tour } from '@/lib/types';
+import type { PriceableOption } from '@/lib/tourUtils';
 import {
     generateDepartureInstances,
     calculateDeparturePrice,
@@ -26,8 +27,14 @@ import {
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
+/** The tour fields the booking form uses; both frontend Tour shapes satisfy it. */
+type BookableTour = Pick<Tour, 'id' | 'title' | 'code' | 'price' | 'salePrice' | 'saleEnabled' | 'pricePerPerson' | 'paymentOptions' | 'tourDates' | 'enquiry'> & {
+    coverImage?: string | null;
+    pricingOptions?: PriceableOption[];
+};
+
 interface FrontBookingProps {
-    tourData: Tour;
+    tourData: BookableTour;
     prefilledDate?: Date;
 }
 
@@ -125,6 +132,8 @@ export function FrontBooking({ tourData, prefilledDate }: FrontBookingProps) {
                 const pricing = calculateDeparturePrice(
                     departure,
                     tourData.price ?? 0,
+                    tourData.salePrice,
+                    tourData.saleEnabled,
                     tourData.pricingOptions
                 );
 
@@ -198,7 +207,7 @@ export function FrontBooking({ tourData, prefilledDate }: FrontBookingProps) {
 
     const quoteWithCode = async (code: string) => {
         return quoteBooking({
-            tourId: tourData._id,
+            tourId: tourData.id,
             participants: { adults: bookingForm.adults, children: bookingForm.children, infants: 0 },
             paymentType,
             promoCode: code,
@@ -333,9 +342,9 @@ export function FrontBooking({ tourData, prefilledDate }: FrontBookingProps) {
         // is intentionally NOT sent, since the server always recomputes it
         // authoritatively from the tour's own configuration.
         const bookingData: BookingData = {
-            tourId: tourData._id,
+            tourId: tourData.id,
             tourTitle: tourData.title,
-            tourCode: tourData.code || `TOUR-${tourData._id.slice(-8).toUpperCase()}`,
+            tourCode: tourData.code || `TOUR-${tourData.id.slice(-8).toUpperCase()}`,
             departureDate: bookingForm.departureDate,
             participants: {
                 adults: bookingForm.adults,

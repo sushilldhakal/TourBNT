@@ -216,7 +216,8 @@ export function SettingsPage() {
     const isKeySet = (key: string): boolean => {
         if (!data) return false;
 
-        const settingsData = data.settings || data;
+        type KeyFlags = { openaiApiKey?: unknown; googleApiKey?: unknown };
+        const settingsData = ((data as { settings?: KeyFlags }).settings || data) as KeyFlags;
 
         switch (key) {
             case 'OPENAI_API_KEY':

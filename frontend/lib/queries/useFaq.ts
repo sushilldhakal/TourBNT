@@ -8,7 +8,8 @@ import { queryKeys } from './queryKeys';
 import type { FaqData } from '@/types/faq';
 
 export function useFaq(userId: string | null, enabled = true) {
-    return useQuery<FaqData[]>({
+    // The API answers { success, data: FaqData[] }; callers read `.data`.
+    return useQuery<{ data?: FaqData[] }>({
         queryKey: queryKeys.faq.list(userId),
         queryFn: () => getUserFaq(userId!),
         enabled: !!userId && enabled,

@@ -45,7 +45,7 @@ export const EditCategoryDialog = ({ categoryId, open, onOpenChange, onSuccess }
 
     const { category, isLoading } = useCategoryById(categoryId, open && !!categoryId);
 
-    const form = useForm({
+    const form = useForm<{ name: string; description: string; imageUrl: string; featuredTours: string[]; reason: string }>({
         defaultValues: {
             name: '',
             description: '',

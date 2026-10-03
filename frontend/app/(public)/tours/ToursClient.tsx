@@ -11,7 +11,7 @@ import { useUserLocation } from '@/lib/hooks/useUserLocation';
 import { useRef, useCallback, useEffect, useState, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { format, parseISO } from 'date-fns';
-import { Tour } from '@/types';
+import type { Tour } from '@/types/types';
 import type { TourListFilters } from '@/lib/api/tours';
 import { PRICE_MAX, PRICE_MIN } from '@/lib/tourSearchUrl';
 
@@ -130,7 +130,7 @@ export function ToursClient() {
     }, [handleObserver]);
 
     // Flatten all pages of tours
-    const allTours = toursData?.pages.flatMap((page) => page?.data ?? []) ?? [];
+    const allTours = (toursData?.pages.flatMap((page) => page?.data ?? []) ?? []) as Tour[];
 
 
     // Dynamic price range generation
@@ -420,8 +420,8 @@ export function ToursClient() {
                                         >
                                             {filteredTours.map((tour, index) => (
                                                 <TourCard
-                                                    key={(tour as { id?: string }).id ?? (tour as { id?: string }).id ?? `tour-${index}`}
-                                                    tour={tour as Tour}
+                                                    key={tour.id ?? `tour-${index}`}
+                                                    tour={tour}
                                                     viewMode={viewMode}
                                                 />
                                             ))}

@@ -59,7 +59,7 @@ export function PricingPresets() {
     },
   ]);
 
-  const { data: presets, isLoading, refetch } = usePricingPresets(user?.id, !!user?.id);
+  const { data: presets, isLoading, refetch } = usePricingPresets(user?.id ?? undefined, !!user?.id);
 
   // Create mutation
   const createMutation = useMutation({

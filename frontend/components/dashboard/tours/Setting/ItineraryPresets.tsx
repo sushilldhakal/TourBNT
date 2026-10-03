@@ -46,7 +46,7 @@ export function ItineraryPresets() {
     itinerary: [defaultItineraryItem()],
   });
 
-  const { data: presets, isLoading, refetch } = useItineraryPresets(user?.id, !!user?.id);
+  const { data: presets, isLoading, refetch } = useItineraryPresets(user?.id ?? undefined, !!user?.id);
 
   const createMutation = useMutation({
     mutationFn: (data: Partial<ItineraryPreset>) => {

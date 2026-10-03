@@ -53,7 +53,7 @@ export function TourFAQs() {
     const [openPopovers, setOpenPopovers] = useState<Record<number, boolean>>({});
 
 
-    const { data: faqData } = useFaq(userId, !!userId) as unknown as { data: { data: FaqData[] } };
+    const { data: faqData } = useFaq(userId, !!userId);
     const faq = (faqData as { data?: FaqData[] })?.data || [];
 
     // Derive hasManuallyAddedFaqs directly from faqFields instead of using effect-based state
@@ -91,7 +91,7 @@ export function TourFAQs() {
 
             const updatedFaqs = await queryClient.fetchQuery({
                 queryKey: ['faq', userId],
-                queryFn: () => getUserFaq(userId) as Promise<FaqData[]>,
+                queryFn: () => getUserFaq(userId),
             });
 
             if (currentFaqIndex !== null && updatedFaqs && Array.isArray(updatedFaqs) && updatedFaqs.length > 0) {

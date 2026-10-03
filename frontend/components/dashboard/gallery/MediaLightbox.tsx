@@ -562,7 +562,7 @@ export function MediaLightbox({
                                 {getVisibleThumbnails().map(({ item, actualIndex }) => (
                                     <button
                                         key={item.id}
-                                        ref={(el) => (thumbnailRefs.current[actualIndex] = el)}
+                                        ref={(el) => { thumbnailRefs.current[actualIndex] = el; }}
                                         onClick={() => onIndexChange(actualIndex)}
                                         className={cn(
                                             'relative flex-shrink-0 w-14 h-14 md:w-16 md:h-16 rounded-lg overflow-hidden border-2 transition-all duration-200',

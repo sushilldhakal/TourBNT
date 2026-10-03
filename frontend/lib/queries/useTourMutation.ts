@@ -63,7 +63,7 @@ export function useTourMutation({
             if (onSuccess) {
                 onSuccess(data);
             } else {
-                const createdTourId = data?.tour?._id || data?._id;
+                const createdTourId = data?.tour?.id || data?.id || data?.tour?._id || data?._id;
                 if (createdTourId) {
                     router.push(`/dashboard/tours/edit/${createdTourId}`);
                 } else {

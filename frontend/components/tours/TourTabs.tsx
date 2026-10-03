@@ -136,7 +136,7 @@ export function TourTabs({ tour, onBookNow, destinations }: TourTabsProps) {
                     {tour.faqs && tour.faqs.length > 0 ? (
                         <Accordion type="single" collapsible className="w-full">
                             {tour.faqs.map((faq, index) => (
-                                <AccordionItem key={faq._id || faq.id || index} value={`faq-${index}`}>
+                                <AccordionItem key={faq.id || faq.faqId || index} value={`faq-${index}`}>
                                     <AccordionTrigger
                                         className="text-left text-sm sm:text-base"
                                         aria-label={`Question: ${faq.question}`}
@@ -161,11 +161,16 @@ export function TourTabs({ tour, onBookNow, destinations }: TourTabsProps) {
 }
 
 interface InclusionsExclusionsProps {
-    inclusions?: string;
-    exclusions?: string;
+    inclusions?: string | string[];
+    exclusions?: string | string[];
 }
 
-function InclusionsExclusions({ inclusions, exclusions }: InclusionsExclusionsProps) {
+/** Rich text (string) or a list; an empty list (the database default) means nothing to show. */
+const hasContent = (v?: string | string[]) => (Array.isArray(v) ? v.length > 0 : !!v);
+
+function InclusionsExclusions({ inclusions: rawInclusions, exclusions: rawExclusions }: InclusionsExclusionsProps) {
+    const inclusions = hasContent(rawInclusions) ? rawInclusions : undefined;
+    const exclusions = hasContent(rawExclusions) ? rawExclusions : undefined;
     if (!inclusions && !exclusions) {
         return null;
     }

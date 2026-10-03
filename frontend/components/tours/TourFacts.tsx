@@ -1,12 +1,21 @@
 'use client';
 
 import { Info } from 'lucide-react';
-import type { FactData } from '@/types/facts';
 import { renderFactValue } from '@/lib/tourUtils';
 import Icon from '@/components/Icon';
 
+/** A fact as copied onto a tour (the editor stores `title`; older copies have `name`). */
+interface TourFact {
+    id?: string;
+    name?: string;
+    title?: string;
+    icon?: string;
+    field_type?: 'Plain Text' | 'Single Select' | 'Multi Select';
+    value?: string | string[] | Array<{ label?: string; value?: string }>;
+}
+
 interface TourFactsProps {
-    facts?: FactData[];
+    facts?: TourFact[];
 }
 
 export function TourFacts({ facts }: TourFactsProps) {

@@ -49,8 +49,9 @@ export default function ProfilePage() {
         }
         let cancelled = false;
         getUserById(profileId)
-            .then((data: ProfileUser) => {
+            .then((raw) => {
                 if (cancelled) return;
+                const data = raw as ProfileUser;
                 setProfile(data);
                 const u = data as Record<string, unknown>;
                 setFormData({

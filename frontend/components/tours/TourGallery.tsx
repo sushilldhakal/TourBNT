@@ -17,7 +17,7 @@ import { GalleryItem, TourGalleryItem } from '@/types/types';
 import { generateBlurDataURL, getImageSizes } from '@/lib/imageUtils';
 
 interface TourGalleryProps {
-    coverImage: string;
+    coverImage?: string | null;
     gallery?: GalleryItem[];
     title: string;
 }
@@ -48,9 +48,9 @@ export function TourGallery({ coverImage, gallery = [], title }: TourGalleryProp
     // Combine cover image with gallery items
     const allMedia: TourGalleryItem[] = [
         {
-            image: coverImage,
+            image: coverImage ?? '',
             alt: title,
-            type: isVideo(coverImage) ? 'video' as const : 'image' as const,
+            type: isVideo(coverImage ?? '') ? 'video' as const : 'image' as const,
         },
         ...gallery.map((item): TourGalleryItem => {
             const imageUrl = item.image || item.url || item.secure_url || '';

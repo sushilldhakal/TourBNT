@@ -107,10 +107,6 @@ export interface Destination {
 
 export interface DestinationTypes {
     approvalStatus: string;
-    approvalStatus: string;
-    approvalStatus: string;
-    approvalStatus: string;
-    approvalStatus: any;
     _id: string;
     name: string;
     description: string;
@@ -185,7 +181,7 @@ export interface Itinerary {
     day?: string;
     title: string;
     description: string;
-    dateTime?: Date;
+    dateTime?: Date | string; // ISO string when it comes from the API
     date?: string | Date;
     time?: string;
     destination?: string;
@@ -287,7 +283,8 @@ export interface Location {
 
 // Tour types
 export interface Tour {
-    _id: string;
+    /** Not sent by the API any more; use `id`. */
+    _id?: string;
     id: string;
     title: string;
     code: string;
@@ -295,7 +292,7 @@ export interface Tour {
     excerpt?: string;
     price: number;
     originalPrice?: number;
-    coverImage: string;
+    coverImage?: string;
     images?: string[];
     category?: string | Category[];
     destination?: string | Destination;

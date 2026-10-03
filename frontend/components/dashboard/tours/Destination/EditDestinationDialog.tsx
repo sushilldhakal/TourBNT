@@ -407,7 +407,7 @@ export const EditDestinationDialog = ({ destinationId, open, onOpenChange, onSuc
                                                             <FormControl>
                                                                 <MultiSelect
                                                                     options={(tourTitles as TourTitle[] || []).map((item: TourTitle) => ({
-                                                                        value: item._id,
+                                                                        value: item.id,
                                                                         label: item.code ? `${item.title} (${item.code})` : item.title,
                                                                     }))}
                                                                     defaultValue={normalizedValue}

@@ -61,7 +61,7 @@ export function DatePresets() {
     },
   });
 
-  const { data: presets, isLoading, refetch } = useDatePresets(user?.id, !!user?.id);
+  const { data: presets, isLoading, refetch } = useDatePresets(user?.id ?? undefined, !!user?.id);
 
   const createMutation = useMutation({
     mutationFn: (data: Partial<DatePreset>) => {

@@ -24,8 +24,9 @@ export default function BookingsPage() {
     useEffect(() => {
         let cancelled = false;
         getUserBookings({ limit: 50 })
-            .then((res: { data?: BookingItem[]; items?: BookingItem[]; bookings?: BookingItem[] }) => {
+            .then((raw) => {
                 if (cancelled) return;
+                const res = raw as { data?: BookingItem[]; items?: BookingItem[]; bookings?: BookingItem[] } | undefined;
                 const list = res?.data ?? res?.items ?? res?.bookings ?? [];
                 setBookings(Array.isArray(list) ? list : []);
                 setAuthError(false);

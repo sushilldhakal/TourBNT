@@ -25,6 +25,7 @@ export interface PricingOption {
 }
 
 export interface PricingOptionPreset {
+  id: string;
   _id: string;
   userId: string;
   name: string;
@@ -39,6 +40,7 @@ export interface PricingOptionPreset {
 }
 
 export interface DatePreset {
+  id: string;
   _id: string;
   userId: string;
   name: string;
@@ -59,6 +61,7 @@ export interface DatePreset {
 }
 
 export interface PaxPreset {
+  id: string;
   _id: string;
   userId: string;
   name: string;
@@ -77,6 +80,7 @@ export interface PaxPreset {
 }
 
 export interface DiscountPreset {
+  id: string;
   _id: string;
   userId: string;
   name: string;
@@ -97,6 +101,7 @@ export interface DiscountPreset {
 }
 
 export interface ContentPreset {
+  id: string;
   _id: string;
   userId: string;
   name: string;
@@ -113,6 +118,7 @@ export interface ContentPreset {
 }
 
 export interface ItineraryPreset {
+  id: string;
   _id: string;
   userId: string;
   name: string;
@@ -136,6 +142,7 @@ export interface ItineraryPreset {
 }
 
 export interface TourTemplatePreset {
+  id: string;
   _id: string;
   userId: string;
   name: string;
@@ -170,6 +177,7 @@ export interface TourTemplatePreset {
 }
 
 export interface UserTourSettings {
+  id: string;
   _id: string;
   userId: string;
   preferences: {

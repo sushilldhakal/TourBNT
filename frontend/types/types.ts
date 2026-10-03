@@ -66,7 +66,6 @@ export interface Comment {
     post: Post;
     createdAt: string;
     status: "pending" | "approved" | "rejected";
-    id: string;
     approve: boolean;
     created_at: string;
 }
@@ -92,7 +91,8 @@ export interface Category {
 
 export interface CategoryData {
     id: string;
-    id?: string | null;
+    /** Set by normalizeCategories (useCategories.ts); the user-category id the dashboard edits by. */
+    _id?: string;
     name: string;
     description: string;
     imageUrl?: string;
@@ -255,24 +255,9 @@ export interface DateRange {
 
 // Tour Dates and Departure types
 // FINAL, CLEAN TourDates structure - lock this
-export interface TourDates {
-    type: 'flexible' | 'fixed' | 'multiple';
-
-    days?: number;
-    nights?: number;
-
-     // For fixed type
-     dateRange?: DateRange;
-
-     // For multiple type
-     departures?: Departure[];
- 
-     // Recurrence
-     recurrence?: RecurrenceConfig; // Use the RecurrenceConfig interface below
- 
-     selectedPricingOptions?: string[];
-     capacity?: number; // ADD THIS for fixed dates
-}
+// Tour dates as the server stores them (see server processTourDatesData).
+import type { TourDates, Departure, Itinerary as TourItineraryDay } from '@/lib/types';
+export type { TourDates, Departure };
 
 export interface RecurrenceConfig {
     enabled: boolean;
@@ -280,14 +265,6 @@ export interface RecurrenceConfig {
     endDate?: string; // Date string
 }
 
-export interface Departure {
-    id: string; // MAKE REQUIRED
-    label: string;
-    dateRange: DateRange;
-    selectedPricingOptions?: string[];
-    recurrence?: RecurrenceConfig; // ADD THIS
-    capacity?: number;
-}
 
 // Pax Range types
 export interface PaxRange {
@@ -416,15 +393,7 @@ export interface Tour {
     }>;
 
     // Itinerary - UPDATE structure
-    itinerary?: Array<{
-        _id?: string;
-        day?: string;
-        title: string;
-        description: string;
-        dateTime?: string;
-        date?: string;
-        destination?: string;
-    }>;
+    itinerary?: TourItineraryDay[];
 
     // FAQs - UPDATE structure
     faqs?: Array<{

@@ -237,7 +237,7 @@ const TourFaqs = () => {
                                     </table>
                                 </div>
                             )
-                        ) : faqs?.length ? (
+                        ) : faqs?.data?.length ? (
                             <div className="text-center py-8">
                                 <Search className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                                 <h3 className="font-medium text-lg mb-1">No matching FAQs found</h3>
