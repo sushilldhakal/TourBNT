@@ -12,7 +12,6 @@ interface SubscriberBannerProps {
     setEmail: (email: string) => void;
     handleSubscribe: (event: React.FormEvent<HTMLFormElement>) => void;
     mutation: UseMutationResult<any, Error, string, unknown>;
-    isFixed: boolean;
 }
 
 export default function SubscriberBanner({
@@ -20,12 +19,11 @@ export default function SubscriberBanner({
     setEmail,
     handleSubscribe,
     mutation,
-    isFixed
 }: SubscriberBannerProps) {
     return (
         <div
-            className={`w-full min-h-[400px] md:min-h-[500px] flex items-center justify-center relative transition-all duration-300 ${isFixed ? 'sticky bottom-0 left-0 right-0 z-0' : 'relative'
-                }`}
+            // Always sticky, but only within the footer's wrapper (see Footer): it slides up behind the footer.
+            className="sticky bottom-0 z-0 w-full min-h-[400px] md:min-h-[500px] flex items-center justify-center"
             style={{
                 backgroundImage: 'url(/subscriber.jpg)',
                 backgroundSize: 'cover',

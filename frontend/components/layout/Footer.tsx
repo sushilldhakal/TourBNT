@@ -26,7 +26,6 @@ const SubscriberBanner = dynamic(() => import('./SubscriberBanner'), {
 
 export function Footer() {
     const [email, setEmail] = useState('');
-    const [isSubscriberFixed, setIsSubscriberFixed] = useState(false);
     const [showSubscriberBanner, setShowSubscriberBanner] = useState(false);
     const { toast } = useToast();
     const footerRef = useRef<HTMLElement>(null);
@@ -54,32 +53,23 @@ export function Footer() {
         }
     });
 
-    // Scroll detection - also triggers subscriber banner load
+    // Load the subscriber banner once the footer comes into view (it is code-split). Where the banner sits is
+    // pure CSS (see the wrapper below), so a late or missed check only delays the banner, never misplaces it.
     useEffect(() => {
-        const handleScroll = () => {
-            if (footerRef.current) {
-                const footerRect = footerRef.current.getBoundingClientRect();
-                const footerBottom = footerRect.bottom;
-                const windowHeight = window.innerHeight;
-
-                // Load subscriber banner when footer comes into view
-                if (footerRect.top < windowHeight && !showSubscriberBanner) {
-                    setShowSubscriberBanner(true);
-                }
-
-                if (footerBottom <= windowHeight) {
-                    setIsSubscriberFixed(true);
-                } else {
-                    setIsSubscriberFixed(false);
-                }
-            }
+        if (showSubscriberBanner) return;
+        const check = () => {
+            const footer = footerRef.current;
+            if (footer && footer.getBoundingClientRect().top < window.innerHeight) setShowSubscriberBanner(true);
         };
-
-        window.addEventListener('scroll', handleScroll);
-        handleScroll();
-
-        return () => window.removeEventListener('scroll', handleScroll);
-    }, [showSubscriberBanner]);
+        window.addEventListener('scroll', check, { passive: true });
+        window.addEventListener('resize', check);
+        check();
+        return () => {
+            window.removeEventListener('scroll', check);
+            window.removeEventListener('resize', check);
+        };
+        // Re-run once the real footer (with the ref) replaces the loading placeholder.
+    }, [isLoading, showSubscriberBanner]);
 
     const handleSubscribe = (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
@@ -98,7 +88,10 @@ export function Footer() {
     }
 
     return (
-        <>
+        // The banner is `sticky bottom-0` inside this wrapper, so as the footer scrolls into view the banner slides
+        // up behind it (the footer is opaque and above it). A sticky element can't leave its parent, so the banner
+        // can never cover the page content above the footer, whatever the page height or scroll position.
+        <div className="relative">
             <footer ref={footerRef} className="relative z-20 bg-secondary pt-20 pb-5 lg:pt-[120px] lg:pb-5 w-full">
                 <ContentContainer className="px-4">
                     <div className="flex flex-wrap -mx-4">
@@ -220,10 +213,9 @@ export function Footer() {
                     setEmail={setEmail}
                     handleSubscribe={handleSubscribe}
                     mutation={mutation}
-                    isFixed={isSubscriberFixed}
                 />
             )}
-        </>
+        </div>
     );
 }
 
