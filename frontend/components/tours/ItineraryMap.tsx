@@ -13,6 +13,9 @@ const KIND = {
     stay: { color: '#15803d', label: 'Overnight stay' },
 } as const;
 
+/** Closest the map zooms when fitting the route: about town level, so a stay in one place still shows its area. */
+const MAX_FIT_ZOOM = 12;
+
 const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
 
 const pinIcon = (stop: TourRouteStop) =>
@@ -58,7 +61,8 @@ export default function ItineraryMap({ days }: { days: TourRouteDay[] }) {
         const bounds = L.latLngBounds(latlngs);
         boundsRef.current = bounds;
         if (latlngs.length === 1) map.setView(latlngs[0], 9);
-        else map.fitBounds(bounds, { padding: [40, 40] });
+        // Cap the zoom: when every stop is in one town the bounds are tiny and would zoom right into a field.
+        else map.fitBounds(bounds, { padding: [40, 40], maxZoom: MAX_FIT_ZOOM });
 
         return () => {
             map.remove();
@@ -74,7 +78,7 @@ export default function ItineraryMap({ days }: { days: TourRouteDay[] }) {
         if (expanded) map.scrollWheelZoom.enable();
         else map.scrollWheelZoom.disable();
         map.invalidateSize();
-        if (boundsRef.current && days.flatMap((d) => d.stops).length > 1) map.fitBounds(boundsRef.current, { padding: expanded ? [80, 80] : [40, 40] });
+        if (boundsRef.current && days.flatMap((d) => d.stops).length > 1) map.fitBounds(boundsRef.current, { padding: expanded ? [80, 80] : [40, 40], maxZoom: MAX_FIT_ZOOM });
     }, [expanded, days]);
 
     useEffect(() => {

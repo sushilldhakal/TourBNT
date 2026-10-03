@@ -342,9 +342,12 @@ function ItineraryItem({ id, index, onRemove, onDragStart, onDragOver, onDrop }:
                     </Label>
                     <Input
                         id={`itinerary.options.0.${index}.destination`}
-                        placeholder="e.g., Paris, France"
+                        placeholder="e.g., Pokhara"
                         {...register(`itinerary.options.0.${index}.destination`)}
                     />
+                    <p className="text-xs text-muted-foreground">
+                        Where the day is spent. It places this day on the tour&apos;s route map. Leave it empty if the day stays in the same place as the day before.
+                    </p>
                 </div>
 
                 {/* Logistics — link a registered TourBNT business, or type a plain name if it's not registered */}

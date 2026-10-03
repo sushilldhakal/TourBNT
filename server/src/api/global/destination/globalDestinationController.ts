@@ -5,6 +5,23 @@ import type { SellerInfo } from '../../user/userTypes';
 import * as notifications from '../../notifications/notificationController';
 
 // Get all approved destinations (public)
+/**
+ * The map position sent with a destination: `coordinates: {latitude, longitude}` (JSON) or flat `latitude` /
+ * `longitude` fields (the dashboard form sends multipart, where nested objects don't survive).
+ * undefined = none sent; null = sent but not a valid position.
+ */
+function readCoordinates(body: Record<string, any>): { latitude: number; longitude: number } | null | undefined {
+  let c = body?.coordinates;
+  if (typeof c === 'string') { try { c = JSON.parse(c); } catch { return null; } }
+  const rawLat = c?.latitude ?? body?.latitude;
+  const rawLng = c?.longitude ?? body?.longitude;
+  if ((rawLat === undefined || rawLat === '') && (rawLng === undefined || rawLng === '')) return undefined;
+  const latitude = Number(rawLat);
+  const longitude = Number(rawLng);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) return null;
+  return { latitude, longitude };
+}
+
 export const getApprovedDestinations = async (req: Request, res: Response): Promise<void> => {
   try {
     const { country, region, search } = req.query;
@@ -222,7 +239,11 @@ export const getFavoriteDestinations = async (req: Request, res: Response) => {
 // Submit new destination for approval
 export const submitDestination = async (req: Request, res: Response) => {
   try {
-    const { name, description, reason, coverImage, country, region, city, coordinates, popularity, metadata } = req.body;
+    const { name, description, reason, coverImage, country, region, city, popularity, metadata } = req.body;
+    const coordinates = readCoordinates(req.body);
+    if (coordinates === null) {
+      return res.status(400).json({ success: false, message: 'The map position is not valid. Place the pin on the map again.' });
+    }
     const createdBy = req.user?.id;
 
     if (!createdBy) {
@@ -565,7 +586,11 @@ export const updateDestination = async (req: Request, res: Response) => {
       return res.status(403).json({ success: false, message: 'You can only update destinations you created' });
     }
 
-    const { name, description, coverImage, country, region, city, coordinates, isActive, popularity, metadata } = req.body;
+    const { name, description, coverImage, country, region, city, isActive, popularity, metadata } = req.body;
+    const coordinates = readCoordinates(req.body);
+    if (coordinates === null) {
+      return res.status(400).json({ success: false, message: 'The map position is not valid. Place the pin on the map again.' });
+    }
 
     if (!name || !description || !country) {
       const missingFields = [];

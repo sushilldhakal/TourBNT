@@ -21,6 +21,9 @@ import { Gallery } from "@/components/dashboard/gallery/Gallery";
 import type { JSONContent } from "novel";
 
 const NovelEditor = dynamic(() => import("@/components/dashboard/editor/NovelEditor"), { ssr: false });
+// Leaflet needs the browser.
+const LocationPicker = dynamic(() => import("./LocationPicker"), { ssr: false, loading: () => <div className="h-64 w-full animate-pulse rounded-lg bg-muted" /> });
+import type { LatLng } from "./LocationPicker";
 import { PlaceResult } from "@/lib/hooks/useGooglePlacesAutocomplete";
 import { GooglePlacesInput } from "@/components/GooglePlacesInput";
 import Image from "next/image";
@@ -35,6 +38,8 @@ const AddDestination = ({ onDestinationAdded }: AddDestinationProps) => {
     const isAdmin = useAuth().userRole === 'admin';
     const { invalidateDestinations } = useCacheManager();
     const [showManualEntry, setShowManualEntry] = useState(false);
+    // Where the destination is on the map (route maps use it). Set by the search box or by clicking the map.
+    const [position, setPosition] = useState<LatLng | null>(null);
 
     const [dialogOpen, setDialogOpen] = useState(false);
     const [descriptionContent, setDescriptionContent] = useState<JSONContent>({
@@ -66,6 +71,7 @@ const AddDestination = ({ onDestinationAdded }: AddDestinationProps) => {
                 description: "The destination has been submitted successfully.",
             });
             form.reset();
+            setPosition(null);
             invalidateDestinations({ my: true, admin: true, pending: true, approved: true });
             onDestinationAdded(created);
         },
@@ -85,6 +91,7 @@ const AddDestination = ({ onDestinationAdded }: AddDestinationProps) => {
         form.setValue('city', place.city, { shouldDirty: true });
         form.setValue('region', place.state, { shouldDirty: true });
         form.setValue('country', place.country, { shouldDirty: true });
+        if (place.lat != null && place.lng != null) setPosition({ latitude: place.lat, longitude: place.lng });
 
         // If name is empty, suggest the city name
         if (!form.getValues('name')) {
@@ -104,6 +111,10 @@ const AddDestination = ({ onDestinationAdded }: AddDestinationProps) => {
         formData.append('region', values.region);
         formData.append('city', values.city);
         formData.append('popularity', values.popularity.toString());
+        if (position) {
+            formData.append('latitude', String(position.latitude));
+            formData.append('longitude', String(position.longitude));
+        }
         values.featuredTours.forEach((id) => formData.append('featuredTours[]', id));
         await destinationMutation.mutateAsync(formData);
     };
@@ -316,7 +327,11 @@ const AddDestination = ({ onDestinationAdded }: AddDestinationProps) => {
                                         </div>
                                     )}
 
-
+                                    {/* Map position */}
+                                    <div className="space-y-2">
+                                        <FormLabel className="text-sm font-medium">Location on the map</FormLabel>
+                                        <LocationPicker value={position} onChange={setPosition} />
+                                    </div>
 
                                     {/* Active toggle */}
                                     <FormField

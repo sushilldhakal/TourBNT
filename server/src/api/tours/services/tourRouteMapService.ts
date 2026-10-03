@@ -100,9 +100,14 @@ export async function buildTourRouteMap(tourId: string) {
   const townVisits = new Map<string, number>();
   const days: RouteDay[] = [];
   const unresolved: string[] = [];
+  // A day without its own destination is where the tour already is: the previous day's place, or for the
+  // first day the tour's main destination. So a tour whose days name no place still gets a map.
+  let previousPlace = tour.destinationId ?? '';
   for (let i = 0; i < itinerary.length; i++) {
     const d = itinerary[i];
-    const placeRaw = d.destination != null ? String(d.destination).trim() : '';
+    const ownPlace = d.destination != null ? String(d.destination).trim() : '';
+    const placeRaw = ownPlace || previousPlace;
+    previousPlace = placeRaw;
     const place = destById.get(placeRaw)?.name ?? placeRaw;
     if (!place) continue;
     const base = await resolvePlace(placeRaw);

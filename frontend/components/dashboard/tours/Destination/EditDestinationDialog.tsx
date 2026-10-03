@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { useForm } from "react-hook-form";
+import type { LatLng } from "./LocationPicker";
+// Leaflet needs the browser.
+const LocationPicker = dynamic(() => import("./LocationPicker"), { ssr: false, loading: () => <div className="h-64 w-full animate-pulse rounded-lg bg-muted" /> });
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -23,6 +26,7 @@ export const EditDestinationDialog = ({ destinationId, open, onOpenChange, onSuc
 
     const [dialogOpen, setDialogOpen] = useState(false);
     const [descriptionContent, setDescriptionContent] = useState<DescriptionContent | string>('');
+    const [position, setPosition] = useState<LatLng | null>(null);
 
     const form = useForm<{
         name: string;
@@ -69,6 +73,10 @@ export const EditDestinationDialog = ({ destinationId, open, onOpenChange, onSuc
             reason: destination.reason || '',
             featuredTours: (destination.featuredTours || []) as string[],
         });
+        const d = destination as { latitude?: number | null; longitude?: number | null; coordinates?: { latitude?: number; longitude?: number } };
+        const lat = d.latitude ?? d.coordinates?.latitude;
+        const lng = d.longitude ?? d.coordinates?.longitude;
+        setPosition(typeof lat === 'number' && typeof lng === 'number' ? { latitude: lat, longitude: lng } : null);
         if (destination.description) {
             try {
                 const isLikelyJSON = destination.description.trim().startsWith('{') && destination.description.trim().endsWith('}');
@@ -107,6 +115,10 @@ export const EditDestinationDialog = ({ destinationId, open, onOpenChange, onSuc
         formData.append('country', values.country || '');
         formData.append('region', values.region || '');
         formData.append('city', values.city || '');
+        if (position) {
+            formData.append('latitude', String(position.latitude));
+            formData.append('longitude', String(position.longitude));
+        }
         formData.append('reason', values.reason || '');
 
         // If user is not admin, set approval status to pending for re-approval
@@ -230,6 +242,12 @@ export const EditDestinationDialog = ({ destinationId, open, onOpenChange, onSuc
                                                     </FormItem>
                                                 )}
                                             />
+                                        </div>
+
+                                        {/* Map position: used for the route maps on tour pages */}
+                                        <div className="space-y-2">
+                                            <p className="text-xs font-medium text-muted-foreground">Location on the map</p>
+                                            {open && <LocationPicker value={position} onChange={setPosition} />}
                                         </div>
 
                                         {/* Reason Field inside Location Details */}
