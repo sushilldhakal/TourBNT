@@ -32,7 +32,6 @@ import { metricsMiddleware } from "./middlewares/metricsMiddleware";
 import { generalLimiter } from "./middlewares/rateLimiter";
 import swaggerUi from 'swagger-ui-express';
 import { getSwaggerSpec } from './config/swagger';
-import { logger } from './utils/logger';
 import cookieParser from 'cookie-parser';
 import { TRUST_PROXY } from './config/trustProxy';
 import helmet from 'helmet';
@@ -153,10 +152,18 @@ app.use('/api/v2/tours', tourRouterV2);
 
 // Local-only route list. Production does not expose the API surface.
 if (config.env !== 'production') {
-app.get('/debug/routes', (req, res) => {
-  const routes: any[] = [];
+/** The parts of Express's (untyped, internal) router stack this listing reads. */
+interface RouterLayer {
+  name?: string;
+  regexp: RegExp;
+  route?: { path: string; methods: Record<string, boolean> };
+  handle: { stack?: RouterLayer[] };
+}
 
-  app._router.stack.forEach((middleware: any) => {
+app.get('/debug/routes', (req, res) => {
+  const routes: Array<{ path: string; method: string }> = [];
+
+  (app._router.stack as RouterLayer[]).forEach((middleware) => {
     if (middleware.route) {
       // Routes registered directly on the app
       routes.push({
@@ -165,7 +172,7 @@ app.get('/debug/routes', (req, res) => {
       });
     } else if (middleware.name === 'router') {
       // Router middleware
-      middleware.handle.stack.forEach((handler: any) => {
+      (middleware.handle.stack ?? []).forEach((handler) => {
         if (handler.route) {
           const path = handler.route.path;
           const baseUrl = middleware.regexp.toString()

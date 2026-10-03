@@ -1,5 +1,5 @@
 import { db, conversations, conversationParticipants, conversationMessages, users, tours, tourAuthors, businessPartners } from '../../db';
-import { eq, and, or, inArray, desc, asc, count, sql } from 'drizzle-orm';
+import { eq, and, or, inArray, desc, asc, count, sql, type SQLWrapper } from 'drizzle-orm';
 import createHttpError from 'http-errors';
 import { USER_ROLES, type UserRole } from '../../utils/roles';
 import { notifyEnquiryCreated } from '../../services/emailService';
@@ -60,7 +60,7 @@ async function validateUserIds(userIds: string[]): Promise<string[]> {
  * membership). `convIds` may be a plain id list OR a sub-select of the page's ids, so list() can run
  * this in the same round trip as the page query itself.
  */
-function loadConversationRelations(convIds: string[] | any, requester: RequesterUser) {
+function loadConversationRelations(convIds: string[] | SQLWrapper, requester: RequesterUser) {
   return Promise.all([
     db.select({ ...userSummary, role: users.role }).from(users).where(inArray(users.id, db.select({ id: sql<string>`unnest(array[${conversations.fromUserId}, ${conversations.assignedTo}])` }).from(conversations).where(inArray(conversations.id, convIds)))),
     db.select(tourSummary).from(tours).where(inArray(tours.id, db.select({ id: conversations.tourId }).from(conversations).where(inArray(conversations.id, convIds)))),

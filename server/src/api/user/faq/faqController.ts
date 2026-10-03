@@ -123,7 +123,7 @@ export const updateFaqs = async (req: Request, res: Response, next: NextFunction
       .where(sql`EXISTS (SELECT 1 FROM jsonb_array_elements(${tours.faqs}) elem WHERE elem->>'faqId' = ${faqId})`);
 
     for (const tour of affectedTours) {
-      const updatedTourFaqs = (tour.faqs as any[]).map((f) =>
+      const updatedTourFaqs = ((tour.faqs ?? []) as Array<{ faqId?: string; question?: string; answer?: string }>).map((f) =>
         f.faqId === faqId ? { ...f, question: updatedFaq.question, answer: updatedFaq.answer } : f
       );
       await db.update(tours).set({ faqs: updatedTourFaqs, updatedAt: new Date() }).where(eq(tours.id, tour.id));

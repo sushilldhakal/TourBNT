@@ -1,6 +1,6 @@
 import { NextFunction, Request, Response } from "express";
 import createHttpError from "http-errors";
-import { JwtPayload, verify, sign, decode } from "jsonwebtoken";
+import { JwtPayload, verify, sign } from "jsonwebtoken";
 import { config } from "../config/config";
 import { HTTP_STATUS } from "../utils/apiResponse";
 import { AuthUser } from "../types/express";
@@ -26,9 +26,9 @@ const authenticate = async (req: Request, res: Response, next: NextFunction) => 
 
     try {
       decoded = verify(token, config.jwtSecret) as JwtPayload & { keepMeSignedIn?: boolean };
-    } catch (verifyError: any) {
+    } catch (verifyError) {
       // Only handle TokenExpiredError - other errors mean the token is invalid
-      if (verifyError.name === 'TokenExpiredError') {
+      if (verifyError instanceof Error && verifyError.name === 'TokenExpiredError') {
         try {
           // Verify signature even for expired tokens (ignore expiration check)
           // This ensures the token was originally valid, just expired

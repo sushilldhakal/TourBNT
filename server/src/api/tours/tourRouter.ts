@@ -729,7 +729,7 @@ router.patch(
   updateTour
 );
 
-router.delete('/:tourId', authenticate, authorizeRoles('admin', 'seller') as any, validateObjectId(), deleteTour);
+router.delete('/:tourId', authenticate, authorizeRoles('admin', 'seller'), validateObjectId(), deleteTour);
 
 // (PATCH /:tourId/bookings/increment was removed: it let anyone raise a tour's booking count.)
 

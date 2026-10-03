@@ -33,7 +33,7 @@ postRouter.get('/',
   getAllPosts
 );
 
-postRouter.post('/', uploadNone, authenticate as any, authorizeRoles('admin', 'seller') as any, addPost);
+postRouter.post('/', uploadNone, authenticate, authorizeRoles('admin', 'seller'), addPost);
 
 postRouter.get('/user', authenticate, getAllUserPosts);
 postRouter.get('/user/:userId', authenticate, getUserPost);

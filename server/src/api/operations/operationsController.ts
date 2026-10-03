@@ -113,13 +113,13 @@ export const getOperationsRequests = async (req: Request, res: Response, next: N
           r.status, r.capacity_confirmed as "capacityConfirmed", r.response_notes as "responseNotes", r.counter_units as "counterUnits", r.counter_date::text as "counterDate",
           r.counter_notes as "counterNotes", r.hold_expires_at as "holdExpiresAt", r.respond_by_at as "respondByAt", r.updated_at as "updatedAt"
         ${from} where ${where} order by r.service_date asc, r.created_at desc limit ${limit} offset ${offset}`),
-      db.execute(sql`select count(*)::int as value ${from} where ${where}`),
-      db.execute(sql`select r.status, count(*)::int as value from itinerary_partner_requests r group by r.status`),
+      db.execute<{ value: number }>(sql`select count(*)::int as value ${from} where ${where}`),
+      db.execute<{ status: string; value: number }>(sql`select r.status, count(*)::int as value from itinerary_partner_requests r group by r.status`),
     ]);
 
-    const totalItems = Number((totalRows as any)[0]?.value ?? 0);
+    const totalItems = Number(totalRows[0]?.value ?? 0);
     const counts: Record<string, number> = {};
-    for (const r of statusRows as any[]) counts[r.status] = Number(r.value);
+    for (const r of statusRows) counts[r.status] = Number(r.value);
     return res.json({ success: true, items: rows, counts, pagination: { page, limit, totalItems, totalPages: Math.ceil(totalItems / limit) } });
   } catch (error) {
     next(error);
@@ -161,10 +161,10 @@ export const getOperationsTrips = async (req: Request, res: Response, next: Next
         ) rq on true
         where true ${search}
         order by tr.departure asc limit ${limit} offset ${offset}`),
-      db.execute(sql`${trips} select count(*)::int as value from trips tr join tours t on t.id = tr.tour_id where true ${search}`),
+      db.execute<{ value: number }>(sql`${trips} select count(*)::int as value from trips tr join tours t on t.id = tr.tour_id where true ${search}`),
     ]);
 
-    const totalItems = Number((totalRows as any)[0]?.value ?? 0);
+    const totalItems = Number(totalRows[0]?.value ?? 0);
     return res.json({ success: true, items: rows, pagination: { page, limit, totalItems, totalPages: Math.ceil(totalItems / limit) } });
   } catch (error) {
     next(error);
@@ -194,13 +194,13 @@ export const getOperationsSuppliers = async (req: Request, res: Response, next: 
           (select count(*) from itinerary_partner_requests r where r.business_partner_id = bp.id and r.status = 'confirmed')::int as "confirmedRequests",
           (select count(*) from itinerary_partner_requests r where r.business_partner_id = bp.id and r.status in ('declined','expired'))::int as "problemRequests"
         from business_partners bp where ${where} order by "openRequests" desc, bp.name asc limit ${limit} offset ${offset}`),
-      db.execute(sql`select count(*)::int as value from business_partners bp where ${where}`),
-      db.execute(sql`select bp.type, count(*)::int as value from business_partners bp where bp.approval_status = 'approved' group by bp.type`),
+      db.execute<{ value: number }>(sql`select count(*)::int as value from business_partners bp where ${where}`),
+      db.execute<{ type: string; value: number }>(sql`select bp.type, count(*)::int as value from business_partners bp where bp.approval_status = 'approved' group by bp.type`),
     ]);
 
-    const totalItems = Number((totalRows as any)[0]?.value ?? 0);
+    const totalItems = Number(totalRows[0]?.value ?? 0);
     const counts: Record<string, number> = {};
-    for (const r of typeRows as any[]) counts[r.type] = Number(r.value);
+    for (const r of typeRows) counts[r.type] = Number(r.value);
     return res.json({ success: true, items: rows, counts, pagination: { page, limit, totalItems, totalPages: Math.ceil(totalItems / limit) } });
   } catch (error) {
     next(error);
@@ -267,18 +267,18 @@ export const getOperationsAttention = async (req: Request, res: Response, next: 
           case r.status when 'declined' then 0 when 'expired' then 1 when 'countered' then 2 when 'pending' then 3 else 4 end,
           r.service_time asc nulls first, t.title asc
         limit ${limit} offset ${offset}`),
-      db.execute(sql`select count(*)::int as value ${from} where ${where}`),
+      db.execute<{ value: number }>(sql`select count(*)::int as value ${from} where ${where}`),
       // Counts for the filter chips: everything open for this person, ignoring the chips' own filter.
-      db.execute(sql`select r.status, count(*)::int as value,
+      db.execute<{ status: string; value: number; within7: number }>(sql`select r.status, count(*)::int as value,
           count(*) filter (where r.service_date < current_date + 7)::int as "within7"
         ${from} where ${baseWhere} group by r.status`),
       db.execute(sql`select distinct t.id, t.title, t.code ${from} where ${baseWhere} order by t.title`),
     ]);
 
-    const totalItems = Number((totalRows as any)[0]?.value ?? 0);
+    const totalItems = Number(totalRows[0]?.value ?? 0);
     const counts: Record<string, number> = {};
     let within7Days = 0;
-    for (const r of statusRows as any[]) { counts[r.status] = Number(r.value); within7Days += Number(r.within7); }
+    for (const r of statusRows) { counts[r.status] = Number(r.value); within7Days += Number(r.within7); }
     return res.json({
       success: true,
       items: rows,

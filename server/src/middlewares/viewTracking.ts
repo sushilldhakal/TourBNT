@@ -10,12 +10,12 @@ export type ViewTrackableResource = 'tour' | 'review' | 'post';
  * Logger interface for view tracking errors
  */
 interface Logger {
-    error(message: string, meta?: any): void;
+    error(message: string, meta?: Record<string, unknown>): void;
 }
 
 // Use the application logger
 const defaultLogger: Logger = {
-    error: (message: string, meta?: any) => {
+    error: (message: string, meta?: Record<string, unknown>) => {
         appLogger.error(message, meta);
     }
 };

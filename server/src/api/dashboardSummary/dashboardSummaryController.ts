@@ -10,7 +10,7 @@ import { sendSuccess } from '../../utils/apiResponse';
  * listings (requests, inventory, reviews, ads). GET /api/v1/dashboard/summary
  */
 
-const rows = async (q: ReturnType<typeof sql>) => (await db.execute(q)) as unknown as any[];
+const rows = async (q: ReturnType<typeof sql>) => Array.from(await db.execute<Record<string, unknown>>(q));
 const one = async (q: ReturnType<typeof sql>) => (await rows(q))[0] ?? {};
 const n = (v: unknown) => Number(v ?? 0);
 

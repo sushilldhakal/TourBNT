@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { db, reviews, reviewReplies, tours, tourAuthors, users, bookings } from '../../db';
-import { eq, and, or, ilike, desc, asc, avg, count, inArray, sql } from 'drizzle-orm';
+import { eq, and, or, ilike, desc, asc, avg, count, inArray, sql, type SQLWrapper } from 'drizzle-orm';
 import { sendSuccess } from '../../utils/apiResponse';
 import { invalidateTour } from '../../services/cacheInvalidation';
 
@@ -28,7 +28,7 @@ async function recalculateTourRating(tourId: string) {
   await invalidateTour(tourId, { extraFamilies: ['reviews'] });
 }
 
-async function withReplies(reviewIds: string[] | any) {
+async function withReplies(reviewIds: string[] | SQLWrapper) {
   // Accepts explicit ids or a sub-select of ids (so it can run in the same round trip as the page).
   if (Array.isArray(reviewIds) && reviewIds.length === 0) return new Map<string, unknown[]>();
   const rows = await db

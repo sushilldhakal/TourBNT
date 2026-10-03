@@ -29,7 +29,7 @@
   "author": "sushill <sus.hill.dhakal@gmail.com>",
   "license": "ISC",
   "devDependencies": {
-    "@eslint/js": "^8.57.0",
+    "@eslint/js": "^9.39.0",
     "@types/bcrypt": "^5.0.2",
     "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.17",
@@ -39,10 +39,8 @@
     "@types/node": "^20.14.9",
     "@types/swagger-jsdoc": "^6.0.4",
     "@types/swagger-ui-express": "^4.1.8",
-    "@typescript-eslint/eslint-plugin": "^8.1.0",
-    "@typescript-eslint/parser": "^8.1.0",
     "drizzle-kit": "^0.31.11",
-    "eslint": "^8.57.0",
+    "eslint": "^9.39.0",
     "fast-check": "^4.4.0",
     "globals": "^15.7.0",
     "nodemon": "^3.1.4",
@@ -50,7 +48,7 @@
     "ts-node-dev": "^2.0.0",
     "tsx": "^4.19.2",
     "typescript": "^5.5.3",
-    "typescript-eslint": "^7.15.0"
+    "typescript-eslint": "^8.46.0"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1141.0",

@@ -69,7 +69,7 @@ export async function listAgencies(opts: { page: number; limit: number; search?:
   const { page, limit, search } = opts;
   const like = search ? `%${search.replace(/[%_\\]/g, '\\$&')}%` : null;
 
-  const rows = await db.execute(sql`
+  const rows = await db.execute<Record<string, unknown>>(sql`
     SELECT u.id,
            COALESCE(NULLIF(TRIM(u.seller_info->>'companyName'), ''), u.name) AS name,
            u.seller_info->>'businessDescription' AS description,
@@ -86,7 +86,7 @@ export async function listAgencies(opts: { page: number; limit: number; search?:
     ORDER BY "reviewCount" DESC, name ASC
   `);
 
-  const all = (rows as unknown as { rows?: any[] }).rows ?? (rows as unknown as any[]);
+  const all = Array.from(rows);
   const items = all.slice((page - 1) * limit, page * limit).map((r) => ({
     id: r.id as string,
     name: r.name as string,

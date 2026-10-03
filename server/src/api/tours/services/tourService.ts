@@ -1,7 +1,7 @@
 import { db, tours, tourCategories, tourAuthors, globalCategories, users, facts as factsTable, tourItineraryPartners, businessPartners, businessPartnerUnitTypes } from '../../../db';
 import { eq, and, or, ilike, gte, lte, gt, desc, asc, sql, inArray, count, getTableColumns, type SQL } from 'drizzle-orm';
 import createHttpError from 'http-errors';
-import { Tour } from '../tourTypes';
+import { Tour, isItineraryRole, type StoredItineraryDay, type StoredTourFact } from '../tourTypes';
 import { ITINERARY_ROLE_TO_PARTNER_TYPES } from '../../businessPartners/businessPartnerTypes';
 import { cacheGetWithEpoch, cacheSetIfEpoch, getRedisClient } from '../../../config/redisClient';
 import { invalidateTour } from '../../../services/cacheInvalidation';
@@ -17,7 +17,6 @@ async function reconcileItineraryRequests(tourId: string) {
   }
 }
 
-type TourRow = typeof tours.$inferSelect;
 
 /** Simple numeric pagination params — tours never use the "all"/hybrid mode. */
 interface TourPaginationParams {
@@ -39,11 +38,26 @@ const {
   ...LIST_COLUMNS
 } = getTableColumns(tours);
 
+type TourRow = typeof tours.$inferSelect;
+/** A tour with its authors and categories, as getTourById returns (and caches) it. */
+interface AuthorSummary { id: string; name: string; email: string; roles: string }
+interface CategorySummary { id: string; name: string; description: string }
+type TourDetail = TourRow & { author: AuthorSummary[]; category: CategorySummary[] };
+
+/** Columns a tour list may be sorted by (the API's `sort` names; `rating` is the average review rating). */
+const TOUR_SORT_COLUMNS = {
+  createdAt: tours.createdAt,
+  price: tours.price,
+  title: tours.title,
+  views: tours.views,
+  rating: tours.averageRating,
+} as const;
+
 const AUTHOR_COLUMNS = { id: users.id, name: users.name, email: users.email, roles: users.role } as const;
 const CATEGORY_COLUMNS = { id: globalCategories.id, name: globalCategories.name, description: globalCategories.description } as const;
 
 /** Batches author/category lookups for a set of tours and merges them in. */
-async function attachRelations<T extends { id: string }>(rows: T[]): Promise<any[]> {
+async function attachRelations<T extends { id: string }>(rows: T[]): Promise<Array<T & { author: AuthorSummary[]; category: CategorySummary[] }>> {
   if (rows.length === 0) return [];
   const tourIds = rows.map((t) => t.id);
 
@@ -52,14 +66,14 @@ async function attachRelations<T extends { id: string }>(rows: T[]): Promise<any
     db.select({ tourId: tourCategories.tourId, category: CATEGORY_COLUMNS }).from(tourCategories).innerJoin(globalCategories, eq(tourCategories.categoryId, globalCategories.id)).where(inArray(tourCategories.tourId, tourIds)),
   ]);
 
-  const authorsByTour = new Map<string, unknown[]>();
+  const authorsByTour = new Map<string, AuthorSummary[]>();
   for (const { tourId, author } of authorRows) {
     const list = authorsByTour.get(tourId) || [];
     list.push(author);
     authorsByTour.set(tourId, list);
   }
 
-  const categoriesByTour = new Map<string, unknown[]>();
+  const categoriesByTour = new Map<string, CategorySummary[]>();
   for (const { tourId, category } of categoryRows) {
     const list = categoriesByTour.get(tourId) || [];
     list.push(category);
@@ -102,11 +116,11 @@ async function syncTourItineraryPartners(tourId: string, itinerary: unknown[] | 
   type LinkRow = { tourId: string; dayId: string; role: 'transport' | 'accommodation' | 'guide' | 'meals' | 'other'; businessPartnerId: string | null; name: string; notes: string | null; sortOrder: number; unitsRequested: number | null; unitType: string | null; unitTypeId: string | null };
   const rows: LinkRow[] = [];
 
-  for (const day of itinerary as any[]) {
+  for (const day of itinerary as StoredItineraryDay[]) {
     const dayId = day?.id;
     if (!dayId || !Array.isArray(day.partners)) continue;
-    day.partners.forEach((p: any, idx: number) => {
-      if (!p || !p.role || !p.name) return;
+    day.partners.forEach((p, idx) => {
+      if (!p || !isItineraryRole(p.role) || !p.name) return;
       rows.push({
         tourId,
         dayId,
@@ -204,11 +218,12 @@ async function syncTourItineraryPartners(tourId: string, itinerary: unknown[] | 
  * partner that's since been deleted or unapproved gracefully degrades to
  * plain text — `businessPartnerId` is dropped but the stored `name` remains.
  */
-async function enrichItineraryPartners(itinerary: unknown): Promise<unknown> {
+async function enrichItineraryPartners(itinerary: unknown[]): Promise<unknown[]> {
   if (!Array.isArray(itinerary)) return itinerary;
+  const days = itinerary as StoredItineraryDay[];
 
   const referencedIds = new Set<string>();
-  for (const day of itinerary as any[]) {
+  for (const day of days) {
     for (const p of day?.partners ?? []) {
       if (p?.businessPartnerId) referencedIds.add(p.businessPartnerId);
     }
@@ -221,15 +236,15 @@ async function enrichItineraryPartners(itinerary: unknown): Promise<unknown> {
     .where(inArray(businessPartners.id, Array.from(referencedIds)));
   const byId = new Map(partnerRows.map((p) => [p.id, p]));
 
-  return (itinerary as any[]).map((day) => {
+  return days.map((day) => {
     if (!Array.isArray(day?.partners)) return day;
     return {
       ...day,
-      partners: day.partners.map((p: any) => {
+      partners: day.partners.map((p) => {
         if (!p?.businessPartnerId) return p;
         const live = byId.get(p.businessPartnerId);
         if (!live || live.approvalStatus !== 'approved') {
-          const { businessPartnerId, ...rest } = p;
+          const { businessPartnerId: _dropped, ...rest } = p;
           return rest;
         }
         return { ...p, name: live.name, businessPartnerSlug: live.slug, businessPartnerType: live.type, businessPartnerRating: live.averageRating, businessPartnerReviewCount: live.reviewCount };
@@ -248,7 +263,7 @@ function splitTourData(tourData: Partial<Tour> & Record<string, unknown>) {
   // Only keep known scalar/jsonb columns — extractTourFields may include
   // fields (like `dates`, `pricing`) that were only used to derive other
   // columns and don't map onto the tours table directly.
-  const columnData: Partial<typeof tours.$inferInsert> = {};
+  const columnData: Record<string, unknown> = {};
   const allowedKeys = new Set([
     'title', 'code', 'excerpt', 'description', 'coverImage', 'file', 'tourStatus', 'outline',
     'destination', 'destinationId', 'itinerary', 'include', 'exclude', 'facts', 'faqs', 'gallery',
@@ -262,13 +277,14 @@ function splitTourData(tourData: Partial<Tour> & Record<string, unknown>) {
   for (const [key, value] of Object.entries(rest)) {
     if (!allowedKeys.has(key) || value === undefined) continue;
     if (key === 'destination') {
-      (columnData as any).destinationId = value || null;
+      columnData.destinationId = value || null;
     } else {
-      (columnData as any)[key] = value;
+      columnData[key] = value;
     }
   }
 
-  return { columnData, categoryIds, authorIds };
+  // Keys are limited to tour columns above; values were shaped by extractTourFields.
+  return { columnData: columnData as Partial<typeof tours.$inferInsert>, categoryIds, authorIds };
 }
 
 export class TourService {
@@ -289,9 +305,9 @@ export class TourService {
       where = and(where, inArray(tours.id, matchingTourIds))!;
     }
 
-    const sortField = sortOptions?.field && (tours as any)[sortOptions.field] ? sortOptions.field : 'createdAt';
+    const sortField = sortOptions?.field && sortOptions.field in TOUR_SORT_COLUMNS ? sortOptions.field as keyof typeof TOUR_SORT_COLUMNS : 'createdAt';
     const sortOrderFn = sortOptions?.order === 'asc' ? asc : desc;
-    const orderColumn = (tours as any)[sortField];
+    const orderColumn = TOUR_SORT_COLUMNS[sortField];
 
     const page = paginationParams.page || 1;
     const limit = paginationParams.limit || 10;
@@ -334,7 +350,7 @@ export class TourService {
   }
 
   static async getTourById(tourId: string) {
-    const { value: cached, epoch } = await cacheGetWithEpoch<any>(TourService.tourCacheKey(tourId));
+    const { value: cached, epoch } = await cacheGetWithEpoch<TourDetail>(TourService.tourCacheKey(tourId));
     if (cached) return cached;
 
     const [tour] = await db.select().from(tours).where(eq(tours.id, tourId)).limit(1);
@@ -347,20 +363,21 @@ export class TourService {
     // Enrich facts with current data from the master facts table.
     const factsArr = Array.isArray(enriched.facts) ? enriched.facts : [];
     if (factsArr.length > 0) {
-      const factIds = factsArr.map((f: any) => f.factId).filter(Boolean);
+      const tourFacts = factsArr as StoredTourFact[];
+      const factIds = tourFacts.map((f) => f.factId).filter((id): id is string => !!id);
       const masterFacts = factIds.length
         ? await db.select().from(factsTable).where(inArray(factsTable.id, factIds))
         : [];
       const masterById = new Map(masterFacts.map((f) => [f.id, f]));
 
-      enriched.facts = factsArr.map((fact: any) => {
+      enriched.facts = tourFacts.map((fact) => {
         const master = fact.factId ? masterById.get(fact.factId) : undefined;
         if (!master) return fact;
         return { ...fact, title: master.name, name: master.name, icon: master.icon, field_type: master.fieldType };
       });
     }
 
-    enriched.itinerary = await enrichItineraryPartners(enriched.itinerary);
+    enriched.itinerary = await enrichItineraryPartners(enriched.itinerary ?? []);
 
     await cacheSetIfEpoch(TourService.tourCacheKey(tourId), enriched, 60, epoch);
     return enriched;

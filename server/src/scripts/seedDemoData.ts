@@ -23,12 +23,14 @@ import { config as dotenvConfig } from 'dotenv';
 import path from 'path';
 import fs from 'fs';
 import { randomUUID } from 'crypto';
-import { sql, eq, inArray } from 'drizzle-orm';
+import { sql, eq, inArray, type SQL } from 'drizzle-orm';
+import type { PgInsertValue, PgTable } from 'drizzle-orm/pg-core';
 import * as S from '../db';
 import { TOUR_CATALOG, MASTER_FACTS, CANCELLATION, INSURANCE, type DiscountSpec, type DaySpec } from './seedData/tourCatalog';
 import { AD_CAMPAIGNS, ADVERTISER_SPECS, type AdCampaign } from './seedData/adCatalog';
 import { tourDescription, bulletDoc } from './seedData/richText';
-import { processPricingOptions, processTourDatesData, processItineraryData, processFaqsData, processLocationData, processPaymentOptions } from '../api/tours/utils/dataProcessors';
+import { processPricingOptions, processTourDatesData, processItineraryData, processFaqsData, processLocationData, processPaymentOptions, type ItineraryDayInput, type ItineraryPartnerInput } from '../api/tours/utils/dataProcessors';
+import { isItineraryRole } from '../api/tours/tourTypes';
 import { calculateBookingPricing } from '../api/bookings/utils/pricingCalculator';
 import { getDefaultCommissionRate, splitBooking } from '../services/payouts';
 
@@ -69,9 +71,12 @@ const avatar = (i: number) => `https://i.pravatar.cc/256?img=${(i % 70) + 1}`;
 const phone = () => `+977-98${int(10000000, 99999999)}`;
 const richDoc = (text: string) => JSON.stringify({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] });
 
-async function insertChunked<T extends Record<string, unknown>>(table: any, rows: T[], size = 150) {
+/** A row as `table` accepts it on insert. */
+type Insert<T extends PgTable> = T['$inferInsert'];
+
+async function insertChunked<T extends PgTable>(table: T, rows: Array<Insert<T>>, size = 150) {
   for (let i = 0; i < rows.length; i += size) {
-    await db.insert(table).values(rows.slice(i, i + size) as any).onConflictDoNothing();
+    await db.insert(table).values(rows.slice(i, i + size) as PgInsertValue<T>[]).onConflictDoNothing();
   }
 }
 
@@ -151,7 +156,7 @@ async function wipe() {
   console.log('Removing previous demo rows…');
   const demoUsers = sql`(select id from users where email like ${'%@' + DEMO_DOMAIN})`;
   const demoTours = sql`(select id from tours where code like 'DEMO-%')`;
-  const run = (q: any) => db.execute(q);
+  const run = (q: SQL) => db.execute(q);
 
   await run(sql`delete from review_replies where user_id in ${demoUsers} or review_id in (select id from reviews where tour_id in ${demoTours} or user_id in ${demoUsers})`);
   await run(sql`delete from business_review_replies where user_id in ${demoUsers}`);
@@ -205,16 +210,16 @@ async function seed() {
   console.log('Admin reference:', admin.email);
 
   // ------------------------------ users ------------------------------
-  const userRows: any[] = [];
+  const userRows: Array<Insert<typeof S.users>> = [];
   let avatarCounter = 1;
-  const mkUser = (o: { email: string; name: string; role: string; group: string; note?: string; verified?: boolean; sellerInfo?: any; createdDaysAgo?: number; mediaFolder?: string }) => {
+  const mkUser = (o: { email: string; name: string; role: Insert<typeof S.users>['role']; group: string; note?: string; verified?: boolean; sellerInfo?: Record<string, unknown>; createdDaysAgo?: number; mediaFolder?: string }) => {
     const id = uuid();
     const created = daysFromNow(-(o.createdDaysAgo ?? int(5, 240)));
     userRows.push({
       id, name: o.name, email: `${o.email}@${DEMO_DOMAIN}`, password: passwordHash, role: o.role, avatar: avatar(avatarCounter++),
       phone: phone(), verified: o.verified ?? true, mediaFolder: o.mediaFolder ?? null, sellerInfo: o.sellerInfo ?? null, createdAt: created, updatedAt: created,
     });
-    accounts.push({ id, name: o.name, email: `${o.email}@${DEMO_DOMAIN}`, role: o.role, group: o.group, note: o.note ?? '' });
+    accounts.push({ id, name: o.name, email: `${o.email}@${DEMO_DOMAIN}`, role: o.role ?? 'user', group: o.group, note: o.note ?? '' });
     return { id, name: o.name, email: `${o.email}@${DEMO_DOMAIN}`, created };
   };
 
@@ -247,8 +252,9 @@ async function seed() {
     return { ...u, company };
   });
   // pending + rejected seller applicants (role stays 'user' until admin approves)
-  const pendingSellers = SELLER_COMPANIES.slice(10, 17).map((company, i) => mkUser({ email: `pending.seller${pad(i + 1)}`, name: personName(i + 11), role: 'user', group: 'Applicants – Sellers (pending)', note: company, sellerInfo: sellerInfoFor(company, i, 'pending', pick(['Kathmandu', 'Pokhara', 'Bhaktapur'])) }));
-  const rejectedSellers = SELLER_COMPANIES.slice(17, 20).map((company, i) => mkUser({ email: `rejected.seller${pad(i + 1)}`, name: personName(i + 18), role: 'user', group: 'Applicants – Sellers (rejected)', note: company, sellerInfo: sellerInfoFor(company, i, 'rejected', 'Kathmandu') }));
+  // Applicants: created for their accounts only (nothing else refers to them).
+  SELLER_COMPANIES.slice(10, 17).forEach((company, i) => mkUser({ email: `pending.seller${pad(i + 1)}`, name: personName(i + 11), role: 'user', group: 'Applicants – Sellers (pending)', note: company, sellerInfo: sellerInfoFor(company, i, 'pending', pick(['Kathmandu', 'Pokhara', 'Bhaktapur'])) }));
+  SELLER_COMPANIES.slice(17, 20).forEach((company, i) => mkUser({ email: `rejected.seller${pad(i + 1)}`, name: personName(i + 18), role: 'user', group: 'Applicants – Sellers (rejected)', note: company, sellerInfo: sellerInfoFor(company, i, 'rejected', 'Kathmandu') }));
 
   // customers: signed up through the site, wanting to book tours
   const customers = Array.from({ length: 60 }, (_, i) =>
@@ -278,11 +284,11 @@ async function seed() {
 
   interface Partner { id: string; ownerId: string; ownerEmail: string; type: string; name: string; destId: string; status: 'approved' | 'pending' | 'rejected'; slug: string }
   const partners: Partner[] = [];
-  const partnerRows: any[] = [];
-  const docRows: any[] = [];
+  const partnerRows: Array<Insert<typeof S.businessPartners>> = [];
+  const docRows: Array<Insert<typeof S.businessDocuments>> = [];
   const DOC_URL = 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf';
 
-  const detailsFor = (type: string, i: number, extra?: any): Record<string, unknown> => {
+  const detailsFor = (type: string, i: number, extra?: Record<string, unknown>): Record<string, unknown> => {
     switch (type) {
       case 'hotel': return { starRating: int(3, 5), roomCount: int(20, 120), amenities: shuffle(['WiFi', 'Breakfast', 'Airport pickup', 'Spa', 'Restaurant', 'Rooftop bar', 'Gym', 'Laundry']).slice(0, 5), checkInTime: '14:00', checkOutTime: '11:00', priceFromUSD: int(35, 220) };
       case 'guesthouse': return { roomCount: int(6, 20), amenities: shuffle(['WiFi', 'Hot shower', 'Garden', 'Breakfast', 'Laundry', 'Trekking info desk']).slice(0, 4), breakfastIncluded: chance(0.6), priceFromUSD: int(12, 40) };
@@ -308,7 +314,7 @@ async function seed() {
 
   const makePartners = (
     type: 'hotel' | 'guesthouse' | 'restaurant' | 'guide' | 'transport' | 'advertiser',
-    names: Array<{ name: string; extra?: any; destName?: string; description?: string }>,
+    names: Array<{ name: string; extra?: Record<string, unknown>; destName?: string; description?: string }>,
     counts: { approved: number; pending: number; rejected: number },
     groupLabel: string,
   ) => {
@@ -329,7 +335,7 @@ async function seed() {
       partnerRows.push({
         id, ownerId: owner.id, type, name: n.name, slug, description: n.description ?? descFor(type, n.name, dest.city ?? dest.name),
         logo: img(`logo-${slug}`, 256, 256), coverImage: img(`cover-${slug}`), email: `info.${slug}@${DEMO_DOMAIN}`, phone: phone(), website: `https://${slug}.example.com`,
-        address: { address: `${int(1, 120)} ${pick(['Main Street', 'Lakeside Road', 'Temple Road', 'Bazaar Lane'])}`, city: dest.city ?? dest.name, state: dest.region, postalCode: `${int(33000, 44999)}`, country: 'Nepal' },
+        address: { address: `${int(1, 120)} ${pick(['Main Street', 'Lakeside Road', 'Temple Road', 'Bazaar Lane'])}`, city: dest.city ?? dest.name, state: dest.region ?? undefined, postalCode: `${int(33000, 44999)}`, country: 'Nepal' },
         destinationId: dest.id, details: detailsFor(type, i, n.extra),
         isApproved: status === 'approved', approvalStatus: status,
         approvedBy: status === 'approved' ? admin.id : null, approvedAt: status === 'approved' ? new Date(submitted.getTime() + 86400000) : null,
@@ -376,7 +382,7 @@ async function seed() {
   await insertChunked(S.businessPartnerDestinations, approvedPartners.flatMap((p) => [p.destId, nearestOther(p.destId)].filter((v, i, arr) => arr.indexOf(v) === i).map((d) => ({ businessPartnerId: p.id, destinationId: d }))));
 
   // ---- capacity, unit types, blocks, overrides, guide availability ----
-  const capRows: any[] = [], unitTypeRows: any[] = [], blockRows: any[] = [], overrideRows: any[] = [], availRows: any[] = [];
+  const capRows: Array<Insert<typeof S.businessPartnerCapacity>> = [], unitTypeRows: Array<Insert<typeof S.businessPartnerUnitTypes>> = [], blockRows: Array<Insert<typeof S.businessPartnerUnitTypeBlocks>> = [], overrideRows: Array<Insert<typeof S.businessPartnerCapacityOverrides>> = [], availRows: Array<Insert<typeof S.businessPartnerAvailabilityBlocks>> = [];
   const unitTypesByPartner = new Map<string, Array<{ id: string; name: string; totalUnits: number }>>();
   for (const p of approvedPartners) {
     if (p.type === 'advertiser') continue;
@@ -410,8 +416,8 @@ async function seed() {
   // ---------------------------------------------------------------------
   // seller extras: facts, faqs, preferences, presets, media, settings
   // ---------------------------------------------------------------------
-  const factRows: any[] = [], faqRows: any[] = [];
-  const sellerFacts = new Map<string, any[]>(), sellerFaqs = new Map<string, any[]>();
+  const factRows: Array<Insert<typeof S.facts>> = [], faqRows: Array<Insert<typeof S.faqs>> = [];
+  const sellerFacts = new Map<string, Array<Insert<typeof S.facts>>>(), sellerFaqs = new Map<string, Array<Insert<typeof S.faqs>>>();
   sellers.forEach((s) => {
     // The full master fact list — tours pick their own value for each (see seedData/tourCatalog.ts).
     const f = MASTER_FACTS.map((m) => ({ id: uuid(), userId: s.id, name: m.name, fieldType: m.fieldType, value: m.options, icon: m.icon }));
@@ -431,8 +437,8 @@ async function seed() {
   await insertChunked(S.userSettings, sellers.map((s) => ({ userId: s.id, openaiApiKey: '', googleApiKey: '' })));
 
   await insertChunked(S.mediaAssets, sellers.flatMap((s, si) => [
-    ...Array.from({ length: 4 }, (_, k) => ({ userId: s.id, kind: 'image', url: img(`gallery-${si}-${k}`), secureUrl: img(`gallery-${si}-${k}`), originalFilename: `photo-${k + 1}.jpg`, displayName: `Photo ${k + 1}`, publicId: `${s.id}/photo-${k + 1}`, width: 1200, height: 800, format: 'jpg', resourceType: 'image', tags: ['demo', 'tour'], bytes: int(120000, 900000), assetFolder: slugify(s.company) })),
-    { userId: s.id, kind: 'pdf', url: DOC_URL, secureUrl: DOC_URL, originalFilename: 'brochure.pdf', displayName: 'Company brochure', publicId: `${s.id}/brochure`, format: 'pdf', resourceType: 'raw', pages: 4, bytes: 52000, tags: ['brochure'] },
+    ...Array.from({ length: 4 }, (_, k) => ({ userId: s.id, kind: 'image' as const, url: img(`gallery-${si}-${k}`), secureUrl: img(`gallery-${si}-${k}`), originalFilename: `photo-${k + 1}.jpg`, displayName: `Photo ${k + 1}`, publicId: `${s.id}/photo-${k + 1}`, width: 1200, height: 800, format: 'jpg', resourceType: 'image', tags: ['demo', 'tour'], bytes: int(120000, 900000), assetFolder: slugify(s.company) })),
+    { userId: s.id, kind: 'pdf' as const, url: DOC_URL, secureUrl: DOC_URL, originalFilename: 'brochure.pdf', displayName: 'Company brochure', publicId: `${s.id}/brochure`, format: 'pdf', resourceType: 'raw', pages: 4, bytes: 52000, tags: ['brochure'] },
   ]));
 
   await insertChunked(S.paxPresets, sellers.map((s) => ({ userId: s.id, name: 'Small group (2–10)', minSize: 2, maxSize: 10, pricePerPerson: true, tags: ['demo'] })));
@@ -452,11 +458,11 @@ async function seed() {
   // processors the real tour editor's save path uses, so each field has exactly the shape the
   // editor / tour page read back (pricing options, discounts, dates, facts, itinerary, ...).
   // ---------------------------------------------------------------------
-  interface Link { id: string; tour: TourRec; dayIdx: number; role: string; partner: Partner; unitTypeId: string | null; unitType: string | null; units: number }
-  interface TourRec { id: string; spec: { status: 'Published' | 'Draft' | 'Archived'; max: number; price: number }; code: string; sellerId: string; destId: string; departures: Date[]; itinerary: any[]; price: number; title: string; row: any }
+  interface Link { id: string; tour: TourRec; dayIdx: number; role: Insert<typeof S.itineraryPartnerRequests>['role']; partner: Partner; unitTypeId: string | null; unitType: string | null; units: number }
+  interface TourRec { id: string; spec: { status: 'Published' | 'Draft' | 'Archived'; max: number; price: number }; code: string; sellerId: string; destId: string; departures: Date[]; itinerary: ItineraryDayInput[]; price: number; title: string; row: Insert<typeof S.tours> }
   const tourRecs: TourRec[] = [];
-  const tourRows: any[] = [], tourCatRows: any[] = [], tourAuthRows: any[] = [];
-  const linkRows: any[] = [];
+  const tourRows: Array<Insert<typeof S.tours>> = [], tourCatRows: Array<Insert<typeof S.tourCategories>> = [], tourAuthRows: Array<Insert<typeof S.tourAuthors>> = [];
+  const linkRows: Array<Insert<typeof S.tourItineraryPartners>> = [];
   const links: Link[] = [];
 
   const quiet = <T,>(fn: () => T): T => { const log = console.log; console.log = () => undefined; try { return fn(); } finally { console.log = log; } };
@@ -505,7 +511,7 @@ async function seed() {
     const itineraryIn = e.days.map((day: DaySpec, di: number) => {
       const salt = ti * 7 + di;
       const regions = [day.region, e.region, 'Kathmandu Valley'];
-      const partnersForDay: any[] = [];
+      const partnersForDay: ItineraryPartnerInput[] = [];
       const add = (role: string, partner: Partner, time: string | null, endTime: string | null, withUnits: boolean) => {
         const ut = withUnits ? pickUnitType(partner, role, time, maxSize) : null;
         const units = role === 'accommodation' ? Math.ceil(maxSize / 2) : role === 'meals' ? maxSize : role === 'transport' ? Math.max(1, Math.ceil(maxSize / (maxSize <= 6 ? 4 : 12))) : null;
@@ -543,7 +549,7 @@ async function seed() {
     const spanEnd = (start: Date) => new Date(start.getTime() + (days - 1) * 86400000);
     const sch = e.schedule;
     let departures: Date[] = [];
-    let datesIn: any;
+    let datesIn: Record<string, unknown>;
     if (sch.type === 'flexible') {
       datesIn = { scheduleType: 'flexible', days, nights, dateRange: { from: startOfDay(sch.fromDays), to: startOfDay(sch.toDays) }, pricingCategory: optionIds };
     } else if (sch.type === 'fixed') {
@@ -605,8 +611,9 @@ async function seed() {
     tourRecs.push(rec);
 
     // ---- one tour_itinerary_partners row per linked entry (what the editor's save would create) ----
-    (itinerary as any[]).forEach((day, di) => {
-      (day.partners as any[]).forEach((p, order) => {
+    itinerary.forEach((day, di) => {
+      day.partners.forEach((p, order) => {
+        if (!isItineraryRole(p.role)) return;
         const linkId = uuid();
         const partner = p.businessPartnerId ? approvedPartners.find((x) => x.id === p.businessPartnerId) : undefined;
         linkRows.push({ id: linkId, tourId: id, dayId: day.id, role: p.role, businessPartnerId: p.businessPartnerId ?? null, name: p.name, notes: p.notes ?? null, sortOrder: order, unitsRequested: p.unitsRequested ?? null, unitType: p.unitType ?? null, unitTypeId: p.unitTypeId ?? null });
@@ -662,7 +669,7 @@ async function seed() {
   // bookings
   // ---------------------------------------------------------------------
   const liveTours = tourRecs.filter((t) => t.spec.status !== 'Draft');
-  const bookingRows: any[] = [];
+  const bookingRows: Array<Insert<typeof S.bookings>> = [];
   interface BookingRec { id: string; tour: TourRec; departure: Date; pax: number; status: string }
   const bookingRecs: BookingRec[] = [];
   let bkSeq = 1;
@@ -686,13 +693,14 @@ async function seed() {
       const optionRows = (tour.row.pricingOptions ?? []) as Array<{ id: string; category: string }>;
       const optId = tour.row.pricingOptionsEnabled ? (optionRows.find((o) => o.category === 'adult') ?? optionRows[0])?.id ?? null : null;
       const bookedAt = new Date(departure.getTime() - int(10, 60) * 86400000);
-      let calc = calculateBookingPricing(tour.row as any, { adults, children, infants }, paymentType, optId);
+      // The pricing calculator reads a stored tour; the insert row carries every field it uses.
+      let calc = calculateBookingPricing(tour.row as typeof S.tours.$inferSelect, { adults, children, infants }, paymentType, optId);
       // About one booking in six used a promo code.
       let promo: PromoRec | null = null;
       if (chance(0.17)) {
         for (const p of shuffle(promoRecs)) {
           const amount = promoAmount(p, tour, calc.totalPrice, bookedAt);
-          if (amount > 0) { promo = p; calc = calculateBookingPricing(tour.row as any, { adults, children, infants }, paymentType, optId, { code: p.code, amount }); break; }
+          if (amount > 0) { promo = p; calc = calculateBookingPricing(tour.row as typeof S.tours.$inferSelect, { adults, children, infants }, paymentType, optId, { code: p.code, amount }); break; }
         }
       }
       // A cancelled booking gives its redemption back, as the booking service does.
@@ -729,23 +737,23 @@ async function seed() {
   // Payouts: per seller, bookings that are paid, confirmed/completed and whose trip ended over a day ago are
   // payable (see services/payouts.ts). The oldest half is in a paid payout; for every other seller the next
   // few are in a payout waiting for the transfer; the rest are left payable so "Create payout" has work to do.
-  const payoutRows: any[] = [];
+  const payoutRows: Array<Insert<typeof S.payouts>> = [];
   const payableCutoff = hoursFromNow(-24);
   sellers.forEach((sl, si) => {
     const payable = bookingRows
-      .filter((b) => b.sellerId === sl.id && b.paymentStatus === 'paid' && (b.status === 'confirmed' || b.status === 'completed') && b.departureDate < payableCutoff && b.sellerEarning > 0)
-      .sort((a, b) => a.departureDate - b.departureDate);
+      .filter((b) => b.sellerId === sl.id && b.paymentStatus === 'paid' && (b.status === 'confirmed' || b.status === 'completed') && b.departureDate < payableCutoff && (b.sellerEarning ?? 0) > 0)
+      .sort((a, b) => new Date(a.departureDate).getTime() - new Date(b.departureDate).getTime());
     if (payable.length < 2) return;
-    const groups: Array<{ rows: any[]; paid: boolean }> = [{ rows: payable.slice(0, Math.ceil(payable.length / 2)), paid: true }];
+    const groups: Array<{ rows: typeof payable; paid: boolean }> = [{ rows: payable.slice(0, Math.ceil(payable.length / 2)), paid: true }];
     if (si % 2 === 0) groups.push({ rows: payable.slice(Math.ceil(payable.length / 2), Math.ceil(payable.length / 2) + 2), paid: false });
     for (const g of groups) {
       if (!g.rows.length) continue;
       const id = uuid();
-      const lastTrip = g.rows[g.rows.length - 1].departureDate as Date;
+      const lastTrip = new Date(g.rows[g.rows.length - 1].departureDate);
       const createdAt = g.paid ? new Date(Math.min(lastTrip.getTime() + 3 * 86400000, NOW.getTime() - 86400000)) : hoursFromNow(-int(2, 48));
       const paidAt = g.paid ? new Date(Math.min(createdAt.getTime() + 2 * 86400000, NOW.getTime())) : null;
       payoutRows.push({
-        id, sellerId: sl.id, amount: Math.round(g.rows.reduce((n, b) => n + b.sellerEarning, 0) * 100) / 100, currency: 'USD', bookingCount: g.rows.length,
+        id, sellerId: sl.id, amount: Math.round(g.rows.reduce((n, b) => n + (b.sellerEarning ?? 0), 0) * 100) / 100, currency: 'USD', bookingCount: g.rows.length,
         status: g.paid ? 'paid' : 'pending', reference: g.paid ? `DEMO-TRF-${int(100000, 999999)}` : null, notes: g.paid ? 'Bank transfer' : null,
         createdBy: demoAdmin.id, paidAt, createdAt, updatedAt: paidAt ?? createdAt,
       });
@@ -766,7 +774,7 @@ async function seed() {
   // ---------------------------------------------------------------------
   // tour reviews (+ replies) and aggregates
   // ---------------------------------------------------------------------
-  const tourReviewRows: any[] = [], tourReplyRows: any[] = [];
+  const tourReviewRows: Array<Insert<typeof S.reviews>> = [], tourReplyRows: Array<Insert<typeof S.reviewReplies>> = [];
   for (const t of liveTours) {
     const reviewers = shuffle(customers).slice(0, t.spec.status === 'Archived' ? 4 : int(6, 10));
     const agg = { sum: 0, approved: 0 };
@@ -788,7 +796,8 @@ async function seed() {
   // ---------------------------------------------------------------------
   // business reviews + likes
   // ---------------------------------------------------------------------
-  const bizReviewRows: any[] = [], bizReplyRows: any[] = [], bizLikeRows: any[] = [];
+  const reviewTotals = new Map<string, { total: number; sum: number; approved: number }>();
+  const bizReviewRows: Array<Insert<typeof S.businessReviews>> = [], bizReplyRows: Array<Insert<typeof S.businessReviewReplies>> = [], bizLikeRows: Array<Insert<typeof S.businessReviewLikes>> = [];
   for (const p of approvedPartners.filter((x) => x.type !== 'advertiser')) {
     const reviewers = shuffle(customers).slice(0, int(2, 5));
     const agg = { sum: 0, approved: 0 };
@@ -803,13 +812,13 @@ async function seed() {
         if (chance(0.5)) bizLikeRows.push({ id: uuid(), reviewId: id, userId: pick(customers).id });
       }
     });
-    (p as any).agg = { total: reviewers.length, ...agg };
+    reviewTotals.set(p.id, { total: reviewers.length, ...agg });
   }
   await insertChunked(S.businessReviews, bizReviewRows);
   await insertChunked(S.businessReviewReplies, bizReplyRows);
   await insertChunked(S.businessReviewLikes, bizLikeRows);
   for (const p of approvedPartners) {
-    const a = (p as any).agg; if (!a) continue;
+    const a = reviewTotals.get(p.id); if (!a) continue;
     await db.update(S.businessPartners).set({ reviewCount: a.total, approvedReviewCount: a.approved, averageRating: a.approved ? Math.round((a.sum / a.approved) * 10) / 10 : 0 }).where(eq(S.businessPartners.id, p.id));
   }
   console.log(`✅ Business reviews: ${bizReviewRows.length}`);
@@ -818,11 +827,12 @@ async function seed() {
   // itinerary partners + supplier requests (drives /dashboard/operations)
   // ---------------------------------------------------------------------
 
-  const reqRows: any[] = [], eventRows: any[] = [], contribRows: any[] = [];
+  const reqRows: Array<Insert<typeof S.itineraryPartnerRequests>> = [], eventRows: Array<Insert<typeof S.itineraryRequestEvents>> = [], contribRows: Array<Insert<typeof S.itineraryRequestBookingContributions>> = [];
   const reqKey = new Set<string>();
-  const STATUS_WEIGHTS: Array<[string, number]> = [['confirmed', 44], ['pending', 20], ['held', 10], ['countered', 8], ['declined', 10], ['expired', 8]];
-  const pickStatus = () => { let r = rnd() * 100; for (const [s, w] of STATUS_WEIGHTS) { if ((r -= w) < 0) return s; } return 'pending'; };
-  const addRequest = (link: Link, serviceDate: Date, headcount: number, sourceDeparture: Date | null, forcedStatus?: string) => {
+  type RequestStatus = NonNullable<Insert<typeof S.itineraryPartnerRequests>['status']>;
+  const STATUS_WEIGHTS: Array<[RequestStatus, number]> = [['confirmed', 44], ['pending', 20], ['held', 10], ['countered', 8], ['declined', 10], ['expired', 8]];
+  const pickStatus = (): RequestStatus => { let r = rnd() * 100; for (const [s, w] of STATUS_WEIGHTS) { if ((r -= w) < 0) return s; } return 'pending'; };
+  const addRequest = (link: Link, serviceDate: Date, headcount: number, sourceDeparture: Date | null, forcedStatus?: RequestStatus) => {
     const dateStr = isoDate(serviceDate);
     const time = link.role === 'meals' ? '19:00' : link.role === 'guide' ? '09:00' : null;
     const key = `${link.id}|${dateStr}|${time}`;
@@ -832,7 +842,7 @@ async function seed() {
     const id = uuid();
     const created = daysFromNow(-int(1, 25));
     const responded = status === 'pending' ? null : new Date(created.getTime() + int(2, 40) * 3600000);
-    const row: any = {
+    const row: Insert<typeof S.itineraryPartnerRequests> = {
       id, tourId: link.tour.id, tourItineraryPartnerId: link.id, businessPartnerId: link.partner.id, role: link.role, serviceDate: dateStr, serviceTime: time,
       serviceEndTime: link.role === 'guide' ? '17:00' : null, headcount, unitsRequested: link.units, unitTypeId: link.unitTypeId, status,
       capacityConfirmed: ['confirmed', 'held'].includes(status) ? link.units : status === 'countered' ? null : null,
@@ -889,7 +899,7 @@ async function seed() {
   const SITE_URL = (process.env.SEED_SITE_URL || 'https://tourbnt.com').replace(/\/+$/, '');
   const PRICE_PER_MONTH = 5000;       // Rs — default price list
   const PRICE_PER_100_VIEWS = 50;     // Rs
-  const adRows: any[] = [], adCatRows: any[] = [], adDestRows: any[] = [], adStatRows: any[] = [];
+  const adRows: Array<Insert<typeof S.advertisements>> = [], adCatRows: Array<Insert<typeof S.adCategoryTargets>> = [], adDestRows: Array<Insert<typeof S.adDestinationTargets>> = [], adStatRows: Array<Insert<typeof S.adDailyStats>> = [];
   const partnerByName = new Map(partners.map((p) => [p.name, p]));
   const partnerRowById = new Map(partnerRows.map((r) => [r.id, r]));
   const placeId = (name: string) => { const d = destByName.get(name); if (!d) throw new Error(`Ad target destination "${name}" is missing.`); return d.id; };
@@ -976,12 +986,12 @@ async function seed() {
   // ---------------------------------------------------------------------
   // messaging
   // ---------------------------------------------------------------------
-  const convRows: any[] = [], partRows: any[] = [], msgRows: any[] = [];
+  const convRows: Array<Insert<typeof S.conversations>> = [], partRows: Array<Insert<typeof S.conversationParticipants>> = [], msgRows: Array<Insert<typeof S.conversationMessages>> = [];
   const ENQ_Q = ['Is {t} suitable for a beginner? I have only done day hikes before.', 'Can you arrange a private departure of {t} for 6 people next month?', 'Do you offer a group discount on {t}?', 'What happens if my flight is delayed and I miss the start of {t}?', 'Is vegetarian food available throughout {t}?', 'Can we add an extra night in Pokhara before {t}?', 'What is the best month to do {t}, and what gear should I bring?'];
   const ENQ_A = ['Thanks for your interest! Yes, it is suitable for beginners — we keep a moderate pace with a support crew.', 'Absolutely, we can set up a private departure. I will send a quote shortly.', 'Groups of 8+ receive 10% off. Shall I prepare a proposal?', 'Please message us as soon as you know — we will rebook you on the next departure at no cost.', 'Yes, every meal has vegetarian options.', 'Of course — I can add hotel nights for you. Which dates?'];
   const ENQ_F = ['That sounds great, please send more details.', 'Thank you! We will confirm by the end of the week.', 'Perfect, we would like to go ahead.'];
   let msgClock = 0;
-  const addConv = (c: { type: string; subject: string; status: string; fromUserId?: string | null; guestName?: string; guestEmail?: string; tourId?: string | null; assignedTo?: string | null; broadcastAudience?: string; allowReplies?: boolean; groupName?: string; participants: Array<{ userId: string; read?: boolean; archived?: boolean }>; messages: Array<{ sender: string | null; role: 'customer' | 'support'; text: string }>; startedDaysAgo: number }) => {
+  const addConv = (c: { type: Insert<typeof S.conversations>['type']; subject: string; status: Insert<typeof S.conversations>['status']; fromUserId?: string | null; guestName?: string; guestEmail?: string; tourId?: string | null; assignedTo?: string | null; broadcastAudience?: Insert<typeof S.conversations>['broadcastAudience']; allowReplies?: boolean; groupName?: string; participants: Array<{ userId: string; read?: boolean; archived?: boolean }>; messages: Array<{ sender: string | null; role: 'customer' | 'support'; text: string }>; startedDaysAgo: number }) => {
     const id = uuid();
     const start = daysFromNow(-c.startedDaysAgo).getTime();
     let last = start;
@@ -1042,17 +1052,18 @@ async function seed() {
   [[sellers[0], 'Your tour listing needs an updated itinerary', 'Hi, the Annapurna Base Camp Trek itinerary is missing Day 6 details. Could you update it?', 'Thanks, updating it today!'],
    [byType('hotel')[0], 'Please confirm room availability for October', 'We have several groups arriving in October. Can you confirm your allocation?', 'We can offer 20 rooms across both weeks — confirming in the dashboard now.'],
    [byType('guide')[0], 'Welcome to TourBNT', 'Your guide profile is approved — welcome aboard! Please set your availability calendar.', 'Thank you! I have blocked out my leave dates.'],
-   [byType('transport')[0], 'Vehicle request declined — please review', 'We saw you declined a vehicle request for next week. Is there anything we can do to help?', 'Sorry, both vans are in the workshop. We can do it the following week.']].forEach((row: any, i) => {
+   [byType('transport')[0], 'Vehicle request declined — please review', 'We saw you declined a vehicle request for next week. Is there anything we can do to help?', 'Sorry, both vans are in the workshop. We can do it the following week.']].forEach((entry, i) => {
+    const row = entry as [{ id: string; ownerId?: string }, string, string, string];
     const target = row[0].ownerId ?? row[0].id;
     addConv({ type: 'direct', subject: row[1], status: pick(['open', 'replied'] as const), fromUserId: admin.id, assignedTo: admin.id, participants: [{ userId: target, read: i % 2 === 0 }], startedDaysAgo: int(1, 14),
       messages: [{ sender: admin.id, role: 'customer', text: row[2] }, { sender: target, role: 'support', text: row[3] }] });
   });
   // group threads
   addConv({ type: 'group', groupName: 'Kathmandu Ops Team', subject: 'Kathmandu Ops Team', status: 'open', fromUserId: admin.id, assignedTo: admin.id,
-    participants: [sellers[4], sellers[5], byType('transport')[0], byType('hotel')[1], byType('guide')[1]].map((x: any, i) => ({ userId: x.ownerId ?? x.id, read: i < 2 })), startedDaysAgo: 9,
+    participants: [sellers[4], sellers[5], byType('transport')[0], byType('hotel')[1], byType('guide')[1]].map((x: { id: string; ownerId?: string }, i) => ({ userId: x.ownerId ?? x.id, read: i < 2 })), startedDaysAgo: 9,
     messages: [{ sender: admin.id, role: 'customer', text: 'Welcome to the ops group for the upcoming Kathmandu cultural departures. Please post blockers here.' }, { sender: sellers[4].id, role: 'support', text: 'Group of 12 arriving Monday — we need a coach from the airport at 09:30.' }, { sender: byType('transport')[0].ownerId, role: 'support', text: 'Confirmed, a 45-seater will be there.' }] });
   addConv({ type: 'group', groupName: 'Trek Leaders', subject: 'Trek Leaders', status: 'replied', fromUserId: admin.id, assignedTo: admin.id,
-    participants: [sellers[0], sellers[1], sellers[9], byType('guide')[2], byType('guide')[3]].map((x: any) => ({ userId: x.ownerId ?? x.id, read: true })), startedDaysAgo: 18,
+    participants: [sellers[0], sellers[1], sellers[9], byType('guide')[2], byType('guide')[3]].map((x: { id: string; ownerId?: string }) => ({ userId: x.ownerId ?? x.id, read: true })), startedDaysAgo: 18,
     messages: [{ sender: admin.id, role: 'customer', text: 'Sharing the new altitude-sickness protocol for all treks above 3,500m.' }, { sender: sellers[0].id, role: 'support', text: 'We already follow this — happy to share our checklist.' }] });
   addConv({ type: 'group', groupName: 'Advertiser Onboarding', subject: 'Advertiser Onboarding', status: 'open', fromUserId: admin.id, assignedTo: admin.id,
     participants: byType('advertiser').slice(0, 4).map((x, i) => ({ userId: x.ownerId, read: i === 0 })), startedDaysAgo: 4,
@@ -1086,9 +1097,9 @@ async function seed() {
     ['10 Tips for Trekking in the Annapurna Region', ['trekking', 'annapurna', 'tips']], ['A Food Lover’s Guide to Kathmandu', ['food', 'kathmandu']], ['Best Time to Visit Nepal', ['planning', 'weather']],
     ['Packing List for a First Himalayan Trek', ['gear', 'packing']], ['Responsible Tourism in the Mountains', ['sustainability']], ['Why Bardia Beats Chitwan for Tigers', ['wildlife', 'bardia']],
   ] as const;
-  const postRows = POSTS.map(([title, tags], i) => ({ id: uuid(), title, content: richDoc(`${title}. ${'Nepal rewards travellers who plan ahead and travel slowly. '.repeat(4)}`), authorId: sellers[i].id, tags: [...tags], image: img(`post-${i}`), status: i === 5 ? 'Draft' : 'Published', likes: int(0, 60), views: int(20, 2000), enableComments: true, createdAt: daysFromNow(-int(5, 100)), updatedAt: new Date() }));
+  const postRows = POSTS.map(([title, tags], i) => ({ id: uuid(), title, content: richDoc(`${title}. ${'Nepal rewards travellers who plan ahead and travel slowly. '.repeat(4)}`), authorId: sellers[i].id, tags: [...tags], image: img(`post-${i}`), status: i === 5 ? ('Draft' as const) : ('Published' as const), likes: int(0, 60), views: int(20, 2000), enableComments: true, createdAt: daysFromNow(-int(5, 100)), updatedAt: new Date() }));
   await insertChunked(S.posts, postRows);
-  const commentRows: any[] = [];
+  const commentRows: Array<Insert<typeof S.comments>> = [];
   postRows.filter((p) => p.status === 'Published').forEach((p) => {
     for (let k = 0; k < 3; k++) {
       const cid = uuid();
@@ -1103,15 +1114,15 @@ async function seed() {
   // ---------------------------------------------------------------------
   // notifications
   // ---------------------------------------------------------------------
-  const notifRows: any[] = [];
-  const addNotif = (recipientId: string, type: string, title: string, message: string, data?: any) => notifRows.push({ id: uuid(), recipientId, senderId: admin.id, type, title, message, data: data ?? null, isRead: chance(0.4), createdAt: daysFromNow(-int(0, 30)), updatedAt: new Date() });
+  const notifRows: Array<Insert<typeof S.notifications>> = [];
+  const addNotif = (recipientId: string, type: Insert<typeof S.notifications>['type'], title: string, message: string, data?: Record<string, unknown>) => notifRows.push({ id: uuid(), recipientId, senderId: admin.id, type, title, message, data: data ?? null, isRead: chance(0.4), createdAt: daysFromNow(-int(0, 30)), updatedAt: new Date() });
   approvedPartners.forEach((p) => {
     addNotif(p.ownerId, 'business_partner_approved', 'Your business was approved', `${p.name} is now live on TourBNT.`, { businessPartnerId: p.id });
     if (chance(0.6)) addNotif(p.ownerId, 'business_review_received', 'New review received', `A traveller left a review for ${p.name}.`, { businessPartnerId: p.id });
   });
   partners.filter((p) => p.status === 'rejected').forEach((p) => addNotif(p.ownerId, 'business_partner_rejected', 'Your application was rejected', `${p.name}: please review the reason and reapply.`, { businessPartnerId: p.id }));
-  adRows.forEach((a) => { const owner = partners.find((p) => p.id === a.businessPartnerId)!; if (a.approvalStatus === 'approved') addNotif(owner.ownerId, 'ad_approved', 'Your ad was approved', `"${a.title}" is now eligible to run.`, { adId: a.id }); if (a.approvalStatus === 'rejected') addNotif(owner.ownerId, 'ad_rejected', 'Your ad was rejected', a.rejectionReason, { adId: a.id }); });
-  reqRows.slice(0, 120).forEach((r) => { const p = partners.find((x) => x.id === r.businessPartnerId)!; const map: Record<string, string> = { pending: 'itinerary_request_created', confirmed: 'itinerary_request_confirmed', declined: 'itinerary_request_declined', held: 'itinerary_request_held', countered: 'itinerary_request_countered', expired: 'itinerary_request_expired' }; addNotif(r.status === 'pending' ? p.ownerId : tourRecs.find((t) => t.id === r.tourId)!.sellerId, map[r.status], `Service request ${r.status}`, `Request for ${r.serviceDate} is ${r.status}.`, { requestId: r.id, tourId: r.tourId }); });
+  adRows.forEach((a) => { const owner = partners.find((p) => p.id === a.businessPartnerId)!; if (a.approvalStatus === 'approved') addNotif(owner.ownerId, 'ad_approved', 'Your ad was approved', `"${a.title}" is now eligible to run.`, { adId: a.id }); if (a.approvalStatus === 'rejected') addNotif(owner.ownerId, 'ad_rejected', 'Your ad was rejected', a.rejectionReason ?? 'Your ad did not meet our guidelines.', { adId: a.id }); });
+  reqRows.slice(0, 120).forEach((r) => { const p = partners.find((x) => x.id === r.businessPartnerId)!; const map: Record<RequestStatus, Insert<typeof S.notifications>['type']> = { pending: 'itinerary_request_created', confirmed: 'itinerary_request_confirmed', declined: 'itinerary_request_declined', held: 'itinerary_request_held', countered: 'itinerary_request_countered', expired: 'itinerary_request_expired' }; addNotif(r.status === 'pending' ? p.ownerId : tourRecs.find((t) => t.id === r.tourId)!.sellerId, map[r.status ?? 'pending'], `Service request ${r.status}`, `Request for ${r.serviceDate} is ${r.status}.`, { requestId: r.id, tourId: r.tourId }); });
   sellers.forEach((s) => { addNotif(s.id, 'destination_approved', 'Destination approved', 'Your destination request was approved.'); addNotif(s.id, 'general', 'Welcome to TourBNT', 'Your seller account is ready — start adding tours!'); });
   await insertChunked(S.notifications, notifRows, 150);
   console.log(`✅ Notifications: ${notifRows.length}`);

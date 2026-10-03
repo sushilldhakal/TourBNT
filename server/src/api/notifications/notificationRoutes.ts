@@ -65,7 +65,7 @@ const router = express.Router();
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  */
-router.get('/', authenticate, paginationMiddleware(), getUserNotifications as any);
+router.get('/', authenticate, paginationMiddleware(), getUserNotifications);
 
 /**
  * @swagger
@@ -98,7 +98,7 @@ router.get('/', authenticate, paginationMiddleware(), getUserNotifications as an
  *       404:
  *         $ref: '#/components/responses/NotFound'
  */
-router.patch('/:id/read', authenticate, markNotificationAsRead as any);
+router.patch('/:id/read', authenticate, markNotificationAsRead);
 
 /**
  * @swagger
@@ -124,6 +124,6 @@ router.patch('/:id/read', authenticate, markNotificationAsRead as any);
  *       404:
  *         $ref: '#/components/responses/NotFound'
  */
-router.delete('/:id', authenticate, deleteNotification as any);
+router.delete('/:id', authenticate, deleteNotification);
 
 export default router;

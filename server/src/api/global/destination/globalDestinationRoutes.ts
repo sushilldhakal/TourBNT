@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { type Request, type Response } from 'express';
 import { makeGetAvailable, makeBulkAdd } from '../bulkAdd';
 import {
   getApprovedDestinations,
@@ -37,12 +37,12 @@ const router = express.Router();
 router.use(invalidateOnWrite(['destinations', 'destinations-approved', 'destinations-by-country', 'destination-by-id', 'home-feed']));
 
 // Wrapper functions to handle :id parameter for RESTful routes
-const updateDestinationById = (req: any, res: any) => {
+const updateDestinationById = (req: Request, res: Response) => {
   req.params.destinationId = req.params.id;
   return updateDestination(req, res);
 };
 
-const deleteDestinationById = (req: any, res: any) => {
+const deleteDestinationById = (req: Request, res: Response) => {
   req.params.destinationId = req.params.id;
   return deleteDestination(req, res);
 };
@@ -144,7 +144,7 @@ router.get('/', cacheRoute('destinations', 120), paginationMiddleware(), getAppr
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/', authenticate, authorizeRoles('admin'), uploadNone, submitDestination as any);
+router.post('/', authenticate, authorizeRoles('admin'), uploadNone, submitDestination);
 
 /**
  * @swagger
@@ -201,7 +201,7 @@ router.post('/', authenticate, authorizeRoles('admin'), uploadNone, submitDestin
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.patch('/:id', authenticate, authorizeRoles('admin'), uploadNone, updateDestinationById as any);
+router.patch('/:id', authenticate, authorizeRoles('admin'), uploadNone, updateDestinationById);
 
 /**
  * @swagger
@@ -250,7 +250,7 @@ router.patch('/:id', authenticate, authorizeRoles('admin'), uploadNone, updateDe
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.delete('/:id', authenticate, authorizeRoles('admin'), deleteDestinationById as any);
+router.delete('/:id', authenticate, authorizeRoles('admin'), deleteDestinationById);
 
 // Legacy route for backward compatibility
 /**
@@ -310,13 +310,13 @@ router.get('/public/:destinationId', cacheRoute('destination-by-id', 60), getDes
 router.use(authenticate);
 
 // Seller routes
-router.get('/seller/visible', getSellerDestinations as any);
-router.get('/seller/search', searchDestinations as any);
-router.get('/seller/enabled', getEnabledDestinations as any);
-router.get('/seller/favorites', getFavoriteDestinations as any);
-router.get('/user-destinations', getUserDestinations as any); // New route for user-specific destinations
-router.get('/available', makeGetAvailable('destination') as any);
-router.post('/bulk-add', makeBulkAdd('destination') as any);
+router.get('/seller/visible', getSellerDestinations);
+router.get('/seller/search', searchDestinations);
+router.get('/seller/enabled', getEnabledDestinations);
+router.get('/seller/favorites', getFavoriteDestinations);
+router.get('/user-destinations', getUserDestinations); // New route for user-specific destinations
+router.get('/available', makeGetAvailable('destination'));
+router.post('/bulk-add', makeBulkAdd('destination'));
 
 /**
  * @swagger
@@ -360,24 +360,24 @@ router.post('/bulk-add', makeBulkAdd('destination') as any);
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/submit', uploadNone, submitDestination as any);
-router.patch('/:destinationId', uploadNone, updateDestination as any);
-router.put('/preferences', updateDestinationPreferences as any);
-router.put('/:destinationId/favorite', toggleFavoriteDestination as any);
-router.patch('/:destinationId/toggle-active', toggleDestinationActiveStatus as any);
-router.post('/:destinationId/add-to-list', authenticate, addExistingDestinationToSeller as any);
-router.post('/:destinationId/remove-from-list', authenticate, removeExistingDestinationFromSeller as any);
+router.post('/submit', uploadNone, submitDestination);
+router.patch('/:destinationId', uploadNone, updateDestination);
+router.put('/preferences', updateDestinationPreferences);
+router.put('/:destinationId/favorite', toggleFavoriteDestination);
+router.patch('/:destinationId/toggle-active', toggleDestinationActiveStatus);
+router.post('/:destinationId/add-to-list', authenticate, addExistingDestinationToSeller);
+router.post('/:destinationId/remove-from-list', authenticate, removeExistingDestinationFromSeller);
 
 // Admin routes
-router.get('/admin/pending', getPendingDestinations as any);
-router.get('/admin/all', authorizeRoles('admin'), getAllDestinationsAdmin as any);
-router.get('/admin/change-requests', authorizeRoles('admin'), getChangeRequests as any);
-router.put('/admin/change-requests/:changeRequestId/approve', authorizeRoles('admin'), changeRequestNotFound as any);
-router.put('/admin/change-requests/:changeRequestId/reject', authorizeRoles('admin'), changeRequestNotFound as any);
-router.put('/admin/:destinationId/approve', approveDestination as any);
-router.put('/admin/:destinationId/reject', rejectDestination as any);
-router.get('/admin/:destinationId/usage', getDestinationUsage as any);
-router.delete('/admin/:destinationId', deleteDestination as any);
-router.post('/admin/fix-deleted-approved', fixDeletedApprovedDestinations as any);
+router.get('/admin/pending', getPendingDestinations);
+router.get('/admin/all', authorizeRoles('admin'), getAllDestinationsAdmin);
+router.get('/admin/change-requests', authorizeRoles('admin'), getChangeRequests);
+router.put('/admin/change-requests/:changeRequestId/approve', authorizeRoles('admin'), changeRequestNotFound);
+router.put('/admin/change-requests/:changeRequestId/reject', authorizeRoles('admin'), changeRequestNotFound);
+router.put('/admin/:destinationId/approve', approveDestination);
+router.put('/admin/:destinationId/reject', rejectDestination);
+router.get('/admin/:destinationId/usage', getDestinationUsage);
+router.delete('/admin/:destinationId', deleteDestination);
+router.post('/admin/fix-deleted-approved', fixDeletedApprovedDestinations);
 
 export default router;

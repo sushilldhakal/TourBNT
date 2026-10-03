@@ -1,3 +1,4 @@
+import { appendFileSync } from 'fs';
 import postgres from 'postgres';
 import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from './schema';
@@ -40,8 +41,7 @@ function createDb(): Db {
         ? {
             debug: (connection: number, query: string) => {
               try {
-                // eslint-disable-next-line @typescript-eslint/no-var-requires
-                require('fs').appendFileSync(process.env.DB_QUERY_LOG!, `${Date.now()} c${connection} ${query.replace(/\s+/g, ' ').slice(0, 160)}\n`);
+                appendFileSync(process.env.DB_QUERY_LOG!, `${Date.now()} c${connection} ${query.replace(/\s+/g, ' ').slice(0, 160)}\n`);
               } catch { /* ignore */ }
             },
           }
@@ -62,8 +62,8 @@ function createDb(): Db {
         : (new Proxy(base, {
             get(target, prop, receiver) {
               if (prop === 'unsafe') {
-                return (query: string, params?: unknown[], options?: Record<string, unknown>) =>
-                  (target.unsafe as any)(query, params, { prepare: true, ...options });
+                return (...[query, params, options]: Parameters<typeof target.unsafe>) =>
+                  target.unsafe(query, params, { prepare: true, ...options });
               }
               return Reflect.get(target, prop, receiver);
             },

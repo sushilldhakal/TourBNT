@@ -59,14 +59,14 @@ async function main() {
     // Sellers' embedded lists: swap duplicate ids for the survivor and drop repeats.
     const sellers = await tx.select({ id: users.id, sellerInfo: users.sellerInfo }).from(users).where(sql`${users.sellerInfo} -> 'destination' IS NOT NULL`);
     for (const s of sellers) {
-      const info = (s.sellerInfo ?? {}) as Record<string, any>;
+      const info: Record<string, unknown> = s.sellerInfo ?? {};
       if (!Array.isArray(info.destination)) continue;
       const seen = new Set<string>();
-      const next = info.destination
-        .map((e: any) => ({ ...e, destinationId: remap.get(e?.destinationId) ?? e?.destinationId }))
-        .filter((e: any) => e.destinationId && !seen.has(e.destinationId) && seen.add(e.destinationId));
+      const next = (info.destination as Array<{ destinationId?: string }>)
+        .map((e) => ({ ...e, destinationId: (e?.destinationId && remap.get(e.destinationId)) || e?.destinationId }))
+        .filter((e) => !!e.destinationId && !seen.has(e.destinationId) && !!seen.add(e.destinationId));
       if (JSON.stringify(next) !== JSON.stringify(info.destination)) {
-        await tx.update(users).set({ sellerInfo: { ...info, destination: next } as any }).where(sql`${users.id} = ${s.id}`);
+        await tx.update(users).set({ sellerInfo: { ...info, destination: next } }).where(sql`${users.id} = ${s.id}`);
       }
     }
 

@@ -149,20 +149,20 @@ export const generateCompletion = async (req: Request
     const completion = completionResponse.choices[0]?.message?.content || '';
 
     res.json({ completion });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error in generateCompletion:', error);
 
-    if (error.response) {
-      if (error.response.status === 429) {
-        // Rate limit error
+    if (error instanceof OpenAI.APIError) {
+      if (error.status === 429) {
+        // Rate limit / quota error
         res.status(429).json({ error: 'You have exceeded your current quota. Please check your plan and billing details.' });
       } else {
         // Other API errors
-        res.status(error.response.status || 500).json({ error: error.response.data.message || 'Internal Server Error' });
+        res.status(error.status || 500).json({ error: error.message || 'Internal Server Error' });
       }
     } else {
       // Non-API errors
-      res.status(500).json({ error: error.message || 'An unexpected error occurred.' });
+      res.status(500).json({ error: error instanceof Error ? error.message : 'An unexpected error occurred.' });
     }
   }
 };

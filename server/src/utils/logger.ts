@@ -14,7 +14,7 @@ export interface LogEntry {
     level: LogLevel;
     message: string;
     timestamp: string;
-    metadata?: Record<string, any>;
+    metadata?: Record<string, unknown>;
 }
 
 class Logger {
@@ -60,7 +60,7 @@ class Logger {
     /**
      * Log error message
      */
-    error(message: string, metadata?: Record<string, any>): void {
+    error(message: string, metadata?: Record<string, unknown>): void {
         this.writeLog({
             level: LogLevel.ERROR,
             message,
@@ -72,7 +72,7 @@ class Logger {
     /**
      * Log warning message
      */
-    warn(message: string, metadata?: Record<string, any>): void {
+    warn(message: string, metadata?: Record<string, unknown>): void {
         this.writeLog({
             level: LogLevel.WARN,
             message,
@@ -84,7 +84,7 @@ class Logger {
     /**
      * Log info message
      */
-    info(message: string, metadata?: Record<string, any>): void {
+    info(message: string, metadata?: Record<string, unknown>): void {
         this.writeLog({
             level: LogLevel.INFO,
             message,
@@ -96,7 +96,7 @@ class Logger {
     /**
      * Log debug message (only in development)
      */
-    debug(message: string, metadata?: Record<string, any>): void {
+    debug(message: string, metadata?: Record<string, unknown>): void {
         this.writeLog({
             level: LogLevel.DEBUG,
             message,

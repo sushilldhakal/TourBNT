@@ -212,7 +212,7 @@ galleryRoutes.delete(
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-galleryRoutes.get('/:mediaId', authenticate, getSingleMedia as any);
+galleryRoutes.get('/:mediaId', authenticate, getSingleMedia);
 
 // Update media (Protected, Admin or Seller)
 /**

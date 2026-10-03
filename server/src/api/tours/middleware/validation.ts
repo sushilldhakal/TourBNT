@@ -43,8 +43,7 @@ export const validateTourCreation = (req: Request, res: Response, next: NextFunc
   }
 
   if (errors.length > 0) {
-    const error = createHttpError(HTTP_STATUS.BAD_REQUEST, 'Validation failed');
-    (error as any).details = errors;
+    const error = createHttpError(HTTP_STATUS.BAD_REQUEST, 'Validation failed', { details: errors });
     return next(error);
   }
 
@@ -112,8 +111,7 @@ export const validateSearchParams = (req: Request, res: Response, next: NextFunc
   }
 
   if (errors.length > 0) {
-    const error = createHttpError(HTTP_STATUS.BAD_REQUEST, 'Validation failed');
-    (error as any).details = errors;
+    const error = createHttpError(HTTP_STATUS.BAD_REQUEST, 'Validation failed', { details: errors });
     return next(error);
   }
 

@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import createHttpError from 'http-errors';
 import { db, comments, commentLikes, posts, users } from '../../db';
-import { eq, and, inArray, count, desc, sql, ilike, isNull } from 'drizzle-orm';
+import { eq, and, inArray, count, desc, sql, ilike, isNull, type SQLWrapper } from 'drizzle-orm';
 import { optionalViewer } from '../../middlewares/optionalViewer';
 import { sendSuccess, sendPaginatedResponse } from '../../utils/apiResponse';
 
@@ -14,7 +14,7 @@ export async function canModeratePost(viewer: { id: string; isAdmin: boolean } |
   return !!viewer && (viewer.isAdmin || viewer.id === postAuthorId);
 }
 
-const withReplies = async (parentIds: string[] | any, onlyApproved = false) => {
+const withReplies = async (parentIds: string[] | SQLWrapper, onlyApproved = false) => {
   // Accepts explicit ids or a sub-select of ids (so it can run in the same round trip as the page).
   if (Array.isArray(parentIds) && parentIds.length === 0) return new Map<string, unknown[]>();
 

@@ -20,7 +20,7 @@ const subscriberRouter = express.Router();
  *       200:
  *         description: Subscribers retrieved successfully
  */
-subscriberRouter.get('/', authenticate as any, authorizeRoles('admin'), paginationMiddleware(), getAllSubscribers);
+subscriberRouter.get('/', authenticate, authorizeRoles('admin'), paginationMiddleware(), getAllSubscribers);
 
 /**
  * @swagger
@@ -77,6 +77,6 @@ subscriberRouter.post(
 subscriberRouter.post('/unsubscribe', unsubscribeByToken);
 
 // Removing an address by name is an admin action: it used to be public, so anyone could unsubscribe anyone.
-subscriberRouter.delete('/:email', authenticate as any, authorizeRoles('admin'), deleteSubscriber);
+subscriberRouter.delete('/:email', authenticate, authorizeRoles('admin'), deleteSubscriber);
 
 export default subscriberRouter;

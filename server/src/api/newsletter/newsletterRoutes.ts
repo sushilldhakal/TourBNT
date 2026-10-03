@@ -54,7 +54,7 @@ router.post('/', asyncAuthHandler(async (req, res) => {
     let failed = 0;
     for (const r of recipients) {
       const ok = await sendEmail({ ...renderNewsletter({ subject, body, unsubscribeToken: r.token }), to: r.email });
-      ok ? sent++ : failed++;
+      if (ok) sent++; else failed++;
       // Keep the record roughly current without a write per email.
       if ((sent + failed) % 20 === 0) await db.update(newsletters).set({ sentCount: sent, failedCount: failed, updatedAt: new Date() }).where(eq(newsletters.id, record.id)).catch(() => undefined);
       await new Promise((r2) => setTimeout(r2, GAP_MS));

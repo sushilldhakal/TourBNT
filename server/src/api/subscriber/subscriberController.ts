@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { db, subscribers } from '../../db';
 import { and, count, desc, eq, isNull } from 'drizzle-orm';
-import { HTTP_STATUS, sendSuccess, sendPaginatedResponse } from '../../utils/apiResponse';
+import { HTTP_STATUS, sendPaginatedResponse } from '../../utils/apiResponse';
 
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

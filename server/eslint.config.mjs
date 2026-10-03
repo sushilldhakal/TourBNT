@@ -1,33 +1,28 @@
-import globals from "globals";
-import pluginJs from "@eslint/js";
-import tseslint from "@typescript-eslint/eslint-plugin";
-import parser from "@typescript-eslint/parser";
+import globals from 'globals';
+import js from '@eslint/js';
+import tseslint from 'typescript-eslint';
 
-export default [
+export default tseslint.config(
+  { ignores: ['dist/**', 'drizzle/**', 'node_modules/**', 'coverage/**'] },
+  js.configs.recommended,
+  ...tseslint.configs.recommended,
   {
-    files: ["**/*.{js,mjs,cjs,ts}"],
+    files: ['**/*.{js,mjs,cjs,ts}'],
     languageOptions: {
-      globals: globals.browser,
-      parser, // Use TypeScript parser
-      parserOptions: {
-        ecmaVersion: 2020,
-        sourceType: "module",
-      },
-    },
-    plugins: {
-      "@typescript-eslint": tseslint,
+      ecmaVersion: 2022,
+      sourceType: 'module',
+      globals: globals.node,
     },
     rules: {
-      // Add your custom rules here
+      // Fully typed: no `any`, explicit or implied by a stray cast.
+      '@typescript-eslint/no-explicit-any': 'error',
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrors: 'none', ignoreRestSiblings: true }],
     },
   },
-  // Directly include recommended configurations without using "extends"
   {
-    ...pluginJs.configs.recommended,
-    plugins: { ...pluginJs.configs.recommended.plugins },
+    // CommonJS config files.
+    files: ['**/*.cjs', 'ecosystem.config.js'],
+    languageOptions: { sourceType: 'commonjs' },
+    rules: { '@typescript-eslint/no-require-imports': 'off' },
   },
-  {
-    ...tseslint.configs.recommended,
-    plugins: { ...tseslint.configs.recommended.plugins },
-  },
-];
+);

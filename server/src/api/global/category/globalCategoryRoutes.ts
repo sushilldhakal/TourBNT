@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { type Request, type Response } from 'express';
 import { makeGetAvailable, makeBulkAdd } from '../bulkAdd';
 import {
   getCategoryById,
@@ -37,12 +37,12 @@ const router = express.Router();
 router.use(invalidateOnWrite(['categories', 'categories-approved', 'categories-by-type', 'category-by-id', 'home-feed', ...TOUR_LISTING_PREFIXES]));
 
 // Wrapper functions to handle :id parameter for RESTful routes
-const updateCategoryById = (req: any, res: any) => {
+const updateCategoryById = (req: Request, res: Response) => {
   req.params.categoryId = req.params.id;
   return updateCategory(req, res);
 };
 
-const deleteCategoryById = (req: any, res: any) => {
+const deleteCategoryById = (req: Request, res: Response) => {
   req.params.categoryId = req.params.id;
   return deleteCategory(req, res);
 };
@@ -142,7 +142,7 @@ router.get('/', cacheRoute('categories', 120), paginationMiddleware(), getApprov
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/', authenticate, authorizeRoles('admin'), uploadNone, submitCategory as any);
+router.post('/', authenticate, authorizeRoles('admin'), uploadNone, submitCategory);
 
 /**
  * @swagger
@@ -197,7 +197,7 @@ router.post('/', authenticate, authorizeRoles('admin'), uploadNone, submitCatego
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.patch('/:id', authenticate, authorizeRoles('admin'), uploadNone, updateCategoryById as any);
+router.patch('/:id', authenticate, authorizeRoles('admin'), uploadNone, updateCategoryById);
 
 /**
  * @swagger
@@ -246,7 +246,7 @@ router.patch('/:id', authenticate, authorizeRoles('admin'), uploadNone, updateCa
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.delete('/:id', authenticate, authorizeRoles('admin'), deleteCategoryById as any);
+router.delete('/:id', authenticate, authorizeRoles('admin'), deleteCategoryById);
 
 // Legacy route for backward compatibility
 /**
@@ -305,13 +305,13 @@ router.get('/public/:categoryId', cacheRoute('category-by-id', 60), getCategoryB
 router.use(authenticate);
 
 // Seller routes (specific routes must come before parameterized routes)
-router.get('/user-categories', getUserCategories as any); // New route for user-specific categories
-router.get('/available', makeGetAvailable('category') as any);
-router.post('/bulk-add', makeBulkAdd('category') as any);
-router.get('/seller/visible', getSellerCategories as any);
-router.get('/seller/search', searchCategories as any);
-router.get('/seller/enabled', getEnabledCategories as any);
-router.get('/seller/favorites', getFavoriteCategories as any);
+router.get('/user-categories', getUserCategories); // New route for user-specific categories
+router.get('/available', makeGetAvailable('category'));
+router.post('/bulk-add', makeBulkAdd('category'));
+router.get('/seller/visible', getSellerCategories);
+router.get('/seller/search', searchCategories);
+router.get('/seller/enabled', getEnabledCategories);
+router.get('/seller/favorites', getFavoriteCategories);
 
 // Parameterized routes (must come after specific routes)
 /**
@@ -390,24 +390,24 @@ router.get('/:categoryId', getCategoryById);
 // Business partners (hotel/restaurant/guide/transport/advertiser) don't
 // author tour categories; unlike destinations, they have no analogous
 // "location" use for a category. See globalDestinationRoutes.ts.
-router.post('/submit', uploadNone, authorizeRoles('admin', 'seller'), submitCategory as any);
-router.put('/:categoryId', uploadNone, authorizeRoles('admin', 'seller'), updateCategory as any);
-router.patch('/:categoryId', uploadNone, authorizeRoles('admin', 'seller'), updateCategory as any);
-router.put('/preferences', authorizeRoles('admin', 'seller'), updateCategoryPreferences as any);
-router.put('/:categoryId/favorite', toggleFavoriteCategory as any);
-router.patch('/:categoryId/toggle-active', toggleCategoryActiveStatus as any);
-router.post('/:categoryId/add-to-list', authenticate, addExistingCategoryToSeller as any);
-router.post('/:categoryId/remove-from-list', authenticate, removeExistingCategoryFromSeller as any);
+router.post('/submit', uploadNone, authorizeRoles('admin', 'seller'), submitCategory);
+router.put('/:categoryId', uploadNone, authorizeRoles('admin', 'seller'), updateCategory);
+router.patch('/:categoryId', uploadNone, authorizeRoles('admin', 'seller'), updateCategory);
+router.put('/preferences', authorizeRoles('admin', 'seller'), updateCategoryPreferences);
+router.put('/:categoryId/favorite', toggleFavoriteCategory);
+router.patch('/:categoryId/toggle-active', toggleCategoryActiveStatus);
+router.post('/:categoryId/add-to-list', authenticate, addExistingCategoryToSeller);
+router.post('/:categoryId/remove-from-list', authenticate, removeExistingCategoryFromSeller);
 
 // Admin routes
-router.get('/admin/pending', getPendingCategories as any);
-router.get('/admin/all', authorizeRoles('admin'), getAllCategoriesAdmin as any);
-router.get('/admin/change-requests', authorizeRoles('admin'), getChangeRequests as any);
-router.put('/admin/change-requests/:changeRequestId/approve', authorizeRoles('admin'), changeRequestNotFound as any);
-router.put('/admin/change-requests/:changeRequestId/reject', authorizeRoles('admin'), changeRequestNotFound as any);
-router.put('/admin/:categoryId/approve', approveCategory as any);
-router.put('/admin/:categoryId/reject', rejectCategory as any);
-router.get('/admin/:categoryId/usage', authorizeRoles('admin'), getCategoryUsage as any);
-router.delete('/admin/:categoryId', authorizeRoles('admin'), deleteCategory as any);
+router.get('/admin/pending', getPendingCategories);
+router.get('/admin/all', authorizeRoles('admin'), getAllCategoriesAdmin);
+router.get('/admin/change-requests', authorizeRoles('admin'), getChangeRequests);
+router.put('/admin/change-requests/:changeRequestId/approve', authorizeRoles('admin'), changeRequestNotFound);
+router.put('/admin/change-requests/:changeRequestId/reject', authorizeRoles('admin'), changeRequestNotFound);
+router.put('/admin/:categoryId/approve', approveCategory);
+router.put('/admin/:categoryId/reject', rejectCategory);
+router.get('/admin/:categoryId/usage', authorizeRoles('admin'), getCategoryUsage);
+router.delete('/admin/:categoryId', authorizeRoles('admin'), deleteCategory);
 
 export default router;

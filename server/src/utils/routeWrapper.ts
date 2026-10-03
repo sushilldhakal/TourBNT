@@ -8,7 +8,7 @@ import { Request, Response, NextFunction, RequestHandler } from 'express';
 
 export const asyncAuthHandler = (
     fn: (req: Request
-, res: Response, next: NextFunction) => any
+, res: Response, next: NextFunction) => unknown
 ): RequestHandler => {
     return (req, res, next) => {
         Promise.resolve(fn(req as Request
