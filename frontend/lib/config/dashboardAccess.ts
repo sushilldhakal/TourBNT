@@ -27,7 +27,7 @@ export const DASHBOARD_ACCESS_RULES: ReadonlyArray<{ prefix: string; roles: read
     // Platform administration
     { prefix: '/dashboard/users', roles: [A] },
     { prefix: '/dashboard/subscribers', roles: [A] },
-    { prefix: '/dashboard/operations', roles: [A] },
+    { prefix: '/dashboard/operations', roles: [A, S] }, // sellers: their own tours' supplier follow-ups
     { prefix: '/dashboard/ads', roles: [A] }, // ad moderation queue
     { prefix: '/dashboard/business-partners', roles: [A] },
 

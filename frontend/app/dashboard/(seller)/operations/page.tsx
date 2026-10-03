@@ -4,9 +4,12 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { format, formatDistanceToNowStrict } from 'date-fns';
-import { Gauge, Building2, Utensils, Compass, Truck, AlertCircle, AlertTriangle, CheckCircle2, Search, ListChecks, Plane, Store } from 'lucide-react';
+import { BellRing, Gauge, Building2, Utensils, Compass, Truck, AlertCircle, AlertTriangle, CheckCircle2, Search, ListChecks, Plane, Store } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { AdminGuard } from '@/components/dashboard/RoleGuard';
+import { SellerGuard } from '@/components/dashboard/RoleGuard';
+import { AttentionBoard } from '@/components/dashboard/operations/AttentionBoard';
+import { useAuth } from '@/lib/hooks/useAuth';
+import { isAdmin } from '@/lib/config/roles';
 import { DashboardCardHeader } from '@/components/dashboard/layout/CardHeader';
 import { PaginationControls } from '@/components/dashboard/shared/PaginationControls';
 import { EmptyState } from '@/components/dashboard/shared/EmptyState';
@@ -283,32 +286,47 @@ function SuppliersTab() {
 }
 
 // ---------------------------------------------------------------------------
+/**
+ * Operations. Sellers: what needs attention across all their published tours (suppliers who haven't confirmed,
+ * proposed a change or declined), soonest first. Admins: the same board across every seller, plus the
+ * portfolio-wide overview, request, trip and supplier tabs.
+ */
 export default function OperationsPage() {
+    const { user } = useAuth();
+    const admin = isAdmin(user.roles);
     return (
-        <AdminGuard>
+        <SellerGuard>
             <div className="container mx-auto py-8 px-4 max-w-6xl space-y-6">
                 <DashboardCardHeader
                     variant="compact"
-                    icon={Gauge}
+                    icon={admin ? Gauge : BellRing}
                     badge="Operations"
-                    title="Today's Operations"
-                    description="A live snapshot across every trip and supplier — the control center for TourBNT staff."
+                    title={admin ? "Today's Operations" : 'Needs attention'}
+                    description={admin
+                        ? 'A live snapshot across every trip and supplier — the control center for TourBNT staff.'
+                        : 'Hotels, guesthouses, restaurants, guides and transport on your upcoming tours that haven\'t confirmed yet, soonest first. Call them, accept a proposed change, ask again or swap the supplier. The same actions are on each tour\'s itinerary.'}
                 />
 
-                <Tabs defaultValue="overview" className="space-y-4">
-                    <TabsList className="h-auto flex-wrap justify-start gap-1">
-                        <TabsTrigger value="overview" className="gap-1.5"><Gauge className="h-4 w-4" />Overview</TabsTrigger>
-                        <TabsTrigger value="requests" className="gap-1.5"><ListChecks className="h-4 w-4" />Supplier requests</TabsTrigger>
-                        <TabsTrigger value="trips" className="gap-1.5"><Plane className="h-4 w-4" />Upcoming trips</TabsTrigger>
-                        <TabsTrigger value="suppliers" className="gap-1.5"><Store className="h-4 w-4" />Suppliers</TabsTrigger>
-                    </TabsList>
-                    {/* Radix unmounts inactive tab content, so each tab only fetches once opened. */}
-                    <TabsContent value="overview"><OverviewTab /></TabsContent>
-                    <TabsContent value="requests"><RequestsTab /></TabsContent>
-                    <TabsContent value="trips"><TripsTab /></TabsContent>
-                    <TabsContent value="suppliers"><SuppliersTab /></TabsContent>
-                </Tabs>
+                {admin ? (
+                    <Tabs defaultValue="attention" className="space-y-4">
+                        <TabsList className="h-auto flex-wrap justify-start gap-1">
+                            <TabsTrigger value="attention" className="gap-1.5"><BellRing className="h-4 w-4" />Needs attention</TabsTrigger>
+                            <TabsTrigger value="overview" className="gap-1.5"><Gauge className="h-4 w-4" />Overview</TabsTrigger>
+                            <TabsTrigger value="requests" className="gap-1.5"><ListChecks className="h-4 w-4" />Supplier requests</TabsTrigger>
+                            <TabsTrigger value="trips" className="gap-1.5"><Plane className="h-4 w-4" />Upcoming trips</TabsTrigger>
+                            <TabsTrigger value="suppliers" className="gap-1.5"><Store className="h-4 w-4" />Suppliers</TabsTrigger>
+                        </TabsList>
+                        {/* Radix unmounts inactive tab content, so each tab only fetches once opened. */}
+                        <TabsContent value="attention"><AttentionBoard /></TabsContent>
+                        <TabsContent value="overview"><OverviewTab /></TabsContent>
+                        <TabsContent value="requests"><RequestsTab /></TabsContent>
+                        <TabsContent value="trips"><TripsTab /></TabsContent>
+                        <TabsContent value="suppliers"><SuppliersTab /></TabsContent>
+                    </Tabs>
+                ) : (
+                    <AttentionBoard />
+                )}
             </div>
-        </AdminGuard>
+        </SellerGuard>
     );
 }

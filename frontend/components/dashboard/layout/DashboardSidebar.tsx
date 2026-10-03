@@ -116,7 +116,8 @@ const baseNavigationItems: NavigationItem[] = [
         href: '/dashboard/operations',
         label: 'Operations',
         icon: Gauge,
-        adminOnly: true
+        // Sellers: their own tours' supplier follow-ups. Admins: everything.
+        roles: ['admin', 'seller']
     },
     // Add My Profile link at top level (accessible to all authenticated users)
     {

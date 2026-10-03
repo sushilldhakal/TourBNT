@@ -94,7 +94,7 @@ export const baseNavigationItems: NavigationItem[] = [
         href: '/dashboard/operations',
         label: 'Operations',
         icon: Gauge,
-        adminOnly: true,
+        roles: ['admin', 'seller'],
     },
     // Split by type (see DashboardSidebar for the ownership-driven version
     // that only shows the ones a user actually owns) — the search palette

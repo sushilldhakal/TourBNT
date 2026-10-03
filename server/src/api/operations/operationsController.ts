@@ -206,3 +206,88 @@ export const getOperationsSuppliers = async (req: Request, res: Response, next: 
     next(error);
   }
 };
+
+const OPEN_STATUSES = ['pending', 'held', 'countered', 'declined', 'expired'];
+
+/**
+ * "Needs attention": every upcoming supplier request that isn't confirmed yet (no reply, a proposed change,
+ * declined, expired, or only held) on published tours, soonest service date first, so whoever runs the tours
+ * can call the supplier, accept a change or swap the supplier before the day. Problems sort before rows that
+ * are just waiting on the same day.
+ *
+ * Sellers see their own tours (any tour they are an author of); admins see everyone's.
+ * The actions themselves use the existing per-tour endpoints (counter-response, reopen, replace), which
+ * check access again.
+ * GET /api/v1/operations/attention?status=&role=&tourId=&q=&page=&limit=
+ */
+export const getOperationsAttention = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { page, limit, offset } = parsePage(req);
+    const status = strParam(req.query.status);
+    const role = strParam(req.query.role);
+    const tourId = strParam(req.query.tourId);
+    const q = strParam(req.query.q);
+    const isAdmin = req.user!.roles.includes('admin');
+
+    // Upcoming, not-yet-confirmed requests on published tours this person runs.
+    const base = [
+      sql`r.status in ('pending','held','countered','declined','expired')`,
+      sql`r.service_date >= current_date`,
+      sql`t.tour_status = 'Published'`,
+    ];
+    if (!isAdmin) base.push(sql`exists (select 1 from tour_authors ta where ta.tour_id = r.tour_id and ta.user_id = ${req.user!.id})`);
+    const baseWhere = sql.join(base, sql` and `);
+
+    const filters = [...base];
+    if (status && OPEN_STATUSES.includes(status)) filters.push(sql`r.status = ${status}`);
+    if (role && REQUEST_ROLES.includes(role)) filters.push(sql`r.role = ${role}`);
+    if (tourId) filters.push(sql`r.tour_id = ${tourId}`);
+    if (q) { const like = `%${q}%`; filters.push(sql`(t.title ilike ${like} or t.code ilike ${like} or bp.name ilike ${like})`); }
+    const where = sql.join(filters, sql` and `);
+
+    const from = sql`from itinerary_partner_requests r
+      join tours t on t.id = r.tour_id
+      join business_partners bp on bp.id = r.business_partner_id
+      left join business_partner_unit_types ut on ut.id = r.unit_type_id`;
+
+    const [rows, totalRows, statusRows, tourRows] = await Promise.all([
+      db.execute(sql`select r.id, r.tour_id as "tourId", t.title as "tourTitle", t.code as "tourCode", t.destination_id as "tourDestinationId",
+          r.tour_itinerary_partner_id as "tourItineraryPartnerId",
+          bp.id as "businessPartnerId", bp.name as "partnerName", bp.type as "partnerType", bp.phone as "partnerPhone", bp.email as "partnerEmail",
+          r.role, r.service_date::text as "serviceDate", r.service_time as "serviceTime", r.headcount, r.units_requested as "unitsRequested",
+          coalesce(ut.name, tip.unit_type) as "unitType",
+          r.status, r.response_notes as "responseNotes", r.counter_units as "counterUnits", r.counter_date::text as "counterDate",
+          r.counter_time as "counterTime", r.counter_notes as "counterNotes", r.hold_expires_at as "holdExpiresAt", r.respond_by_at as "respondByAt",
+          (r.service_date - current_date)::int as "daysUntil",
+          coalesce((select sum(c.headcount) from itinerary_request_booking_contributions c where c.request_id = r.id), 0)::int as "bookedTravellers"
+        ${from}
+        left join tour_itinerary_partners tip on tip.id = r.tour_itinerary_partner_id
+        where ${where}
+        order by r.service_date asc,
+          case r.status when 'declined' then 0 when 'expired' then 1 when 'countered' then 2 when 'pending' then 3 else 4 end,
+          r.service_time asc nulls first, t.title asc
+        limit ${limit} offset ${offset}`),
+      db.execute(sql`select count(*)::int as value ${from} where ${where}`),
+      // Counts for the filter chips: everything open for this person, ignoring the chips' own filter.
+      db.execute(sql`select r.status, count(*)::int as value,
+          count(*) filter (where r.service_date < current_date + 7)::int as "within7"
+        ${from} where ${baseWhere} group by r.status`),
+      db.execute(sql`select distinct t.id, t.title, t.code ${from} where ${baseWhere} order by t.title`),
+    ]);
+
+    const totalItems = Number((totalRows as any)[0]?.value ?? 0);
+    const counts: Record<string, number> = {};
+    let within7Days = 0;
+    for (const r of statusRows as any[]) { counts[r.status] = Number(r.value); within7Days += Number(r.within7); }
+    return res.json({
+      success: true,
+      items: rows,
+      counts,
+      within7Days,
+      tours: tourRows,
+      pagination: { page, limit, totalItems, totalPages: Math.ceil(totalItems / limit) },
+    });
+  } catch (error) {
+    next(error);
+  }
+};

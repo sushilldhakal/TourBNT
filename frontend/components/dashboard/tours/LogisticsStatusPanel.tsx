@@ -72,7 +72,7 @@ const supplierCandidatesQuery = (role: string, destinationId: string | undefined
  * meals, guides for guiding) — in the tour's own area by default, with a switch
  * to widen to every area and a search box to narrow it down.
  */
-function ReplaceSupplierPopover({ row, tourDestinationId, onReplace }: { row: TourItineraryRequestStatus; tourDestinationId?: string; onReplace: (partner: BusinessPartner) => void }) {
+export function ReplaceSupplierPopover({ row, tourDestinationId, onReplace }: { row: Pick<TourItineraryRequestStatus, 'role' | 'businessPartnerId'>; tourDestinationId?: string; onReplace: (partner: BusinessPartner) => void }) {
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
     const [areaOnly, setAreaOnly] = useState(!!tourDestinationId);

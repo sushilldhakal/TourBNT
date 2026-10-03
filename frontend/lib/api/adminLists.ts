@@ -329,3 +329,51 @@ export const getDashboardSummary = async () => {
         throw handleApiError(error, 'fetching dashboard summary');
     }
 };
+
+/** One upcoming supplier request that still needs attention (see GET /operations/attention). */
+export interface AttentionRow {
+    id: string;
+    tourId: string;
+    tourTitle: string;
+    tourCode: string | null;
+    tourDestinationId: string | null;
+    tourItineraryPartnerId: string;
+    businessPartnerId: string;
+    partnerName: string;
+    partnerType: string;
+    partnerPhone: string | null;
+    partnerEmail: string | null;
+    role: 'transport' | 'accommodation' | 'guide' | 'meals' | 'other';
+    serviceDate: string;
+    serviceTime: string | null;
+    headcount: number;
+    unitsRequested: number;
+    unitType: string | null;
+    status: 'pending' | 'held' | 'countered' | 'declined' | 'expired';
+    responseNotes: string | null;
+    counterUnits: number | null;
+    counterDate: string | null;
+    counterTime: string | null;
+    counterNotes: string | null;
+    holdExpiresAt: string | null;
+    respondByAt: string | null;
+    daysUntil: number;
+    bookedTravellers: number;
+}
+
+export interface AttentionPage extends PagedResult<AttentionRow> {
+    /** Open items with a service date in the next 7 days. */
+    within7Days: number;
+    /** Tours that have open items, for the tour filter. */
+    tours: Array<{ id: string; title: string; code: string | null }>;
+}
+
+/** Upcoming supplier requests not confirmed yet, soonest first: the seller's own tours (admins: all). */
+export const getOperationsAttention = async (params: { status?: string; role?: string; tourId?: string; q?: string; page: number; limit: number }): Promise<AttentionPage> => {
+    try {
+        const response = await api.get('/operations/attention', { params: clean(params) });
+        return { ...normalize<AttentionRow>(response.data), within7Days: response.data?.within7Days ?? 0, tours: response.data?.tours ?? [] };
+    } catch (error) {
+        throw handleApiError(error, 'fetching items that need attention');
+    }
+};
