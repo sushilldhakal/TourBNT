@@ -8,6 +8,9 @@ import { Toaster } from "@/components/ui/toaster";
 import { WebVitalsReporter } from "@/components/WebVitalsReporter";
 import { AuthRedirect } from "@/components/auth/AuthRedirect";
 import AuthBootstrap from "@/providers/AuthBootstrap";
+import { Suspense } from "react";
+import { CookieConsent } from "@/components/consent/CookieConsent";
+import { Analytics } from "@/components/consent/Analytics";
 
 
 const nunitoSans = Nunito_Sans({
@@ -54,6 +57,8 @@ export default function RootLayout({
               <WebVitalsReporter />
               {children}
               <Toaster />
+              <CookieConsent />
+              <Suspense fallback={null}><Analytics /></Suspense>
             </LayoutProvider>
           </QueryProvider>
         </ThemeProvider>

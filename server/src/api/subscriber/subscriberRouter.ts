@@ -3,6 +3,7 @@ import { body } from "express-validator";
 import { authenticate, authorizeRoles } from "../../middlewares/authenticate";
 import { paginationMiddleware } from "../../middlewares/pagination";
 import { createSubscriber, deleteSubscriber, getAllSubscribers } from "./subscriberController";
+import { requireHuman } from '../../middlewares/turnstile';
 
 const subscriberRouter = express.Router();
 
@@ -48,6 +49,7 @@ subscriberRouter.get('/', authenticate as any, authorizeRoles('admin'), paginati
  */
 subscriberRouter.post(
     '/',
+    requireHuman(),
     [body('email').notEmpty().withMessage('Email is required')],
     createSubscriber
 );

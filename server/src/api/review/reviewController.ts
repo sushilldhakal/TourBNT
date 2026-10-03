@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { db, reviews, reviewReplies, tours, tourAuthors, users } from '../../db';
+import { db, reviews, reviewReplies, tours, tourAuthors, users, bookings } from '../../db';
 import { eq, and, or, ilike, desc, asc, avg, count, inArray, sql } from 'drizzle-orm';
 import { sendSuccess } from '../../utils/apiResponse';
 import { invalidateTour } from '../../services/cacheInvalidation';
@@ -104,6 +104,43 @@ export const getAllApprovedReviews = async (req: Request, res: Response) => {
   }
 };
 
+/**
+ * Who may write a tour review: only a traveller whose booking on this tour was confirmed or completed AND whose
+ * departure date has passed — i.e. someone who has actually taken the trip. Admins may always review (moderation,
+ * testing); the tour's own sellers may not review it.
+ */
+async function reviewEligibility(userId: string, roles: string[], tourId: string): Promise<{ canReview: boolean; reason?: 'own_tour' | 'no_booking' | 'trip_not_taken'; message?: string; tripDate?: Date }> {
+  if (roles.includes('admin')) return { canReview: true };
+
+  const [own] = await db.select({ userId: tourAuthors.userId }).from(tourAuthors).where(and(eq(tourAuthors.tourId, tourId), eq(tourAuthors.userId, userId))).limit(1);
+  if (own) return { canReview: false, reason: 'own_tour', message: 'You cannot review a tour you run.' };
+
+  const mine = await db
+    .select({ departureDate: bookings.departureDate })
+    .from(bookings)
+    .where(and(eq(bookings.tourId, tourId), eq(bookings.userId, userId), inArray(bookings.status, ['confirmed', 'completed'])));
+  if (mine.length === 0) return { canReview: false, reason: 'no_booking', message: 'Only travellers who booked this tour can review it. Book a departure and share your experience after the trip.' };
+
+  const now = new Date();
+  if (!mine.some((b) => new Date(b.departureDate) <= now)) {
+    const next = mine.map((b) => new Date(b.departureDate)).sort((a, b) => a.getTime() - b.getTime())[0];
+    return { canReview: false, reason: 'trip_not_taken', tripDate: next, message: `You can review this tour after your trip on ${next.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' })}.` };
+  }
+  return { canReview: true };
+}
+
+// Can the signed-in user review this tour? (drives the review form on the tour page)
+export const getReviewEligibility = async (req: Request, res: Response) => {
+  try {
+    if (!req.user) return res.status(401).json({ message: 'You must be logged in to add a review' });
+    const result = await reviewEligibility(req.user.id, req.user.roles ?? [], req.params.tourId);
+    res.json({ success: true, data: result });
+  } catch (error) {
+    console.error('Error checking review eligibility:', error);
+    res.status(500).json({ message: 'Could not check review eligibility' });
+  }
+};
+
 // Add a review to a tour
 export const addReview = async (req: Request, res: Response) => {
   try {
@@ -126,6 +163,12 @@ export const addReview = async (req: Request, res: Response) => {
     const roundedRating = Math.round(rating * 2) / 2;
 
     const [existingReview] = await db.select().from(reviews).where(and(eq(reviews.tourId, tourId), eq(reviews.userId, userId))).limit(1);
+
+    // Editing your own earlier review is always allowed; a NEW review needs a taken trip (see reviewEligibility).
+    if (!existingReview) {
+      const eligibility = await reviewEligibility(userId, req.user?.roles ?? [], tourId);
+      if (!eligibility.canReview) return res.status(403).json({ message: eligibility.message ?? 'You cannot review this tour.' });
+    }
 
     let review;
     let isUpdate = false;

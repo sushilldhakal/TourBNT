@@ -164,6 +164,26 @@ const nextConfig = {
     return config;
   },
 
+  // Security headers on every page. (A strict Content-Security-Policy is deliberately not set yet: the app
+  // relies on inline scripts and several third-party origins, and an untested CSP would break pages.)
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          // HTTPS only for a year. Not includeSubDomains/preload: nothing here controls other subdomains.
+          { key: "Strict-Transport-Security", value: "max-age=31536000" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          // Pages may be framed only by the same site (clickjacking protection).
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          // geolocation is used by the "businesses near me" button; the rest are never needed.
+          { key: "Permissions-Policy", value: "geolocation=(self), camera=(), microphone=(), payment=(self)" },
+        ],
+      },
+    ];
+  },
+
   // API proxy: use app/api/[...path] route (forwards cookies). No rewrites.
   // Rewrites don't forward cookies; the API route does.
 };

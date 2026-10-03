@@ -2,6 +2,7 @@ import { db, conversations, conversationParticipants, conversationMessages, user
 import { eq, and, or, inArray, desc, asc, count, sql } from 'drizzle-orm';
 import createHttpError from 'http-errors';
 import { USER_ROLES, type UserRole } from '../../utils/roles';
+import { notifyEnquiryCreated } from '../../services/emailService';
 
 /** Every role except the two that are never on the internal/support side of a conversation. */
 const INTERNAL_ROLES: UserRole[] = USER_ROLES.filter((r) => r !== 'user' && r !== 'subscriber');
@@ -311,6 +312,9 @@ export const ConversationService = {
       role: 'customer',
       content: input.message,
     });
+
+    // Alert the seller / admins and acknowledge the sender — after the commit, never blocking it.
+    void notifyEnquiryCreated(row.id);
 
     return populateConversation(row);
   },

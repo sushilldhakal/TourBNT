@@ -14,6 +14,7 @@ import { canAccessDashboard } from "@/lib/utils/roles";
 import { Mail, Lock, UserIcon, Phone, CheckCircle2, Loader2, EyeIcon, EyeOffIcon } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
+import { TurnstileWidget } from '@/components/security/TurnstileWidget';
 
 function LoginPageContent() {
     const router = useRouter();
@@ -372,6 +373,8 @@ function LoginPageContent() {
                                 </Button>
                             </div>
 
+                            <TurnstileWidget />
+
                             <Button
                                 className="w-full"
                                 onClick={handleLogin}
@@ -506,6 +509,8 @@ function LoginPageContent() {
                                 {errors.registerConfirmPassword && <p className="text-sm text-destructive">{errors.registerConfirmPassword}</p>}
                             </div>
 
+                            <TurnstileWidget />
+
                             <Button
                                 className="w-full"
                                 onClick={handleRegister}
@@ -572,6 +577,8 @@ function LoginPageContent() {
                                     {errors.forgotEmail && <p className="text-sm text-destructive">{errors.forgotEmail}</p>}
                                 </div>
                             )}
+
+                            {!searchParams.get('forgottoken') && <TurnstileWidget />}
 
                             <Button
                                 className="w-full"

@@ -16,12 +16,13 @@ import {
   archiveConversation,
   deleteConversation,
 } from './conversationController';
+import { requireHuman } from '../../middlewares/turnstile';
 
 const conversationRouter = express.Router();
 
 // Contact form / tour enquiry — works with or without a session (see
 // getOptionalRequester in the controller); must stay ahead of `authenticate`.
-conversationRouter.post('/', createConversation);
+conversationRouter.post('/', requireHuman({ skipIfSignedIn: true }), createConversation);
 
 conversationRouter.use(authenticate);
 

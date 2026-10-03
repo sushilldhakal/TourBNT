@@ -36,7 +36,7 @@ import {
 } from './middleware/validation';
 import { TourService } from './services/tourService';
 // Import review controller functions for nested routes
-import { getTourReviews, addReview, getTourRating } from '../review/reviewController';
+import { getTourReviews, addReview, getTourRating, getReviewEligibility } from '../review/reviewController';
 // Import booking controller function for nested routes
 import { getTourBookings } from '../bookings/controllers/bookingController';
 
@@ -516,6 +516,8 @@ router.get('/:tourId/reviews', validateObjectId(), paginationMiddleware(), getTo
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
+// Whether the signed-in user may review this tour (they must have taken a booked trip).
+router.get('/:tourId/reviews/eligibility', authenticate, validateObjectId(), getReviewEligibility);
 router.post('/:tourId/reviews', authenticate, validateObjectId(), addReview);
 
 /**

@@ -65,6 +65,7 @@
     "express-rate-limit": "^7.4.0",
     "express-validator": "^7.1.0",
     "googleapis": "^140.0.1",
+    "helmet": "^8.3.0",
     "http-errors": "^2.0.0",
     "ioredis": "^6.0.0",
     "jsonwebtoken": "^9.0.2",

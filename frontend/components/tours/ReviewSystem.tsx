@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import Link from 'next/link';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTourReviews } from '@/lib/queries';
 import { Star, ThumbsUp, Eye, MessageCircle, Send } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -12,6 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/use-toast';
 import {
     getTourReviews,
+    getReviewEligibility,
     addReview,
     addReviewReply,
     likeReview,
@@ -38,8 +40,8 @@ export function ReviewSystem({ tourId, initialReviews }: ReviewSystemProps) {
         <section className="bg-card border rounded-lg p-4 sm:p-6 space-y-4 sm:space-y-6" aria-labelledby="reviews-heading">
             <h2 id="reviews-heading" className="text-xl sm:text-2xl font-bold">Reviews</h2>
 
-            {/* Review form */}
-            <ReviewForm tourId={tourId} onSuccess={refetch} />
+            {/* Review form: only for travellers who have taken the trip */}
+            <ReviewFormGate tourId={tourId} onSuccess={refetch} />
 
             {/* Reviews list */}
             <div className="space-y-4 sm:space-y-6" role="list" aria-label="Tour reviews">
@@ -59,6 +61,28 @@ export function ReviewSystem({ tourId, initialReviews }: ReviewSystemProps) {
                 )}
             </div>
         </section>
+    );
+}
+
+/** Shows the review form to travellers who may review, and an explanation to everyone else. */
+function ReviewFormGate({ tourId, onSuccess }: { tourId: string; onSuccess: () => void }) {
+    const { data, isLoading } = useQuery({
+        queryKey: ['review-eligibility', tourId],
+        queryFn: () => getReviewEligibility(tourId),
+        staleTime: 60_000,
+    });
+
+    if (isLoading) return null;
+    if (data?.canReview) return <ReviewForm tourId={tourId} onSuccess={onSuccess} />;
+    return (
+        <Card>
+            <CardContent className="pt-4 sm:pt-6 px-3 sm:px-6 text-sm text-muted-foreground">
+                {data?.message ?? 'Only travellers who booked this tour can review it.'}
+                {data?.reason === 'not_signed_in' && (
+                    <> <Link href="/auth/login" className="text-primary underline-offset-4 hover:underline">Sign in</Link></>
+                )}
+            </CardContent>
+        </Card>
     );
 }
 

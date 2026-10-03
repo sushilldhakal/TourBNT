@@ -79,6 +79,25 @@ export const likeReview = async (tourId: string, reviewId: string) => {
     }
 };
 
+export interface ReviewEligibility {
+    canReview: boolean;
+    reason?: 'not_signed_in' | 'own_tour' | 'no_booking' | 'trip_not_taken';
+    message?: string;
+}
+
+/** Whether the visitor may review this tour. A signed-out visitor is simply "not signed in", not an error. */
+export const getReviewEligibility = async (tourId: string): Promise<ReviewEligibility> => {
+    try {
+        const response = await api.get(`/tours/${tourId}/reviews/eligibility`);
+        return (response.data?.data ?? { canReview: false }) as ReviewEligibility;
+    } catch (error: any) {
+        if (error?.response?.status === 401) {
+            return { canReview: false, reason: 'not_signed_in', message: 'Sign in to review a tour you have taken.' };
+        }
+        throw handleApiError(error, 'checking review eligibility');
+    }
+};
+
 /**
  * Add a new review
  */

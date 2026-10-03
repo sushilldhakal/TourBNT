@@ -4,6 +4,7 @@ import useUserStore from '@/lib/store/useUserStore';
 import { useAuthRedirectStore } from '@/lib/store/useAuthRedirectStore';
 import { devLog } from '@/lib/devLogger';
 import { SERVER_BACKEND_URL } from '@/lib/config/backendUrl';
+import { needsHumanCheck, turnstile } from '@/lib/turnstile';
 
 // Flag to prevent multiple simultaneous redirects
 let isRedirecting = false;
@@ -78,11 +79,23 @@ export const serverApi = axios.create({
     maxRedirects: 5,
 });
 
-api.interceptors.request.use((config) => config, (e) => Promise.reject(e));
+api.interceptors.request.use((config) => {
+    // Attach the Cloudflare Turnstile token to the few requests the server protects (see lib/turnstile.ts).
+    if (needsHumanCheck(config.method, config.url)) {
+        const token = turnstile.get();
+        if (token) config.headers.set('X-Turnstile-Token', token);
+    }
+    return config;
+}, (e) => Promise.reject(e));
 
 api.interceptors.response.use(
-    (response) => response,
+    (response) => {
+        // A Turnstile token is single-use: get a fresh one after every protected request.
+        if (needsHumanCheck(response.config.method, response.config.url)) turnstile.reset();
+        return response;
+    },
     (error: AxiosError) => {
+        if (needsHumanCheck(error.config?.method, error.config?.url)) turnstile.reset();
         const originalRequest = error.config;
         const status = error.response?.status;
         const url = originalRequest?.url ?? '';

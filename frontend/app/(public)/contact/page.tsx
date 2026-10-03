@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { createConversation } from '@/lib/api/conversations';
 import { toast } from '@/components/ui/use-toast';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { TurnstileWidget } from '@/components/security/TurnstileWidget';
 
 export default function ContactPage() {
     const { user } = useAuth();
@@ -237,6 +238,8 @@ export default function ContactPage() {
                                         placeholder="Tell us how we can help you..."
                                     />
                                 </div>
+
+                                <TurnstileWidget />
 
                                 <button
                                     type="submit"

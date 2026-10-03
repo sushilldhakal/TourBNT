@@ -4,8 +4,8 @@
 
 import type { CompanyInfo } from '@/types/company';
 
-// For demo purposes - this will be replaced with an actual API call once backend is ready
-const mockCompanyInfo: CompanyInfo = {
+// TODO(launch): placeholder contact details — replace the address, phone and social links with the real ones.
+export const mockCompanyInfo: CompanyInfo = {
     companyName: "TourBNT",
     description: "Discover the world with TourBNT - your trusted partner for unforgettable travel experiences and adventures around the globe.",
     contactPhone: "+61 0433 926 079",
@@ -14,14 +14,14 @@ const mockCompanyInfo: CompanyInfo = {
     resources: [
         { title: "Travel Guides", link: "/blog" },
         { title: "Tour Packages", link: "/tours" },
-        { title: "Destination Tips", link: "/blog" },
-        { title: "Travel Insurance", link: "/contact" }
+        { title: "Destinations", link: "/destinations" },
+        { title: "Tour Operators", link: "/agencies" }
     ],
     quickLinks: [
         { title: "About Us", link: "/about" },
-        { title: "Our Services", link: "/about" },
-        { title: "Meet Our Team", link: "/about" },
-        { title: "Download App", link: "/app" }
+        { title: "Help Center", link: "/help" },
+        { title: "Contact Us", link: "/contact" },
+        { title: "Cancellation & Refund Policy", link: "/refund-policy" }
     ],
     socialMedia: [
         { platform: "Facebook", link: "https://facebook.com/TourBNT", icon: "facebook" },
@@ -33,14 +33,8 @@ const mockCompanyInfo: CompanyInfo = {
 
 export const getCompanyInfo = async (): Promise<CompanyInfo> => {
     try {
-        // In a real implementation, this would be an API call:
-        // const response = await api.get('/company-info');
-        // return response.data;
-
-        // For now, return the mock data with a simulated delay
-        return new Promise((resolve) => {
-            setTimeout(() => resolve(mockCompanyInfo), 300);
-        });
+        // Static for now (no backend endpoint yet); resolve immediately so the footer never waits.
+        return mockCompanyInfo;
     } catch (error) {
         if (error instanceof Error) {
             throw new Error(`Error fetching company info: ${error.message}`);

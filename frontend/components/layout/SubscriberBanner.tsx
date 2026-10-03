@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ContentContainer } from './PublicLayoutClient';
 import type { UseMutationResult } from '@tanstack/react-query';
+import { TurnstileWidget } from '@/components/security/TurnstileWidget';
 
 interface SubscriberBannerProps {
     email: string;
@@ -59,6 +60,7 @@ export default function SubscriberBanner({
                                 onChange={(e) => setEmail(e.target.value)}
                                 required
                             />
+                            <TurnstileWidget />
                             <Button
                                 type="submit"
                                 variant="secondary"

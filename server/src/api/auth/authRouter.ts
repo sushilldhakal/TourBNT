@@ -8,6 +8,7 @@ import {
     forgotPassword,
     resetPassword
 } from '../user/userController';
+import { requireHuman } from '../../middlewares/turnstile';
 
 const authRouter = express.Router();
 
@@ -74,6 +75,7 @@ const authRouter = express.Router();
 authRouter.post(
     '/register',
     authLimiter,
+    requireHuman(),
     [
         body('name').notEmpty().withMessage('Name is required'),
         body('email').isEmail().withMessage('Valid email is required'),
@@ -156,6 +158,7 @@ authRouter.post(
 authRouter.post(
     '/login',
     authLimiter,
+    requireHuman(),
     [
         body('email').isEmail().withMessage('Valid email is required'),
         body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters')
@@ -237,6 +240,7 @@ authRouter.post(
 authRouter.post(
     '/forgot-password',
     authLimiter,
+    requireHuman(),
     [body('email').isEmail().withMessage('Valid email is required')],
     forgotPassword
 );

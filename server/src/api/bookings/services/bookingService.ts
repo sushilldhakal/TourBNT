@@ -3,6 +3,7 @@ import { eq, and, or, ilike, gte, lt, inArray, desc, asc, count, sql } from 'dri
 import createHttpError from 'http-errors';
 import { calculateBookingPricing, type PaymentType } from '../utils/pricingCalculator';
 import { ItineraryRequestService, findMatchingFixedDeparture } from '../../tours/services/itineraryRequestService';
+import { notifyBookingCreated, notifyBookingConfirmed, notifyBookingCancelled, notifyPaymentReceived } from '../../../services/emailService';
 
 type BookingRow = typeof bookings.$inferSelect;
 
@@ -227,6 +228,9 @@ export class BookingService {
             }
         }
 
+        // Confirmation to the traveller and an alert to the seller — after the commit, never blocking it.
+        void notifyBookingCreated(booking.id);
+
         return booking;
     }
 
@@ -352,9 +356,16 @@ export class BookingService {
             updateData.notes = notes;
         }
 
+        const [before] = await db.select({ status: bookings.status }).from(bookings).where(eq(bookings.id, bookingId)).limit(1);
         const [booking] = await db.update(bookings).set(updateData).where(eq(bookings.id, bookingId)).returning();
         if (!booking) {
             throw createHttpError(404, 'Booking not found');
+        }
+
+        // Tell the traveller about a real change only (not a repeated save of the same status).
+        if (before?.status !== status) {
+            if (status === 'confirmed') void notifyBookingConfirmed(booking.id);
+            if (status === 'cancelled') void notifyBookingCancelled(booking.id);
         }
 
         if (status === 'cancelled') {
@@ -378,6 +389,7 @@ export class BookingService {
             await BookingService.assertTourAccess(existing.tourId, requester);
         }
 
+        const [prior] = await db.select({ paymentStatus: bookings.paymentStatus }).from(bookings).where(eq(bookings.id, bookingId)).limit(1);
         const updateData: Partial<BookingRow> = { paymentStatus: paymentStatus as any, updatedAt: new Date() };
 
         if (paidAmount !== undefined) {
@@ -391,6 +403,11 @@ export class BookingService {
         const [booking] = await db.update(bookings).set(updateData).where(eq(bookings.id, bookingId)).returning();
         if (!booking) {
             throw createHttpError(404, 'Booking not found');
+        }
+
+        // Receipt when money is actually received (the future payment-gateway webhook goes through here too).
+        if (prior?.paymentStatus !== paymentStatus && (paymentStatus === 'paid' || paymentStatus === 'partial')) {
+            void notifyPaymentReceived(booking.id);
         }
 
         return booking;

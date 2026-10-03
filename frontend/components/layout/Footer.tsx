@@ -9,6 +9,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useCompanyInfo } from '@/lib/queries/useCompanyInfo';
 import { subscribeEmail } from '@/lib/api/subscribers';
 import { ContentContainer } from './PublicLayoutClient';
+import { CookieSettingsButton } from '@/components/consent/CookieConsent';
 import dynamic from 'next/dynamic';
 
 // Lazy load the ToastAction - only loads when there's an error
@@ -199,6 +200,14 @@ export function Footer() {
                             <p className="text-center text-base text-muted-foreground">
                                 &copy; {new Date().getFullYear()} {companyInfo?.companyName}. All rights reserved.
                             </p>
+                            <nav aria-label="Legal" className="mt-3 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm text-muted-foreground">
+                                <Link href="/terms" className="hover:text-primary transition-colors">Terms</Link>
+                                <Link href="/privacy" className="hover:text-primary transition-colors">Privacy</Link>
+                                <Link href="/cookies" className="hover:text-primary transition-colors">Cookies</Link>
+                                <Link href="/refund-policy" className="hover:text-primary transition-colors">Cancellation &amp; Refunds</Link>
+                                <Link href="/help" className="hover:text-primary transition-colors">Help Center</Link>
+                                <CookieSettingsButton className="hover:text-primary transition-colors" />
+                            </nav>
                         </div>
                     </ContentContainer>
                 </div>

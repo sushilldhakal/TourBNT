@@ -35,10 +35,21 @@ import { getSwaggerSpec } from './config/swagger';
 import { logger } from './utils/logger';
 import cookieParser from 'cookie-parser';
 import { TRUST_PROXY } from './config/trustProxy';
+import helmet from 'helmet';
 
 const app = express();
 // Believe X-Forwarded-For only from nginx and Cloudflare, so req.ip is the real visitor (see config/trustProxy.ts).
 app.set('trust proxy', TRUST_PROXY);
+
+// Standard security headers on every API response (HSTS, nosniff, frame and referrer policy, ...).
+// CSP is off here: this app serves JSON plus the Swagger UI (which needs inline scripts). The site's own
+// pages get their headers from the Next.js config.
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: { policy: 'cross-origin' }, // the site on another origin loads API images/files
+  strictTransportSecurity: { maxAge: 31536000, includeSubDomains: false },
+}));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
