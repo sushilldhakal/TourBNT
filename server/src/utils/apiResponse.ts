@@ -2,7 +2,6 @@ import { Request, Response, NextFunction } from 'express';
 import { HttpError } from 'http-errors';
 import { config } from '../config/config';
 import { logger } from './logger';
-import { normalizeDoc } from './normalizeDoc';
 
 /**
  * HTTP Status Codes Constants
@@ -57,44 +56,6 @@ export interface PaginationMeta {
 }
 
 /**
- * Recursively normalize nested documents in an object
- */
-const normalizeNested = (obj: any): any => {
-    if (!obj || typeof obj !== 'object') {
-        return obj;
-    }
-
-    // Dates (and other non-plain objects) have no own enumerable properties,
-    // so recursing into them with Object.entries below would silently turn
-    // them into {}. Return them as-is; JSON.stringify serializes Dates via
-    // their own toJSON() when the response is sent.
-    if (obj instanceof Date) {
-        return obj;
-    }
-
-    if (Array.isArray(obj)) {
-        return obj.map(item => normalizeNested(item));
-    }
-
-    // Check if this is a Mongoose document
-    if (typeof obj.toObject === 'function') {
-        return normalizeDoc(obj);
-    }
-
-    // Handle plain objects with potential nested documents
-    const result: any = {};
-    for (const [key, value] of Object.entries(obj)) {
-        if (value && typeof value === 'object') {
-            result[key] = normalizeNested(value);
-        } else {
-            result[key] = value;
-        }
-    }
-
-    return result;
-};
-
-/**
  * Get client IP address from request
  */
 function getClientIp(req: Request): string {
@@ -111,7 +72,7 @@ function getClientIp(req: Request): string {
 // ============================================================================
 
 /**
- * Send success response with automatic data normalization
+ * Send a success response
  */
 export const sendSuccess = (
     res: Response,
@@ -119,17 +80,15 @@ export const sendSuccess = (
     message: string = 'Success',
     statusCode: number = HTTP_STATUS.OK
 ) => {
-    const normalizedData = normalizeNested(data);
-
     res.status(statusCode).json({
         success: true,
         message,
-        data: normalizedData
+        data
     });
 };
 
 /**
- * Send paginated response with automatic data normalization
+ * Send a paginated response
  * Standard format: { success, items, pagination, message }
  */
 export const sendPaginatedResponse = (
@@ -138,11 +97,9 @@ export const sendPaginatedResponse = (
     pagination: PaginationMeta,
     message: string = 'Success'
 ) => {
-    const normalizedItems = normalizeDoc(items);
-
     res.status(HTTP_STATUS.OK).json({
         success: true,
-        items: normalizedItems,
+        items,
         pagination: {
             page: pagination.page,
             limit: pagination.limit,
