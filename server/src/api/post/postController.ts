@@ -2,7 +2,8 @@ import { NextFunction, Request, Response } from 'express';
 import createHttpError from 'http-errors';
 import { db, posts, users } from '../../db';
 import { eq, and, ne, desc, asc, count, sql, type SQL } from 'drizzle-orm';
-import { canModeratePost, optionalViewerId } from './commentController';
+import { canModeratePost } from './commentController';
+import { optionalViewer } from '../../middlewares/optionalViewer';
 import { HTTP_STATUS, sendSuccess, sendPaginatedResponse, sendNotFoundError, sendForbiddenError } from '../../utils/apiResponse';
 
 const SORTABLE = new Set(['createdAt', 'updatedAt', 'title', 'views']);
@@ -118,7 +119,7 @@ export const getPost = async (req: Request, res: Response, next: NextFunction): 
       .where(eq(posts.id, postId));
 
     // Drafts are visible to their author and admins (the dashboard editor loads them here), nobody else.
-    if (!row || (row.post.status !== 'Published' && !(await canModeratePost(optionalViewerId(req), row.post.authorId)))) {
+    if (!row || (row.post.status !== 'Published' && !(await canModeratePost(await optionalViewer(req), row.post.authorId)))) {
       return sendNotFoundError(res, 'Post not found');
     }
 

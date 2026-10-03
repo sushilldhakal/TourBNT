@@ -1,6 +1,7 @@
 import createHttpError from 'http-errors';
-import { and, eq } from 'drizzle-orm';
-import { db, bookings, tours, tourAuthors, users } from '../../../db';
+import { eq } from 'drizzle-orm';
+import { db, bookings, tours, users } from '../../../db';
+import { assertCanViewBooking } from './bookingAccess';
 import { primarySellerOf } from '../../../services/payouts';
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -22,11 +23,7 @@ export async function getBookingInvoice(bookingId: string, requester: { id: stri
   const [b] = await db.select().from(bookings).where(eq(bookings.id, bookingId)).limit(1);
   if (!b) throw createHttpError(404, 'Booking not found');
 
-  if (!requester.isAdmin && b.userId !== requester.id && b.sellerId !== requester.id) {
-    const [author] = await db.select({ u: tourAuthors.userId }).from(tourAuthors)
-      .where(and(eq(tourAuthors.tourId, b.tourId), eq(tourAuthors.userId, requester.id))).limit(1);
-    if (!author) throw createHttpError(403, 'You do not have access to this booking');
-  }
+  await assertCanViewBooking(b, requester);
 
   const [tour] = await db.select({ title: tours.title, code: tours.code, pricePerPerson: tours.pricePerPerson }).from(tours).where(eq(tours.id, b.tourId)).limit(1);
   const sellerId = b.sellerId ?? (await primarySellerOf(b.tourId));

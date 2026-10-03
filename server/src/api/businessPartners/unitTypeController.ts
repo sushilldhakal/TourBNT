@@ -111,12 +111,19 @@ export const deleteUnitType = async (req: Request, res: Response, next: NextFunc
   }
 };
 
+async function unitTypeBelongsTo(unitTypeId: string, businessPartnerId: string): Promise<boolean> {
+  const [row] = await db.select({ bp: businessPartnerUnitTypes.businessPartnerId }).from(businessPartnerUnitTypes).where(eq(businessPartnerUnitTypes.id, unitTypeId)).limit(1);
+  return row?.bp === businessPartnerId;
+}
+
 // GET /business-partners/:businessPartnerId/unit-types/:unitTypeId/inventory?from=&to=
 export const getUnitTypeInventory = async (req: Request, res: Response, next: NextFunction) => {
   try {
     if (!req.user) return handleUnauthorized(res, 'Not authenticated');
     const { businessPartnerId, unitTypeId } = req.params;
     if (!(await assertOwnerOrAdmin(businessPartnerId, req))) return sendForbiddenError(res, 'Not authorized to view this business\'s inventory');
+    // The unit type must belong to this business, or an owner could reach another business's inventory.
+    if (!(await unitTypeBelongsTo(unitTypeId, businessPartnerId))) return sendNotFoundError(res, 'Unit type not found');
 
     const { from, to } = req.query as { from?: string; to?: string };
     if (!from || !to) return sendValidationError(res, 'Validation failed', [{ field: 'from/to', message: 'from and to dates are required' }]);
@@ -134,6 +141,8 @@ export const setUnitTypeBlock = async (req: Request, res: Response, next: NextFu
     if (!req.user) return handleUnauthorized(res, 'Not authenticated');
     const { businessPartnerId, unitTypeId, date } = req.params;
     if (!(await assertOwnerOrAdmin(businessPartnerId, req))) return sendForbiddenError(res, 'Not authorized to manage this business\'s inventory');
+    // The unit type must belong to this business, or an owner could reach another business's inventory.
+    if (!(await unitTypeBelongsTo(unitTypeId, businessPartnerId))) return sendNotFoundError(res, 'Unit type not found');
 
     const { channel, blockedCount, notes } = req.body as { channel?: 'direct' | 'private' | 'other' | 'maintenance'; blockedCount?: number; notes?: string };
     if (!channel || !['direct', 'private', 'other', 'maintenance'].includes(channel)) {
@@ -161,6 +170,8 @@ export const getUnitTypeBlocks = async (req: Request, res: Response, next: NextF
     if (!req.user) return handleUnauthorized(res, 'Not authenticated');
     const { businessPartnerId, unitTypeId } = req.params;
     if (!(await assertOwnerOrAdmin(businessPartnerId, req))) return sendForbiddenError(res, 'Not authorized to view this business\'s inventory');
+    // The unit type must belong to this business, or an owner could reach another business's inventory.
+    if (!(await unitTypeBelongsTo(unitTypeId, businessPartnerId))) return sendNotFoundError(res, 'Unit type not found');
 
     const { date } = req.query as { date?: string };
     const conditions = [eq(businessPartnerUnitTypeBlocks.unitTypeId, unitTypeId)];

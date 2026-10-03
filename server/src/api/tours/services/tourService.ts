@@ -555,12 +555,4 @@ export class TourService {
       await db.update(tours).set({ views: sql`${tours.views} + 1` }).where(eq(tours.id, tourId));
     }
   }
-
-  static async incrementTourBookings(tourId: string) {
-    const [updated] = await db.update(tours).set({ bookingCount: sql`${tours.bookingCount} + 1` }).where(eq(tours.id, tourId)).returning({ bookingCount: tours.bookingCount });
-    if (!updated) {
-      throw createHttpError(404, 'Tour not found');
-    }
-    return updated.bookingCount;
-  }
 }

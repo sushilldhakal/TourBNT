@@ -1,3 +1,4 @@
+import { randomBytes } from 'crypto';
 import { db, bookings, tours, users, tourAuthors } from '../../../db';
 import { eq, and, or, ilike, gte, lt, inArray, desc, asc, count, sql } from 'drizzle-orm';
 import createHttpError from 'http-errors';
@@ -25,9 +26,17 @@ interface PaginationParams {
 const TOUR_COLUMNS = { id: tours.id, title: tours.title, code: tours.code, coverImage: tours.coverImage, price: tours.price, location: tours.location } as const;
 const USER_COLUMNS = { id: users.id, name: users.name, email: users.email, phone: users.phone } as const;
 
+// Letters and digits that can't be confused when read out (no 0/O, 1/I/L).
+const REF_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+
+/**
+ * A booking reference people can read out, that can't be guessed: 10 characters from a cryptographic random
+ * source (~49 bits), after a date-based part. The reference plus the contact email is how a guest finds a booking.
+ */
 function generateBookingReference(): string {
     const timestamp = Date.now().toString(36).toUpperCase();
-    const random = Math.random().toString(36).substring(2, 6).toUpperCase();
+    const bytes = randomBytes(10);
+    const random = Array.from(bytes, (b) => REF_ALPHABET[b % REF_ALPHABET.length]).join('');
     return `BK-${timestamp}-${random}`;
 }
 
@@ -253,7 +262,8 @@ export class BookingService {
                 contactEmail: bookingData.contactEmail,
                 contactPhone: bookingData.contactPhone,
                 specialRequests: bookingData.specialRequests ?? null,
-                bookingReference: bookingData.bookingReference || generateBookingReference(),
+                // Always ours: a client-chosen reference could be guessable or clash with someone else's.
+                bookingReference: generateBookingReference(),
                 promoCode: pricing.promo?.code ?? null,
                 sellerId: earnings.sellerId,
                 commissionRate: earnings.commissionRate,

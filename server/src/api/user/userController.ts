@@ -994,16 +994,25 @@ export const updateUserById = async (req: Request, res: Response, next: NextFunc
     }
 
     const { name, email, roles, password, phone } = req.body;
+    // The route lets people edit their own account, but only an admin may change a role, an email address or
+    // set a password here. Otherwise anyone could make themselves admin, or take over an account by switching
+    // its email. People change their own password at PATCH /users/me/password (which asks for the current one).
+    const isAdmin = req.user?.roles.includes('admin') === true;
+    const wantsEmailChange = typeof email === 'string' && email.trim() !== '' && email.trim().toLowerCase() !== user.email.toLowerCase();
+    if (!isAdmin && wantsEmailChange) {
+      return next(createHttpError(403, 'Contact support to change the email address on your account.'));
+    }
 
     const updateData: Partial<typeof users.$inferInsert> = {
       name: name || user.name,
-      email: email || user.email,
-      role: coerceUserRole(roles, user.role),
       phone: phone || user.phone,
     };
-
-    if (password) {
-      updateData.password = await bcrypt.hash(password, 10);
+    if (isAdmin) {
+      updateData.email = email || user.email;
+      updateData.role = coerceUserRole(roles, user.role);
+      if (password) {
+        updateData.password = await bcrypt.hash(password, 10);
+      }
     }
 
     const updatedUser = await pgUsers.updateUser(userId, updateData);

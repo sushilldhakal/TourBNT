@@ -2,6 +2,8 @@ import { Request, Response, NextFunction } from 'express';
 import { BookingService } from '../services/bookingService';
 import { ItineraryRequestService } from '../../tours/services/itineraryRequestService';
 import { getBookingInvoice as getInvoice } from '../services/invoiceService';
+import { assertCanViewBooking, canViewBooking } from '../services/bookingAccess';
+import { optionalViewer } from '../../../middlewares/optionalViewer';
 import { HTTP_STATUS, sendSuccess, sendPaginatedResponse } from '../../../utils/apiResponse';
 import createHttpError from 'http-errors';
 
@@ -119,10 +121,7 @@ export const getBookingById = async (req: Request, res: Response, next: NextFunc
     try {
         const { bookingId } = req.params;
         const booking = await BookingService.getBookingById(bookingId);
-
-        if (req.user && booking.userId && booking.userId !== req.user.id && !req.user.roles.includes('admin')) {
-            throw createHttpError(403, 'You do not have access to this booking');
-        }
+        await assertCanViewBooking(booking, req.user ? { id: req.user.id, isAdmin: req.user.roles.includes('admin') } : null);
 
         sendSuccess(res, booking, 'Booking retrieved successfully');
     } catch (error) {
@@ -159,6 +158,14 @@ export const getBookingByReference = async (req: Request, res: Response, next: N
     try {
         const { reference } = req.params;
         const booking = await BookingService.getBookingByReference(reference);
+        // Public route: the reference alone is not enough. The traveller (or seller/admin) signed in may see it;
+        // anyone else must also give the booking's contact email, like an airline's "manage booking".
+        const email = typeof req.query.email === 'string' ? req.query.email.trim().toLowerCase() : '';
+        const emailMatches = !!email && email === String(booking.contactEmail ?? '').trim().toLowerCase();
+        if (!emailMatches && !(await canViewBooking(booking, await optionalViewer(req)))) {
+            // Same answer as an unknown reference, so references can't be probed.
+            throw createHttpError(404, 'Booking not found');
+        }
 
         sendSuccess(res, booking, 'Booking retrieved successfully');
     } catch (error) {
@@ -313,6 +320,10 @@ export const cancelBooking = async (req: Request, res: Response, next: NextFunct
         const { bookingId } = req.params;
         const { reason } = req.body;
 
+        // Only the traveller who booked, the tour's seller, or an admin may cancel it.
+        const existing = await BookingService.getBookingById(bookingId);
+        await assertCanViewBooking(existing, req.user ? { id: req.user.id, isAdmin: req.user.roles.includes('admin') } : null);
+
         const booking = await BookingService.cancelBooking(bookingId, reason);
 
         sendSuccess(res, booking, 'Booking cancelled successfully');
@@ -358,10 +369,7 @@ export const downloadVoucher = async (req: Request
         // Get booking to verify ownership
         const booking = await BookingService.getBookingById(bookingId);
 
-        // Verify user has access to this booking
-        if (req.user && booking.userId && booking.userId !== req.user.id) {
-            throw createHttpError(403, 'You do not have access to this booking');
-        }
+        await assertCanViewBooking(booking, req.user ? { id: req.user.id, isAdmin: req.user.roles.includes('admin') } : null);
 
         // Generate voucher data
         const voucherData = await BookingService.generateVoucher(bookingId);

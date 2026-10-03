@@ -18,7 +18,6 @@ import {
   getSpecialOfferTours,
   getUserToursTitle,
   getMyTours,
-  incrementTourBookings,
   checkTourAvailability,
   getTourLogisticsStatus,
   getTourRouteMap,
@@ -732,32 +731,8 @@ router.patch(
 
 router.delete('/:tourId', authenticate, authorizeRoles('admin', 'seller') as any, validateObjectId(), deleteTour);
 
-/**
- * @swagger
- * /api/v1/tours/{tourId}/bookings/increment:
- *   patch:
- *     summary: Increment tour bookings
- *     description: Increment the booking count for a tour (internal use)
- *     tags: [Tours]
- *     parameters:
- *       - in: path
- *         name: tourId
- *         required: true
- *         schema:
- *           type: string
- *         description: Tour ID
- *     responses:
- *       200:
- *         description: Booking count incremented
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 bookings:
- *                   type: number
- */
-router.patch('/:tourId/bookings/increment', validateObjectId(), incrementTourBookings);
+// (PATCH /:tourId/bookings/increment was removed: it let anyone raise a tour's booking count.)
+
 
 // Protected routes (authentication required) - ALL routes below this line require auth
 router.use(authenticate);

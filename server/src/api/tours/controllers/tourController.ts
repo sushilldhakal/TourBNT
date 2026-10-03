@@ -3,6 +3,7 @@ import { TourService } from '../services/tourService';
 import { extractTourFields } from '../utils/dataProcessors';
 import { sendSuccess, sendError, sendPaginatedResponse, HTTP_STATUS } from '../../../utils/apiResponse';
 import { asyncAuthHandler } from '../../../utils/routeWrapper';
+import { optionalViewer } from '../../../middlewares/optionalViewer';
 import { RESPONSE_MESSAGES } from '../utils/constants';
 import { generateUniqueCode } from '../utils/codeGenerator';
 
@@ -58,6 +59,16 @@ export const getAllTours = asyncAuthHandler(async (req: Request, res: Response) 
 export const getTour = asyncAuthHandler(async (req: Request, res: Response) => {
   const { tourId } = req.params;
   const tour = await TourService.getTourById(tourId);
+
+  // A draft is only for its authors and admins (the dashboard editor loads it here); to everyone else it
+  // doesn't exist yet. Archived tours stay viewable so old links from past travellers still work.
+  if (tour.tourStatus === 'Draft') {
+    const viewer = await optionalViewer(req);
+    const authorIds = (Array.isArray(tour.author) ? tour.author : []).map((a: { id?: string }) => a?.id);
+    if (!viewer || (!viewer.isAdmin && !authorIds.includes(viewer.id))) {
+      return sendError(res, 'Tour not found', HTTP_STATUS.NOT_FOUND);
+    }
+  }
 
   if (tour.facts) {
     tour.facts = tour.facts.map((fact: any) => {
@@ -256,14 +267,6 @@ export const incrementTourViews = asyncAuthHandler(async (req: Request, res: Res
   sendSuccess(res, { views }, RESPONSE_MESSAGES.VIEW_INCREMENTED);
 });
 
-/**
- * Increment tour bookings
- */
-export const incrementTourBookings = asyncAuthHandler(async (req: Request, res: Response) => {
-  const { tourId } = req.params;
-  const bookingCount = await TourService.incrementTourBookings(tourId);
-  sendSuccess(res, { bookingCount }, RESPONSE_MESSAGES.BOOKING_INCREMENTED);
-});
 
 /**
  * Check tour availability for a specific date

@@ -2,33 +2,16 @@ import { Request, Response, NextFunction } from 'express';
 import createHttpError from 'http-errors';
 import { db, comments, commentLikes, posts, users } from '../../db';
 import { eq, and, inArray, count, desc, sql, ilike, isNull } from 'drizzle-orm';
-import { verify } from 'jsonwebtoken';
-import { config } from '../../config/config';
-import { COOKIE_NAMES } from '../../utils/cookieUtils';
+import { optionalViewer } from '../../middlewares/optionalViewer';
 import { sendSuccess, sendPaginatedResponse } from '../../utils/apiResponse';
 
 const userSelect = { id: users.id, name: users.name, avatar: users.avatar } as const;
 
 const MAX_COMMENT_LENGTH = 2000;
 
-/** The signed-in user on a public route, if any (a valid, unexpired auth cookie); null otherwise. */
-export function optionalViewerId(req: Request): string | null {
-  const token = req.cookies?.[COOKIE_NAMES.AUTH_TOKEN];
-  if (!token) return null;
-  try {
-    const sub = (verify(token, config.jwtSecret) as { sub?: string }).sub;
-    return sub ?? null;
-  } catch {
-    return null;
-  }
-}
-
 /** Admins and the post's author moderate its comments, so they also see the ones not approved yet. */
-export async function canModeratePost(userId: string | null, postAuthorId: string): Promise<boolean> {
-  if (!userId) return false;
-  if (userId === postAuthorId) return true;
-  const [u] = await db.select({ role: users.role }).from(users).where(eq(users.id, userId)).limit(1);
-  return u?.role === 'admin';
+export async function canModeratePost(viewer: { id: string; isAdmin: boolean } | null, postAuthorId: string): Promise<boolean> {
+  return !!viewer && (viewer.isAdmin || viewer.id === postAuthorId);
 }
 
 const withReplies = async (parentIds: string[] | any, onlyApproved = false) => {
@@ -127,10 +110,11 @@ export const addReply = async (req: Request, res: Response, next: NextFunction):
 export const likeComment = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { commentId } = req.params;
-    const userId = req.body.userId || req.user?.id;
+    // Always the signed-in user: a client-supplied id would let anyone like as someone else.
+    const userId = req.user?.id;
 
     if (!userId) {
-      return next(createHttpError(400, 'User ID is required'));
+      return next(createHttpError(401, 'Please sign in to like comments.'));
     }
 
     const [existingLike] = await db
@@ -205,9 +189,18 @@ export const editComment = async (req: Request, res: Response, next: NextFunctio
       approve = false;
     }
 
-    const [existing] = await db.select().from(comments).where(eq(comments.id, commentId)).limit(1);
+    const [existing] = await db
+      .select({ id: comments.id, postAuthorId: posts.authorId })
+      .from(comments)
+      .innerJoin(posts, eq(comments.postId, posts.id))
+      .where(eq(comments.id, commentId))
+      .limit(1);
     if (!existing) {
       return next(createHttpError(404, 'Comment not found'));
+    }
+    // Approving is moderation: only the post's author or an admin.
+    if (!(await canModeratePost(await optionalViewer(req), existing.postAuthorId))) {
+      return next(createHttpError(403, 'Only the post\'s author or an admin can approve comments.'));
     }
 
     await db.update(comments).set({ approve }).where(eq(comments.id, commentId));
@@ -246,7 +239,7 @@ export const getCommentsByPost = async (req: Request, res: Response, next: NextF
       return next(createHttpError(404, 'Post not found'));
     }
     // Visitors see approved comments only; the post's author and admins also see the ones waiting for approval.
-    const moderator = await canModeratePost(optionalViewerId(req), post.authorId);
+    const moderator = await canModeratePost(await optionalViewer(req), post.authorId);
     const onlyApproved = !moderator;
     // Top-level comments only; replies come nested under their parent.
     const where = and(eq(comments.postId, postId), isNull(comments.parentId), onlyApproved ? eq(comments.approve, true) : undefined);
@@ -299,7 +292,7 @@ export const getCommentWithReplies = async (req: Request, res: Response, next: N
 
     // Same rule as the post's comment list: unapproved comments are only for the post's author and admins.
     const [post] = await db.select({ authorId: posts.authorId }).from(posts).where(eq(posts.id, row.comment.postId)).limit(1);
-    const moderator = post ? await canModeratePost(optionalViewerId(req), post.authorId) : false;
+    const moderator = post ? await canModeratePost(await optionalViewer(req), post.authorId) : false;
     if (!moderator && !row.comment.approve) {
       return next(createHttpError(404, 'Comment not found'));
     }
@@ -396,10 +389,27 @@ export const getUnapprovedCommentsCount = async (req: Request, res: Response, ne
 export const deleteComment = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { commentId } = req.params;
-    const idsArray = commentId.split(',').map((id) => id.trim());
+    const idsArray = [...new Set(commentId.split(',').map((id) => id.trim()).filter(Boolean))];
+    const viewer = await optionalViewer(req);
+    if (!viewer) {
+      return next(createHttpError(401, 'Please sign in.'));
+    }
+
+    // Each comment may be deleted by whoever wrote it, the post's author, or an admin; otherwise none are deleted.
+    const rows = await db
+      .select({ id: comments.id, userId: comments.userId, postAuthorId: posts.authorId })
+      .from(comments)
+      .innerJoin(posts, eq(comments.postId, posts.id))
+      .where(inArray(comments.id, idsArray));
+    if (rows.length === 0) {
+      return next(createHttpError(404, 'Comment not found'));
+    }
+    if (!viewer.isAdmin && rows.some((r) => r.userId !== viewer.id && r.postAuthorId !== viewer.id)) {
+      return next(createHttpError(403, 'You can only delete your own comments or comments on your posts.'));
+    }
 
     // Deleting a comment cascades to its replies (parent_id FK) and likes.
-    await db.delete(comments).where(inArray(comments.id, idsArray));
+    await db.delete(comments).where(inArray(comments.id, rows.map((r) => r.id)));
 
     sendSuccess(res, null, 'Comment deleted successfully');
   } catch (err) {
