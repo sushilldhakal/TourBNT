@@ -400,18 +400,9 @@ export const processTourDatesData = (tourDates: any) => {
 
     if (!parsed) return undefined;
 
-    console.log('🔍 Processing tour dates data:', parsed);
-    console.log('🔍 Raw dateRange field:', parsed.dateRange);
-    console.log('🔍 dateRange type:', typeof parsed.dateRange);
-    console.log('🔍 Full parsed object:', JSON.stringify(parsed, null, 2));
-
     // Process departures array for multiple departure type
     const processedDepartures = Array.isArray(parsed.departures)
       ? parsed.departures.map((departure: any) => {
-        console.log('🔍 Processing individual departure:', departure);
-        console.log('🔍 Departure recurrencePattern:', departure.recurrencePattern);
-        console.log('🔍 Departure selectedPricingOptions:', departure.selectedPricingOptions);
-        console.log('🔍 Departure pricingCategory:', departure.pricingCategory);
 
         return {
           id: departure.id || `departure_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -483,7 +474,6 @@ export const processTourDatesData = (tourDates: any) => {
       })()
     };
 
-    console.log('🎯 Processed dates result:', result);
     return result;
   } catch (error) {
     console.error("Error processing tour dates data:", error);

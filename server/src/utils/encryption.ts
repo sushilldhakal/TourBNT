@@ -21,7 +21,6 @@ const getKey = () => {
   return keyBuffer;
 };
 
-
 /**
  * Encrypts text using AES-256-CBC encryption
  * @param text - The text to encrypt
@@ -57,53 +56,30 @@ export const decrypt = (encryptedText: string): string => {
   if (!encryptedText) return '';
   
   try {
-    console.log('🔍 Decrypt input:', { 
-      input: encryptedText, 
-      length: encryptedText.length, 
-      hasColon: encryptedText.includes(':') 
-    });
-    
     // Check if it's in our encryption format (IV:encryptedData)
     const textParts = encryptedText.split(':');
     if (textParts.length !== 2) {
-      console.log('🔍 Not encrypted format, returning as-is');
       return encryptedText;
     }
     
     const ivHex = textParts[0];
     const encryptedData = textParts[1];
-    
-    console.log('🔍 Decryption parts:', {
-      ivHex: ivHex,
-      ivLength: ivHex.length,
-      encryptedData: encryptedData.substring(0, 20) + '...',
-      encryptedDataLength: encryptedData.length
-    });
-    
+
     // Validate IV format (should be 32 hex characters for 16 bytes)
     if (ivHex.length !== 32 || !/^[0-9a-fA-F]+$/.test(ivHex)) {
-      console.log('🔍 Invalid IV format, returning as-is');
       return encryptedText;
     }
     
     const iv = Buffer.from(ivHex, 'hex');
     const key = getKey();
-    
-    console.log('🔍 Starting decryption with key length:', key.length);
-    
+
     const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
     let decrypted = decipher.update(encryptedData, 'base64', 'utf8');
     decrypted += decipher.final('utf8');
-    
-    console.log('🔍 Decryption successful:', {
-      decryptedLength: decrypted.length,
-      decryptedPreview: decrypted.substring(0, 5) + '...'
-    });
-    
+
     return decrypted;
   } catch (error) {
     console.error('🔍 Decryption error:', error);
-    console.log('🔍 Returning original text due to error');
     return encryptedText; // Return original if decryption fails
   }
 };
