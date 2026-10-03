@@ -3,6 +3,7 @@ import { authenticate, authorizeRoles } from '../../middlewares/authenticate';
 import { paginationMiddleware } from '../../middlewares/pagination';
 import { filterSortMiddleware } from '../../middlewares/filterSort';
 import { asyncAuthHandler } from '../../utils/routeWrapper';
+import { withRowLevelSecurity } from '../../middlewares/rowLevelSecurity';
 import {
     createBooking,
     quoteBooking,
@@ -180,7 +181,7 @@ bookingRouter.get('/reference/:reference', asyncAuthHandler(getBookingByReferenc
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-bookingRouter.get('/my-bookings', authenticate, asyncAuthHandler(getUserBookings));
+bookingRouter.get('/my-bookings', authenticate, withRowLevelSecurity, asyncAuthHandler(getUserBookings));
 
 /**
  * @swagger
@@ -219,6 +220,7 @@ bookingRouter.get('/my-bookings', authenticate, asyncAuthHandler(getUserBookings
 bookingRouter.get(
     '/stats',
     authenticate,
+    withRowLevelSecurity,
     authorizeRoles('admin', 'seller') as RequestHandler,
     asyncAuthHandler(getBookingStats)
 );
@@ -291,6 +293,7 @@ bookingRouter.get(
 bookingRouter.get(
     '/',
     authenticate,
+    withRowLevelSecurity,
     authorizeRoles('admin', 'seller') as RequestHandler,
     paginationMiddleware(),
     filterSortMiddleware(['status', 'paymentStatus', 'tourId'], ['createdAt', 'departureDate', 'totalAmount']),
@@ -333,7 +336,7 @@ bookingRouter.get(
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-bookingRouter.get('/:bookingId', authenticate, asyncAuthHandler(getBookingById));
+bookingRouter.get('/:bookingId', authenticate, withRowLevelSecurity, asyncAuthHandler(getBookingById));
 
 /**
  * @swagger
@@ -358,10 +361,10 @@ bookingRouter.get('/:bookingId', authenticate, asyncAuthHandler(getBookingById))
  *       404:
  *         description: Booking not found
  */
-bookingRouter.get('/:bookingId/timeline', authenticate, asyncAuthHandler(getBookingTimeline));
+bookingRouter.get('/:bookingId/timeline', authenticate, withRowLevelSecurity, asyncAuthHandler(getBookingTimeline));
 
 // The traveller's invoice (the traveller, the tour's seller, or an admin). See services/invoiceService.ts.
-bookingRouter.get('/:bookingId/invoice', authenticate, asyncAuthHandler(getBookingInvoice));
+bookingRouter.get('/:bookingId/invoice', authenticate, withRowLevelSecurity, asyncAuthHandler(getBookingInvoice));
 
 /**
  * @swagger
@@ -416,6 +419,7 @@ bookingRouter.get('/:bookingId/invoice', authenticate, asyncAuthHandler(getBooki
 bookingRouter.patch(
     '/:bookingId/status',
     authenticate,
+    withRowLevelSecurity,
     authorizeRoles('admin', 'seller') as RequestHandler,
     asyncAuthHandler(updateBookingStatus)
 );
@@ -475,6 +479,7 @@ bookingRouter.patch(
 bookingRouter.patch(
     '/:bookingId/payment',
     authenticate,
+    withRowLevelSecurity,
     authorizeRoles('admin', 'seller') as RequestHandler,
     asyncAuthHandler(updatePaymentStatus)
 );
@@ -527,6 +532,7 @@ bookingRouter.patch(
 bookingRouter.delete(
     '/:bookingId',
     authenticate,
+    withRowLevelSecurity,
     asyncAuthHandler(cancelBooking)
 );
 
@@ -570,6 +576,7 @@ bookingRouter.delete(
 bookingRouter.get(
     '/:bookingId/voucher',
     authenticate,
+    withRowLevelSecurity,
     asyncAuthHandler(downloadVoucher)
 );
 

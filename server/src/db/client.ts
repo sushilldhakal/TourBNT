@@ -1,6 +1,7 @@
 import postgres from 'postgres';
 import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from './schema';
+import { requestDbScope } from './requestScope';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -77,13 +78,22 @@ function createDb(): Db {
 /**
  * Proxy so `import { db } from './db'` works everywhere, while the
  * real connection is only established on first use (see createDb above).
+ * Inside a request running under row-level security it is that request's transaction instead
+ * (see requestScope.ts), so existing code needs no changes to be covered by the policies.
  */
 export const db: Db = new Proxy({} as Db, {
-  get(_target, prop, receiver) {
-    const instance = createDb();
-    return Reflect.get(instance as object, prop, receiver);
+  get(_target, prop) {
+    const scope = requestDbScope.getStore();
+    const instance = (scope && !scope.done ? scope.tx : createDb()) as object;
+    const value = Reflect.get(instance, prop, instance);
+    return typeof value === 'function' ? value.bind(instance) : value;
   },
 }) as Db;
+
+/** The pool itself, never a request's transaction. For starting a request's transaction. */
+export function poolDb(): Db {
+  return createDb();
+}
 
 export async function closeDb(): Promise<void> {
   if (_sql) {
