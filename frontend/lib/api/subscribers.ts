@@ -10,6 +10,7 @@ export interface Subscriber {
     id?: string;
     email: string;
     subscribedAt: string;
+    unsubscribedAt?: string | null;
     createdAt?: string;
 }
 
@@ -151,5 +152,17 @@ export const getSubscribers = async (params?: { page?: number; limit?: number })
         };
     } catch (error) {
         throw handleApiError(error, 'fetching subscribers');
+    }
+};
+
+/**
+ * Unsubscribe with the secret token from a newsletter email's link (public; the token is the credential).
+ */
+export const unsubscribeWithToken = async (token: string) => {
+    try {
+        const response = await api.post(`/subscribers/unsubscribe?token=${encodeURIComponent(token)}`);
+        return extractResponseData<{ message: string }>(response);
+    } catch (error: any) {
+        throw new Error(error?.response?.data?.error?.message ?? 'Something went wrong. Please try again.');
     }
 };

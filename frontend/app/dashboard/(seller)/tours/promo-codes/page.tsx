@@ -16,6 +16,8 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/components/ui/use-toast';
+import { MultiSelect } from '@/components/ui/MultiSelect';
+import { getMyTours } from '@/lib/api/tours';
 import { createPromoCode, deletePromoCode, listPromoCodes, updatePromoCode, type PromoCode } from '@/lib/api/promoCodes';
 
 const KEY = ['promo-codes'];
@@ -90,6 +92,7 @@ export default function PromoCodesPage() {
                                                 <TableCell>
                                                     {describe(p)}
                                                     {p.minBookingAmount ? <div className="text-xs text-muted-foreground">min booking ${p.minBookingAmount}</div> : null}
+                                                    {p.tourIds?.length ? <div className="text-xs text-muted-foreground">{p.tourIds.length} selected tour{p.tourIds.length === 1 ? '' : 's'} only</div> : null}
                                                 </TableCell>
                                                 <TableCell>{p.usedCount}{p.maxUses != null ? ` / ${p.maxUses}` : ''}</TableCell>
                                                 <TableCell className="text-sm">
@@ -121,6 +124,14 @@ export default function PromoCodesPage() {
 
 function NewCodeDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpenChange: (o: boolean) => void; onCreated: () => void }) {
     const { toast } = useToast();
+    const [tourIds, setTourIds] = useState<string[]>([]);
+    // Admins get every tour here, sellers only their own (the server enforces the same rule).
+    const { data: tourOptions = [] } = useQuery({
+        queryKey: ['promo-codes', 'tour-options'],
+        queryFn: async () => (await getMyTours({ limit: 100 })).data.map((t: any) => ({ value: String(t.id), label: t.code ? `${t.title} (${t.code})` : t.title })),
+        enabled: open,
+        staleTime: 5 * 60_000,
+    });
     const [f, setF] = useState({ code: '', description: '', discountType: 'percentage' as 'percentage' | 'fixed', discountValue: '10', maxDiscountAmount: '', minBookingAmount: '', maxUses: '', startsAt: '', expiresAt: '' });
     const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF((p) => ({ ...p, [k]: e.target.value }));
 
@@ -135,12 +146,14 @@ function NewCodeDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpe
             maxUses: f.maxUses ? Number(f.maxUses) : null,
             startsAt: f.startsAt ? new Date(f.startsAt).toISOString() : null,
             expiresAt: f.expiresAt ? new Date(`${f.expiresAt}T23:59:59`).toISOString() : null,
+            tourIds: tourIds.length ? tourIds : null,
         }),
         onSuccess: (p) => {
             toast({ title: 'Promo code created', description: `${p.code} is live.` });
             onCreated();
             onOpenChange(false);
             setF({ code: '', description: '', discountType: 'percentage', discountValue: '10', maxDiscountAmount: '', minBookingAmount: '', maxUses: '', startsAt: '', expiresAt: '' });
+            setTourIds([]);
         },
         onError: (e: Error) => toast({ title: 'Could not create the code', description: e.message, variant: 'destructive' }),
     });
@@ -184,6 +197,20 @@ function NewCodeDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpe
                             <Label htmlFor="pc-cap">Maximum discount ($)</Label>
                             <Input id="pc-cap" type="number" min="0.01" step="1" value={f.maxDiscountAmount} onChange={set('maxDiscountAmount')} placeholder="No cap" />
                         </div>
+                    </div>
+                    <div className="grid gap-2">
+                        <Label>Works on</Label>
+                        <MultiSelect
+                            key={open ? 'open' : 'closed'}
+                            options={tourOptions}
+                            defaultValue={tourIds}
+                            onValueChange={setTourIds}
+                            placeholder="All eligible tours"
+                            modalPopover
+                            maxCount={2}
+                            className="w-full"
+                        />
+                        <p className="text-xs text-muted-foreground">Leave empty for every tour the code can apply to, or pick specific tours.</p>
                     </div>
                     <div className="grid grid-cols-3 gap-3">
                         <div className="grid gap-2">

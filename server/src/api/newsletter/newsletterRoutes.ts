@@ -1,6 +1,6 @@
 import express from 'express';
 import createHttpError from 'http-errors';
-import { desc, eq, isNull } from 'drizzle-orm';
+import { count, desc, eq, isNull } from 'drizzle-orm';
 import { authenticate, authorizeRoles } from '../../middlewares/authenticate';
 import { asyncAuthHandler } from '../../utils/routeWrapper';
 import { sendSuccess } from '../../utils/apiResponse';
@@ -13,9 +13,13 @@ router.use(authenticate, authorizeRoles('admin'));
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const GAP_MS = 120; // pace sending so the mail provider's rate limits are respected
 
-/** Past campaigns, newest first. */
+/** Past campaigns, newest first, plus how many people a send would reach right now. */
 router.get('/', asyncAuthHandler(async (_req, res) => {
-  sendSuccess(res, await db.select().from(newsletters).orderBy(desc(newsletters.createdAt)).limit(50), 'Newsletters');
+  const [items, [{ active }]] = await Promise.all([
+    db.select().from(newsletters).orderBy(desc(newsletters.createdAt)).limit(50),
+    db.select({ active: count() }).from(subscribers).where(isNull(subscribers.unsubscribedAt)),
+  ]);
+  sendSuccess(res, { items, activeSubscribers: Number(active) }, 'Newsletters');
 }));
 
 /**

@@ -11,6 +11,7 @@
  *   - users:          email ends with @demo.tourbnt.test
  *   - tours:          code starts with DEMO-
  *   - subscribers:    email ends with @demo.tourbnt.test
+ *   - promo codes:    code starts with DEMO-
  * Every other row (partners, bookings, reviews, conversations, ads, ...) hangs
  * off those users/tours and is removed with them. Real users/tours are never touched.
  *
@@ -29,6 +30,7 @@ import { AD_CAMPAIGNS, ADVERTISER_SPECS, type AdCampaign } from './seedData/adCa
 import { tourDescription, bulletDoc } from './seedData/richText';
 import { processPricingOptions, processTourDatesData, processItineraryData, processFaqsData, processLocationData, processPaymentOptions } from '../api/tours/utils/dataProcessors';
 import { calculateBookingPricing } from '../api/bookings/utils/pricingCalculator';
+import { getDefaultCommissionRate, splitBooking } from '../services/payouts';
 
 dotenvConfig({ path: path.resolve(__dirname, '../../.env') });
 
@@ -159,6 +161,8 @@ async function wipe() {
   await run(sql`delete from bookings where tour_id in ${demoTours} or user_id in ${demoUsers}`);
   // payouts reference their seller with ON DELETE RESTRICT, so they must go before the demo sellers do
   await run(sql`delete from payouts where seller_id in ${demoUsers}`);
+  await run(sql`delete from promo_codes where code like 'DEMO-%' or owner_id in ${demoUsers}`);
+  await run(sql`delete from newsletters where sent_by in ${demoUsers}`);
   await run(sql`delete from tours where code like 'DEMO-%'`);
   await run(sql`delete from posts where author_id in ${demoUsers}`);
   await run(sql`delete from conversations where from_user_id in ${demoUsers} or assigned_to in ${demoUsers} or guest_email like ${'%@' + DEMO_DOMAIN}
@@ -617,6 +621,44 @@ async function seed() {
   console.log(`✅ Tours: ${tourRecs.length}   Itinerary partner links: ${linkRows.length}`);
 
   // ---------------------------------------------------------------------
+  // commission rates + promo codes
+  // ---------------------------------------------------------------------
+  // Two sellers have negotiated their own rate; everyone else pays the platform default.
+  const defaultRate = await getDefaultCommissionRate();
+  const sellerRate = new Map<string, number>([[sellers[0].id, 8], [sellers[1].id, 12]]);
+  for (const [id, rate] of sellerRate) await db.update(S.users).set({ commissionRate: rate }).where(eq(S.users.id, id));
+  const rateFor = (sellerId: string) => sellerRate.get(sellerId) ?? defaultRate;
+  // Rows below belong to the demo admin (not the real one) so demo:wipe removes them.
+  const demoAdmin = adminUsers[0];
+
+  interface PromoRec { id: string; code: string; ownerId: string; isAdmin: boolean; discountType: 'percentage' | 'fixed'; discountValue: number; maxDiscountAmount: number | null; minBookingAmount: number | null; startsAt: Date | null; expiresAt: Date | null; isActive: boolean; tourIds: string[] | null; maxUses: number | null; usedCount: number; description: string }
+  const promoRecs: PromoRec[] = [];
+  const addPromo = (p: Omit<PromoRec, 'id' | 'usedCount' | 'maxDiscountAmount' | 'minBookingAmount' | 'startsAt' | 'expiresAt' | 'isActive' | 'tourIds' | 'maxUses'> & Partial<PromoRec>) =>
+    promoRecs.push({ id: uuid(), usedCount: 0, maxDiscountAmount: null, minBookingAmount: null, startsAt: null, expiresAt: null, isActive: true, tourIds: null, maxUses: null, ...p });
+  // site-wide (admin) codes
+  addPromo({ code: 'DEMO-WELCOME10', ownerId: demoAdmin.id, isAdmin: true, discountType: 'percentage', discountValue: 10, maxDiscountAmount: 150, description: 'Newsletter welcome offer' });
+  addPromo({ code: 'DEMO-FLAT50', ownerId: demoAdmin.id, isAdmin: true, discountType: 'fixed', discountValue: 50, minBookingAmount: 500, maxUses: 40, description: 'Partner referral, $50 off bookings over $500' });
+  addPromo({ code: 'DEMO-SUMMER25', ownerId: demoAdmin.id, isAdmin: true, discountType: 'percentage', discountValue: 25, maxDiscountAmount: 300, startsAt: daysFromNow(-150), expiresAt: daysFromNow(-60), description: 'Summer sale (ended)' });
+  addPromo({ code: 'DEMO-SPRING15', ownerId: demoAdmin.id, isAdmin: true, discountType: 'percentage', discountValue: 15, startsAt: daysFromNow(120), description: 'Spring campaign (scheduled)' });
+  // seller codes: one general code each for the first five, a code limited to two tours, and one switched off
+  sellers.slice(0, 5).forEach((sl, i) => addPromo({ code: `DEMO-SELLER${pad(i + 1)}-10`, ownerId: sl.id, isAdmin: false, discountType: 'percentage', discountValue: 10, maxUses: i % 2 ? 25 : null, description: `${sl.company} early-bird` }));
+  const s2Tours = tourRecs.filter((t) => t.sellerId === sellers[1].id && t.spec.status === 'Published').slice(0, 2).map((t) => t.id);
+  if (s2Tours.length) addPromo({ code: 'DEMO-TREK75', ownerId: sellers[1].id, isAdmin: false, discountType: 'fixed', discountValue: 75, tourIds: s2Tours, description: 'Only on two selected treks' });
+  addPromo({ code: 'DEMO-OLDCODE', ownerId: sellers[2].id, isAdmin: false, discountType: 'percentage', discountValue: 20, isActive: false, description: 'Retired code' });
+
+  /** The same checks and sizing as the promo service, against the booking date instead of now. */
+  const promoAmount = (p: PromoRec, tour: TourRec, subtotal: number, at: Date): number => {
+    if (!p.isActive || (p.startsAt && at < p.startsAt) || (p.expiresAt && at > p.expiresAt)) return 0;
+    if (p.maxUses != null && p.usedCount >= p.maxUses) return 0;
+    if (p.tourIds && !p.tourIds.includes(tour.id)) return 0;
+    if (!p.isAdmin && p.ownerId !== tour.sellerId) return 0;
+    if (p.minBookingAmount != null && subtotal < p.minBookingAmount) return 0;
+    let amount = p.discountType === 'percentage' ? (subtotal * p.discountValue) / 100 : p.discountValue;
+    if (p.maxDiscountAmount != null) amount = Math.min(amount, p.maxDiscountAmount);
+    return Math.round(Math.min(amount, subtotal) * 100) / 100;
+  };
+
+  // ---------------------------------------------------------------------
   // bookings
   // ---------------------------------------------------------------------
   const liveTours = tourRecs.filter((t) => t.spec.status !== 'Draft');
@@ -643,13 +685,23 @@ async function seed() {
       const paymentType = pick(offered);
       const optionRows = (tour.row.pricingOptions ?? []) as Array<{ id: string; category: string }>;
       const optId = tour.row.pricingOptionsEnabled ? (optionRows.find((o) => o.category === 'adult') ?? optionRows[0])?.id ?? null : null;
-      const calc = calculateBookingPricing(tour.row as any, { adults, children, infants }, paymentType, optId);
+      const bookedAt = new Date(departure.getTime() - int(10, 60) * 86400000);
+      let calc = calculateBookingPricing(tour.row as any, { adults, children, infants }, paymentType, optId);
+      // About one booking in six used a promo code.
+      let promo: PromoRec | null = null;
+      if (chance(0.17)) {
+        for (const p of shuffle(promoRecs)) {
+          const amount = promoAmount(p, tour, calc.totalPrice, bookedAt);
+          if (amount > 0) { promo = p; calc = calculateBookingPricing(tour.row as any, { adults, children, infants }, paymentType, optId, { code: p.code, amount }); break; }
+        }
+      }
+      // A cancelled booking gives its redemption back, as the booking service does.
+      if (promo && status !== 'cancelled') promo.usedCount++;
       const total = calc.totalPrice, dueNow = calc.amountDueNow;
       let paymentStatus: 'unpaid' | 'partial' | 'paid' | 'refunded' = 'unpaid', paid = 0;
       if (status === 'confirmed' || status === 'completed') { if (paymentType === 'full_payment' || status === 'completed') { paymentStatus = 'paid'; paid = total; } else if (paymentType === 'deposit_percentage') { paymentStatus = 'partial'; paid = dueNow; } }
       if (status === 'cancelled') { if (dueNow > 0 && chance(0.6)) { paymentStatus = 'refunded'; paid = 0; } }
       if (status === 'pending' && paymentType === 'full_payment' && chance(0.3)) { paymentStatus = 'paid'; paid = total; }
-      const bookedAt = new Date(departure.getTime() - int(10, 60) * 86400000);
       const guestInfo = isGuest ? { fullName: personName(bkSeq + 5), email: `guest${bkSeq}@${DEMO_DOMAIN}`, phone: phone(), country: pick(COUNTRIES) } : null;
       const contact = isGuest ? guestInfo! : { fullName: cust.name, email: cust.email, phone: phone() };
       const id = uuid();
@@ -659,6 +711,9 @@ async function seed() {
         travelers: Array.from({ length: adults + children + infants }, (_, k) => ({ fullName: k === 0 ? contact.fullName : personName(bkSeq + k + 40), type: k < adults ? 'adult' : k < adults + children ? 'child' : 'infant', nationality: pick(COUNTRIES) })),
         pricingOptionId: optId,
         pricing: calc,
+        promoCode: promo?.code ?? null,
+        // Seller and commission frozen at booking time, as BookingService.createBooking does.
+        sellerId: tour.sellerId, commissionRate: rateFor(tour.sellerId), ...splitBooking(total, rateFor(tour.sellerId)), payoutId: null as string | null,
         paymentType, contactName: contact.fullName, contactEmail: contact.email!, contactPhone: contact.phone!,
         specialRequests: chance(0.3) ? pick(['Vegetarian meals please', 'Celebrating an anniversary', 'One traveller has a knee injury', 'Early airport pickup needed']) : null,
         status, paymentStatus, paymentMethod: paid > 0 ? pick(['card', 'bank_transfer', 'esewa']) : null, transactionId: paid > 0 ? `TXN${int(10000000, 99999999)}` : null, paidAmount: paid,
@@ -670,13 +725,43 @@ async function seed() {
       bookingRecs.push({ id, tour, departure, pax: adults + children + infants, status });
     }
   });
+
+  // Payouts: per seller, bookings that are paid, confirmed/completed and whose trip ended over a day ago are
+  // payable (see services/payouts.ts). The oldest half is in a paid payout; for every other seller the next
+  // few are in a payout waiting for the transfer; the rest are left payable so "Create payout" has work to do.
+  const payoutRows: any[] = [];
+  const payableCutoff = hoursFromNow(-24);
+  sellers.forEach((sl, si) => {
+    const payable = bookingRows
+      .filter((b) => b.sellerId === sl.id && b.paymentStatus === 'paid' && (b.status === 'confirmed' || b.status === 'completed') && b.departureDate < payableCutoff && b.sellerEarning > 0)
+      .sort((a, b) => a.departureDate - b.departureDate);
+    if (payable.length < 2) return;
+    const groups: Array<{ rows: any[]; paid: boolean }> = [{ rows: payable.slice(0, Math.ceil(payable.length / 2)), paid: true }];
+    if (si % 2 === 0) groups.push({ rows: payable.slice(Math.ceil(payable.length / 2), Math.ceil(payable.length / 2) + 2), paid: false });
+    for (const g of groups) {
+      if (!g.rows.length) continue;
+      const id = uuid();
+      const lastTrip = g.rows[g.rows.length - 1].departureDate as Date;
+      const createdAt = g.paid ? new Date(Math.min(lastTrip.getTime() + 3 * 86400000, NOW.getTime() - 86400000)) : hoursFromNow(-int(2, 48));
+      const paidAt = g.paid ? new Date(Math.min(createdAt.getTime() + 2 * 86400000, NOW.getTime())) : null;
+      payoutRows.push({
+        id, sellerId: sl.id, amount: Math.round(g.rows.reduce((n, b) => n + b.sellerEarning, 0) * 100) / 100, currency: 'USD', bookingCount: g.rows.length,
+        status: g.paid ? 'paid' : 'pending', reference: g.paid ? `DEMO-TRF-${int(100000, 999999)}` : null, notes: g.paid ? 'Bank transfer' : null,
+        createdBy: demoAdmin.id, paidAt, createdAt, updatedAt: paidAt ?? createdAt,
+      });
+      for (const b of g.rows) b.payoutId = id;
+    }
+  });
+  await insertChunked(S.payouts, payoutRows);
   await insertChunked(S.bookings, bookingRows, 40);
+  await insertChunked(S.promoCodes, promoRecs.map(({ isAdmin: _a, ...p }) => ({ ...p, createdAt: daysFromNow(-int(60, 200)), updatedAt: new Date() })));
   // tour.bookingCount
   for (const t of tourRecs) {
     const c = bookingRecs.filter((b) => b.tour.id === t.id && b.status !== 'cancelled').length;
     await db.update(S.tours).set({ bookingCount: c }).where(eq(S.tours.id, t.id));
   }
-  console.log(`✅ Bookings: ${bookingRows.length}`);
+  console.log(`✅ Bookings: ${bookingRows.length}   with a promo code: ${bookingRows.filter((b) => b.promoCode).length}`);
+  console.log(`✅ Promo codes: ${promoRecs.length}   Payouts: ${payoutRows.length} (${payoutRows.filter((p) => p.status === 'paid').length} paid)`);
 
   // ---------------------------------------------------------------------
   // tour reviews (+ replies) and aggregates
@@ -986,7 +1071,13 @@ async function seed() {
     ...Array.from({ length: 50 }, (_, i) => ({ email: `newsletter${pad(i + 1)}@${DEMO_DOMAIN}`, subscribedAt: daysFromNow(-int(0, 200)) })),
   ].map((s) => ({ id: uuid(), ...s, createdAt: s.subscribedAt, updatedAt: s.subscribedAt }));
   await insertChunked(S.subscribers, subRows);
-  console.log(`✅ Subscribers: ${subRows.length}`);
+  // A few have unsubscribed, and two newsletters went out, so the admin newsletter screens have something to show.
+  await db.update(S.subscribers).set({ unsubscribedAt: daysFromNow(-int(1, 20)) }).where(inArray(S.subscribers.id, subRows.slice(0, 4).map((r) => r.id)));
+  await insertChunked(S.newsletters, [
+    { subject: 'New autumn treks are open', body: 'Our autumn departures for Everest Base Camp, Annapurna and Langtang are now open.\n\nBook before the end of the month for the best dates.', sentAt: daysFromNow(-40) },
+    { subject: 'Festival season in Kathmandu', body: 'Dashain and Tihar are the best time to see the valley at its most colourful.\n\nHere are three short tours that fit around the festivals.', sentAt: daysFromNow(-12) },
+  ].map((n) => ({ id: uuid(), ...n, sentBy: demoAdmin.id, status: 'sent', recipientCount: subRows.length, sentCount: subRows.length - 1, failedCount: 1, createdAt: n.sentAt, updatedAt: n.sentAt })));
+  console.log(`✅ Subscribers: ${subRows.length} (4 unsubscribed)   Newsletters: 2`);
 
   // ---------------------------------------------------------------------
   // posts, comments, wishlists

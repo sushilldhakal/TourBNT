@@ -142,6 +142,7 @@ export function SubscriberList() {
                         <div className="flex items-center gap-2">
                             <Mail className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                             <span className="font-medium">{subscriber.email}</span>
+                            {subscriber.unsubscribedAt && <Badge variant="secondary">Unsubscribed</Badge>}
                         </div>
                     );
                 },
