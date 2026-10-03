@@ -154,9 +154,26 @@ export async function findMatchingAds(slot: string, ctx: AdContext, limit: numbe
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)
     .map(({ live }) => ({
-      ...live.ad,
+      ...toPublicAd(live.ad),
       business: { id: live.business.id, name: live.business.name, slug: live.business.slug, type: live.business.type },
     }));
+}
+
+/**
+ * What any visitor may see of an ad: the creative and where it links. Price, views bought,
+ * counters, payment and review details stay with the advertiser and admins.
+ */
+export function toPublicAd(ad: typeof advertisements.$inferSelect) {
+  return {
+    id: ad.id,
+    businessPartnerId: ad.businessPartnerId,
+    title: ad.title,
+    description: ad.description,
+    imageUrl: ad.imageUrl,
+    ctaLabel: ad.ctaLabel,
+    ctaUrl: ad.ctaUrl,
+    placementSlot: ad.placementSlot,
+  };
 }
 
 /**
