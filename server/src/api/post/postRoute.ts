@@ -1,7 +1,7 @@
 import express from 'express';
 import { db, posts } from '../../db';
 import { eq, sql } from 'drizzle-orm';
-import { addPost, getPost, deletePost, editPost, getAllPosts, getUserPost, getAllUserPosts } from './postController';
+import { addPost, getPost, deletePost, editPost, getAllPosts, getUserPost, getAllUserPosts, getRelatedPosts } from './postController';
 import { authenticate, authorizeRoles } from '../../middlewares/authenticate';
 import { paginationMiddleware } from '../../middlewares/pagination';
 import { filterSortMiddleware } from '../../middlewares/filterSort';
@@ -49,6 +49,7 @@ postRouter.delete('/:postId', authenticate, deletePost);
 
 // Nested post resource routes - RESTful patterns
 postRouter.get('/:postId/comments', paginationMiddleware(), getCommentsByPost);
+postRouter.get('/:postId/related', cacheRoute('posts', 120), getRelatedPosts);
 postRouter.post('/:postId/comments', authenticate, addComment);
 
 // Old comment routes - kept for backward compatibility during migration

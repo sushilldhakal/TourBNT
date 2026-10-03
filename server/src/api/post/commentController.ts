@@ -12,7 +12,7 @@ const userSelect = { id: users.id, name: users.name, avatar: users.avatar } as c
 const MAX_COMMENT_LENGTH = 2000;
 
 /** The signed-in user on a public route, if any (a valid, unexpired auth cookie); null otherwise. */
-function optionalViewerId(req: Request): string | null {
+export function optionalViewerId(req: Request): string | null {
   const token = req.cookies?.[COOKIE_NAMES.AUTH_TOKEN];
   if (!token) return null;
   try {
@@ -24,7 +24,7 @@ function optionalViewerId(req: Request): string | null {
 }
 
 /** Admins and the post's author moderate its comments, so they also see the ones not approved yet. */
-async function canModeratePost(userId: string | null, postAuthorId: string): Promise<boolean> {
+export async function canModeratePost(userId: string | null, postAuthorId: string): Promise<boolean> {
   if (!userId) return false;
   if (userId === postAuthorId) return true;
   const [u] = await db.select({ role: users.role }).from(users).where(eq(users.id, userId)).limit(1);

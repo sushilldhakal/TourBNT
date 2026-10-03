@@ -1,7 +1,8 @@
 import { NextFunction, Request, Response } from 'express';
 import createHttpError from 'http-errors';
 import { db, posts, users } from '../../db';
-import { eq, and, desc, asc, count, type SQL } from 'drizzle-orm';
+import { eq, and, ne, desc, asc, count, sql, type SQL } from 'drizzle-orm';
+import { canModeratePost, optionalViewerId } from './commentController';
 import { HTTP_STATUS, sendSuccess, sendPaginatedResponse, sendNotFoundError, sendForbiddenError } from '../../utils/apiResponse';
 
 const SORTABLE = new Set(['createdAt', 'updatedAt', 'title', 'views']);
@@ -44,9 +45,13 @@ export const addPost = async (req: Request, res: Response, next: NextFunction): 
 // Get all posts with optional pagination, sorting, and filtering
 export const getAllPosts = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const conditions: SQL[] = [];
-    if (req.filters?.status) conditions.push(eq(posts.status, req.filters.status));
+    // This is the public list (blog, home page, sitemap): published posts only. Authors manage their drafts
+    // through /posts/user.
+    const conditions: SQL[] = [eq(posts.status, 'Published')];
     if (req.filters?.author) conditions.push(eq(posts.authorId, req.filters.author));
+    // ?tag=food: posts carrying that tag (any letter case).
+    const tag = typeof req.query.tag === 'string' ? req.query.tag.trim().slice(0, 50) : '';
+    if (tag) conditions.push(sql`exists (select 1 from jsonb_array_elements_text(${posts.tags}) t where lower(t) = lower(${tag}))`);
     const where = conditions.length ? and(...conditions) : undefined;
 
     const sortField = req.sort?.field && SORTABLE.has(req.sort.field) ? req.sort.field : 'createdAt';
@@ -112,7 +117,8 @@ export const getPost = async (req: Request, res: Response, next: NextFunction): 
       .leftJoin(users, eq(posts.authorId, users.id))
       .where(eq(posts.id, postId));
 
-    if (!row) {
+    // Drafts are visible to their author and admins (the dashboard editor loads them here), nobody else.
+    if (!row || (row.post.status !== 'Published' && !(await canModeratePost(optionalViewerId(req), row.post.authorId)))) {
       return sendNotFoundError(res, 'Post not found');
     }
 
@@ -229,5 +235,38 @@ export const editPost = async (req: Request, res: Response, next: NextFunction):
   } catch (err) {
     console.error('Error editing post:', err);
     next(createHttpError(500, 'Failed to edit post'));
+  }
+};
+
+/**
+ * Posts related to one post: other published posts ranked by how many tags they share with it, then newest.
+ * If too few share a tag, the newest other posts fill the rest, so the section is never empty.
+ * GET /api/v1/posts/:postId/related?limit=3
+ */
+export const getRelatedPosts = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { postId } = req.params;
+    const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? '3'), 10) || 3, 1), 12);
+
+    const [current] = await db.select({ tags: posts.tags }).from(posts).where(eq(posts.id, postId)).limit(1);
+    if (!current) return sendNotFoundError(res, 'Post not found');
+    const tags = (current.tags ?? []).map((t) => String(t).toLowerCase().trim()).filter(Boolean);
+
+    const shared = tags.length
+      ? sql<number>`(select count(*) from jsonb_array_elements_text(${posts.tags}) t where lower(t) in (${sql.join(tags.map((t) => sql`${t}`), sql`, `)}))::int`
+      : sql<number>`0`;
+
+    const rows = await db
+      .select({ id: posts.id, title: posts.title, image: posts.image, tags: posts.tags, createdAt: posts.createdAt, author: authorSelect, sharedTags: shared })
+      .from(posts)
+      .leftJoin(users, eq(posts.authorId, users.id))
+      .where(and(eq(posts.status, 'Published'), ne(posts.id, postId)))
+      .orderBy(desc(shared), desc(posts.createdAt))
+      .limit(limit);
+
+    sendSuccess(res, rows, 'Related posts');
+  } catch (err) {
+    console.error('Error fetching related posts:', err);
+    next(createHttpError(500, 'Failed to get related posts'));
   }
 };

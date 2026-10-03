@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import Image from 'next/image';
-import { getSinglePost } from '@/lib/api/posts';
+import { getRelatedPosts, getSinglePost, type RelatedPost } from '@/lib/api/posts';
 import type { Post } from '@/types/types';
 import RichTextRenderer from '@/components/RichTextRenderer';
 import { BlogComments } from '@/components/blog/BlogComments';
@@ -39,6 +39,8 @@ export default async function SingleBlogPage({ params }: { params: Promise<{ id:
     const rawTags = (post as { tags?: unknown }).tags;
     const tags = (Array.isArray(rawTags) ? rawTags : []).map((t) => String(t).trim()).filter(Boolean);
     const commentsEnabled = (post as { enableComments?: boolean }).enableComments !== false;
+    // Posts sharing the most tags with this one (then the newest); an empty list just hides the section.
+    const related: RelatedPost[] = await getRelatedPosts(blogId, 3).catch(() => []);
 
     return (
         <div className="w-full mx-auto px-4 py-16 transition-all duration-300">
@@ -64,7 +66,14 @@ export default async function SingleBlogPage({ params }: { params: Promise<{ id:
                         {tags.length > 0 && (
                             <ul className="mt-4 flex flex-wrap gap-2" aria-label="Tags">
                                 {tags.map((tag) => (
-                                    <li key={tag} className="rounded-full bg-secondary px-3 py-1 text-xs font-medium text-secondary-foreground">#{tag}</li>
+                                    <li key={tag}>
+                                        <Link
+                                            href={`/blog?tag=${encodeURIComponent(tag)}`}
+                                            className="inline-block rounded-full bg-secondary px-3 py-1 text-xs font-medium text-secondary-foreground capitalize transition-colors hover:bg-primary hover:text-primary-foreground"
+                                        >
+                                            {tag}
+                                        </Link>
+                                    </li>
                                 ))}
                             </ul>
                         )}
@@ -98,12 +107,30 @@ export default async function SingleBlogPage({ params }: { params: Promise<{ id:
 
                 <BlogComments postId={blogId} enabled={commentsEnabled} />
 
-                <div className="mt-12 pt-8 border-t border-border">
-                    <h3 className="text-xl font-semibold mb-6">Related Posts</h3>
-                    <div className="text-center py-8 bg-card border border-border rounded-lg">
-                        <p className="text-muted-foreground">No related posts available</p>
-                    </div>
-                </div>
+                {related.length > 0 && (
+                    <section aria-labelledby="related-heading" className="mt-12 pt-8 border-t border-border">
+                        <h2 id="related-heading" className="text-xl font-semibold mb-6">Related Posts</h2>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            {related.map((r) => (
+                                <Link key={r.id} href={`/blog/${r.id}`} className="group bg-card border border-border rounded-lg overflow-hidden hover:shadow-md transition">
+                                    <div className="aspect-video bg-muted relative">
+                                        {r.image ? (
+                                            <Image src={r.image} alt={r.title} fill className="object-cover group-hover:scale-105 transition" sizes="(max-width: 640px) 100vw, 300px" />
+                                        ) : (
+                                            <span className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">No image</span>
+                                        )}
+                                    </div>
+                                    <div className="p-3">
+                                        <h3 className="font-medium line-clamp-2 group-hover:text-primary">{r.title}</h3>
+                                        {r.tags && r.tags.length > 0 && (
+                                            <p className="mt-1 text-xs text-muted-foreground capitalize line-clamp-1">{r.tags.slice(0, 3).join(' · ')}</p>
+                                        )}
+                                    </div>
+                                </Link>
+                            ))}
+                        </div>
+                    </section>
+                )}
             </div>
         </div>
     );

@@ -7,10 +7,13 @@ import type { PostListItem } from '@/types/post';
 export const revalidate = 60;
 
 // Server component: the HTML arrives with the data in it, no client-side fetch round trip.
-export default async function BlogPage() {
+export default async function BlogPage({ searchParams }: { searchParams: Promise<{ tag?: string | string[] }> }) {
+    const { tag: rawTag } = await searchParams;
+    // /blog?tag=food lists only the posts with that tag (the tag links on each post lead here).
+    const tag = typeof rawTag === 'string' ? rawTag.trim().slice(0, 50) : '';
     let posts: PostListItem[] = [];
     try {
-        const res: any = await getPosts({ limit: 24 });
+        const res: any = await getPosts({ limit: 24, tag: tag || undefined });
         const list = res?.data ?? res?.items ?? res?.posts ?? [];
         posts = Array.isArray(list) ? list : [];
     } catch {
@@ -20,17 +23,24 @@ export default async function BlogPage() {
     return (
         <div className="w-full mx-auto px-4 py-16 transition-all duration-300">
             <div className="mb-8">
-                <h1 className="text-4xl font-bold mb-4">Travel Blog</h1>
-                <p className="text-xl text-muted-foreground">
-                    Travel tips, destination guides, and inspiring stories
-                </p>
+                <h1 className="text-4xl font-bold mb-4">{tag ? <>Posts about <span className="text-primary capitalize">{tag}</span></> : 'Travel Blog'}</h1>
+                {tag ? (
+                    <p className="text-muted-foreground">
+                        {posts.length} post{posts.length === 1 ? '' : 's'} tagged “{tag}”.{' '}
+                        <Link href="/blog" className="text-primary hover:text-primary/80">See all posts</Link>
+                    </p>
+                ) : (
+                    <p className="text-xl text-muted-foreground">
+                        Travel tips, destination guides, and inspiring stories
+                    </p>
+                )}
             </div>
 
             {posts.length === 0 ? (
                 <div className="text-center py-16">
-                    <p className="text-xl text-muted-foreground mb-4">No blog posts available at the moment</p>
-                    <Link href="/" className="text-primary hover:text-primary/80">
-                        Return to Home
+                    <p className="text-xl text-muted-foreground mb-4">{tag ? `No posts are tagged “${tag}” yet` : 'No blog posts available at the moment'}</p>
+                    <Link href={tag ? '/blog' : '/'} className="text-primary hover:text-primary/80">
+                        {tag ? 'See all posts' : 'Return to Home'}
                     </Link>
                 </div>
             ) : (

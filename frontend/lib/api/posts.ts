@@ -8,16 +8,20 @@ import { api, serverApi, handleApiError, extractResponseData } from './apiClient
  */
 export const getPosts =  async ({
     page = 1,
-    limit = 10
+    limit = 10,
+    tag,
 }: {
     page?: number;
     limit?: number;
+    /** Only posts with this tag. */
+    tag?: string;
 } = {}) => {
     try {
         const response = await api.get('/posts', {
             params: {
                 page,
-                limit
+                limit,
+                ...(tag ? { tag } : {}),
             }
         });
         return extractResponseData(response);
@@ -145,5 +149,29 @@ export const getSinglePostServer = async (postId: string) => {
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'fetching post (server)');
+    }
+};
+
+export interface RelatedPost {
+    id: string;
+    title: string;
+    image: string | null;
+    tags: string[] | null;
+    createdAt: string;
+    author: { id: string; name: string } | null;
+    sharedTags: number;
+}
+
+/**
+ * Other published posts, those sharing the most tags with this one first, topped up with the newest.
+ */
+export const getRelatedPosts = async (postId: string, limit = 3): Promise<RelatedPost[]> => {
+    try {
+        const response = await api.get(`/posts/${postId}/related`, { params: { limit } });
+        // extractResponseData only unwraps single objects, so take the list out of the envelope here.
+        const list = response.data?.data;
+        return Array.isArray(list) ? list : [];
+    } catch (error) {
+        throw handleApiError(error, 'fetching related posts');
     }
 };
