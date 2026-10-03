@@ -26,6 +26,10 @@ export const CURRENCIES = [
 type Code = (typeof CURRENCIES)[number]['code'];
 const STORAGE_KEY = 'tourbnt:currency';
 
+// The header currency switcher is turned off: every price shows in USD, the currency tours are charged in.
+// To bring it back, set this to true and put <CurrencySwitcher /> back in MainHeader.
+const VISITOR_CAN_CHOOSE = false;
+
 // First-visit guess from the browser's region. The visitor can always change it.
 const REGION_CURRENCY: Record<string, Code> = {
     AU: 'AUD', GB: 'GBP', CA: 'CAD', NP: 'NPR', IN: 'INR', SG: 'SGD', JP: 'JPY', CN: 'CNY', AE: 'AED', CH: 'CHF',
@@ -50,6 +54,7 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
 
     // Chosen after mount (not during render) so the server HTML and the first client render agree.
     useEffect(() => {
+        if (!VISITOR_CAN_CHOOSE) return;
         try {
             const stored = localStorage.getItem(STORAGE_KEY) as Code | null;
             if (stored && CURRENCIES.some((c) => c.code === stored)) {
