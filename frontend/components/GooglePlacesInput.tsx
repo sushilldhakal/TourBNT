@@ -44,7 +44,7 @@ export const GooglePlacesInput = forwardRef<HTMLInputElement, GooglePlacesInputP
                     ref={(node) => {
                         // Handle both refs
                         if (inputRef) {
-                            // eslint-disable-next-line react-hooks/immutability
+                             
                             (inputRef as React.MutableRefObject<HTMLInputElement | null>).current = node;
                         }
                         if (typeof externalRef === 'function') {

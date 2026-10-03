@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Folder, FolderOpen } from "lucide-react";
 import { useEffect, useState, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { ContentContainer } from "@/components/layout/PublicLayoutClient";
 import type { CategoryData } from "@/types/types";
 

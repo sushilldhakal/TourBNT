@@ -1,6 +1,6 @@
 import { ArrowDownWideNarrow, CheckCheck, RefreshCcwDot, StepForward, WrapText } from "lucide-react";
 import { useEditor, getPrevText } from "novel";
-import { Command, CommandGroup, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command";
+import { CommandGroup, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command";
 
 /**
  * AI command options for text editing and generation

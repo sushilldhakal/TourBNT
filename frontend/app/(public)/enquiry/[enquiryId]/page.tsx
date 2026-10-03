@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { Home, ChevronRight, MessageCircle, Loader2, ArrowLeft } from 'lucide-react';
+import { ChevronRight, MessageCircle, Loader2, ArrowLeft } from 'lucide-react';
 import {
     getConversation,
     getConversationMessages,

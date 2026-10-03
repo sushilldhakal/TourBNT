@@ -7,7 +7,7 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { AlertTriangle, Check, Folder, Plus, X } from "lucide-react";
 import { DashboardCardHeader } from "@/components/dashboard/layout/CardHeader";
-import { useCategoriesRoleBased, usePendingCategories, useChangeRequests, useApproveChangeRequest, useRejectChangeRequest, categoryKeys } from '@/lib/queries/useCategories';
+import { useCategoriesRoleBased, usePendingCategories, useChangeRequests, useApproveChangeRequest, useRejectChangeRequest } from '@/lib/queries/useCategories';
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useCacheManager } from '@/lib/queries/cacheUtils';

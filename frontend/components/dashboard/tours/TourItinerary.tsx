@@ -140,7 +140,7 @@ export function TourItinerary() {
                         </p>
                     )}
                     <p className="text-sm text-muted-foreground mt-2">
-                        Tip: Use bullet points to make the list easy to read. Press '/' for formatting options.
+                        Tip: Use bullet points to make the list easy to read. Press &apos;/&apos; for formatting options.
                     </p>
                 </CardContent>
             </Card>

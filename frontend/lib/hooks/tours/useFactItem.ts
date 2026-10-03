@@ -5,7 +5,7 @@ import { useSingleFact } from '@/lib/queries/useFacts';
 import { toast } from '@/components/ui/use-toast';
 import { updateFacts } from '@/lib/api/factsApi';
 import { useAuth } from '@/lib/hooks/useAuth';
-import type { FactData, UseFactItemProps } from '@/types/facts';
+import type { UseFactItemProps } from '@/types/facts';
 
 export const useFactItem = ({ fact, DeleteFact }: UseFactItemProps) => {
     const [isEditMode, setIsEditMode] = useState<boolean>(false);

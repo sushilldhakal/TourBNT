@@ -8,14 +8,7 @@ import { Heart, Eye, MessageSquare, BookOpen, ChevronLeft, ChevronRight } from '
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-    CarouselWithPlugins,
-    CarouselContent,
-    CarouselItem,
-    CarouselNext,
-    CarouselPrevious,
-    type CarouselApi,
-} from "@/components/ui/carousel-with-plugins-lazy";
+import { CarouselWithPlugins, CarouselContent, CarouselItem, type CarouselApi } from "@/components/ui/carousel-with-plugins-lazy";
 import { Post } from '@/types/types';
 import { ContentContainer } from '@/components/layout/PublicLayoutClient';
 import Image from 'next/image';

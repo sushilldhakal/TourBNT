@@ -35,7 +35,7 @@ import { useTourContext } from '@/providers/TourProvider';
 import type { FaqData } from '@/types/faq';
 import { getUserId } from '@/lib/utils/auth';
 import AddFaq from './Faq/AddFaq';
-import { getAllFaqs, getUserFaq } from '@/lib/api/faqApi';
+import { getUserFaq } from '@/lib/api/faqApi';
 
 export function TourFAQs() {
     const { faqFields, appendFaq, faqRemove, faqMove, form } = useTourContext();

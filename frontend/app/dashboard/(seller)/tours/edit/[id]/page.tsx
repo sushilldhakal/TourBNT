@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { FormProvider } from 'react-hook-form';
 import { useMutation } from '@tanstack/react-query';
 import { useCacheManager } from '@/lib/queries/cacheUtils';
-import { ArrowLeft, Save, Loader2, Trash2, AlertTriangle } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { TourProvider, useTourContext } from '@/providers/TourProvider';
 import { TourEditorLayout } from '@/components/dashboard/tours/TourEditorLayout';
 import {
@@ -24,15 +24,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertCircle } from 'lucide-react';
 import { TabsContent } from '@/components/ui/tabs';
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-    DialogTrigger,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { deleteTour } from '@/lib/api/tours';
 import { toast } from '@/components/ui/use-toast';
 import { DashboardCardHeader } from '@/components/dashboard/layout/CardHeader';

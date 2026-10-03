@@ -1,27 +1,7 @@
 "use client"
 
 import * as React from "react"
-import {
-  Send,
-  User,
-  Bot,
-  Plus,
-  Search,
-  MessageCircle,
-  ChevronDown,
-  Check,
-  CheckCheck,
-  Paperclip,
-  Mic,
-  Smile,
-  MoreVertical,
-  ArrowLeft,
-  Archive,
-  Trash2,
-  X,
-  Users,
-  LayoutGrid,
-} from "lucide-react"
+import { Send, Plus, Search, MessageCircle, ChevronDown, Check, CheckCheck, Paperclip, Mic, Smile, MoreVertical, ArrowLeft, Archive, Trash2, X, Users, LayoutGrid } from "lucide-react";
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"

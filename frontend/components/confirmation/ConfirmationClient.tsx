@@ -28,7 +28,7 @@ export default function ConfirmationClient() {
                         </div>
                         <h1 className="text-3xl font-bold mb-2">Booking Confirmed!</h1>
                         <p className="text-muted-foreground text-lg">
-                            Thank you for your booking. We've sent a confirmation email with all the details.
+                            Thank you for your booking. We&apos;ve sent a confirmation email with all the details.
                         </p>
                     </div>
 
@@ -48,7 +48,7 @@ export default function ConfirmationClient() {
                                 <div>
                                     <p className="font-medium">Add to Calendar</p>
                                     <p className="text-sm text-muted-foreground">
-                                        Don't forget to mark your tour dates
+                                        Don&apos;t forget to mark your tour dates
                                     </p>
                                 </div>
                             </div>

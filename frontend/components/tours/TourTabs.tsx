@@ -182,7 +182,7 @@ function InclusionsExclusions({ inclusions: rawInclusions, exclusions: rawExclus
                 <section className="bg-card border rounded-lg p-4 sm:p-6" aria-labelledby="inclusions-heading">
                     <div className="flex items-center gap-2 mb-3 sm:mb-4">
                         <CheckCircle2 className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 dark:text-green-400 shrink-0" aria-hidden="true" />
-                        <h3 id="inclusions-heading" className="text-base sm:text-lg font-semibold">What's Included</h3>
+                        <h3 id="inclusions-heading" className="text-base sm:text-lg font-semibold">What&apos;s Included</h3>
                     </div>
                     <div className="text-sm">
                         <RichTextRenderer content={inclusions} />
@@ -195,7 +195,7 @@ function InclusionsExclusions({ inclusions: rawInclusions, exclusions: rawExclus
                 <section className="bg-card border rounded-lg p-4 sm:p-6" aria-labelledby="exclusions-heading">
                     <div className="flex items-center gap-2 mb-3 sm:mb-4">
                         <XCircle className="h-4 w-4 sm:h-5 sm:w-5 text-red-600 dark:text-red-400 shrink-0" aria-hidden="true" />
-                        <h3 id="exclusions-heading" className="text-base sm:text-lg font-semibold">What's Not Included</h3>
+                        <h3 id="exclusions-heading" className="text-base sm:text-lg font-semibold">What&apos;s Not Included</h3>
                     </div>
                     <div className="text-sm">
                         <RichTextRenderer content={exclusions} />

@@ -1,6 +1,5 @@
 'use client';
 
-import { formatPrice } from '@/lib/tourUtils';
 import { PricingOption } from '@/types/types';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';

@@ -10,7 +10,7 @@ import { format } from 'date-fns';
 import { toast } from '@/components/ui/use-toast';
 import { CheckoutSteps } from '@/components/cart/CheckoutSteps';
 import { useValidatePromoCode } from '@/lib/queries/useBooking';
-import { getCartBookings, removeFromCart, updateCartBooking, clearCart, CartBooking } from '@/lib/cartUtils';
+import { getCartBookings, removeFromCart, CartBooking } from '@/lib/cartUtils';
 
 export default function CartClient() {
     const router = useRouter();

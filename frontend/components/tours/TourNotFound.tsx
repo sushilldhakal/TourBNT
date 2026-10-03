@@ -18,7 +18,7 @@ export function TourNotFound() {
                     </h1>
 
                     <p className="text-muted-foreground mb-6 text-lg">
-                        The tour you're looking for doesn't exist or has been removed.
+                        The tour you&apos;re looking for doesn&apos;t exist or has been removed.
                         It may have been deleted or the URL might be incorrect.
                     </p>
 

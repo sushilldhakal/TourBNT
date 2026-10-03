@@ -1,5 +1,4 @@
-import { api, serverApi, handleApiError, createFormData, extractResponseData, extractList } from './apiClient';
-import { AxiosError } from 'axios';
+import { api, serverApi, handleApiError, extractResponseData, extractList } from './apiClient';
 import type { Tour } from '@/types/types';
 
 /**

@@ -52,7 +52,7 @@ export default function TermsPage() {
                     <li>Hold valid travel documents, visas and any permits needed for your trip, unless the tour says it arranges them.</li>
                     <li>Take out travel insurance. For treks and activities at altitude or involving adventure sports, your insurance must cover them, including emergency evacuation. This is a condition of travelling on those tours.</li>
                     <li>Make sure you are fit enough for the trip as described, and tell the Operator in advance about any medical condition, allergy or dietary need that could affect you or the group.</li>
-                    <li>Follow your guide's instructions and local laws, and treat people, wildlife, places of worship and the environment with respect.</li>
+                    <li>Follow your guide&apos;s instructions and local laws, and treat people, wildlife, places of worship and the environment with respect.</li>
                 </ul>
             </Section>
 
@@ -61,7 +61,7 @@ export default function TermsPage() {
             </Section>
 
             <Section title="8. Reviews and content you post">
-                <p>Reviews must describe your genuine experience. Do not post anything unlawful, misleading, abusive or that infringes someone else's rights. You keep ownership of what you post, but you give {company.companyName} a non-exclusive, worldwide licence to display, reproduce and promote it on the site and in our marketing. We may moderate, reject or remove content.</p>
+                <p>Reviews must describe your genuine experience. Do not post anything unlawful, misleading, abusive or that infringes someone else&apos;s rights. You keep ownership of what you post, but you give {company.companyName} a non-exclusive, worldwide licence to display, reproduce and promote it on the site and in our marketing. We may moderate, reject or remove content.</p>
             </Section>
 
             <Section title="9. Operators, Providers and advertisers">
@@ -74,7 +74,7 @@ export default function TermsPage() {
             </Section>
 
             <Section title="10. Using the site">
-                <p>You agree not to misuse the site: no scraping or automated access beyond what we permit, no attempts to break or overload it, no use of someone else's account, and no use to send spam or to harm others. We may apply rate limits and block abusive traffic.</p>
+                <p>You agree not to misuse the site: no scraping or automated access beyond what we permit, no attempts to break or overload it, no use of someone else&apos;s account, and no use to send spam or to harm others. We may apply rate limits and block abusive traffic.</p>
             </Section>
 
             <Section title="11. Intellectual property">

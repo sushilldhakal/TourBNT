@@ -81,7 +81,7 @@ class NovelEditorErrorBoundary extends Component<
                         <AlertCircle className="h-4 w-4" />
                         <AlertTitle>Editor Failed to Load</AlertTitle>
                         <AlertDescription>
-                            The rich text editor encountered an error and couldn't load properly.
+                            The rich text editor encountered an error and couldn&apos;t load properly.
                             You can continue editing using the basic text area below, or try reloading the editor.
                         </AlertDescription>
                     </Alert>

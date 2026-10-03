@@ -514,7 +514,7 @@ function generateRecurringInstances(
         return [departure];
     }
 
-    let currentDate = new Date(startDate);
+    const currentDate = new Date(startDate);
     let instanceCount = 0;
     const maxInstances = 100; // Safety limit
 

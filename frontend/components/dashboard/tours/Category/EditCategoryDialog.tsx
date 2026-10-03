@@ -14,7 +14,7 @@ import { useAuth } from "@/lib/hooks/useAuth";
 import { useMutation } from "@tanstack/react-query";
 import { useCategoryById, useCacheManager } from "@/lib/queries";
 import { updateCategory } from "@/lib/api/categories";
-import { CategoryData, DescriptionContent, TourObject, TourTitle } from "@/types/types";
+import { DescriptionContent, TourObject, TourTitle } from "@/types/types";
 import Image from "next/image";
 import { toast } from "@/components/ui/use-toast";
 import { MultiSelect } from "@/components/ui/MultiSelect";

@@ -4,7 +4,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { FolderOpen, Edit, Trash2, Power, X, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { CategoryData, TourTitle } from "@/types/types";
 import type { CategoryGridViewProps } from "@/types/category";
 import { useCacheManager, useTourTitlesByIds } from '@/lib/queries';
 import { useAuth } from "@/lib/hooks/useAuth";

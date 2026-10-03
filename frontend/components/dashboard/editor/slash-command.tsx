@@ -12,7 +12,7 @@ import {
     Twitter,
     Youtube,
 } from "lucide-react";
-import { createSuggestionItems, Command, renderItems, type SuggestionItem } from "novel";
+import { createSuggestionItems, Command, renderItems } from "novel";
 import type { Range, Editor } from "@tiptap/core";
 import Magic from "./icons/Magic";
 import { type JSONContent } from "novel";

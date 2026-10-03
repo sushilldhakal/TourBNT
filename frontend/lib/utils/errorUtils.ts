@@ -86,7 +86,7 @@ export const getDestinationToggleErrorInfo = (error: any, action: 'activate' | '
         ? `update favorite status`
         : `${action} destination`;
 
-    let errorInfo = getErrorInfo(error, baseContext);
+    const errorInfo = getErrorInfo(error, baseContext);
 
     // Handle specific destination errors
     if (error?.statusCode === 400) {

@@ -155,7 +155,7 @@ export function useMedia(options: UseMediaOptions) {
             cache.invalidateMedia();
 
             if (showToast) {
-                let count = (data as any).uploadedCount ?? variables.length;
+                const count = (data as any).uploadedCount ?? variables.length;
                 toast({
                     title: 'Upload Successful',
                     description: `${count} file${count !== 1 ? 's' : ''} uploaded successfully`,

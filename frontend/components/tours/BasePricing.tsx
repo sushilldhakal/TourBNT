@@ -1,6 +1,5 @@
 'use client';
 
-import { formatPrice } from '@/lib/tourUtils';
 import { Badge } from '@/components/ui/badge';
 import { AlertCircle } from 'lucide-react';
 import { Price } from '@/components/common/Price';

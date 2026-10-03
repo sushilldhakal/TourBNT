@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { MapPin, Globe, Building } from "lucide-react";
 import { useEffect, useState, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import RichTextRenderer from "@/components/RichTextRenderer";
 import { ContentContainer } from "@/components/layout/PublicLayoutClient";
 import { Destination } from "@/types/types";

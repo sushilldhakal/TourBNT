@@ -15,15 +15,13 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { toast } from '@/components/ui/use-toast';
-import { Loader2, Save, ArrowLeft, Eye, EyeOff, User, Mail, Phone, Lock, Building2, CreditCard, Camera, Upload, X, Shield } from 'lucide-react';
-import Link from 'next/link';
+import { Loader2, Save, ArrowLeft, Eye, EyeOff, User, Mail, Lock, Building2, CreditCard, Camera, X, Shield } from 'lucide-react';
 import { updateUser, uploadMyAvatar } from '@/lib/api/users';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AdminGuard } from '@/components/dashboard/RoleGuard';
-import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
-import { getRoleBadgeColor, UserRole, isAdmin } from '@/lib/utils/roles';
+import { UserRole, isAdmin } from '@/lib/utils/roles';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { Gallery } from '@/components/dashboard/gallery/Gallery';
 import { User as UserType } from '@/types/types';
@@ -414,7 +412,7 @@ export default function EditUserPage() {
                                             <User className="h-5 w-5" />
                                             <CardTitle>Profile Information</CardTitle>
                                         </div>
-                                        <CardDescription>Update user's personal information</CardDescription>
+                                        <CardDescription>Update user&apos;s personal information</CardDescription>
                                     </CardHeader>
                                     <CardContent className="space-y-5">
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -530,7 +528,7 @@ export default function EditUserPage() {
                                             <CreditCard className="h-5 w-5" />
                                             <CardTitle>Banking Details</CardTitle>
                                         </div>
-                                        <CardDescription>Update user's banking information for payments</CardDescription>
+                                        <CardDescription>Update user&apos;s banking information for payments</CardDescription>
                                     </CardHeader>
                                     <CardContent className="space-y-5">
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -689,7 +687,7 @@ export default function EditUserPage() {
                                     <Lock className="h-5 w-5" />
                                     <CardTitle>Change Password</CardTitle>
                                 </div>
-                                <CardDescription>Update user's password to keep their account secure</CardDescription>
+                                <CardDescription>Update user&apos;s password to keep their account secure</CardDescription>
                             </CardHeader>
                             <CardContent>
                                 <Form {...form}>
@@ -723,7 +721,7 @@ export default function EditUserPage() {
                                                         </div>
                                                     </FormControl>
                                                     <FormDescription>
-                                                        Leave empty if you don't want to change the password
+                                                        Leave empty if you don&apos;t want to change the password
                                                     </FormDescription>
                                                     <FormMessage />
                                                 </FormItem>

@@ -15,7 +15,6 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { useCacheManager } from '@/lib/queries';
 import { addDestination, getAvailableDestinationsPage, bulkAddDestinations } from '@/lib/api/destinations';
 import { ExistingItemsPicker } from '@/components/dashboard/shared/ExistingItemsPicker';
-import { DestinationTypes, TourTitle } from "@/types/types";
 import type { DestinationFormData } from "@/types/destination";
 import { Gallery } from "@/components/dashboard/gallery/Gallery";
 import type { JSONContent } from "novel";

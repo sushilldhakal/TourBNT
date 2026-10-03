@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { useCacheManager, useMyTours } from '@/lib/queries';
 import { deleteTour } from '@/lib/api/tours';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { DashboardCardHeader } from '@/components/dashboard/layout/CardHeader';
 import {
     CirclePlus,

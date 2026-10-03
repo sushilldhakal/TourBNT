@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useTourReviews } from '@/lib/queries';
 import { Star, ThumbsUp, Eye, MessageCircle, Send } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -11,15 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/use-toast';
-import {
-    getTourReviews,
-    getReviewEligibility,
-    addReview,
-    addReviewReply,
-    likeReview,
-    likeReply,
-    incrementReplyView,
-} from '@/lib/api/reviews';
+import { getReviewEligibility, addReview, addReviewReply, likeReview, likeReply, incrementReplyView } from '@/lib/api/reviews';
 import { Review, Reply } from '@/types/types';
 import { cn } from '@/lib/utils';
 

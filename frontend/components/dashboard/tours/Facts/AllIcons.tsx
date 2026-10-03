@@ -122,7 +122,7 @@ export default function AllIcons({ onSelectIcon }: AllIconsProps) {
                             </div>
                             {getAllFilteredIcons.length === 0 && (
                                 <div className="text-center py-8 text-muted-foreground">
-                                    No icons found matching "{searchTerm}"
+                                    No icons found matching &quot;{searchTerm}&quot;
                                 </div>
                             )}
                         </ScrollArea>
@@ -165,7 +165,7 @@ export default function AllIcons({ onSelectIcon }: AllIconsProps) {
                                         </div>
                                         {getFilteredIconsBySet(set.prefix).length === 0 && (
                                             <div className="text-center py-8 text-muted-foreground">
-                                                No icons found in {set.name} matching "{searchTerm}"
+                                                No icons found in {set.name} matching &quot;{searchTerm}&quot;
                                             </div>
                                         )}
                                     </ScrollArea>

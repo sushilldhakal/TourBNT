@@ -9,7 +9,6 @@ import { baseNavigationItems, getFlatNavigationForSearch } from '@/components/da
 import { isAdmin } from '@/lib/utils/roles';
 import { getUserRole } from '@/lib/utils/auth';
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
-import { Button } from '@/components/ui/button';
 
 export default function DashboardNotFound() {
     const router = useRouter();
@@ -54,7 +53,7 @@ export default function DashboardNotFound() {
                 Page Not Found
             </h2>
             <p className="text-slate-600 dark:text-slate-400 max-w-md mb-8">
-                The dashboard page you're looking for doesn't exist.
+                The dashboard page you&apos;re looking for doesn&apos;t exist.
             </p>
 
             {/* Search Box */}

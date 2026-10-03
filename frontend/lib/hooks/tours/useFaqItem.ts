@@ -7,7 +7,7 @@ import { useCacheManager } from '@/lib/queries/cacheUtils';
 import { useSingleFaq } from '@/lib/queries/useFaq';
 import { toast } from '@/components/ui/use-toast';
 import { updateFaq } from '@/lib/api/faqApi';
-import type { FaqData, UseFaqItemProps } from '@/types/faq';
+import type { UseFaqItemProps } from '@/types/faq';
 
 // Validation schema
 const faqSchema = z.object({

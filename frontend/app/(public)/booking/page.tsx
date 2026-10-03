@@ -67,7 +67,7 @@ export default function BookingsPage() {
                 <div className="text-center py-16 text-muted-foreground">Loading...</div>
             ) : bookings.length === 0 ? (
                 <div className="text-center py-16 bg-card border border-border rounded-lg">
-                    <p className="text-xl text-muted-foreground mb-4">You don't have any bookings yet</p>
+                    <p className="text-xl text-muted-foreground mb-4">You don&apos;t have any bookings yet</p>
                     <Link href="/tours" className="text-primary hover:text-primary/80">
                         Browse Tours
                     </Link>

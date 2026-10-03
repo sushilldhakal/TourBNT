@@ -264,7 +264,7 @@ const TourFacts = () => {
                                 <h3 className="font-semibold text-lg mb-2">No facts added yet</h3>
                                 <p className="text-sm text-muted-foreground max-w-md mx-auto mb-6">
                                     Facts provide important information about your tours.
-                                    They'll appear here once added.
+                                    They&apos;ll appear here once added.
                                 </p>
                                 <Button
                                     onClick={() => setIsAddFactOpen(true)}
