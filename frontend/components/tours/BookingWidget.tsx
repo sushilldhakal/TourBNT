@@ -29,7 +29,9 @@ export function BookingWidget({ tour, prefilledDate, className }: BookingWidgetP
         <aside
             id="booking-widget"
             className={cn(
-                "relative mt-[-90px]",
+                // The negative top margin pulls the widget up beside the tour header on wide layouts only;
+                // on narrower screens the widget stacks below the content and must not overlap it.
+                "relative lg:mt-[-90px]",
                 className
             )}
             aria-label="Tour booking"
