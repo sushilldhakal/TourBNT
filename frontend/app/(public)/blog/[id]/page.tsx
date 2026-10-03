@@ -2,6 +2,8 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { getSinglePost } from '@/lib/api/posts';
 import type { Post } from '@/types/types';
+import RichTextRenderer from '@/components/RichTextRenderer';
+import { BlogComments } from '@/components/blog/BlogComments';
 
 // Serve cached HTML and refresh it in the background at most once a minute (ISR).
 export const revalidate = 60;
@@ -34,6 +36,9 @@ export default async function SingleBlogPage({ params }: { params: Promise<{ id:
     const authorName = (post as { author?: { name?: string } }).author?.name;
     const content = (post as { content?: string }).content ?? (post as { body?: string }).body ?? '';
     const image = (post as { image?: string }).image ?? (post as { featuredImage?: string }).featuredImage;
+    const rawTags = (post as { tags?: unknown }).tags;
+    const tags = (Array.isArray(rawTags) ? rawTags : []).map((t) => String(t).trim()).filter(Boolean);
+    const commentsEnabled = (post as { enableComments?: boolean }).enableComments !== false;
 
     return (
         <div className="w-full mx-auto px-4 py-16 transition-all duration-300">
@@ -56,6 +61,13 @@ export default async function SingleBlogPage({ params }: { params: Promise<{ id:
                                 </>
                             )}
                         </div>
+                        {tags.length > 0 && (
+                            <ul className="mt-4 flex flex-wrap gap-2" aria-label="Tags">
+                                {tags.map((tag) => (
+                                    <li key={tag} className="rounded-full bg-secondary px-3 py-1 text-xs font-medium text-secondary-foreground">#{tag}</li>
+                                ))}
+                            </ul>
+                        )}
                     </div>
 
                     <div className="bg-card border border-border rounded-lg overflow-hidden mb-8">
@@ -76,14 +88,15 @@ export default async function SingleBlogPage({ params }: { params: Promise<{ id:
                         </div>
                     </div>
 
-                    <div className="prose max-w-none dark:prose-invert">
-                        {content ? (
-                            <div dangerouslySetInnerHTML={{ __html: content }} />
-                        ) : (
-                            <p className="text-muted-foreground">No content available.</p>
-                        )}
-                    </div>
+                    {content ? (
+                        // The post is stored as rich-text JSON from the editor; this turns it into safe HTML.
+                        <RichTextRenderer content={content} />
+                    ) : (
+                        <p className="text-muted-foreground">No content available.</p>
+                    )}
                 </article>
+
+                <BlogComments postId={blogId} enabled={commentsEnabled} />
 
                 <div className="mt-12 pt-8 border-t border-border">
                     <h3 className="text-xl font-semibold mb-6">Related Posts</h3>

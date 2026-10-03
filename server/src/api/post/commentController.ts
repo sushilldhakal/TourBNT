@@ -1,12 +1,37 @@
 import { Request, Response, NextFunction } from 'express';
 import createHttpError from 'http-errors';
 import { db, comments, commentLikes, posts, users } from '../../db';
-import { eq, and, inArray, count, desc, sql, ilike } from 'drizzle-orm';
+import { eq, and, inArray, count, desc, sql, ilike, isNull } from 'drizzle-orm';
+import { verify } from 'jsonwebtoken';
+import { config } from '../../config/config';
+import { COOKIE_NAMES } from '../../utils/cookieUtils';
 import { sendSuccess, sendPaginatedResponse } from '../../utils/apiResponse';
 
 const userSelect = { id: users.id, name: users.name, avatar: users.avatar } as const;
 
-const withReplies = async (parentIds: string[] | any) => {
+const MAX_COMMENT_LENGTH = 2000;
+
+/** The signed-in user on a public route, if any (a valid, unexpired auth cookie); null otherwise. */
+function optionalViewerId(req: Request): string | null {
+  const token = req.cookies?.[COOKIE_NAMES.AUTH_TOKEN];
+  if (!token) return null;
+  try {
+    const sub = (verify(token, config.jwtSecret) as { sub?: string }).sub;
+    return sub ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Admins and the post's author moderate its comments, so they also see the ones not approved yet. */
+async function canModeratePost(userId: string | null, postAuthorId: string): Promise<boolean> {
+  if (!userId) return false;
+  if (userId === postAuthorId) return true;
+  const [u] = await db.select({ role: users.role }).from(users).where(eq(users.id, userId)).limit(1);
+  return u?.role === 'admin';
+}
+
+const withReplies = async (parentIds: string[] | any, onlyApproved = false) => {
   // Accepts explicit ids or a sub-select of ids (so it can run in the same round trip as the page).
   if (Array.isArray(parentIds) && parentIds.length === 0) return new Map<string, unknown[]>();
 
@@ -14,7 +39,8 @@ const withReplies = async (parentIds: string[] | any) => {
     .select({ reply: comments, user: userSelect })
     .from(comments)
     .leftJoin(users, eq(comments.userId, users.id))
-    .where(inArray(comments.parentId, parentIds));
+    .where(and(inArray(comments.parentId, parentIds), onlyApproved ? eq(comments.approve, true) : undefined))
+    .orderBy(comments.createdAt);
 
   const byParent = new Map<string, unknown[]>();
   for (const { reply, user } of replies) {
@@ -28,22 +54,35 @@ const withReplies = async (parentIds: string[] | any) => {
 // Create a new comment
 export const addComment = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { post, text, likes } = req.body;
-    const userId = req.user?.id || req.body.user;
+    // The post comes from the URL (/posts/:postId/comments); the old /comment/:postId route also used the body.
+    const postId = req.params.postId ?? req.body?.post;
+    const text = String(req.body?.text ?? '').trim();
+    // Always the signed-in user: the client must not be able to comment as someone else.
+    const userId = req.user?.id;
 
     if (!userId) {
-      return next(createHttpError(400, 'User ID is required. Please log in to comment.'));
+      return next(createHttpError(401, 'Please sign in to comment.'));
     }
-    if (!post || !text) {
-      return next(createHttpError(400, 'Post ID and text are required'));
+    if (!postId || !text) {
+      return next(createHttpError(400, 'Write a comment first.'));
+    }
+    if (text.length > MAX_COMMENT_LENGTH) {
+      return next(createHttpError(400, `Comments can be up to ${MAX_COMMENT_LENGTH} characters.`));
+    }
+    const [post] = await db.select({ status: posts.status, enableComments: posts.enableComments }).from(posts).where(eq(posts.id, postId)).limit(1);
+    if (!post || post.status !== 'Published') {
+      return next(createHttpError(404, 'Post not found'));
+    }
+    if (!post.enableComments) {
+      return next(createHttpError(403, 'Comments are turned off for this post.'));
     }
 
     const [newComment] = await db
       .insert(comments)
-      .values({ postId: post, userId, text, likes: likes || 0, approve: false })
+      .values({ postId, userId, text, likes: 0, approve: false })
       .returning();
 
-    sendSuccess(res, newComment, 'Comment created successfully', 201);
+    sendSuccess(res, newComment, 'Thanks! Your comment will appear once it has been approved.', 201);
   } catch (err) {
     console.error('Error adding comment:', err);
     next(createHttpError(500, 'Failed to add comment'));
@@ -54,14 +93,17 @@ export const addComment = async (req: Request, res: Response, next: NextFunction
 export const addReply = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { commentId } = req.params;
-    const { text } = req.body;
-    const userId = req.user?.id || req.body.user;
+    const text = String(req.body?.text ?? '').trim();
+    const userId = req.user?.id;
 
     if (!userId) {
-      return next(createHttpError(400, 'User ID is required. Please log in to reply.'));
+      return next(createHttpError(401, 'Please sign in to reply.'));
     }
     if (!text) {
-      return next(createHttpError(400, 'Text is required'));
+      return next(createHttpError(400, 'Write a reply first.'));
+    }
+    if (text.length > MAX_COMMENT_LENGTH) {
+      return next(createHttpError(400, `Replies can be up to ${MAX_COMMENT_LENGTH} characters.`));
     }
 
     const [parentComment] = await db.select().from(comments).where(eq(comments.id, commentId)).limit(1);
@@ -199,7 +241,15 @@ export const getCommentsByPost = async (req: Request, res: Response, next: NextF
     const { page, limit, skip } = req.pagination || { page: 1, limit: 10, skip: 0 };
     const pageLimit = typeof limit === 'number' ? limit : 10;
 
-    const where = eq(comments.postId, postId);
+    const [post] = await db.select({ authorId: posts.authorId, status: posts.status }).from(posts).where(eq(posts.id, postId)).limit(1);
+    if (!post) {
+      return next(createHttpError(404, 'Post not found'));
+    }
+    // Visitors see approved comments only; the post's author and admins also see the ones waiting for approval.
+    const moderator = await canModeratePost(optionalViewerId(req), post.authorId);
+    const onlyApproved = !moderator;
+    // Top-level comments only; replies come nested under their parent.
+    const where = and(eq(comments.postId, postId), isNull(comments.parentId), onlyApproved ? eq(comments.approve, true) : undefined);
 
     const [rows, [{ value: totalItems }]] = await Promise.all([
       db
@@ -213,7 +263,7 @@ export const getCommentsByPost = async (req: Request, res: Response, next: NextF
       db.select({ value: count() }).from(comments).where(where),
     ]);
 
-    const repliesByParent = await withReplies(rows.map((r) => r.comment.id));
+    const repliesByParent = await withReplies(rows.map((r) => r.comment.id), onlyApproved);
     const items = rows.map(({ comment, user }) => ({
       ...comment,
       user,
@@ -247,7 +297,14 @@ export const getCommentWithReplies = async (req: Request, res: Response, next: N
       return next(createHttpError(404, 'Comment not found'));
     }
 
-    const repliesByParent = await withReplies([commentId]);
+    // Same rule as the post's comment list: unapproved comments are only for the post's author and admins.
+    const [post] = await db.select({ authorId: posts.authorId }).from(posts).where(eq(posts.id, row.comment.postId)).limit(1);
+    const moderator = post ? await canModeratePost(optionalViewerId(req), post.authorId) : false;
+    if (!moderator && !row.comment.approve) {
+      return next(createHttpError(404, 'Comment not found'));
+    }
+
+    const repliesByParent = await withReplies([commentId], !moderator);
     sendSuccess(res, { ...row.comment, user: row.user, replies: repliesByParent.get(commentId) || [] }, 'Comment with replies retrieved successfully');
   } catch (err) {
     console.error('Error fetching comment with replies:', err);

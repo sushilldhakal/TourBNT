@@ -1,18 +1,26 @@
 import { api, handleApiError, extractResponseData } from './apiClient';
 
 /**
- * Add a new comment to a post
+ * Add a comment to a post (signed in). It is held for approval before it shows publicly.
  */
-export const addComment = async (commentData: FormData, postId: string) => {
+export const addComment = async (postId: string, text: string) => {
     try {
-        const response = await api.post(`/posts/${postId}/comments`, commentData, {
-            headers: {
-                'Content-Type': 'multipart/form-data',
-            },
-        });
+        const response = await api.post(`/posts/${postId}/comments`, { text });
         return extractResponseData(response);
     } catch (error) {
         throw handleApiError(error, 'adding comment');
+    }
+};
+
+/**
+ * Reply to a comment from the public blog page (signed in). Also held for approval.
+ */
+export const replyToComment = async (commentId: string, text: string) => {
+    try {
+        const response = await api.post(`/posts/comment/reply/${commentId}`, { text });
+        return extractResponseData(response);
+    } catch (error) {
+        throw handleApiError(error, 'adding reply');
     }
 };
 
