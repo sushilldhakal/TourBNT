@@ -9,10 +9,15 @@ import { useToursInfinite, useApprovedCategories, useApprovedDestinations } from
 import { RelevantAdSlot } from '@/components/ads/RelevantAdSlot';
 import { useUserLocation } from '@/lib/hooks/useUserLocation';
 import { useRef, useCallback, useEffect, useState, useMemo, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { format, parseISO } from 'date-fns';
 import { Tour } from '@/types';
+import type { TourListFilters } from '@/lib/api/tours';
+import { PRICE_MAX, PRICE_MIN } from '@/lib/tourSearchUrl';
 
-type UrlFilters = { destination: string; category: string; keyword: string };
+type UrlFilters = { destination: string; category: string; keyword: string; priceRange: string; startDate: string; endDate: string };
+
+const isDay = (v: string | null) => (v && /^\d{4}-\d{2}-\d{2}/.test(v) ? v.slice(0, 10) : '');
 
 /**
  * Applies ?destination= / ?type= / ?keyword= (what the search form and destination links
@@ -25,9 +30,16 @@ function UrlFilterSync({ onChange }: { onChange: (filters: UrlFilters) => void }
     const destination = params.get('destination') || 'all';
     const category = params.get('type') || params.get('category') || 'all';
     const keyword = params.get('keyword') || '';
+    const min = params.get('minPrice');
+    const max = params.get('maxPrice');
+    // Same "min-max" form the price dropdown uses; the full default range means no price filter.
+    const priceRange = (min || max) && !(Number(min ?? PRICE_MIN) <= PRICE_MIN && Number(max ?? PRICE_MAX) >= PRICE_MAX)
+        ? `${Number(min ?? PRICE_MIN)}-${Number(max ?? PRICE_MAX)}` : 'all';
+    const startDate = isDay(params.get('startDate'));
+    const endDate = isDay(params.get('endDate'));
     useEffect(() => {
-        onChange({ destination, category, keyword });
-    }, [destination, category, keyword, onChange]);
+        onChange({ destination, category, keyword, priceRange, startDate, endDate });
+    }, [destination, category, keyword, priceRange, startDate, endDate, onChange]);
     return null;
 }
 
@@ -38,12 +50,17 @@ export function ToursClient() {
     const [priceRange, setPriceRange] = useState<string>('all');
     const [sortOption, setSortOption] = useState<string>('featured');
     const [keyword, setKeyword] = useState('');
+    // Travel dates from the search form (YYYY-MM-DD).
+    const [dates, setDates] = useState<{ start: string; end: string }>({ start: '', end: '' });
+    const router = useRouter();
     const { coords: userCoords, status: locationStatus, request: requestLocation } = useUserLocation();
 
-    const applyUrlFilters = useCallback(({ destination, category, keyword: kw }: UrlFilters) => {
+    const applyUrlFilters = useCallback(({ destination, category, keyword: kw, priceRange: pr, startDate, endDate }: UrlFilters) => {
         setSelectedDestination(destination);
         setSelectedCategory(category);
         setKeyword(kw);
+        setPriceRange(pr);
+        setDates({ start: startDate, end: endDate });
     }, []);
 
     // View mode state
@@ -51,6 +68,22 @@ export function ToursClient() {
 
     // Intersection observer ref for infinite scroll
     const observerRef = useRef<HTMLDivElement>(null);
+
+    // Every filter is applied by the server, across all tours, so infinite scroll pages through the real
+    // results (filtering in the browser only ever saw the tours loaded so far).
+    const serverFilters = useMemo<TourListFilters | undefined>(() => {
+        const [min, max] = priceRange !== 'all' ? priceRange.split('-').map((n) => Number(n)) : [NaN, NaN];
+        const f: TourListFilters = {
+            destination: selectedDestination !== 'all' ? selectedDestination : undefined,
+            category: selectedCategory !== 'all' ? selectedCategory : undefined,
+            keyword: keyword.trim() || undefined,
+            minPrice: Number.isFinite(min) ? min : undefined,
+            maxPrice: Number.isFinite(max) ? max : undefined,
+            startDate: dates.start || undefined,
+            endDate: dates.end || undefined,
+        };
+        return Object.values(f).some((v) => v !== undefined) ? f : undefined;
+    }, [selectedDestination, selectedCategory, keyword, priceRange, dates]);
 
     const {
         data: toursData,
@@ -60,7 +93,7 @@ export function ToursClient() {
         isLoading: isLoadingTours,
         isError: isErrorTours,
         error: toursError,
-    } = useToursInfinite(12);
+    } = useToursInfinite(12, serverFilters);
 
     const { data: categoriesData } = useApprovedCategories();
     const { data: destinationsData } = useApprovedDestinations();
@@ -139,34 +172,6 @@ export function ToursClient() {
         return ranges;
     }, [allTours]);
 
-    // Get price range values function
-    const getPriceRangeValues = useCallback(
-        (range: string): { min: number; max: number } | null => {
-            if (range === 'all') return null;
-
-            // Try to parse dynamic range format "min-max"
-            const parts = range.split('-');
-            if (parts.length === 2) {
-                const min = parseInt(parts[0], 10);
-                const max = parseInt(parts[1], 10);
-                if (!isNaN(min) && !isNaN(max)) {
-                    return { min, max };
-                }
-            }
-
-            // Fallback to static ranges if dynamic parsing fails
-            const staticRanges: Record<string, { min: number; max: number }> = {
-                '0-100': { min: 0, max: 100 },
-                '100-500': { min: 100, max: 500 },
-                '500-1000': { min: 500, max: 1000 },
-                '1000-5000': { min: 1000, max: 5000 },
-                '5000+': { min: 5000, max: Infinity },
-            };
-
-            return staticRanges[range] || null;
-        },
-        []
-    );
 
     // What the ad strip is "about". An explicit filter or search wins. With nothing chosen it is where the
     // visitor is (if they allowed location) and the places / tour types of the first tours shown — the
@@ -198,64 +203,9 @@ export function ToursClient() {
 
     // Client-side filtering logic
     const filteredTours = useMemo(() => {
-        let filtered = [...allTours];
+        const filtered = [...allTours] as Tour[];
 
-        // Filter by category
-        if (selectedCategory !== 'all') {
-            filtered = filtered.filter((tour: Tour) => {
-                if (!tour.category) return false;
-
-                // Handle category as array
-                if (Array.isArray(tour.category)) {
-                    return tour.category.some((cat: any) => {
-                        if (typeof cat === 'string') {
-                            return cat === selectedCategory;
-                        }
-                        return (cat as any).id === selectedCategory;
-                    });
-                }
-
-                // Handle category as string
-                if (typeof tour.category === 'string') {
-                    return tour.category === selectedCategory;
-                }
-
-                // Handle category as object
-                return (tour.category as any).id === selectedCategory;
-            });
-        }
-
-        // Filter by destination
-        if (selectedDestination !== 'all') {
-            filtered = filtered.filter((tour: Tour) => {
-                if (!tour.destination) return false;
-
-                // Handle destination as string
-                if (typeof tour.destination === 'string') {
-                    return tour.destination === selectedDestination;
-                }
-
-                // Handle destination as object
-                return tour.destination.id === selectedDestination;
-            });
-        }
-
-        // Filter by search keyword
-        const term = keyword.trim().toLowerCase();
-        if (term) {
-            filtered = filtered.filter((tour: Tour) =>
-                [tour.title, (tour as { description?: string }).description, (tour as { excerpt?: string }).excerpt]
-                    .some((text) => typeof text === 'string' && text.toLowerCase().includes(term))
-            );
-        }
-
-        // Filter by price range
-        const priceRangeValues = getPriceRangeValues(priceRange);
-        if (priceRangeValues) {
-            filtered = filtered.filter((tour) => {
-                return tour.price >= priceRangeValues.min && tour.price <= priceRangeValues.max;
-            });
-        }
+        // Category, destination, keyword, price and dates are already applied by the server (serverFilters).
 
         // Sort tours
         switch (sortOption) {
@@ -281,7 +231,7 @@ export function ToursClient() {
         }
 
         return filtered;
-    }, [allTours, selectedCategory, selectedDestination, keyword, priceRange, sortOption, getPriceRangeValues]);
+    }, [allTours, sortOption]);
 
 
     // Reset filters function
@@ -291,7 +241,10 @@ export function ToursClient() {
         setKeyword('');
         setPriceRange('all');
         setSortOption('featured');
-    }, []);
+        setDates({ start: '', end: '' });
+        // Drop the search from the URL too, so a reload doesn't bring it back.
+        router.replace('/tours', { scroll: false });
+    }, [router]);
 
 
     return (
@@ -368,6 +321,12 @@ export function ToursClient() {
                                     onViewModeChange={setViewMode}
                                     onReset={handleResetFilters}
                                 />
+                                {(dates.start || dates.end) && (
+                                    <p className="mt-2 text-sm text-muted-foreground">
+                                        Travelling {dates.start ? `from ${format(parseISO(dates.start), 'd MMM yyyy')}` : ''}{dates.end ? ` until ${format(parseISO(dates.end), 'd MMM yyyy')}` : ''}.{' '}
+                                        <button type="button" className="text-primary underline-offset-4 hover:underline" onClick={() => setDates({ start: '', end: '' })}>Any dates</button>
+                                    </p>
+                                )}
                             </section>
 
                             {/* Businesses connected to what the visitor is looking at: the chosen

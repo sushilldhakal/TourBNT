@@ -425,7 +425,7 @@ export class TourService {
     return deleted;
   }
 
-  static async searchTours(searchParams: { keyword?: string; destination?: string; minPrice?: number; maxPrice?: number; rating?: number; category?: string }, paginationParams: TourPaginationParams) {
+  static async searchTours(searchParams: { keyword?: string; destination?: string; minPrice?: number; maxPrice?: number; rating?: number; category?: string; startDate?: string; endDate?: string }, paginationParams: TourPaginationParams) {
     const conditions: SQL[] = [eq(tours.tourStatus, 'Published')];
 
     if (searchParams.keyword) {
@@ -435,6 +435,27 @@ export class TourService {
     if (searchParams.minPrice !== undefined) conditions.push(gte(tours.price, searchParams.minPrice));
     if (searchParams.maxPrice !== undefined) conditions.push(lte(tours.price, searchParams.maxPrice));
     if (searchParams.rating !== undefined) conditions.push(gte(tours.averageRating, searchParams.rating));
+    if (searchParams.startDate || searchParams.endDate) {
+      // Travelling between start and end (YYYY-MM-DD; either may be open). A tour matches when one of its
+      // departures overlaps that window; a tour without fixed departures matches when its overall available
+      // range overlaps it, or always when it lists no dates at all (bookable any time).
+      const start = searchParams.startDate ?? '0001-01-01';
+      const end = searchParams.endDate ?? '9999-12-31';
+      const day = (v: SQL) => sql`nullif(left(${v}, 10), '')::date`;
+      const deps = sql`coalesce(${tours.tourDates}->'departures', '[]'::jsonb)`;
+      // Flexible-date tours keep their bookable period in defaultDateRange.
+      const range = sql`coalesce(${tours.tourDates}->'dateRange', ${tours.tourDates}->'defaultDateRange')`;
+      conditions.push(sql`(
+        (jsonb_typeof(${deps}) = 'array' and exists (
+          select 1 from jsonb_array_elements(${deps}) d
+          where ${day(sql`d->'dateRange'->>'from'`)} <= ${end}::date
+            and coalesce(${day(sql`d->'dateRange'->>'to'`)}, ${day(sql`d->'dateRange'->>'from'`)}) >= ${start}::date))
+        or ((jsonb_typeof(${deps}) <> 'array' or jsonb_array_length(${deps}) = 0) and (
+          ${range}->>'from' is null
+          or (${day(sql`${range}->>'from'`)} <= ${end}::date
+              and coalesce(${day(sql`${range}->>'to'`)}, ${end}::date) >= ${start}::date)))
+      )`);
+    }
 
     let where: SQL = and(...conditions)!;
     if (searchParams.category) {

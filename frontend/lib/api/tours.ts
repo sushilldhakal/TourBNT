@@ -32,14 +32,36 @@ export interface ToursResponse {
  * Get paginated tours list
  * Supports infinite scroll with cursor-based pagination
  */
+/** Filters for the public tour list, applied by the server (GET /tours/search). Ids, not names. */
+export interface TourListFilters {
+    keyword?: string;
+    destination?: string;
+    category?: string;
+    minPrice?: number;
+    maxPrice?: number;
+    /** YYYY-MM-DD: tours with a departure (or availability) between these dates. */
+    startDate?: string;
+    endDate?: string;
+}
+
+export const hasTourListFilters = (f?: TourListFilters) =>
+    !!f && Object.values(f).some((v) => v !== undefined && v !== '' && v !== null);
+
 export const getTours = async ({
     pageParam = 0,
-    limit = 6
+    limit = 6,
+    filters,
 }: {
     pageParam?: number;
     limit?: number;
+    /** With filters the server searches every tour (not just one loaded page); same response shape. */
+    filters?: TourListFilters;
 }): Promise<ToursResponse> => {
-    const url = `/tours?page=${pageParam + 1}&limit=${limit}`;
+    const query = new URLSearchParams({ page: String(pageParam + 1), limit: String(limit) });
+    if (hasTourListFilters(filters)) {
+        for (const [k, v] of Object.entries(filters!)) if (v !== undefined && v !== '' && v !== null) query.set(k, String(v));
+    }
+    const url = `${hasTourListFilters(filters) ? '/tours/search' : '/tours'}?${query.toString()}`;
 
     try {
         const response = await api.get(url, { timeout: 15000 });

@@ -3,11 +3,11 @@
  * Tour mutations and useTourQuery live in useTourMutation.
  */
 
-import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
+import { useQuery, useInfiniteQuery, keepPreviousData } from '@tanstack/react-query';
 import { getTours, getLatestTours, getTourTitlesByIds, getMyTours, getTourLogisticsStatus } from '@/lib/api/tours';
 import { queryKeys } from './queryKeys';
 import { toursInfiniteOptions } from './publicQueryOptions';
-import type { ToursResponse, TourItineraryRequestStatus } from '@/lib/api/tours';
+import type { ToursResponse, TourItineraryRequestStatus, TourListFilters } from '@/lib/api/tours';
 import type { TourTitle } from '@/types/types';
 
 export function useTours(params?: { pageParam?: number; limit?: number }) {
@@ -19,8 +19,9 @@ export function useTours(params?: { pageParam?: number; limit?: number }) {
 }
 
 /** Public tours page: infinite scroll */
-export function useToursInfinite(limit = 12) {
-    return useInfiniteQuery(toursInfiniteOptions(limit));
+/** Public tour list with infinite scroll; with filters the server does the searching. */
+export function useToursInfinite(limit = 12, filters?: TourListFilters) {
+    return useInfiniteQuery({ ...toursInfiniteOptions(limit, filters), placeholderData: keepPreviousData });
 }
 
 /** Seller dashboard: my tours list (paginated) */

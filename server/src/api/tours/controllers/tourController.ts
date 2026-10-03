@@ -150,6 +150,8 @@ export const deleteTour = asyncAuthHandler(async (req: Request, res: Response) =
  */
 export const searchTours = asyncAuthHandler(async (req: Request, res: Response) => {
   const { keyword, destination, minPrice, maxPrice, rating, category } = req.query;
+  // Dates arrive as YYYY-MM-DD or a full ISO timestamp; keep the date part, ignore anything that isn't one.
+  const asDate = (v: unknown) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v) ? v.slice(0, 10) : undefined);
   const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 10;
 
@@ -159,7 +161,9 @@ export const searchTours = asyncAuthHandler(async (req: Request, res: Response) 
     minPrice: minPrice ? parseFloat(minPrice as string) : undefined,
     maxPrice: maxPrice ? parseFloat(maxPrice as string) : undefined,
     rating: rating ? parseFloat(rating as string) : undefined,
-    category: category as string
+    category: category as string,
+    startDate: asDate(req.query.startDate),
+    endDate: asDate(req.query.endDate),
   };
 
   const result = await TourService.searchTours(searchParams, { page, limit });

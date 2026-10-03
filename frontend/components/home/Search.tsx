@@ -12,6 +12,10 @@ import { useState } from "react";
 import type { DateRange } from "@/components/ui/calendar-lazy";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ui/use-toast";
+import { useApprovedCategories, useApprovedDestinations } from "@/lib/queries";
+import { buildTourSearchUrl } from "@/lib/tourSearchUrl";
+
+const ALL = "__all__";
 
 /**
  * Every field in the search panel: a solid field in the theme's own colours, so text and placeholders contrast in
@@ -26,9 +30,13 @@ const Search = () => {
     const router = useRouter();
     const { toast } = useToast();
     const [keyword, setKeyword] = useState("");
-    const [destination, setDestination] = useState("");
-    const [tourType, setTourType] = useState("");
-    const [duration, setDuration] = useState("");
+    // Real destinations and trip types (by id), the same lists the tours page filters on.
+    const { data: categoriesData } = useApprovedCategories();
+    const { data: destinationsData } = useApprovedDestinations();
+    const categories = (Array.isArray(categoriesData) ? categoriesData : (categoriesData as { data?: unknown[] })?.data ?? []) as Array<{ id?: string; _id?: string; name?: string }>;
+    const destinations = (Array.isArray(destinationsData) ? destinationsData : (destinationsData as { data?: unknown[] })?.data ?? []) as Array<{ id?: string; _id?: string; name?: string }>;
+    const [destination, setDestination] = useState(ALL);
+    const [tourType, setTourType] = useState(ALL);
     const [date, setDate] = useState<DateRange | undefined>({
         from: undefined,
         to: undefined,
@@ -42,18 +50,15 @@ const Search = () => {
     const handleSearch = (event: React.FormEvent) => {
         event.preventDefault();
 
-        const params = new URLSearchParams();
-
-        if (keyword) params.append("keyword", keyword);
-        if (destination) params.append("destination", destination);
-        if (tourType) params.append("type", tourType);
-        if (duration) params.append("duration", duration);
-        if (date?.from) params.append("startDate", date.from.toISOString());
-        if (date?.to) params.append("endDate", date.to.toISOString());
-        params.append("minPrice", priceRange[0].toString());
-        params.append("maxPrice", priceRange[1].toString());
-
-        router.push(`/tours/search?${params.toString()}`);
+        // /tours is the results page (there is no /tours/search page; that path was read as a tour id and 404ed).
+        router.push(buildTourSearchUrl({
+            keyword,
+            destinationId: destination !== ALL ? destination : undefined,
+            categoryId: tourType !== ALL ? tourType : undefined,
+            from: date?.from,
+            to: date?.to,
+            priceRange,
+        }));
 
         toast({
             title: "Searching tours",
@@ -82,14 +87,14 @@ const Search = () => {
                     <label className="block text-sm font-medium mb-1">Choose Destinations</label>
                     <Select value={destination} onValueChange={setDestination}>
                         <SelectTrigger className={FIELD}>
-                            <SelectValue placeholder="Nepal" />
+                            <SelectValue placeholder="All destinations" />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="nepal">Nepal</SelectItem>
-                            <SelectItem value="india">India</SelectItem>
-                            <SelectItem value="bhutan">Bhutan</SelectItem>
-                            <SelectItem value="tibet">Tibet</SelectItem>
-                            <SelectItem value="peru">Peru</SelectItem>
+                            <SelectItem value={ALL}>All destinations</SelectItem>
+                            {destinations.map((d, i) => {
+                                const id = d.id ?? d._id ?? `dest-${i}`;
+                                return <SelectItem key={id} value={id}>{d.name ?? 'Destination'}</SelectItem>;
+                            })}
                         </SelectContent>
                     </Select>
                 </div>
@@ -99,14 +104,14 @@ const Search = () => {
                     <label className="block text-sm font-medium mb-1">Choose Trip Type</label>
                     <Select value={tourType} onValueChange={setTourType}>
                         <SelectTrigger className={FIELD}>
-                            <SelectValue placeholder="Nothing selected" />
+                            <SelectValue placeholder="All trip types" />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="adventure">Adventure</SelectItem>
-                            <SelectItem value="cultural">Cultural</SelectItem>
-                            <SelectItem value="historical">Historical</SelectItem>
-                            <SelectItem value="nature">Nature</SelectItem>
-                            <SelectItem value="wildlife">Wildlife</SelectItem>
+                            <SelectItem value={ALL}>All trip types</SelectItem>
+                            {categories.map((c, i) => {
+                                const id = c.id ?? c._id ?? `cat-${i}`;
+                                return <SelectItem key={id} value={id}>{c.name ?? 'Trip type'}</SelectItem>;
+                            })}
                         </SelectContent>
                     </Select>
                 </div>

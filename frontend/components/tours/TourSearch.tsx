@@ -13,6 +13,7 @@ import type { DateRange } from "@/components/ui/calendar-lazy";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ui/use-toast";
 import { useApprovedCategories, useApprovedDestinations } from "@/lib/queries";
+import { buildTourSearchUrl } from "@/lib/tourSearchUrl";
 
 const ALL_FILTER_VALUE = "__all__";
 
@@ -41,17 +42,14 @@ const TourSearch = () => {
     const handleSearch = (event: React.FormEvent) => {
         event.preventDefault();
 
-        const params = new URLSearchParams();
-
-        if (keyword) params.append("keyword", keyword);
-        if (destination && destination !== ALL_FILTER_VALUE) params.append("destination", destination);
-        if (tourType && tourType !== ALL_FILTER_VALUE) params.append("type", tourType);
-        if (date?.from) params.append("startDate", date.from.toISOString());
-        if (date?.to) params.append("endDate", date.to.toISOString());
-        params.append("minPrice", priceRange[0].toString());
-        params.append("maxPrice", priceRange[1].toString());
-
-        router.push(`/tours?${params.toString()}`);
+        router.push(buildTourSearchUrl({
+            keyword,
+            destinationId: destination !== ALL_FILTER_VALUE ? destination : undefined,
+            categoryId: tourType !== ALL_FILTER_VALUE ? tourType : undefined,
+            from: date?.from,
+            to: date?.to,
+            priceRange,
+        }));
 
         toast({
             title: "Searching tours",
