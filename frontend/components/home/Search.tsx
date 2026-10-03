@@ -13,6 +13,15 @@ import type { DateRange } from "@/components/ui/calendar-lazy";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ui/use-toast";
 
+/**
+ * Every field in the search panel: a solid field in the theme's own colours, so text and placeholders contrast in
+ * light and dark mode alike. (The panel sits on a photo; the old see-through fields with hard-coded white or
+ * "on-primary" text became light-on-light in light mode and dark-on-dark in dark mode.) The dark: overrides beat
+ * the shadcn components' own translucent dark-mode backgrounds.
+ */
+const FIELD =
+    'w-full h-10 rounded-md border border-border bg-background/95 dark:bg-background/95 text-foreground placeholder:text-muted-foreground data-[placeholder]:text-muted-foreground shadow-sm';
+
 const Search = () => {
     const router = useRouter();
     const { toast } = useToast();
@@ -54,7 +63,7 @@ const Search = () => {
     };
 
     return (
-        <div className="search-form w-full text-white">
+        <div className="search-form w-full text-foreground">
             <form onSubmit={handleSearch} className="space-y-4">
                 {/* Search Keyword */}
                 <div className="form-group">
@@ -62,7 +71,7 @@ const Search = () => {
                     <input
                         type="text"
                         placeholder="Search by keyword"
-                        className="w-full h-10 bg-primary/40 border-0 px-4 py-2 rounded text-primary-foreground placeholder:text-primary-foreground focus:bg-primary/40 focus:bg-opacity-30 focus:outline-none focus:ring-2 focus:ring-white focus:ring-opacity-50"
+                        className={`${FIELD} px-4 py-2 focus:outline-none focus:ring-2 focus:ring-ring`}
                         value={keyword}
                         onChange={(e) => setKeyword(e.target.value)}
                     />
@@ -72,7 +81,7 @@ const Search = () => {
                 <div className="form-group">
                     <label className="block text-sm font-medium mb-1">Choose Destinations</label>
                     <Select value={destination} onValueChange={setDestination}>
-                        <SelectTrigger className="w-full h-10 bg-primary/40 bg-opacity-20 border-0 text-primary-foreground">
+                        <SelectTrigger className={FIELD}>
                             <SelectValue placeholder="Nepal" />
                         </SelectTrigger>
                         <SelectContent>
@@ -89,7 +98,7 @@ const Search = () => {
                 <div className="form-group">
                     <label className="block text-sm font-medium mb-1">Choose Trip Type</label>
                     <Select value={tourType} onValueChange={setTourType}>
-                        <SelectTrigger className="w-full h-10 bg-primary/40 bg-opacity-20 border-0 text-primary-foreground">
+                        <SelectTrigger className={FIELD}>
                             <SelectValue placeholder="Nothing selected" />
                         </SelectTrigger>
                         <SelectContent>
@@ -110,10 +119,7 @@ const Search = () => {
                             <PopoverTrigger asChild>
                                 <Button
                                     variant={"outline"}
-                                    className={cn(
-                                        "w-full justify-start text-left font-normal h-10 bg-primary/40 bg-opacity-20 border-0 text-primary-foreground",
-                                        !date && "text-gray-300"
-                                    )}
+                                    className={cn(FIELD, "justify-start text-left font-normal hover:bg-background hover:text-foreground dark:hover:bg-background", !date && "text-muted-foreground")}
                                 >
                                     <CalendarIcon className="mr-2 h-4 w-4" />
                                     {date?.from ? (

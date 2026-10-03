@@ -53,7 +53,7 @@ export default function SubscriberBanner({
                             <Input
                                 type="email"
                                 placeholder="Enter your email address"
-                                className="w-full bg-background border-border text-foreground placeholder:text-muted-foreground h-14 text-base px-6"
+                                className="w-full bg-background dark:bg-background border-border text-foreground placeholder:text-muted-foreground h-14 text-base px-6"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 required
