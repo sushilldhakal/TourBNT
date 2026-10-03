@@ -63,6 +63,23 @@ export const loginWithGoogle = async (credential: string, keepMeSignedIn = false
     return storeUserFromAuthResponse(response);
 };
 
+/** Sign in (or sign up) with a Facebook access token; the server checks it with Facebook and starts the session. */
+export const loginWithFacebook = async (accessToken: string, keepMeSignedIn = false): Promise<User> => {
+    const response = await api.post('/auth/facebook', { accessToken, keepMeSignedIn });
+    return storeUserFromAuthResponse(response);
+};
+
+/**
+ * Sign in with a passkey: the server sends a one-time challenge, the device asks for the person's fingerprint, face
+ * or screen lock and signs it, and the server checks the signature. Throws an Error with a readable message.
+ */
+export const loginWithPasskey = async (keepMeSignedIn = false): Promise<User> => {
+    const { startAuthentication } = await import('@simplewebauthn/browser');
+    const options = (await api.post('/auth/passkeys/login/options')).data.data;
+    const response = await startAuthentication({ optionsJSON: options });
+    return storeUserFromAuthResponse(await api.post('/auth/passkeys/login/verify', { response, keepMeSignedIn }));
+};
+
 /** Reads the user out of a login response, puts them in the store, and returns them. */
 function storeUserFromAuthResponse(response: any): User {
     const body = response?.data;

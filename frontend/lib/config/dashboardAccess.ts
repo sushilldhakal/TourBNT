@@ -44,9 +44,16 @@ export const DASHBOARD_ACCESS_RULES: ReadonlyArray<{ prefix: string; roles: read
 
 const matches = (path: string, prefix: string) => path === prefix || path.startsWith(prefix + '/');
 
+/**
+ * Travellers (role `user`) are not dashboard users, but these pages are theirs: their profile (password, passkeys)
+ * and their bookings. Every other dashboard page stays closed to them.
+ */
+const CUSTOMER_PATHS = ['/dashboard/profile', '/dashboard/bookings'];
+
 /** True if `role` may open `path` (a /dashboard/... pathname). */
 export function canAccessDashboardPath(path: string, role: string | null | undefined): boolean {
     if (!role) return false;
+    if (role === UserRole.USER) return CUSTOMER_PATHS.some((p) => matches(path, p));
     let best: { prefix: string; roles: readonly string[] } | undefined;
     for (const rule of DASHBOARD_ACCESS_RULES) {
         if (matches(path, rule.prefix) && (!best || rule.prefix.length > best.prefix.length)) best = rule;

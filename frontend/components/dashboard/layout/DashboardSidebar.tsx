@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/tooltip';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { isAdmin } from '@/lib/utils/roles';
+import { canAccessDashboardPath } from '@/lib/config/dashboardAccess';
 import { useMyBusinessPartners } from '@/lib/queries';
 import type { BusinessPartnerType } from '@/lib/api/businessPartners';
 import { Megaphone, Building2, Tag, Banknote } from 'lucide-react';
@@ -209,6 +210,10 @@ export function DashboardSidebar({ isCollapsed, onToggle, mobileMenuOpen = false
                 }
                 // Per-role visibility: e.g. a hotel owner never sees Tours or Posts.
                 if (item.roles && !(userRole && item.roles.includes(userRole))) {
+                    return false;
+                }
+                // Never link to a page this role would be turned away from (e.g. a traveller sees only their own pages).
+                if (item.href && !canAccessDashboardPath(item.href, userRole)) {
                     return false;
                 }
 

@@ -5,9 +5,11 @@ import { useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { DashboardLayoutClient } from '@/components/dashboard/layout/DashboardLayoutClient';
 import { useAuth } from '@/lib/hooks/useAuth';
-import { canAccessDashboard } from '@/lib/utils/roles';
+import { canAccessDashboard, UserRole } from '@/lib/utils/roles';
 import { canAccessDashboardPath } from '@/lib/config/dashboardAccess';
 import { redirectToLogin } from '@/lib/api/apiClient';
+
+const isCustomer = (role: string | null | undefined) => role === UserRole.USER;
 
 export default function DashboardLayout({
     children,
@@ -31,7 +33,8 @@ export default function DashboardLayout({
             return;
         }
 
-        if (!canAccessDashboard(user.roles)) {
+        // Travellers have a few pages of their own here (see dashboardAccess); anything else is not for them.
+        if (!canAccessDashboard(user.roles) && !(isCustomer(user.roles) && canAccessDashboardPath(pathname, user.roles))) {
             router.push('/?error=unauthorized');
             return;
         }
@@ -53,7 +56,7 @@ export default function DashboardLayout({
 
     // Don't render dashboard if not authenticated (redirect will happen via useEffect)
     // Never render a page the role isn't allowed to see, even for the instant before the redirect lands.
-    if (isAuthenticated && (!canAccessDashboard(user.roles) || !canAccessDashboardPath(pathname, user.roles))) {
+    if (isAuthenticated && (!(canAccessDashboard(user.roles) || isCustomer(user.roles)) || !canAccessDashboardPath(pathname, user.roles))) {
         return (
             <div className="min-h-screen flex items-center justify-center">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>

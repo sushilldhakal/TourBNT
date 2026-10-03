@@ -41,6 +41,7 @@ import healthRouter from "./api/health/healthRoutes";
 import promoRouter from "./api/promo/promoRoutes";
 import payoutRouter from "./api/payouts/payoutRoutes";
 import newsletterRouter from "./api/newsletter/newsletterRoutes";
+import passkeyRouter from "./api/auth/passkeyRoutes";
 import currencyRouter from "./api/currency/currencyRoutes";
 
 const app = express();
@@ -115,6 +116,8 @@ app.get("/", (req, res) => {
 
 // API v1 routes - individual route registrations for flexibility
 app.use('/api/v1/home', homeRouter);
+// Before /auth so its paths are matched here first.
+app.use('/api/v1/auth/passkeys', passkeyRouter);
 app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/users', userRouter);
 app.use('/api/v1/users', tourSettingsRouter);

@@ -21,6 +21,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { PasskeyManager } from './PasskeyManager';
 import { toast } from '@/components/ui/use-toast';
 import { Loader2, Save, Eye, EyeOff, User, Mail, Lock, Camera, X, Shield, Building2, CreditCard, CheckCircle2 } from 'lucide-react';
 import { updateMyProfile, changeMyPassword, uploadMyAvatar } from '@/lib/api/users';
@@ -537,6 +538,7 @@ export function ProfilePage() {
                         )}
 
                         <TabsContent value="security" className="mt-0 space-y-6">
+                            <PasskeyManager />
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Change Password</CardTitle>

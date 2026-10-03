@@ -5,6 +5,7 @@ import {
     createUser,
     loginUser,
     googleLogin,
+    facebookLogin,
     verifyUser,
     forgotPassword,
     resetPassword
@@ -200,6 +201,9 @@ authRouter.post(
  */
 // Sign in / sign up with a Google ID token (see googleLogin). No human check: Google already did one.
 authRouter.post('/google', authLimiter, googleLogin);
+
+// Sign in / sign up with a Facebook access token (see facebookLogin). No human check: Facebook already did one.
+authRouter.post('/facebook', authLimiter, facebookLogin);
 
 authRouter.post(
     '/verify-email',

@@ -70,6 +70,8 @@ export function GoogleSignInButton({ keepMeSignedIn = false, onSuccess, onError 
                         }
                     },
                 });
+                // renderButton appends; clear first so a second run can't leave two buttons stacked.
+                ref.current.replaceChildren();
                 window.google.accounts.id.renderButton(ref.current, { theme: 'outline', size: 'large', width: ref.current.offsetWidth || 320, text: 'continue_with', shape: 'rectangular' });
                 setReady(true);
             })
@@ -78,13 +80,5 @@ export function GoogleSignInButton({ keepMeSignedIn = false, onSuccess, onError 
     }, []);
 
     if (!CLIENT_ID) return null;
-    return (
-        <div className={ready ? 'space-y-3' : 'hidden'}>
-            <div ref={ref} className="flex justify-center min-h-[44px]" />
-            <div className="relative text-center text-xs text-muted-foreground">
-                <span className="relative z-10 bg-card px-2">or</span>
-                <span className="absolute left-0 right-0 top-1/2 border-t border-border" aria-hidden="true" />
-            </div>
-        </div>
-    );
+    return <div ref={ref} className={ready ? 'flex justify-center min-h-[44px]' : 'hidden'} />;
 }

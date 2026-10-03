@@ -5,6 +5,7 @@ import {
   pgEnum,
   text,
   integer,
+  bigint,
   doublePrecision,
   boolean,
   timestamp,
@@ -169,6 +170,8 @@ export const users = pgTable('users', {
   sellerInfo: jsonb('seller_info').$type<Record<string, unknown> | null>(),
   // Google account id (the `sub` claim) for people who signed in with Google; null for password accounts.
   googleId: text('google_id'),
+  // Facebook user id (app-scoped) for people who signed in with Facebook; null otherwise.
+  facebookId: text('facebook_id'),
   // Platform commission for this seller, as a percentage of each booking. Null = the platform default
   // (app_settings 'commission').
   commissionRate: doublePrecision('commission_rate'),
@@ -176,6 +179,7 @@ export const users = pgTable('users', {
 }, (table) => ({
   emailIdx: uniqueIndex('users_email_idx').on(table.email),
   googleIdIdx: uniqueIndex('users_google_id_idx').on(table.googleId),
+  facebookIdIdx: uniqueIndex('users_facebook_id_idx').on(table.facebookId),
   mediaFolderIdx: uniqueIndex('users_media_folder_idx').on(table.mediaFolder),
 }));
 
@@ -722,6 +726,24 @@ export const newsletters = pgTable('newsletters', {
   sentAt: timestamp('sent_at', { withTimezone: true }),
   ...timestamps,
 });
+
+// Passkeys (WebAuthn): sign in with the device's fingerprint, face or screen lock instead of a password.
+// One row per registered device; the private key never leaves that device. See api/auth/passkeyRoutes.ts.
+export const passkeys = pgTable('passkeys', {
+  // The credential id the authenticator chose (base64url).
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  publicKey: text('public_key').notNull(), // base64url COSE public key
+  counter: bigint('counter', { mode: 'number' }).notNull().default(0),
+  transports: jsonb('transports').$type<string[]>(),
+  deviceType: text('device_type'), // 'singleDevice' | 'multiDevice' (synced, e.g. iCloud Keychain)
+  backedUp: boolean('backed_up').notNull().default(false),
+  name: text('name'), // what the person called it, e.g. "iPhone"
+  lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+  ...timestamps,
+}, (table) => ({
+  userIdx: index('passkeys_user_idx').on(table.userId),
+}));
 
 // Small key/value store for platform-wide settings an admin can change (e.g. the default commission rate).
 export const appSettings = pgTable('app_settings', {

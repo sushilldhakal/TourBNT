@@ -2,7 +2,7 @@ import { NextFunction, Request, Response } from "express";
 import createHttpError from "http-errors";
 import bcrypt from "bcrypt";
 import jwt, { sign } from "jsonwebtoken";
-import { createHash, randomBytes } from "crypto";
+import { createHash, createHmac, randomBytes } from "crypto";
 import { OAuth2Client } from "google-auth-library";
 import { validationResult } from "express-validator";
 import { db, users } from "../../db";
@@ -111,7 +111,7 @@ export const loginUser = async (req: Request, res: Response, next: NextFunction)
 };
 
 /** Signs the user in: sets the auth cookie and returns the user fields the app keeps in its store. */
-function startSession(res: Response, user: pgUsers.PgUser, keepMeSignedIn: boolean) {
+export function startSession(res: Response, user: pgUsers.PgUser, keepMeSignedIn: boolean) {
   const expiresIn = keepMeSignedIn ? '30d' : '2h';
   const token = sign({ sub: user.id, roles: user.role, keepMeSignedIn }, config.jwtSecret, { expiresIn });
   const maxAge = keepMeSignedIn ? COOKIE_DURATIONS.LONG_SESSION : COOKIE_DURATIONS.SHORT_SESSION;
@@ -129,10 +129,7 @@ function startSession(res: Response, user: pgUsers.PgUser, keepMeSignedIn: boole
 
 /**
  * Sign in (or sign up) with Google. The browser gets a signed ID token from Google; we check its signature and that it
- * was issued for OUR client id, then use the verified email. Off until GOOGLE_CLIENT_ID is set.
- *  - known Google account            -> sign in
- *  - existing account, same email    -> link it (Google has verified the mailbox) and sign in
- *  - new person                      -> create a verified account (no usable password)
+ * was issued for OUR client id, then use the verified email (see findOrCreateSocialUser). Off until GOOGLE_CLIENT_ID is set.
  */
 export const googleLogin = async (req: Request, res: Response, next: NextFunction) => {
   const clientId = process.env.GOOGLE_CLIENT_ID;
@@ -152,28 +149,83 @@ export const googleLogin = async (req: Request, res: Response, next: NextFunctio
   }
 
   try {
-    const email = payload.email.trim().toLowerCase();
-    let user = (await db.select().from(users).where(eq(users.googleId, payload.sub)).limit(1))[0];
-    if (!user) {
-      const byEmail = await pgUsers.findUserByEmail(email);
-      if (byEmail) {
-        user = (await pgUsers.updateUser(byEmail.id, { googleId: payload.sub, verified: true, avatar: byEmail.avatar ?? payload.picture ?? null }))!;
-      } else {
-        user = await pgUsers.createUser({
-          name: payload.name?.trim() || email.split('@')[0],
-          email,
-          // Nobody knows this password; the account is entered through Google (or a password reset).
-          password: await bcrypt.hash(randomBytes(32).toString('hex'), 10),
-          verified: true,
-          avatar: payload.picture ?? null,
-          googleId: payload.sub,
-        });
-      }
-    }
+    const user = await findOrCreateSocialUser({ provider: 'google', providerId: payload.sub, email: payload.email, name: payload.name, picture: payload.picture });
     return sendSuccess(res, { user: startSession(res, user, !!keepMeSignedIn) }, 'Login successful');
   } catch (err: any) {
     console.error('Error while signing in with Google:', err);
     next(createHttpError(500, 'Error while signing in with Google'));
+  }
+};
+
+/**
+ * The account for a person who signed in with Google or Facebook, given the identity the provider vouched for:
+ *  - known provider account          -> that user
+ *  - existing account, same email    -> link it (the provider has confirmed the mailbox) and use it
+ *  - new person                      -> create a verified account (no usable password)
+ */
+async function findOrCreateSocialUser(p: { provider: 'google' | 'facebook'; providerId: string; email: string; name?: string; picture?: string | null }) {
+  const column = p.provider === 'google' ? users.googleId : users.facebookId;
+  const link = p.provider === 'google' ? { googleId: p.providerId } : { facebookId: p.providerId };
+  const known = (await db.select().from(users).where(eq(column, p.providerId)).limit(1))[0];
+  if (known) return known;
+
+  const email = p.email.trim().toLowerCase();
+  const byEmail = await pgUsers.findUserByEmail(email);
+  if (byEmail) {
+    return (await pgUsers.updateUser(byEmail.id, { ...link, verified: true, avatar: byEmail.avatar ?? p.picture ?? null }))!;
+  }
+  return pgUsers.createUser({
+    name: p.name?.trim() || email.split('@')[0],
+    email,
+    // Nobody knows this password; the account is entered through the provider (or a password reset).
+    password: await bcrypt.hash(randomBytes(32).toString('hex'), 10),
+    verified: true,
+    avatar: p.picture ?? null,
+    ...link,
+  });
+}
+
+/**
+ * Sign in (or sign up) with Facebook. The browser gets a user access token from the Facebook SDK; we ask Facebook
+ * whether that token is valid and was issued to OUR app (debug_token), then read the person's id and email with it.
+ * Off until FACEBOOK_APP_ID and FACEBOOK_APP_SECRET are set.
+ */
+export const facebookLogin = async (req: Request, res: Response, next: NextFunction) => {
+  const appId = process.env.FACEBOOK_APP_ID;
+  const appSecret = process.env.FACEBOOK_APP_SECRET;
+  if (!appId || !appSecret) return next(createHttpError(503, 'Facebook sign-in is not available right now.'));
+  const { accessToken, keepMeSignedIn = false } = req.body ?? {};
+  if (!accessToken || typeof accessToken !== 'string' || accessToken.length > 2048) return next(createHttpError(400, 'Missing Facebook access token.'));
+
+  const graph = 'https://graph.facebook.com';
+  let profile: { id?: string; name?: string; email?: string; picture?: { data?: { url?: string; is_silhouette?: boolean } } };
+  try {
+    // 1. Was this token issued to our app, and is it still valid? (A token minted for another app must not work here.)
+    const debug = await fetch(`${graph}/debug_token?${new URLSearchParams({ input_token: accessToken, access_token: `${appId}|${appSecret}` })}`, { signal: AbortSignal.timeout(8000) });
+    const info = ((await debug.json()) as { data?: { is_valid?: boolean; app_id?: string; user_id?: string } }).data;
+    if (!debug.ok || !info?.is_valid || info.app_id !== appId || !info.user_id) throw new Error('token rejected');
+
+    // 2. Who is it? appsecret_proof proves the call comes from our server, not just someone holding the token.
+    const proof = createHmac('sha256', appSecret).update(accessToken).digest('hex');
+    const me = await fetch(`${graph}/me?${new URLSearchParams({ fields: 'id,name,email,picture.type(large)', access_token: accessToken, appsecret_proof: proof })}`, { signal: AbortSignal.timeout(8000) });
+    profile = (await me.json()) as typeof profile;
+    if (!me.ok || profile.id !== info.user_id) throw new Error('profile mismatch');
+  } catch {
+    return next(createHttpError(401, 'Facebook sign-in could not be verified. Please try again.'));
+  }
+  // Facebook only returns an email address the person has confirmed. Some accounts have none (phone sign-up),
+  // or the person declined to share it.
+  if (!profile.email) {
+    return next(createHttpError(400, 'We need your email address. Allow TourBNT to see your email on Facebook, or sign up with email instead.'));
+  }
+
+  try {
+    const picture = profile.picture?.data?.is_silhouette ? null : profile.picture?.data?.url ?? null;
+    const user = await findOrCreateSocialUser({ provider: 'facebook', providerId: profile.id!, email: profile.email, name: profile.name, picture });
+    return sendSuccess(res, { user: startSession(res, user, !!keepMeSignedIn) }, 'Login successful');
+  } catch (err: any) {
+    console.error('Error while signing in with Facebook:', err);
+    next(createHttpError(500, 'Error while signing in with Facebook'));
   }
 };
 

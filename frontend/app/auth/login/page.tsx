@@ -16,6 +16,8 @@ import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 import { TurnstileWidget } from '@/components/security/TurnstileWidget';
 import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton';
+import { FacebookSignInButton } from '@/components/auth/FacebookSignInButton';
+import { PasskeySignInButton } from '@/components/auth/PasskeySignInButton';
 
 function LoginPageContent() {
     const router = useRouter();
@@ -310,11 +312,27 @@ function LoginPageContent() {
                             <CardDescription>Sign in to your account</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                            <GoogleSignInButton
-                                keepMeSignedIn={keepMeSignedIn}
-                                onSuccess={() => { toast({ title: 'Signed in', description: 'Welcome!' }); router.replace('/dashboard'); }}
-                                onError={(description) => toast({ title: 'Google sign-in failed', description, variant: 'destructive' })}
-                            />
+                            <div className="space-y-3">
+                                <GoogleSignInButton
+                                    keepMeSignedIn={keepMeSignedIn}
+                                    onSuccess={() => { toast({ title: 'Signed in', description: 'Welcome!' }); router.replace('/dashboard'); }}
+                                    onError={(description) => toast({ title: 'Google sign-in failed', description, variant: 'destructive' })}
+                                />
+                                <FacebookSignInButton
+                                    keepMeSignedIn={keepMeSignedIn}
+                                    onSuccess={() => { toast({ title: 'Signed in', description: 'Welcome!' }); router.replace('/dashboard'); }}
+                                    onError={(description) => toast({ title: 'Facebook sign-in failed', description, variant: 'destructive' })}
+                                />
+                                <PasskeySignInButton
+                                    keepMeSignedIn={keepMeSignedIn}
+                                    onSuccess={() => { toast({ title: 'Signed in', description: 'Welcome!' }); router.replace('/dashboard'); }}
+                                    onError={(description) => toast({ title: 'Passkey sign-in failed', description, variant: 'destructive' })}
+                                />
+                                <div className="relative text-center text-xs text-muted-foreground">
+                                    <span className="relative z-10 bg-card px-2">or use your email</span>
+                                    <span className="absolute left-0 right-0 top-1/2 border-t border-border" aria-hidden="true" />
+                                </div>
+                            </div>
 
                             <div className="space-y-2">
                                 <Label htmlFor="email">Email</Label>
