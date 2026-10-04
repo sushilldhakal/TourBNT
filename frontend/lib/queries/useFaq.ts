@@ -18,7 +18,7 @@ export function useFaq(userId: string | null, enabled = true) {
 }
 
 export function useSingleFaq(faqId: string | null | undefined, enabled = true) {
-    return useQuery<FaqData | { faq: FaqData }>({
+    return useQuery<FaqData>({
         queryKey: queryKeys.faq.detail(faqId ?? ''),
         queryFn: () => getSingleFaq(faqId!),
         enabled: !!faqId && enabled,

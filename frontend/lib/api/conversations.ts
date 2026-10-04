@@ -237,10 +237,10 @@ export async function getConversationMessages(id: string): Promise<ConversationM
 
     if (Array.isArray(raw)) {
       list = raw;
-    } else if ((raw as any)?.messages) {
-      list = (raw as any).messages;
-    } else if ((raw as any)?.data?.messages) {
-      list = (raw as any).data.messages;
+    } else if ('messages' in raw) {
+      list = raw.messages;
+    } else if ('data' in raw) {
+      list = raw.data?.messages;
     }
 
     return Array.isArray(list) ? list : [];

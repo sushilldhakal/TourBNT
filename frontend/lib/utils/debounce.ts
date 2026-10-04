@@ -27,14 +27,14 @@
  * window.addEventListener('scroll', handleScroll);
  * ```
  */
-export function debounce<T extends (...args: any[]) => any>(
-    func: T,
+export function debounce<A extends unknown[]>(
+    func: (...args: A) => unknown,
     wait: number,
     immediate: boolean = false
-): (...args: Parameters<T>) => void {
+): (...args: A) => void {
     let timeout: NodeJS.Timeout | null = null;
 
-    return function executedFunction(...args: Parameters<T>) {
+    return function executedFunction(...args: A) {
         const later = () => {
             timeout = null;
             if (!immediate) func(...args);
@@ -71,13 +71,13 @@ export function debounce<T extends (...args: any[]) => any>(
  * window.addEventListener('resize', handleResize);
  * ```
  */
-export function throttle<T extends (...args: any[]) => any>(
-    func: T,
+export function throttle<A extends unknown[]>(
+    func: (...args: A) => unknown,
     limit: number
-): (...args: Parameters<T>) => void {
+): (...args: A) => void {
     let inThrottle: boolean = false;
 
-    return function executedFunction(...args: Parameters<T>) {
+    return function executedFunction(...args: A) {
         if (!inThrottle) {
             func(...args);
             inThrottle = true;
@@ -106,12 +106,12 @@ export function throttle<T extends (...args: any[]) => any>(
  * window.addEventListener('scroll', handleScroll);
  * ```
  */
-export function rafDebounce<T extends (...args: any[]) => any>(
-    func: T
-): (...args: Parameters<T>) => void {
+export function rafDebounce<A extends unknown[]>(
+    func: (...args: A) => unknown
+): (...args: A) => void {
     let rafId: number | null = null;
 
-    return function executedFunction(...args: Parameters<T>) {
+    return function executedFunction(...args: A) {
         if (rafId !== null) {
             cancelAnimationFrame(rafId);
         }

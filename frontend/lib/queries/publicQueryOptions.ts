@@ -13,9 +13,7 @@ import { queryKeys, categoryKeys, destinationKeys } from './queryKeys';
 /** Public tours page: infinite scroll. */
 export const toursInfiniteOptions = (limit = 12, filters?: TourListFilters) => infiniteQueryOptions({
     queryKey: [...queryKeys.tours.all(), 'infinite', limit, hasTourListFilters(filters) ? filters : null],
-    queryFn: ({ pageParam }: { pageParam: number }) =>
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- page items are loosely typed upstream (ToursResponse.data is unknown[])
-        getTours({ pageParam: pageParam - 1, limit, filters }) as Promise<any>,
+    queryFn: ({ pageParam }: { pageParam: number }) => getTours({ pageParam: pageParam - 1, limit, filters }),
     initialPageParam: 1,
     getNextPageParam: (lastPage: ToursResponse | undefined) =>
         lastPage?.pagination?.hasNextPage

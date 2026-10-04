@@ -38,9 +38,9 @@ export const getUserFaq = async (userId: string): Promise<{ data?: FaqData[] }> 
 export const getSingleFaq = async (faqId: string) => {
     try {
         const response = await api.get(`/faqs/${faqId}`);
-        const data = extractResponseData(response);
+        const data = extractResponseData<FaqData | { faq: FaqData }>(response);
         // Server returns { faq: ... }, extract just the faq
-        return (data as any)?.faq || data;
+        return 'faq' in data ? data.faq : data;
     } catch (error) {
         throw handleApiError(error, 'fetching single FAQ');
     }

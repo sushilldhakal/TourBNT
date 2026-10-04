@@ -135,11 +135,11 @@ const AddCategory = ({ onCategoryAdded }: { onCategoryAdded: (created?: unknown)
                         const page = await getAvailableCategoriesPage(params);
                         return {
                             ...page,
-                            items: page.items.map((c: any) => ({
-                                id: c.id ?? c._id,
+                            items: page.items.map((c) => ({
+                                id: c.id,
                                 title: c.name,
                                 subtitle: typeof c.description === 'string' ? c.description.slice(0, 80) : undefined,
-                                imageUrl: c.imageUrl,
+                                imageUrl: c.imageUrl ?? undefined,
                             })),
                         };
                     }}

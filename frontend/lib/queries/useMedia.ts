@@ -6,7 +6,9 @@
  */
 
 import { useInfiniteQuery, useMutation } from '@tanstack/react-query';
+import axios from 'axios';
 import { getAllMedia, uploadMedia, deleteMedia, validateFiles } from '@/lib/api/mediaApi';
+import { apiErrorMessage, apiErrorStatus } from '@/lib/api/apiClient';
 import { queryKeys } from './queryKeys';
 import { useCacheManager } from './cacheUtils';
 import { toast } from '@/components/ui/use-toast';
@@ -63,14 +65,15 @@ export function useMedia(options: UseMediaOptions) {
                     mediaType
                 });
                 return result;
-            } catch (error: any) {
-                const statusCode = error.statusCode || error.response?.status;
-                const errorMessage = error.message || error.response?.data?.message;
+            } catch (error) {
+                const statusCode = apiErrorStatus(error) ?? 0;
+                const errorMessage = apiErrorMessage(error, '');
+                const errorCode = axios.isAxiosError(error) ? error.code : undefined;
 
-                if (error.code === 'ECONNABORTED' || error.code === 'ERR_NETWORK' || errorMessage?.toLowerCase().includes('network')) {
+                if (errorCode === 'ECONNABORTED' || errorCode === 'ERR_NETWORK' || errorMessage?.toLowerCase().includes('network')) {
                     throw new Error('Network error occurred while loading media. Please check your internet connection and try again.');
                 }
-                if (error.code === 'ETIMEDOUT' || errorMessage?.toLowerCase().includes('timeout')) {
+                if (errorCode === 'ETIMEDOUT' || errorMessage?.toLowerCase().includes('timeout')) {
                     throw new Error('Request timed out while loading media. Please try again.');
                 }
                 if (statusCode === 401) {
@@ -112,7 +115,7 @@ export function useMedia(options: UseMediaOptions) {
     });
 
     const uploadMutation = useMutation<
-        UploadResponse,
+        UploadResponse & { uploadedCount: number },
         Error,
         File[]
     >({
@@ -155,7 +158,7 @@ export function useMedia(options: UseMediaOptions) {
             cache.invalidateMedia();
 
             if (showToast) {
-                const count = (data as any).uploadedCount ?? variables.length;
+                const count = data.uploadedCount ?? variables.length;
                 toast({
                     title: 'Upload Successful',
                     description: `${count} file${count !== 1 ? 's' : ''} uploaded successfully`,
@@ -246,12 +249,15 @@ export function useMedia(options: UseMediaOptions) {
     };
 }
 
-export function getFlattenedMedia(data: any) {
+/** Pages of the media infinite query. */
+type MediaPages = { pages?: MediaQueryResponse[] } | null | undefined;
+
+export function getFlattenedMedia(data: MediaPages) {
     if (!data?.pages) return [];
     return data.pages.flatMap((page: MediaQueryResponse) => page.data ?? []);
 }
 
-export function getMediaCount(data: any): number {
+export function getMediaCount(data: MediaPages): number {
     if (!data?.pages || data.pages.length === 0) return 0;
     const firstPage = data.pages[0] as MediaQueryResponse;
     if (firstPage.totalCount !== undefined) return firstPage.totalCount;

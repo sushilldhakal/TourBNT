@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { api, extractResponseData } from '@/lib/api/apiClient';
+import { api, apiErrorStatus, extractResponseData } from '@/lib/api/apiClient';
+import { useIsClient } from './useIsClient';
 import useUserStore, { User } from '@/lib/store/useUserStore';
 import { logoutUser } from '@/lib/api/users';
 import { devLog } from '@/lib/devLogger';
@@ -15,32 +16,23 @@ interface UseAuthReturn {
     refetch: () => Promise<User | null>;
 }
 
-let bootstrapInFlight: Promise<any> | null = null;
+let bootstrapInFlight: Promise<{ data?: unknown }> | null = null;
+
+/** Only the dashboard needs the signed-in user up front; the public site must not call /users/me. */
+const needsBootstrap = () => window.location.pathname.startsWith('/dashboard');
 
 export const useAuth = (): UseAuthReturn => {
     const router = useRouter();
     const { user, setUser, clearUser } = useUserStore();
-    const [isHydrated, setIsHydrated] = useState(false);
+    const isClient = useIsClient();
+    const [bootstrapped, setBootstrapped] = useState(false);
+    // Hydrated once on the client and either the user is known, this route doesn't load them, or loading finished.
+    const isHydrated = isClient && (!!user.id || !needsBootstrap() || bootstrapped);
 
     useEffect(() => {
-        if (typeof window === 'undefined') return;
-
-        if (user.id) {
-            setIsHydrated(true);
-            return;
-        }
+        if (user.id || !needsBootstrap()) return;
 
         const currentPath = window.location.pathname;
-        // IMPORTANT:
-        // Public site (including 404 pages) should not trigger /users/me bootstrap.
-        // Otherwise an unknown URL (custom 404) can be treated as "protected",
-        // and a transient 401 clears the user store even if the cookie still exists.
-        if (!currentPath.startsWith('/dashboard')) {
-            devLog('auth', `non-dashboard route, skip bootstrap: ${currentPath}`);
-            setIsHydrated(true);
-            return;
-        }
-
         devLog('auth', `protected route, bootstrap /users/me: ${currentPath}`);
 
         // useAuth is mounted by dozens of components; share one in-flight
@@ -64,17 +56,17 @@ export const useAuth = (): UseAuthReturn => {
                     devLog('auth', 'bootstrap ok but no user id, cleared');
                 }
             } catch (e: unknown) {
-                const err = e as { response?: { status?: number }; message?: string };
-                if (err?.response?.status === 401) {
+                const status = apiErrorStatus(e);
+                if (status === 401) {
                     clearUser();
                     devLog('auth', `bootstrap 401, cleared. path=${currentPath}`);
                 } else {
-                    devLog('auth', `bootstrap error: ${err?.response?.status ?? ''} ${err?.message ?? ''}`, {
+                    devLog('auth', `bootstrap error: ${status ?? ''} ${e instanceof Error ? e.message : ''}`, {
                         path: currentPath,
                     });
                 }
             } finally {
-                setIsHydrated(true);
+                setBootstrapped(true);
             }
         };
 

@@ -1,4 +1,4 @@
-import { api } from './apiClient';
+import { api, apiErrorMessage } from './apiClient';
 
 export interface EarningsSummary {
     commissionRate: number;
@@ -47,7 +47,7 @@ export interface SellerBalance {
     bookings: number;
 }
 
-const err = (e: any, fallback: string) => new Error(e?.response?.data?.error?.message ?? e?.response?.data?.message ?? e?.message ?? fallback);
+const err = (e: unknown, fallback: string) => new Error(apiErrorMessage(e, fallback));
 const data = async <T,>(p: Promise<{ data: { data: T } }>, fallback: string): Promise<T> => {
     try { return (await p).data.data; } catch (e) { throw err(e, fallback); }
 };

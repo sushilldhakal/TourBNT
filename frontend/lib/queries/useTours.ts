@@ -1,6 +1,6 @@
 /**
  * Tour queries – public list, count, latest, detail.
- * Tour mutations and useTourQuery live in useTourMutation.
+ * Tour create/update/delete live in TourProvider.
  */
 
 import { useQuery, useInfiniteQuery, keepPreviousData } from '@tanstack/react-query';

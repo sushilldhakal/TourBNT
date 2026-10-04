@@ -139,7 +139,7 @@ export class ApiError extends Error {
     constructor(
         public statusCode: number,
         public message: string,
-        public data?: any,
+        public data?: unknown,
         public code?: string
     ) {
         super(message);
@@ -175,7 +175,7 @@ export const handleApiError = (error: unknown, context: string): never => {
  * Helper to create multipart form data for file uploads
  * Used for gallery uploads and other file operations
  */
-export const createFormData = (data: Record<string, any>): FormData => {
+export const createFormData = (data: Record<string, unknown>): FormData => {
     const formData = new FormData();
 
     Object.entries(data).forEach(([key, value]) => {
@@ -207,17 +207,16 @@ export const createFormData = (data: Record<string, any>): FormData => {
  * Standard list format: { success, data: [...], message, pagination: { page, limit, totalItems, totalPages } }
  * Single resource: { success, data: {...}, message }
  */
-export const extractResponseData = <T>(response: any): T => {
-    // Handle paginated/list response: { success, data: [...], pagination: {...}, message }
-    if (response.data?.pagination != null) {
-        return response.data as T;
-    }
-    // Handle nested single-resource: { success, message, data: {...} }
-    if (response.data?.data !== undefined && !Array.isArray(response.data?.data)) {
-        return response.data.data as T;
+export const extractResponseData = <T>(response: { data?: unknown }): T => {
+    const body = response.data;
+    if (isRecord(body)) {
+        // Handle paginated/list response: { success, data: [...], pagination: {...}, message }
+        if (body.pagination != null) return body as T;
+        // Handle nested single-resource: { success, message, data: {...} }
+        if (body.data !== undefined && !Array.isArray(body.data)) return body.data as T;
     }
     // Handle direct data response
-    return response.data as T;
+    return body as T;
 };
 
 /**
@@ -225,13 +224,42 @@ export const extractResponseData = <T>(response: any): T => {
  * extractResponseData hands back the whole wrapper for those (it only unwraps
  * non-array `data`), so list callers should use this to get the array itself.
  */
-export const extractList = <T>(response: any): T[] => {
+export const extractList = <T>(response: { data?: unknown } | null | undefined): T[] => {
     const body = response?.data;
     if (Array.isArray(body)) return body as T[];
-    if (Array.isArray(body?.data)) return body.data as T[];
-    if (Array.isArray(body?.items)) return body.items as T[];
+    if (isRecord(body)) {
+        if (Array.isArray(body.data)) return body.data as T[];
+        if (Array.isArray(body.items)) return body.items as T[];
+    }
     return [];
 };
+
+/** A plain object (not null, not an array). */
+export const isRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/**
+ * The message to show for a failed request: the server's error message when it sent one
+ * (`{ error: { message } }` or `{ message }`), else the error's own message, else the fallback.
+ */
+export function apiErrorMessage(error: unknown, fallback: string): string {
+    if (axios.isAxiosError(error)) {
+        const body: unknown = error.response?.data;
+        if (isRecord(body)) {
+            if (isRecord(body.error) && typeof body.error.message === 'string') return body.error.message;
+            if (typeof body.message === 'string') return body.message;
+        }
+    }
+    if (error instanceof Error && error.message) return error.message;
+    return fallback;
+}
+
+/** The HTTP status of a failed request, if it got a response. */
+export function apiErrorStatus(error: unknown): number | undefined {
+    if (axios.isAxiosError(error)) return error.response?.status;
+    if (error instanceof ApiError) return error.statusCode;
+    return undefined;
+}
 
 /**
  * Type-safe API request wrapper

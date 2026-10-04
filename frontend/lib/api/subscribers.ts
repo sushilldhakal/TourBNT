@@ -1,4 +1,5 @@
-import { api, handleApiError, extractResponseData } from './apiClient';
+import axios from 'axios';
+import { api, handleApiError, extractResponseData, apiErrorMessage } from './apiClient';
 
 /**
  * Subscriber API Methods
@@ -66,10 +67,10 @@ export const subscribeEmail = async (emailInput: string) => {
         }
 
         throw new Error('Invalid response format');
-    } catch (error: any) {
+    } catch (error) {
         // If error has results in details, return them
-        if (error?.response?.data?.error?.details) {
-            const details = error.response.data.error.details;
+        const details: unknown = axios.isAxiosError(error) ? error.response?.data?.error?.details : undefined;
+        if (details) {
             if (Array.isArray(details)) {
                 return {
                     successful: [],
@@ -162,7 +163,7 @@ export const unsubscribeWithToken = async (token: string) => {
     try {
         const response = await api.post(`/subscribers/unsubscribe?token=${encodeURIComponent(token)}`);
         return extractResponseData<{ message: string }>(response);
-    } catch (error: any) {
-        throw new Error(error?.response?.data?.error?.message ?? 'Something went wrong. Please try again.');
+    } catch (error) {
+        throw new Error(apiErrorMessage(error, 'Something went wrong. Please try again.'));
     }
 };

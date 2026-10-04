@@ -128,7 +128,7 @@ function NewCodeDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpe
     // Admins get every tour here, sellers only their own (the server enforces the same rule).
     const { data: tourOptions = [] } = useQuery({
         queryKey: ['promo-codes', 'tour-options'],
-        queryFn: async () => (await getMyTours({ limit: 100 })).data.map((t: any) => ({ value: String(t.id), label: t.code ? `${t.title} (${t.code})` : t.title })),
+        queryFn: async () => (await getMyTours({ limit: 100 })).data.map((t) => ({ value: String(t.id), label: t.code ? `${t.title} (${t.code})` : t.title })),
         enabled: open,
         staleTime: 5 * 60_000,
     });

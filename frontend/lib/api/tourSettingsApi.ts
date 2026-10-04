@@ -39,13 +39,20 @@ export interface PricingOptionPreset {
   updatedAt?: string;
 }
 
+/** Defaults a date preset fills into a new tour's schedule. */
+export interface DatePresetConfig {
+  defaultDays?: number;
+  defaultNights?: number;
+  defaultCapacity?: number;
+}
+
 export interface DatePreset {
   id: string;
   _id: string;
   userId: string;
   name: string;
   type: 'flexible' | 'fixed' | 'multiple';
-  config: any;
+  config: DatePresetConfig;
   recurrence?: {
     enabled: boolean;
     pattern?: string;
@@ -614,7 +621,6 @@ export const applyTourTemplatePreset = async (
 }> => {
   const response = await api.post(`/users/${userId}/tour-settings/tour-template-presets/${presetId}/apply`);
   const data = response.data.data || response.data;
-  const out: Record<string, unknown> = { ...data };
   const toStr = (v: unknown) => (v != null ? String(v) : undefined);
   return {
     pricingPresetId: toStr(data?.pricingPresetId),

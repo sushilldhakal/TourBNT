@@ -159,11 +159,11 @@ const AddDestination = ({ onDestinationAdded }: AddDestinationProps) => {
                                 const page = await getAvailableDestinationsPage(params);
                                 return {
                                     ...page,
-                                    items: page.items.map((d: any) => ({
-                                        id: d.id ?? d._id,
+                                    items: page.items.map((d) => ({
+                                        id: d.id,
                                         title: d.name,
                                         subtitle: [d.city, d.region, d.country].filter(Boolean).join(', '),
-                                        imageUrl: d.coverImage,
+                                        imageUrl: d.coverImage ?? undefined,
                                     })),
                                 };
                             }}

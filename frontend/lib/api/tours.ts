@@ -17,7 +17,8 @@ export interface TourPagination {
 }
 
 export interface ToursResponse {
-    data: unknown[];
+    data: Tour[];
+    /** 0-based page index of the next page, when there is one. */
     nextCursor?: number;
     pagination: TourPagination;
     currentPage: number;
@@ -25,6 +26,37 @@ export interface ToursResponse {
     totalTours: number;
     hasNextPage: boolean;
     hasPrevPage: boolean;
+}
+
+/** One page of a sendPaginatedResponse list ({ items, pagination: { page, limit, totalItems, totalPages } }). */
+interface PagedTours {
+    items?: Tour[];
+    data?: Tour[];
+    pagination?: { page?: number; limit?: number; totalItems?: number | null; totalPages?: number | null };
+}
+
+/** A list response as ToursResponse; `pageParam` is the 0-based page that was asked for. */
+function toToursResponse(body: PagedTours | Tour[] | null | undefined, pageParam: number, limit: number): ToursResponse {
+    if (!body) throw new Error('Invalid response format: No data received');
+    const tours = Array.isArray(body) ? body : body.items ?? body.data;
+    if (!Array.isArray(tours)) throw new Error('Invalid response format: Could not find tours array');
+    const p = Array.isArray(body) ? undefined : body.pagination;
+    // currentPage is 1-based, like the server's page.
+    const currentPage = p?.page ?? pageParam + 1;
+    const totalPages = p?.totalPages ?? (tours.length < limit ? currentPage : currentPage + 1);
+    const totalTours = p?.totalItems ?? tours.length;
+    const hasNextPage = currentPage < totalPages;
+    const hasPrevPage = currentPage > 1;
+    return {
+        data: tours,
+        nextCursor: hasNextPage ? currentPage : undefined,
+        pagination: { currentPage, totalPages, totalTours, hasNextPage, hasPrevPage, limit: p?.limit ?? limit },
+        currentPage,
+        totalPages,
+        totalTours,
+        hasNextPage,
+        hasPrevPage,
+    };
 }
 
 /**
@@ -64,97 +96,7 @@ export const getTours = async ({
 
     try {
         const response = await api.get(url, { timeout: 15000 });
-        const data = extractResponseData(response);
-
-        if (!data) {
-            throw new Error('Invalid response format: No data received');
-        }
-
-        // Standard sendPaginatedResponse: { items: [...], pagination: { page, limit, totalItems, totalPages } }
-        // (server/src/utils/apiResponse.ts serializes the array under `items`,
-        // not `data` — check that first; keep `data` as a defensive fallback
-        // in case a caller changes shape later.)
-        const raw = data as { items?: unknown[]; data?: unknown[]; pagination?: { page: number; limit: number; totalItems: number; totalPages: number } };
-        if ((Array.isArray(raw?.items) || Array.isArray(raw?.data)) && raw?.pagination) {
-            const toursData = (Array.isArray(raw.items) ? raw.items : raw.data) as unknown[];
-            const p = raw.pagination;
-            const currentPage = p.page ?? 1;
-            const totalPages = p.totalPages ?? 1;
-            const totalItems = p.totalItems ?? toursData.length;
-            const hasNextPage = currentPage < totalPages;
-            return {
-                data: toursData,
-                nextCursor: hasNextPage ? currentPage + 1 : undefined,
-                pagination: {
-                    currentPage,
-                    totalPages,
-                    totalTours: totalItems,
-                    hasNextPage,
-                    hasPrevPage: currentPage > 1,
-                    limit: p.limit ?? limit,
-                },
-                currentPage,
-                totalPages,
-                totalTours: totalItems,
-                hasNextPage,
-                hasPrevPage: currentPage > 1,
-            };
-        }
-
-        // Handle nested data structure (data.data.tours) - after extractResponseData
-        if ((data as any)?.data?.tours) {
-            const { tours: toursData, pagination } = (data as any).data;
-            return {
-                data: toursData,
-                nextCursor: pagination.hasNextPage ? pagination.currentPage : undefined,
-                pagination,
-                currentPage: pagination.currentPage,
-                totalPages: pagination.totalPages,
-                totalTours: pagination.totalTours,
-                hasNextPage: pagination.hasNextPage,
-                hasPrevPage: pagination.hasPrevPage
-            };
-        }
-
-        // Check if response has tours at root level
-        if ((data as any)?.tours) {
-            const toursData = (data as any).tours;
-            const pagination = (data as any).pagination;
-            return {
-                data: toursData,
-                nextCursor: pagination?.hasNextPage ? pagination.currentPage : undefined,
-                pagination: pagination || {},
-                currentPage: pagination?.currentPage || pageParam + 1,
-                totalPages: pagination?.totalPages || 1,
-                totalTours: pagination?.totalTours || toursData.length,
-                hasNextPage: pagination?.hasNextPage || false,
-                hasPrevPage: pagination?.hasPrevPage || false
-            };
-        }
-
-        // Check if data array is directly available
-        if (Array.isArray(data)) {
-            const tours = data;
-            return {
-                data: tours,
-                nextCursor: pageParam + 1,
-                pagination: {
-                    currentPage: pageParam,
-                    totalPages: response.data.totalPages || Math.ceil((tours.length || 0) / limit),
-                    totalTours: response.data.totalTours || tours.length,
-                    hasNextPage: response.data.hasNextPage !== undefined ? response.data.hasNextPage : tours.length >= limit,
-                    hasPrevPage: pageParam > 0,
-                    limit
-                },
-                currentPage: pageParam,
-                totalPages: response.data.totalPages || Math.ceil((tours.length || 0) / limit),
-                totalTours: response.data.totalTours || tours.length,
-                hasNextPage: response.data.hasNextPage !== undefined ? response.data.hasNextPage : tours.length >= limit,
-                hasPrevPage: pageParam > 0
-            };
-        }
-
-        throw new Error('Invalid response format: Could not find tours array');
+        return toToursResponse(extractResponseData<PagedTours | Tour[]>(response), pageParam, limit);
     } catch (error) {
         throw handleApiError(error, 'fetching tours');
     }
@@ -178,59 +120,7 @@ export const getMyTours = async ({
         const limitParam = Math.min(limit, 100);
         const url = `/tours/me?page=${pageParam + 1}&limit=${limitParam}`;
         const response = await api.get(url, { timeout: 30000 }); // Increased timeout for large datasets
-        const data = extractResponseData(response);
-
-        if (!data) {
-            throw new Error('Invalid response format: No data received');
-        }
-
-        // Standard format from sendPaginatedResponse: { items: T[], message, pagination: { page, limit, totalItems, totalPages } }
-        const responseData = data as { items?: unknown[]; data?: unknown[]; pagination?: any; tours?: unknown[] };
-        if (responseData.pagination) {
-            const tours = (responseData.items ?? responseData.data ?? responseData.tours ?? []) as unknown[];
-            const pagination = responseData.pagination;
-            return {
-                data: tours,
-                nextCursor: pagination.currentPage < pagination.totalPages ? pagination.currentPage : undefined,
-                pagination: {
-                    currentPage: pagination.currentPage - 1, // Convert to 0-indexed
-                    totalPages: pagination.totalPages,
-                    totalTours: pagination.totalItems,
-                    hasNextPage: pagination.currentPage < pagination.totalPages,
-                    hasPrevPage: pagination.currentPage > 1,
-                    limit: pagination.limit ?? pagination.itemsPerPage
-                },
-                currentPage: pagination.currentPage - 1, // Convert to 0-indexed
-                totalPages: pagination.totalPages,
-                totalTours: pagination.totalItems,
-                hasNextPage: pagination.currentPage < pagination.totalPages,
-                hasPrevPage: pagination.currentPage > 1
-            };
-        }
-
-        // Fallback: if data array is directly available without pagination
-        if (Array.isArray(data)) {
-            const tours = data as unknown[];
-            return {
-                data: tours,
-                nextCursor: undefined,
-                pagination: {
-                    currentPage: pageParam,
-                    totalPages: 1,
-                    totalTours: tours.length,
-                    hasNextPage: false,
-                    hasPrevPage: false,
-                    limit
-                },
-                currentPage: pageParam,
-                totalPages: 1,
-                totalTours: tours.length,
-                hasNextPage: false,
-                hasPrevPage: false
-            };
-        }
-
-        throw new Error('Invalid response format: Could not find tours array');
+        return toToursResponse(extractResponseData<PagedTours | Tour[]>(response), pageParam, limitParam);
     } catch (error) {
         throw handleApiError(error, 'fetching my tours');
     }

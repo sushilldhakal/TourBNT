@@ -1,4 +1,5 @@
-import { api, handleApiError, extractResponseData, extractList } from './apiClient';
+import { api, apiErrorMessage, handleApiError, extractResponseData, extractList } from './apiClient';
+import type { CartBooking } from '@/lib/cartUtils';
 
 /**
  * Booking API Methods
@@ -113,9 +114,8 @@ export const quoteBooking = async (input: {
     try {
         const response = await api.post('/bookings/quote', input);
         return (response.data?.data ?? response.data) as QuotedPricing;
-    } catch (error: any) {
-        const message = error?.response?.data?.error?.message ?? error?.response?.data?.message ?? error?.message;
-        throw new Error(message || 'Could not check that promo code.');
+    } catch (error) {
+        throw new Error(apiErrorMessage(error, 'Could not check that promo code.'));
     }
 };
 
@@ -267,7 +267,7 @@ export const getBookingStats = async () => {
  * @returns Payment confirmation
  */
 export const processPayment = async (paymentData: {
-    bookings: any[];
+    bookings: CartBooking[];
     paymentMethod: 'card' | 'paypal';
     contactInfo: {
         firstName: string;

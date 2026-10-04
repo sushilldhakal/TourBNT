@@ -1,17 +1,35 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSingleFact } from '@/lib/queries/useFacts';
 import { toast } from '@/components/ui/use-toast';
 import { updateFacts } from '@/lib/api/factsApi';
 import { useAuth } from '@/lib/hooks/useAuth';
-import type { UseFactItemProps } from '@/types/facts';
+import type { FactData, UseFactItemProps } from '@/types/facts';
+
+/** A fact value item as text: plain strings, or the `value` of { label, value } options. */
+const itemText = (item: unknown): string =>
+    typeof item === 'string' ? item : typeof item === 'object' && item !== null && 'value' in item ? String(item.value ?? '') : '';
+
+/** A fact's list values as text (stored as an array, or as a JSON string of one). */
+function parseFactValues(factData: Pick<FactData, 'value'>): string[] {
+    if (Array.isArray(factData.value)) {
+        return (factData.value as unknown[]).map(itemText).filter(Boolean);
+    }
+    if (typeof factData.value === 'string') {
+        try {
+            const parsed: unknown = JSON.parse(factData.value);
+            if (Array.isArray(parsed)) return parsed.map(itemText).filter(Boolean);
+        } catch {
+            // Not JSON: no list values.
+        }
+    }
+    return [];
+}
 
 export const useFactItem = ({ fact, DeleteFact }: UseFactItemProps) => {
     const [isEditMode, setIsEditMode] = useState<boolean>(false);
     const [editingFactId, setEditingFactId] = useState<string | null>(null);
-    const [valuesTag, setValuesTag] = useState<string[]>([]);
-    const [selectedIcon, setSelectedIcon] = useState<string | null>(null);
     const [isOpen, setIsOpen] = useState(false);
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const isInitializingRef = useRef(false);
@@ -23,55 +41,27 @@ export const useFactItem = ({ fact, DeleteFact }: UseFactItemProps) => {
         defaultValues: {
             name: fact?.name || '',
             field_type: fact?.field_type || '',
-            value: Array.isArray(fact?.value) ? fact.value : [],
+            value: fact ? parseFactValues(fact) : [],
             icon: fact?.icon || '',
         },
     });
 
-    const { watch } = form;
-    const fieldType = watch('field_type');
+    const fieldType = useWatch({ control: form.control, name: 'field_type' });
+    // The tag list and icon live in the form (value / icon), so a form.reset updates them too.
+    const valuesTag = useWatch({ control: form.control, name: 'value' });
+    const selectedIconValue = useWatch({ control: form.control, name: 'icon' });
+    const selectedIcon = selectedIconValue || null;
+    const setValuesTag = useCallback((tags: string[]) => form.setValue('value', tags, { shouldDirty: true }), [form]);
+    const setSelectedIcon = useCallback((icon: string | null) => form.setValue('icon', icon ?? '', { shouldDirty: true }), [form]);
 
-    const { data: factSingle, isLoading, isError, refetch, error } = useSingleFact(editingFactId, isEditMode && !!editingFactId);
+    const { data: factSingle, isLoading, isError, refetch } = useSingleFact(editingFactId, isEditMode && !!editingFactId);
 
-    // Helper function to parse fact values
-    const parseFactValues = useCallback((factData: any): string[] => {
-        let parsedValues: string[] = [];
-
-        if (Array.isArray(factData.value)) {
-            parsedValues = factData.value.map((item: any) => {
-                if (typeof item === 'string') {
-                    return item;
-                } else if (typeof item === 'object' && item !== null && 'value' in item) {
-                    return item.value;
-                }
-                return '';
-            }).filter(Boolean);
-        } else if (typeof factData.value === 'string') {
-            try {
-                const parsed = JSON.parse(factData.value);
-                if (Array.isArray(parsed)) {
-                    parsedValues = parsed.map((item: any) => {
-                        if (typeof item === 'string') {
-                            return item;
-                        } else if (typeof item === 'object' && item !== null && 'value' in item) {
-                            return item.value;
-                        }
-                        return '';
-                    }).filter(Boolean);
-                }
-            } catch (e) {
-                // Silent error
-            }
-        }
-
-        return parsedValues;
-    }, []);
 
     // Update form values when entering edit mode or when data loads
     useEffect(() => {
         if (isEditMode && !isInitializingRef.current) {
             // Extract fact data - handle both { facts: ... } and direct fact object
-            const factData = (factSingle as any)?.facts || factSingle;
+            const factData = factSingle;
 
             if (factData && (factData.name || factData.field_type)) {
                 isInitializingRef.current = true;
@@ -84,9 +74,6 @@ export const useFactItem = ({ fact, DeleteFact }: UseFactItemProps) => {
                     value: parsedValues,
                     icon: factData.icon || '',
                 });
-
-                setValuesTag(parsedValues);
-                setSelectedIcon(factData.icon || null);
 
                 // Reset the flag after a short delay
                 setTimeout(() => {
@@ -105,15 +92,12 @@ export const useFactItem = ({ fact, DeleteFact }: UseFactItemProps) => {
                     icon: fact.icon || '',
                 });
 
-                setValuesTag(parsedValues);
-                setSelectedIcon(fact.icon || null);
-
                 setTimeout(() => {
                     isInitializingRef.current = false;
                 }, 100);
             }
         }
-    }, [factSingle, isEditMode, form, fact, parseFactValues]);
+    }, [factSingle, isEditMode, form, fact]);
 
     const updateFactMutation = useMutation({
         mutationFn: (factData: FormData) => updateFacts(factData, fact?.id || fact?._id || ''),
@@ -153,8 +137,7 @@ export const useFactItem = ({ fact, DeleteFact }: UseFactItemProps) => {
             const values = form.getValues('value');
             if (Array.isArray(values) && values.length > 0) {
                 values.forEach((item, index) => {
-                    const itemValue = typeof item === 'object' && item !== null && 'value' in item ? (item as any).value : String(item);
-                    formData.append(`value[${index}]`, itemValue);
+                    formData.append(`value[${index}]`, itemText(item));
                 });
             } else if (valuesTag.length > 0) {
                 valuesTag.forEach((item, index) => {
@@ -171,7 +154,7 @@ export const useFactItem = ({ fact, DeleteFact }: UseFactItemProps) => {
 
         try {
             await updateFactMutation.mutateAsync(formData);
-        } catch (error) {
+        } catch {
             toast({
                 title: 'Failed to update fact',
                 description: 'Please try again later.',
@@ -225,8 +208,6 @@ export const useFactItem = ({ fact, DeleteFact }: UseFactItemProps) => {
                 value: parsedValues,
                 icon: fact.icon || '',
             });
-            setValuesTag(parsedValues);
-            setSelectedIcon(fact.icon || null);
 
             setEditingFactId(factId);
             setIsEditMode(true);
@@ -237,7 +218,7 @@ export const useFactItem = ({ fact, DeleteFact }: UseFactItemProps) => {
                 refetch();
             }
         }
-    }, [fact, editingFactId, isEditMode, form, parseFactValues, refetch]);
+    }, [fact, editingFactId, isEditMode, form, refetch]);
 
     const handleCancelClick = useCallback(() => {
         setEditingFactId(null);
@@ -253,19 +234,15 @@ export const useFactItem = ({ fact, DeleteFact }: UseFactItemProps) => {
                 value: parsedValues,
                 icon: fact.icon || '',
             });
-            setValuesTag(parsedValues);
-            setSelectedIcon(fact.icon || null);
         } else {
             form.reset();
-            setValuesTag([]);
-            setSelectedIcon(null);
         }
-    }, [fact, form, parseFactValues]);
+    }, [fact, form]);
 
     const handleIconSelect = useCallback((iconName: string) => {
         setSelectedIcon(iconName);
         setIsOpen(false);
-    }, []);
+    }, [setSelectedIcon]);
 
     return {
         // State

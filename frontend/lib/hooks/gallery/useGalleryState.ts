@@ -37,14 +37,12 @@ export function useGalleryState(options: UseGalleryStateOptions = {}) {
     const router = useRouter();
     const searchParams = useSearchParams();
 
-    const getInitialTab = useCallback((): 'images' | 'videos' | 'pdfs' => {
-        if (mode === 'picker') return initialTab;
-        if (syncWithUrl) {
-            const tabParam = searchParams.get('tab');
-            if (tabParam === 'images' || tabParam === 'videos' || tabParam === 'pdfs') return tabParam;
-        }
-        return initialTab;
-    }, [mode, initialTab, syncWithUrl, searchParams]);
+    type Tab = GalleryState['activeTab'];
+    const isTab = (value: string | null): value is Tab => value === 'images' || value === 'videos' || value === 'pdfs';
+    // On the standalone gallery page the tab lives in the URL (?tab=), so links and the back button work.
+    const urlSynced = mode === 'standalone' && syncWithUrl;
+    const tabParam = searchParams.get('tab');
+    const urlTab = urlSynced && isTab(tabParam) ? tabParam : null;
 
     const getInitialViewMode = useCallback((): 'list' | 'masonry' => {
         if (persistViewMode && typeof window !== 'undefined') {
@@ -54,37 +52,22 @@ export function useGalleryState(options: UseGalleryStateOptions = {}) {
         return initialViewMode;
     }, [persistViewMode, initialViewMode]);
 
-    const [state, setState] = useState<GalleryState>({
-        activeTab: getInitialTab(),
+    const [state, setState] = useState<GalleryState>(() => ({
+        activeTab: initialTab,
         viewMode: getInitialViewMode(),
         selectedIds: new Set<string>(),
         isUploading: false,
-    });
+    }));
+    const activeTab = urlTab ?? state.activeTab;
 
-    const [isUpdatingFromUrl, setIsUpdatingFromUrl] = useState(false);
     const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
 
-    useEffect(() => {
-        if (mode !== 'standalone' || !syncWithUrl || isUpdatingFromUrl) return;
-        const currentTab = searchParams.get('tab');
-        if (currentTab !== state.activeTab) {
-            const params = new URLSearchParams(searchParams.toString());
-            params.set('tab', state.activeTab);
-            router.replace(`?${params.toString()}`, { scroll: false });
-        }
-    }, [state.activeTab, mode, syncWithUrl, router, searchParams, isUpdatingFromUrl]);
-
-    useEffect(() => {
-        if (mode !== 'standalone' || !syncWithUrl) return;
-        const tabParam = searchParams.get('tab');
-        if (tabParam && (tabParam === 'images' || tabParam === 'videos' || tabParam === 'pdfs')) {
-            if (tabParam !== state.activeTab) {
-                setIsUpdatingFromUrl(true);
-                setState((prev) => ({ ...prev, activeTab: tabParam, selectedIds: new Set<string>() }));
-                setTimeout(() => setIsUpdatingFromUrl(false), 0);
-            }
-        }
-    }, [searchParams, mode, syncWithUrl]);
+    // A tab change from the URL (back/forward) clears the selection, like one from setActiveTab.
+    const [seenUrlTab, setSeenUrlTab] = useState(urlTab);
+    if (urlTab !== seenUrlTab) {
+        setSeenUrlTab(urlTab);
+        setState((prev) => ({ ...prev, selectedIds: new Set<string>() }));
+    }
 
     useEffect(() => {
         if (persistViewMode && typeof window !== 'undefined') {
@@ -92,9 +75,14 @@ export function useGalleryState(options: UseGalleryStateOptions = {}) {
         }
     }, [state.viewMode, persistViewMode]);
 
-    const setActiveTab = useCallback((tab: 'images' | 'videos' | 'pdfs') => {
+    const setActiveTab = useCallback((tab: Tab) => {
         setState((prev) => ({ ...prev, activeTab: tab, selectedIds: new Set<string>() }));
-    }, []);
+        if (urlSynced) {
+            const params = new URLSearchParams(searchParams.toString());
+            params.set('tab', tab);
+            router.replace(`?${params.toString()}`, { scroll: false });
+        }
+    }, [urlSynced, searchParams, router]);
 
     const setViewMode = useCallback((viewMode: 'list' | 'masonry') => {
         setState((prev) => ({ ...prev, viewMode }));
@@ -162,19 +150,19 @@ export function useGalleryState(options: UseGalleryStateOptions = {}) {
 
     const reset = useCallback(() => {
         setState({
-            activeTab: getInitialTab(),
+            activeTab: initialTab,
             viewMode: getInitialViewMode(),
             selectedIds: new Set<string>(),
             isUploading: false,
         });
-    }, [getInitialTab, getInitialViewMode]);
+    }, [initialTab, getInitialViewMode]);
 
     const hasSelection = state.selectedIds.size > 0;
     const selectionCount = state.selectedIds.size;
     const selectedArray = Array.from(state.selectedIds);
 
     return {
-        activeTab: state.activeTab,
+        activeTab,
         viewMode: state.viewMode,
         selectedIds: state.selectedIds,
         isUploading: state.isUploading,
@@ -194,7 +182,7 @@ export function useGalleryState(options: UseGalleryStateOptions = {}) {
         setUploading,
         reset,
         isSelected: (id: string) => state.selectedIds.has(id),
-        isTabActive: (tab: string) => state.activeTab === tab,
+        isTabActive: (tab: string) => activeTab === tab,
         isViewMode: (mode: string) => state.viewMode === mode,
     };
 }

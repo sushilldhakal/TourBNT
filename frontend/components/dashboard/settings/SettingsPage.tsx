@@ -13,7 +13,7 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation } from '@tanstack/react-query';
 import { useCacheManager, useUserSettings } from '@/lib/queries';
-import { userSetting, getDecryptedApiKey } from '@/lib/api/users';
+import { updateMySettings, getMyDecryptedApiKey } from '@/lib/api/users';
 import { getUserId } from '@/lib/utils/auth';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
@@ -91,7 +91,7 @@ export function SettingsPage() {
     const { invalidateUserSettings } = useCacheManager();
     const userSettingUpdate = useMutation({
         mutationFn: ({ userId, formData }: { userId: string; formData: FormData }) =>
-            userSetting(userId, formData),
+            updateMySettings(formData),
         onSuccess: () => {
             setDecryptedKeys({});
             setVisibleKeys({});
@@ -163,7 +163,7 @@ export function SettingsPage() {
                 GOOGLE_API_KEY: 'google_api_key',
             };
 
-            const response = await getDecryptedApiKey(userId, keyTypeMap[keyType]) as { key?: string };
+            const response = await getMyDecryptedApiKey(keyTypeMap[keyType]) as { key?: string };
 
             if (response && response.key !== undefined) {
                 if (response.key === '') {

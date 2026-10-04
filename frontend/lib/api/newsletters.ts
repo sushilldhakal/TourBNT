@@ -1,4 +1,4 @@
-import { api } from './apiClient';
+import { api, apiErrorMessage } from './apiClient';
 
 export interface Newsletter {
     id: string;
@@ -17,7 +17,7 @@ export interface NewsletterHistory {
     activeSubscribers: number;
 }
 
-const message = (e: any, fallback: string) => new Error(e?.response?.data?.error?.message ?? e?.response?.data?.message ?? e?.message ?? fallback);
+const message = (e: unknown, fallback: string) => new Error(apiErrorMessage(e, fallback));
 
 export const listNewsletters = async (): Promise<NewsletterHistory> => {
     try { return (await api.get('/newsletters')).data.data; } catch (e) { throw message(e, 'Could not load newsletters.'); }
