@@ -12,6 +12,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/use-toast';
 import { getReviewEligibility, addReview, addReviewReply, likeReview, likeReply, incrementReplyView } from '@/lib/api/reviews';
+import { apiErrorMessage } from '@/lib/api/apiClient';
 import { Review, Reply } from '@/types/types';
 import { cn } from '@/lib/utils';
 
@@ -100,10 +101,10 @@ function ReviewForm({ tourId, onSuccess }: ReviewFormProps) {
             setRating(5);
             onSuccess();
         },
-        onError: (error: any) => {
+        onError: (error) => {
             toast({
                 title: 'Error',
-                description: error?.response?.data?.message || 'Failed to submit review. Please try again.',
+                description: apiErrorMessage(error, 'Failed to submit review. Please try again.'),
                 variant: 'destructive',
             });
         },
@@ -346,10 +347,10 @@ function ReplyForm({ tourId, reviewId, onSuccess, onCancel }: ReplyFormProps) {
             setComment('');
             onSuccess();
         },
-        onError: (error: any) => {
+        onError: (error) => {
             toast({
                 title: 'Error',
-                description: error?.response?.data?.message || 'Failed to add reply. Please try again.',
+                description: apiErrorMessage(error, 'Failed to add reply. Please try again.'),
                 variant: 'destructive',
             });
         },

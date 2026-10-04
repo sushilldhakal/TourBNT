@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { Search, X } from 'lucide-react';
@@ -110,14 +111,12 @@ export function MenuBarSearch({ handleSearch, headerSearch }: MenuBarSearchProps
         }
     }, [categories]);
 
+    const hasFilter = !!(title.trim() || selectedCategory);
+
     // Debounced search when title or category changes
     useEffect(() => {
         if (debounceRef.current) clearTimeout(debounceRef.current);
-        const hasFilter = title.trim() || selectedCategory;
-        if (!hasFilter) {
-            setSearchResults([]);
-            return;
-        }
+        if (!hasFilter) return;
         debounceRef.current = setTimeout(() => {
             debounceRef.current = null;
             runSearch(title, selectedCategory);
@@ -125,7 +124,7 @@ export function MenuBarSearch({ handleSearch, headerSearch }: MenuBarSearchProps
         return () => {
             if (debounceRef.current) clearTimeout(debounceRef.current);
         };
-    }, [title, selectedCategory, runSearch]);
+    }, [title, selectedCategory, hasFilter, runSearch]);
 
     const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setTitle(e.target.value);
@@ -150,7 +149,8 @@ export function MenuBarSearch({ handleSearch, headerSearch }: MenuBarSearchProps
         setSearchResults([]);
     };
 
-    const displayTours = searchResults.length > 0 ? searchResults : latestTours;
+    // With no filter, show the latest tours rather than the last search's results.
+    const displayTours = hasFilter && searchResults.length > 0 ? searchResults : latestTours;
 
     return (
         <div
@@ -262,18 +262,22 @@ export function MenuBarSearch({ handleSearch, headerSearch }: MenuBarSearchProps
                                             className="image-wrapper pr-5 absolute left-0 top-0"
                                             href={`/tours/${tourId}`}
                                         >
-                                            <img
-                                                className="w-20 h-15"
-                                                src={(tour as { coverImage?: string }).coverImage ?? ''}
-                                                alt={tour.title}
-                                            />
+                                            {tour.coverImage && (
+                                                <Image
+                                                    className="w-20 h-15 object-cover"
+                                                    src={tour.coverImage}
+                                                    alt={tour.title}
+                                                    width={80}
+                                                    height={60}
+                                                />
+                                            )}
                                         </Link>
                                         <h4>
                                             <Link className="cd-nowrap" href={`/tours/${tourId}`}>
                                                 {tour.title}
                                             </Link>
                                         </h4>
-                                        <time dateTime={(tour as { updatedAt?: string }).updatedAt ?? ''} className="text-xs mt-1">
+                                        <time dateTime={tour.updatedAt ?? ''} className="text-xs mt-1">
                                             {(tour as { updatedAt?: string }).updatedAt
                                                 ? formatDate((tour as { updatedAt: string }).updatedAt)
                                                 : ''}

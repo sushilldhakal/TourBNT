@@ -7,7 +7,24 @@ export const revalidate = 3600;
 
 const API = `${SERVER_BACKEND_URL}/api/v1`;
 
-async function getJson(path: string): Promise<any | null> {
+/** A list response, in any of the shapes the list endpoints use. */
+interface ListJson {
+    items?: SitemapRow[];
+    data?: SitemapRow[] | { items?: SitemapRow[]; totalPages?: number };
+    pagination?: { totalPages?: number | null };
+}
+
+/** The fields of a listed record the sitemap reads. */
+interface SitemapRow {
+    id?: string;
+    slug?: string;
+    type?: string;
+    updatedAt?: string;
+    createdAt?: string;
+    [key: string]: unknown;
+}
+
+async function getJson(path: string): Promise<ListJson | null> {
     try {
         const res = await fetch(`${API}${path}`, { next: { revalidate: 3600 } });
         return res.ok ? await res.json() : null;
@@ -16,16 +33,17 @@ async function getJson(path: string): Promise<any | null> {
     }
 }
 
-const rows = (json: any): any[] => json?.items ?? json?.data?.items ?? (Array.isArray(json?.data) ? json.data : []) ?? [];
+const rows = (json: ListJson | null): SitemapRow[] =>
+    json?.items ?? (Array.isArray(json?.data) ? json.data : json?.data?.items) ?? [];
 
 /** Every page of a paginated list, up to a sanity cap. */
-async function getAll(path: string, pageSize = 100, maxPages = 20): Promise<any[]> {
-    const all: any[] = [];
+async function getAll(path: string, pageSize = 100, maxPages = 20): Promise<SitemapRow[]> {
+    const all: SitemapRow[] = [];
     for (let page = 1; page <= maxPages; page++) {
         const json = await getJson(`${path}${path.includes('?') ? '&' : '?'}page=${page}&limit=${pageSize}`);
         const batch = rows(json);
         all.push(...batch);
-        const totalPages = json?.pagination?.totalPages ?? json?.data?.totalPages;
+        const totalPages = json?.pagination?.totalPages ?? (Array.isArray(json?.data) ? undefined : json?.data?.totalPages);
         if (batch.length < pageSize || (totalPages && page >= totalPages)) break;
     }
     return all;

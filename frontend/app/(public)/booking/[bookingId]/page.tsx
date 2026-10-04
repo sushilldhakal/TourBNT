@@ -24,15 +24,12 @@ export default function SingleBookingPage() {
     const params = useParams();
     const bookingId = typeof params.bookingId === 'string' ? params.bookingId : '';
     const [booking, setBooking] = useState<LegacyBookingDetail | null>(null);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(!!bookingId);
     const [error, setError] = useState<string | null>(null);
     const [cancelling, setCancelling] = useState(false);
 
     useEffect(() => {
-        if (!bookingId) {
-            setLoading(false);
-            return;
-        }
+        if (!bookingId) return;
         let cancelled = false;
         getBookingById(bookingId)
             .then((data) => {

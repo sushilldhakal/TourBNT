@@ -143,11 +143,32 @@ export const deleteBusinessPartner = async (businessPartnerId: string) => {
 };
 
 // Business reviews (nested + top-level, mirrors lib/api/reviews.ts)
-export const getBusinessReviews = async (businessPartnerId: string, status?: string) => {
+/** A review of a business partner, with its author and replies. */
+export interface BusinessReview {
+    id: string;
+    rating: number;
+    comment: string;
+    status?: 'pending' | 'approved' | 'rejected';
+    likes?: number;
+    isLiked?: boolean;
+    createdAt?: string;
+    user?: { id?: string; name?: string | null; avatar?: string | null } | null;
+    replies?: Array<{ id: string; comment: string; user?: { name?: string | null } | null }>;
+}
+
+export interface BusinessReviewsPage {
+    reviews: BusinessReview[];
+    pagination?: { currentPage: number; totalPages: number; totalItems: number; itemsPerPage: number };
+    averageRating?: number;
+    reviewCount?: number;
+    approvedReviewCount?: number;
+}
+
+export const getBusinessReviews = async (businessPartnerId: string, status?: string): Promise<BusinessReviewsPage> => {
     try {
         const url = status ? `/business-partners/${businessPartnerId}/reviews?status=${status}` : `/business-partners/${businessPartnerId}/reviews`;
         const response = await api.get(url);
-        return extractResponseData(response);
+        return extractResponseData<BusinessReviewsPage>(response);
     } catch (error) {
         throw handleApiError(error, 'fetching business reviews');
     }

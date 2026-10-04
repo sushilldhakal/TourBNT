@@ -7,6 +7,7 @@ import { useMutation } from '@tanstack/react-query';
 import { toast } from '@/components/ui/use-toast';
 import { applyAsBusinessPartner, BusinessPartnerType } from '@/lib/api/businessPartners';
 import { getApprovedDestinations } from '@/lib/api/globalApi';
+import { listFrom } from '@/lib/api/apiClient';
 import { useAuth } from '@/lib/hooks/useAuth';
 
 const PARTNER_TYPES: { value: BusinessPartnerType; label: string; blurb: string }[] = [
@@ -40,7 +41,7 @@ export default function ApplyPartnerPage() {
 
     useEffect(() => {
         getApprovedDestinations()
-            .then((data: any) => setDestinations(data?.data ?? data?.items ?? data ?? []))
+            .then((data) => setDestinations(listFrom<{ id: string; name: string }>(data, 'data', 'items')))
             .catch(() => setDestinations([]));
     }, []);
 

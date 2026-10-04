@@ -35,10 +35,8 @@ export function GoogleMapsProvider({ children }: GoogleMapsProviderProps) {
     const [LoadScriptComponent, setLoadScriptComponent] = useState<typeof import('@react-google-maps/api').LoadScript | null>(null);
 
     useEffect(() => {
-        if (isGoogleMapsLoaded()) {
-            setShouldLoad(false);
-            return;
-        }
+        // Already loaded: rendering checks that directly.
+        if (isGoogleMapsLoaded()) return;
         if (hasGoogleMapsScript()) {
             const checkInterval = setInterval(() => {
                 if (isGoogleMapsLoaded()) {

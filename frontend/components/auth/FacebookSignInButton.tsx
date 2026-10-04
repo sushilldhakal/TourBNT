@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { loginWithFacebook } from '@/lib/api/users';
+import { apiErrorMessage } from '@/lib/api/apiClient';
 
 declare global {
     interface Window {
@@ -78,7 +79,7 @@ export function FacebookSignInButton({ keepMeSignedIn = false, onSuccess, onErro
             }
             loginWithFacebook(authResponse.accessToken, keepMeSignedIn)
                 .then(onSuccess)
-                .catch((err: any) => onError(err?.response?.data?.error?.message ?? err?.response?.data?.message ?? err?.message ?? 'Facebook sign-in failed. Please try again.'))
+                .catch((err: unknown) => onError(apiErrorMessage(err, 'Facebook sign-in failed. Please try again.')))
                 .finally(() => mounted.current && setBusy(false));
         // auth_type=rerequest asks again for the email if the person declined it last time.
         }, { scope: 'public_profile,email', auth_type: 'rerequest' });

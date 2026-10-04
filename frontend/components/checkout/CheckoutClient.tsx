@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -10,13 +10,16 @@ import { Label } from '@/components/ui/label';
 import { CheckoutSteps } from '@/components/cart/CheckoutSteps';
 import { toast } from '@/components/ui/use-toast';
 import { useProcessPayment } from '@/lib/queries/useBooking';
-import { getCartBookings, clearCart, CartBooking } from '@/lib/cartUtils';
+import { clearCart, useCartBookings } from '@/lib/cartUtils';
+import { useIsClient } from '@/lib/hooks/useIsClient';
 
 export default function CheckoutClient() {
     const router = useRouter();
     const [paymentMethod] = useState<'card' | 'paypal'>('card');
-    const [cartBookings, setCartBookings] = useState<CartBooking[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
+    const cartBookings = useCartBookings();
+    const isClient = useIsClient();
+    // Set once paid, so emptying the cart doesn't bounce the traveller back to /cart.
+    const paidRef = useRef(false);
 
     const [contactInfo, setContactInfo] = useState({
         firstName: '',
@@ -27,16 +30,11 @@ export default function CheckoutClient() {
 
     const processPaymentMutation = useProcessPayment();
 
+    // Nothing to check out: back to the cart.
     useEffect(() => {
-        // Load bookings from localStorage
-        const bookings = getCartBookings();
-        if (bookings.length === 0) {
-            router.push('/cart');
-            return;
-        }
-        setCartBookings(bookings);
-        setIsLoading(false);
-    }, [router]);
+        if (isClient && cartBookings.length === 0 && !paidRef.current) router.push('/cart');
+    }, [isClient, cartBookings.length, router]);
+    const isLoading = !isClient || cartBookings.length === 0;
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -59,7 +57,7 @@ export default function CheckoutClient() {
             },
             {
                 onSuccess: () => {
-                    // Clear cart
+                    paidRef.current = true;
                     clearCart();
 
                     toast({
@@ -69,7 +67,7 @@ export default function CheckoutClient() {
 
                     router.push('/confirmation');
                 },
-                onError: (error: any) => {
+                onError: (error: Error) => {
                     toast({
                         title: 'Payment failed',
                         description: error.message || 'There was an error processing your payment. Please try again.',

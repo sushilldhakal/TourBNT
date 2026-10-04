@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import Image from 'next/image';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ShoppingCart, Trash2, Calendar, Clock, Users, ShieldCheck, CreditCard, Tag, Plus, Minus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -9,36 +10,18 @@ import { Input } from '@/components/ui/input';
 import { format } from 'date-fns';
 import { toast } from '@/components/ui/use-toast';
 import { CheckoutSteps } from '@/components/cart/CheckoutSteps';
-import { useValidatePromoCode } from '@/lib/queries/useBooking';
-import { getCartBookings, removeFromCart, CartBooking } from '@/lib/cartUtils';
+import { removeFromCart, clearCart, saveCart, useCartBookings } from '@/lib/cartUtils';
+import { useIsClient } from '@/lib/hooks/useIsClient';
 
 export default function CartClient() {
     const router = useRouter();
-    const [cartBookings, setCartBookings] = useState<CartBooking[]>([]);
+    const cartBookings = useCartBookings();
     const [promoCode, setPromoCode] = useState('');
     const [discount, setDiscount] = useState(0);
-    const [isLoading, setIsLoading] = useState(true);
-
-    const validatePromoCodeMutation = useValidatePromoCode();
-
-    useEffect(() => {
-        // Load bookings from localStorage using utility function
-        const bookings = getCartBookings();
-        setCartBookings(bookings);
-        setIsLoading(false);
-
-        // Listen for cart updates
-        const handleCartUpdate = () => {
-            setCartBookings(getCartBookings());
-        };
-
-        window.addEventListener('cartUpdated', handleCartUpdate);
-        return () => window.removeEventListener('cartUpdated', handleCartUpdate);
-    }, []);
+    const isLoading = !useIsClient();
 
     const handleRemove = (bookingReference: string) => {
         removeFromCart(bookingReference);
-        setCartBookings(getCartBookings());
         toast({
             title: 'Booking removed',
             description: 'The booking has been removed from your cart.',
@@ -77,13 +60,11 @@ export default function CartClient() {
             return booking;
         });
 
-        setCartBookings(updatedBookings);
-        localStorage.setItem('cartBookings', JSON.stringify(updatedBookings));
+        saveCart(updatedBookings);
     };
 
     const handleClearCart = () => {
-        setCartBookings([]);
-        localStorage.removeItem('cartBookings');
+        clearCart();
         toast({
             title: 'Cart cleared',
             description: 'All bookings have been removed from your cart.',
@@ -142,11 +123,15 @@ export default function CartClient() {
                                     <div className="flex flex-col sm:flex-row gap-4 p-4">
                                         {/* Tour Image */}
                                         <div className="relative w-full sm:w-48 h-48 sm:h-auto rounded-lg overflow-hidden flex-shrink-0">
-                                            <img
-                                                src={booking.tourImage}
-                                                alt={booking.tourTitle}
-                                                className="absolute inset-0 w-full h-full object-cover"
-                                            />
+                                            {booking.tourImage && (
+                                                <Image
+                                                    src={booking.tourImage}
+                                                    alt={booking.tourTitle}
+                                                    fill
+                                                    sizes="(min-width: 640px) 192px, 100vw"
+                                                    className="object-cover"
+                                                />
+                                            )}
                                         </div>
 
                                         {/* Tour Details */}

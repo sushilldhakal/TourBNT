@@ -122,10 +122,28 @@ export const quoteBooking = async (input: {
 /**
  * Create a new booking
  */
-export const createBooking = async (bookingData: BookingData) => {
+/** A booking as POST /bookings returns it. */
+export interface CreatedBooking {
+    id: string;
+    bookingReference: string;
+    tourId: string;
+    tourTitle: string;
+    tourCode: string;
+    departureDate: string;
+    participants: { adults: number; children: number; infants?: number };
+    pricing: { totalPrice: number; currency: string; amountDueNow?: number; amountDueLater?: number };
+    contactName: string;
+    contactEmail: string;
+    contactPhone: string;
+    specialRequests?: string | null;
+    status: string;
+    paymentStatus: string;
+}
+
+export const createBooking = async (bookingData: BookingData): Promise<CreatedBooking> => {
     try {
         const response = await api.post('/bookings', bookingData);
-        return extractResponseData(response);
+        return extractResponseData<CreatedBooking>(response);
     } catch (error) {
         throw handleApiError(error, 'creating booking');
     }

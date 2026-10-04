@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Building2, Check, CheckCircle2, FileText, Landmark, Loader2, Upload, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -146,11 +146,12 @@ export default function ApplySellerPage() {
     const set = (name: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setForm((f) => ({ ...f, [name]: e.target.value }));
     const setValue = (name: string) => (value: string) => setForm((f) => ({ ...f, [name]: value }));
 
-    // Prefill from the account once it has loaded.
-    useEffect(() => {
-        if (!user?.id) return;
-        setForm((f) => ({ ...f, contactPerson: f.contactPerson || user.name || '', phone: f.phone || (user as { phone?: string }).phone || '' }));
-    }, [user?.id, user]);
+    // Prefill from the account once it has loaded (adjusted while rendering, once per account).
+    const [prefilledFor, setPrefilledFor] = useState<string | null>(null);
+    if (user?.id && prefilledFor !== user.id) {
+        setPrefilledFor(user.id);
+        setForm((f) => ({ ...f, contactPerson: f.contactPerson || user.name || '', phone: f.phone || user.phone || '' }));
+    }
 
     const missing = useMemo(() => REQUIRED_BY_STEP[step].filter(([k]) => !form[k]?.trim()).map(([, label]) => label), [step, form]);
     const missingDocs = DOCUMENTS.filter((d) => d.required && !(docs[d.key]?.length));

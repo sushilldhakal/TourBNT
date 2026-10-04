@@ -10,12 +10,6 @@ import { ContentContainer } from './PublicLayoutClient';
 import { CookieSettingsButton } from '@/components/consent/CookieConsent';
 import dynamic from 'next/dynamic';
 
-// Lazy load the ToastAction - only loads when there's an error
-const ToastAction = dynamic(() =>
-    import('@/components/ui/toast').then(m => ({ default: m.ToastAction })),
-    { ssr: false }
-);
-
 // Lazy load the subscriber banner - only loads when scrolled to footer
 const SubscriberBanner = dynamic(() => import('./SubscriberBanner'), {
     ssr: false,

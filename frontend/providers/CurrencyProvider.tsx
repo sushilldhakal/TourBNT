@@ -1,6 +1,7 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import { useIsClient } from '@/lib/hooks/useIsClient';
 import { useQuery } from '@tanstack/react-query';
 import { getCurrencyRates } from '@/lib/api/currency';
 
@@ -49,23 +50,23 @@ interface CurrencyContextValue {
 
 const CurrencyContext = createContext<CurrencyContextValue | null>(null);
 
-export function CurrencyProvider({ children }: { children: ReactNode }) {
-    const [currency, setCurrencyState] = useState<Code>('USD');
+/** The visitor's saved currency, else one guessed from their browser's region, else USD. */
+function detectCurrency(): Code {
+    try {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        const saved = CURRENCIES.find((c) => c.code === stored);
+        if (saved) return saved.code;
+    } catch { /* storage blocked */ }
+    const region = (navigator.language || '').split('-')[1]?.toUpperCase();
+    return (region ? REGION_CURRENCY[region] : undefined) ?? 'USD';
+}
 
-    // Chosen after mount (not during render) so the server HTML and the first client render agree.
-    useEffect(() => {
-        if (!VISITOR_CAN_CHOOSE) return;
-        try {
-            const stored = localStorage.getItem(STORAGE_KEY) as Code | null;
-            if (stored && CURRENCIES.some((c) => c.code === stored)) {
-                setCurrencyState(stored);
-                return;
-            }
-            const region = (navigator.language || '').split('-')[1]?.toUpperCase();
-            const guess = region ? REGION_CURRENCY[region] : undefined;
-            if (guess) setCurrencyState(guess);
-        } catch { /* storage blocked: stay on USD */ }
-    }, []);
+export function CurrencyProvider({ children }: { children: ReactNode }) {
+    // Read only once hydrated, so the server HTML and the first client render agree (both USD).
+    const isClient = useIsClient();
+    const detected = useMemo<Code>(() => (isClient && VISITOR_CAN_CHOOSE ? detectCurrency() : 'USD'), [isClient]);
+    const [chosen, setCurrencyState] = useState<Code | null>(null);
+    const currency = chosen ?? detected;
 
     const setCurrency = useCallback((c: Code) => {
         setCurrencyState(c);

@@ -36,7 +36,7 @@ export default function RecentBlog() {
                 return firstParagraph.content[0].text;
             }
             return 'No content available';
-        } catch (e) {
+        } catch {
             return 'Content unavailable';
         }
     };

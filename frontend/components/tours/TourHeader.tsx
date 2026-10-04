@@ -1,12 +1,11 @@
 import React from 'react';
 import { Badge } from '@/components/ui/badge';
-import { Category } from '@/types/types';
 
 /** Category can be { name, _id } (legacy) or { label, value } (lean API) */
 interface TourHeaderProps {
     title: string;
     code: string;
-    categories?: string | string[] | Array<Category | { label?: string; value?: string; name?: string; _id?: string }>;
+    categories?: string | string[] | Array<{ id?: string; _id?: string; label?: string; value?: string; name?: string }>;
 }
 
 export function TourHeader({ title, code, categories }: TourHeaderProps) {
@@ -14,7 +13,7 @@ export function TourHeader({ title, code, categories }: TourHeaderProps) {
     const categoryArray = React.useMemo(() => {
         if (!categories) return [];
         if (typeof categories === 'string') return [];
-        if (Array.isArray(categories)) return categories;
+        if (Array.isArray(categories)) return categories.filter((c): c is Exclude<typeof c, string> => typeof c !== 'string');
         return [];
     }, [categories]);
 
@@ -40,7 +39,7 @@ export function TourHeader({ title, code, categories }: TourHeaderProps) {
                     <>
                         <span className="text-muted-foreground hidden sm:inline" aria-hidden="true">•</span>
                         <div className="flex flex-wrap gap-1.5 sm:gap-2" role="list" aria-label="Tour categories">
-                            {categoryArray.map((category: any) => (
+                            {categoryArray.map((category) => (
                                 <Badge
                                     key={category._id ?? category.value ?? category.id ?? category.label}
                                     variant="secondary"

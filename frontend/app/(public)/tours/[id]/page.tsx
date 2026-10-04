@@ -171,17 +171,17 @@ export default async function SingleTourPage({ params }: PageProps) {
             // Continue without related tours - this is not critical
             relatedTours = [];
         }
-    } catch (error: any) {
+    } catch (error) {
         console.error('Critical error in tour page:', error);
 
         // If it's a notFound error, let it propagate
-        if (error?.message?.includes('NEXT_NOT_FOUND')) {
+        if (error instanceof Error && error.message.includes('NEXT_NOT_FOUND')) {
             throw error;
         }
 
         // Otherwise, throw to error boundary
         throw new Error(
-            error?.message ||
+            (error instanceof Error && error.message) ||
             'An unexpected error occurred while loading the tour. Please try again.'
         );
     }

@@ -18,6 +18,7 @@ import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import type { Tour } from '@/types/types';
 import type { PriceableOption } from '@/lib/tourUtils';
+import { addToCart } from '@/lib/cartUtils';
 import {
     generateDepartureInstances,
     calculateDeparturePrice,
@@ -97,16 +98,11 @@ export function FrontBooking({ tourData, prefilledDate }: FrontBookingProps) {
         return types.length > 0 ? types : [{ value: 'full_payment' as BookingPaymentType, label: 'Pay in full now' }];
     }, [paymentOptions.fullPaymentEnabled, paymentOptions.depositEnabled, paymentOptions.depositPercentage, paymentOptions.payOnArrivalEnabled]);
 
-    const [paymentType, setPaymentType] = useState<BookingPaymentType>(availablePaymentTypes[0].value);
-
-    // If the available options change (tour data loads/changes) and the
-    // currently selected type is no longer offered, fall back to the first one.
-    useEffect(() => {
-        if (!availablePaymentTypes.some(opt => opt.value === paymentType)) {
-            setPaymentType(availablePaymentTypes[0].value);
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [availablePaymentTypes]);
+    const [chosenPaymentType, setPaymentType] = useState<BookingPaymentType>(availablePaymentTypes[0].value);
+    // If the tour stops offering the chosen type (tour data loads/changes), fall back to the first one offered.
+    const paymentType = availablePaymentTypes.some(opt => opt.value === chosenPaymentType)
+        ? chosenPaymentType
+        : availablePaymentTypes[0].value;
 
     // Generate available dates and price map
     const { availableDates, datePriceMap } = useMemo(() => {
@@ -147,22 +143,23 @@ export function FrontBooking({ tourData, prefilledDate }: FrontBookingProps) {
         return { availableDates: dates, datePriceMap: priceMap };
     }, [tourData]);
 
-    // Update form when prefilled date changes
-    useEffect(() => {
-        if (prefilledDate) {
-            setSelectedDate(prefilledDate);
-            setBookingForm(prev => ({
-                ...prev,
-                departureDate: format(prefilledDate, 'yyyy-MM-dd')
-            }));
-
-            // Calculate end date based on tour duration
-            const days = tourData.tourDates?.days || 1;
-            const endDate = new Date(prefilledDate);
-            endDate.setDate(endDate.getDate() + days - 1);
-            setDateRange({ from: prefilledDate, to: endDate });
-        }
-    }, [prefilledDate, tourData.tourDates?.days]);
+    // A date picked outside the form (e.g. "Book" on a departure) fills it in. Adjusted while rendering,
+    // keyed on the date's time so a new Date for the same day doesn't re-apply it.
+    const prefilledTime = prefilledDate?.getTime();
+    const [appliedPrefill, setAppliedPrefill] = useState<number | undefined>(undefined);
+    if (prefilledDate && prefilledTime !== appliedPrefill) {
+        setAppliedPrefill(prefilledTime);
+        setSelectedDate(prefilledDate);
+        setBookingForm(prev => ({
+            ...prev,
+            departureDate: format(prefilledDate, 'yyyy-MM-dd')
+        }));
+        // End date from the tour's duration.
+        const days = tourData.tourDates?.days || 1;
+        const endDate = new Date(prefilledDate);
+        endDate.setDate(endDate.getDate() + days - 1);
+        setDateRange({ from: prefilledDate, to: endDate });
+    }
 
     // Calculate pricing — mirrors the server's authoritative calculation
     // (server/src/api/bookings/utils/pricingCalculator.ts) so what the
@@ -255,21 +252,26 @@ export function FrontBooking({ tourData, prefilledDate }: FrontBookingProps) {
     // Booking mutation
     const bookingMutation = useMutation({
         mutationFn: (bookingData: BookingData) => createBooking(bookingData),
-        onSuccess: (response: any) => {
-            const bookingData = response.data;
+        onSuccess: (booking) => {
             toast({
                 title: "Booking Successful!",
-                description: `Your booking reference is: ${bookingData.bookingReference}. Redirecting to cart...`,
+                description: `Your booking reference is: ${booking.bookingReference}. Redirecting to cart...`,
             });
 
-            // Store booking in localStorage for cart
-            const existingBookings = JSON.parse(localStorage.getItem('cartBookings') || '[]');
-            existingBookings.push({
-                ...bookingData,
-                tourImage: tourData.coverImage,
-                quantity: 1
+            addToCart({
+                id: booking.id,
+                bookingReference: booking.bookingReference,
+                tourTitle: booking.tourTitle,
+                tourCode: booking.tourCode,
+                tourImage: tourData.coverImage ?? '',
+                departureDate: booking.departureDate,
+                participants: { adults: booking.participants.adults, children: booking.participants.children },
+                pricing: { totalPrice: booking.pricing.totalPrice, currency: booking.pricing.currency },
+                contactName: booking.contactName,
+                contactEmail: booking.contactEmail,
+                contactPhone: booking.contactPhone,
+                specialRequests: booking.specialRequests ?? undefined,
             });
-            localStorage.setItem('cartBookings', JSON.stringify(existingBookings));
 
             // Reset form
             setBookingForm({

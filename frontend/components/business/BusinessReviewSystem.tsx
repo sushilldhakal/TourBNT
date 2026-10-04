@@ -9,7 +9,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/use-toast';
-import { getBusinessReviews, addBusinessReview, addBusinessReviewReply, toggleBusinessReviewLike } from '@/lib/api/businessPartners';
+import { getBusinessReviews, addBusinessReview, addBusinessReviewReply, toggleBusinessReviewLike, type BusinessReview } from '@/lib/api/businessPartners';
+import { apiErrorMessage } from '@/lib/api/apiClient';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/hooks/useAuth';
 
@@ -25,7 +26,7 @@ export function BusinessReviewSystem({ businessPartnerId }: BusinessReviewSystem
         staleTime: 2 * 60 * 1000,
     });
 
-    const reviews = (data as any)?.data?.reviews || [];
+    const reviews = data?.reviews ?? [];
 
     return (
         <section className="bg-card border rounded-lg p-4 sm:p-6 space-y-4 sm:space-y-6" aria-labelledby="business-reviews-heading">
@@ -43,8 +44,8 @@ export function BusinessReviewSystem({ businessPartnerId }: BusinessReviewSystem
                         No reviews yet. Be the first to share your experience!
                     </p>
                 ) : (
-                    reviews.map((review: any) => (
-                        <ReviewCard key={review.id} review={review} businessPartnerId={businessPartnerId} onUpdate={refetch} />
+                    reviews.map((review) => (
+                        <ReviewCard key={review.id} review={review} onUpdate={refetch} />
                     ))
                 )}
             </div>
@@ -65,8 +66,8 @@ function ReviewForm({ businessPartnerId, onSuccess }: { businessPartnerId: strin
             setRating(5);
             onSuccess();
         },
-        onError: (error: any) => {
-            toast({ title: 'Error', description: error?.response?.data?.message || 'Failed to submit review.', variant: 'destructive' });
+        onError: (error) => {
+            toast({ title: 'Error', description: apiErrorMessage(error, 'Failed to submit review.'), variant: 'destructive' });
         },
     });
 
@@ -111,7 +112,7 @@ function ReviewForm({ businessPartnerId, onSuccess }: { businessPartnerId: strin
     );
 }
 
-function ReviewCard({ review, businessPartnerId, onUpdate }: { review: any; businessPartnerId: string; onUpdate: () => void }) {
+function ReviewCard({ review, onUpdate }: { review: BusinessReview; onUpdate: () => void }) {
     const [showReplyForm, setShowReplyForm] = useState(false);
 
     const likeMutation = useMutation({
@@ -157,7 +158,7 @@ function ReviewCard({ review, businessPartnerId, onUpdate }: { review: any; busi
 
                     {review.replies && review.replies.length > 0 && (
                         <div className="mt-3 sm:mt-4 space-y-3 sm:space-y-4 pl-3 sm:pl-4 border-l-2">
-                            {review.replies.map((reply: any) => (
+                            {review.replies.map((reply) => (
                                 <div key={reply.id} className="flex gap-3">
                                     <Avatar className="h-8 w-8">
                                         <AvatarFallback className="text-xs">{(reply.user?.name || '?').slice(0, 2).toUpperCase()}</AvatarFallback>
@@ -185,7 +186,7 @@ function ReplyForm({ reviewId, onSuccess, onCancel }: { reviewId: string; onSucc
             setComment('');
             onSuccess();
         },
-        onError: (error: any) => toast({ title: 'Error', description: error?.response?.data?.message || 'Failed to add reply.', variant: 'destructive' }),
+        onError: (error) => toast({ title: 'Error', description: apiErrorMessage(error, 'Failed to add reply.'), variant: 'destructive' }),
     });
 
     const handleSubmit = (e: React.FormEvent) => {

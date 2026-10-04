@@ -234,6 +234,18 @@ export const extractList = <T>(response: { data?: unknown } | null | undefined):
     return [];
 };
 
+/** The list in a response body: the body itself if it is an array, else the first array under `keys`. */
+export function listFrom<T>(body: unknown, ...keys: string[]): T[] {
+    if (Array.isArray(body)) return body as T[];
+    if (isRecord(body)) {
+        for (const key of keys.length ? keys : ['items', 'data']) {
+            const value = body[key];
+            if (Array.isArray(value)) return value as T[];
+        }
+    }
+    return [];
+}
+
 /** A plain object (not null, not an array). */
 export const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null && !Array.isArray(value);

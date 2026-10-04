@@ -8,10 +8,9 @@ import { Price } from '@/components/common/Price';
 
 interface PricingOptionsProps {
     pricingOptions?: PricingOption[];
-    currency?: string;
 }
 
-export function PricingOptions({ pricingOptions, currency = '$' }: PricingOptionsProps) {
+export function PricingOptions({ pricingOptions }: PricingOptionsProps) {
     if (!pricingOptions || pricingOptions.length === 0) {
         return null;
     }
@@ -29,7 +28,6 @@ export function PricingOptions({ pricingOptions, currency = '$' }: PricingOption
                             <PricingOptionCard
                                 key={option.id || optionIndex}
                                 option={option}
-                                currency={currency}
                             />
                         ))}
                     </div>
@@ -41,10 +39,9 @@ export function PricingOptions({ pricingOptions, currency = '$' }: PricingOption
 
 interface PricingOptionCardProps {
     option: PricingOption;
-    currency: string;
 }
 
-function PricingOptionCard({ option, currency }: PricingOptionCardProps) {
+function PricingOptionCard({ option }: PricingOptionCardProps) {
     // Calculate discount if enabled and within date range
     const hasActiveDiscount = option.discountEnabled && option.discount;
     let displayPrice = option.price;

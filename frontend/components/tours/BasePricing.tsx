@@ -10,7 +10,6 @@ interface BasePricingProps {
     salePrice?: number;
     pricePerPerson?: boolean;
     priceLockDate?: string;
-    currency?: string;
 }
 
 export function BasePricing({
@@ -19,7 +18,6 @@ export function BasePricing({
     salePrice,
     pricePerPerson = true,
     priceLockDate,
-    currency = '$',
 }: BasePricingProps) {
     const displayPrice = saleEnabled && salePrice ? salePrice : basePrice;
     const hasDiscount = saleEnabled && salePrice && salePrice < basePrice;

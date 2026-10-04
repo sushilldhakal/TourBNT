@@ -1,6 +1,6 @@
 'use client';
 
-import type { RichText, Tour } from '@/types/types';
+import type { Departure, RichText, Tour } from '@/types/types';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import RichTextRenderer from '@/components/RichTextRenderer';
 import { ItineraryAccordion } from './ItineraryAccordion';
@@ -17,7 +17,7 @@ import { CheckCircle2, XCircle } from 'lucide-react';
 
 interface TourTabsProps {
     tour: Tour;
-    onBookNow?: (departure: any) => void;
+    onBookNow?: (departure: Departure) => void;
     /** Destination list from relatedData for resolving itinerary destination IDs to names */
     destinations?: { id: string; name: string }[];
 }

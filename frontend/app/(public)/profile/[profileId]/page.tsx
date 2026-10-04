@@ -26,7 +26,7 @@ export default function ProfilePage() {
     const { toast } = useToast();
 
     const [profile, setProfile] = useState<ProfileUser | null>(null);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(!!profileId);
     const [error, setError] = useState<string | null>(null);
     const [isEditing, setIsEditing] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -40,13 +40,10 @@ export default function ProfilePage() {
         bio: '',
     });
 
-    const isOwnProfile = !!currentUser?.id && (currentUser.id === profileId || currentUser.id === (profile as { _id?: string })?._id);
+    const isOwnProfile = !!currentUser?.id && (currentUser.id === profileId || currentUser.id === profile?.id);
 
     useEffect(() => {
-        if (!profileId) {
-            setLoading(false);
-            return;
-        }
+        if (!profileId) return;
         let cancelled = false;
         getUserById(profileId)
             .then((raw) => {

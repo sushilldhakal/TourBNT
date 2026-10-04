@@ -262,7 +262,7 @@ export default function EnquiriesPage() {
                                                     )}
                                                 </div>
                                                 <div className="flex flex-col items-start sm:items-end gap-2">
-                                                    <Badge variant={statusVariant as any} className="text-xs">
+                                                    <Badge variant={statusVariant} className="text-xs">
                                                         {statusLabel}
                                                     </Badge>
                                                     <Button

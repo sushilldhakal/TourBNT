@@ -11,7 +11,7 @@ interface SubscriberBannerProps {
     email: string;
     setEmail: (email: string) => void;
     handleSubscribe: (event: React.FormEvent<HTMLFormElement>) => void;
-    mutation: UseMutationResult<any, Error, string, unknown>;
+    mutation: UseMutationResult<unknown, Error, string, unknown>;
 }
 
 export default function SubscriberBanner({

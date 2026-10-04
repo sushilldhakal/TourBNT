@@ -22,7 +22,7 @@ import * as Hi2Icons from 'react-icons/hi2';
 import * as GrIcons from 'react-icons/gr';
 import * as LuIcons from 'react-icons/lu';
 import * as TbIcons from 'react-icons/tb';
-import { FC, createElement } from 'react';
+import { FC, createElement, type ComponentType } from 'react';
 
 interface IconProps {
     name: string;
@@ -75,63 +75,33 @@ const iconLibraries = {
     tb: TbIcons
 };
 
-const Icon: FC<IconProps> = ({ name, color, size, className }) => {
-    // If no name is provided, return fallback
-    if (!name) return <FallbackIcon />;
-
-    try {
-        // Set default size if none provided
-        const iconSize = size || 24;
-
-        // Handle different icon libraries based on prefix
-        // Support both colon and forward slash as separators for flexibility
-        if (name.includes(':') || name.includes('/')) {
-            // Split using either colon or forward slash
-            const [prefix, iconName] = name.includes(':') ?
-                name.split(':') :
-                name.split('/');
-
-            // React Icons props
-            const iconProps = {
-                size: iconSize,
-                color: color || undefined,
-                className: className,
-                style: { verticalAlign: 'middle' }
-            };
-
-            // Get icon library based on prefix
-            const iconLibrary = iconLibraries[prefix as keyof typeof iconLibraries];
-
-            if (iconLibrary && iconName) {
-                // Check if icon exists in the library
-                const IconComponent = iconLibrary[iconName as keyof typeof iconLibrary];
-
-                if (IconComponent) {
-                    // Directly create the icon element
-                    return createElement(IconComponent, iconProps);
-                }
-            }
-
-            // If we couldn't find the icon, return fallback
-            return <FallbackIcon />;
-        }
-
-        // Handle Lucide icons (no prefix)
-        const LucideIcon = icons[name as keyof typeof icons];
-        if (LucideIcon) {
-            return createElement(LucideIcon, {
-                color,
-                size: iconSize,
-                className
-            });
-        }
-
-        // If no icon was found, return fallback
-        return <FallbackIcon />;
-    } catch (error) {
-        console.error(`Error rendering icon "${name}":`, error);
-        return <FallbackIcon />;
+/** The icon component for a name like "fa:FaHiking", "fa/FaHiking" or a Lucide name; null if unknown. */
+function resolveIcon(name: string): { component: ComponentType<Record<string, unknown>>; lucide: boolean } | null {
+    // Support both colon and forward slash as separators for flexibility
+    if (name.includes(':') || name.includes('/')) {
+        const [prefix, iconName] = name.includes(':') ? name.split(':') : name.split('/');
+        const iconLibrary = iconLibraries[prefix as keyof typeof iconLibraries];
+        if (!iconLibrary || !iconName) return null;
+        const component = iconLibrary[iconName as keyof typeof iconLibrary] as ComponentType<Record<string, unknown>> | undefined;
+        return component ? { component, lucide: false } : null;
     }
+    const lucideIcon = icons[name as keyof typeof icons] as ComponentType<Record<string, unknown>> | undefined;
+    return lucideIcon ? { component: lucideIcon, lucide: true } : null;
+}
+
+const Icon: FC<IconProps> = ({ name, color, size, className }) => {
+    const resolved = name ? resolveIcon(name) : null;
+    if (!resolved) return <FallbackIcon />;
+
+    const iconSize = size || 24;
+    return resolved.lucide
+        ? createElement(resolved.component, { color, size: iconSize, className })
+        : createElement(resolved.component, {
+            size: iconSize,
+            color: color || undefined,
+            className,
+            style: { verticalAlign: 'middle' },
+        });
 };
 
 export default Icon;
