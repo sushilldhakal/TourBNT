@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { loginWithGoogle } from '@/lib/api/users';
+import { apiErrorMessage } from '@/lib/api/apiClient';
 
 declare global {
     interface Window {
@@ -49,7 +50,9 @@ export function GoogleSignInButton({ keepMeSignedIn = false, onSuccess, onError 
     const [ready, setReady] = useState(false);
     // The callback is registered once, so keep the latest handlers in a ref.
     const handlers = useRef({ keepMeSignedIn, onSuccess, onError });
-    handlers.current = { keepMeSignedIn, onSuccess, onError };
+    useEffect(() => {
+        handlers.current = { keepMeSignedIn, onSuccess, onError };
+    });
 
     useEffect(() => {
         if (!CLIENT_ID) return;
@@ -64,9 +67,8 @@ export function GoogleSignInButton({ keepMeSignedIn = false, onSuccess, onError 
                         try {
                             await loginWithGoogle(credential, handlers.current.keepMeSignedIn);
                             handlers.current.onSuccess();
-                        } catch (err: any) {
-                            const msg = err?.response?.data?.error?.message ?? err?.response?.data?.message ?? err?.message;
-                            handlers.current.onError(msg || 'Google sign-in failed. Please try again.');
+                        } catch (err) {
+                            handlers.current.onError(apiErrorMessage(err, 'Google sign-in failed. Please try again.'));
                         }
                     },
                 });

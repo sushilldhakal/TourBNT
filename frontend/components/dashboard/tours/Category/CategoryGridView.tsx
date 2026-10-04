@@ -4,7 +4,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { FolderOpen, Edit, Trash2, Power, X, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { CategoryData, TourTitle } from "@/types/types";
 import type { CategoryGridViewProps } from "@/types/category";
 import { useCacheManager, useTourTitlesByIds } from '@/lib/queries';
 import { useAuth } from "@/lib/hooks/useAuth";
@@ -76,7 +75,7 @@ const CategoryGridView = ({ categories, isLoading, onRefresh }: CategoryGridView
     const featuredTitleMap = useMemo(() => {
         const list = Array.isArray(featuredTourTitlesRaw)
             ? featuredTourTitlesRaw
-            : (featuredTourTitlesRaw as { data?: unknown[] })?.data ?? [];
+            : (featuredTourTitlesRaw as { data?: unknown[] } | undefined)?.data ?? [];
         const m = new Map<string, string>();
         for (const t of list) {
             const id = (t as { _id?: string; id?: string })?._id ?? (t as { id?: string })?.id;

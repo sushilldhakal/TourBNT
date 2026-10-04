@@ -36,14 +36,8 @@ tourRouterV2.patch(
     authenticate,
     authorizeRoles('admin', 'seller'),
     validateObjectId(),
-    (req, res, next) => {
-        // Use the upload middleware's .fields method directly here to avoid the lint error
-        // and ensure correct middleware signature
-        return (upload as any).fields([
-            { name: 'coverImage', maxCount: 1 },
-            { name: 'file', maxCount: 10 }
-        ])(req, res, next);
-    },
+    // Already a multer .fields() handler for coverImage and file (calling .fields on it again threw).
+    upload,
     updateTour
 );
 

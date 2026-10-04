@@ -1,4 +1,4 @@
-import { Departure, PricingOption, TourDates } from './types';
+import type { Departure, PricingOption, TourDates } from '@/types/types';
 
 // ---------------------------------------------------------------------------
 // Booking pricing preview
@@ -294,27 +294,19 @@ export function isVideo(url: string): boolean {
  * @returns Formatted fact value string
  */
 export function renderFactValue(fact: {
-    value: string | string[] | any;
-    field_type: 'Plain Text' | 'Single Select' | 'Multi Select';
+    value?: string | string[] | Array<{ label?: string; value?: string }> | unknown;
+    field_type?: 'Plain Text' | 'Single Select' | 'Multi Select';
 }): string {
     if (!fact || fact.value === null || fact.value === undefined) {
         return '';
     }
-
-    switch (fact.field_type) {
-        case 'Plain Text':
-        case 'Single Select':
-            return String(fact.value);
-
-        case 'Multi Select':
-            if (Array.isArray(fact.value)) {
-                return fact.value.join(', ');
-            }
-            return String(fact.value);
-
-        default:
-            return String(fact.value);
+    // Select options are stored either as plain strings or as { label, value } pairs.
+    const text = (v: unknown): string =>
+        v && typeof v === 'object' ? String((v as { label?: string; value?: string }).label ?? (v as { value?: string }).value ?? '') : String(v);
+    if (Array.isArray(fact.value)) {
+        return fact.value.map(text).filter(Boolean).join(', ');
     }
+    return text(fact.value);
 }
 
 /**
@@ -331,6 +323,21 @@ export function getFactIconName(iconName?: string): string {
     return iconName.toLowerCase().replace(/[^a-z]/g, '');
 }
 
+/** The parts of a pricing option the departure price needs (both frontend Tour shapes satisfy it). */
+export type PriceableOption = {
+    id?: string;
+    _id?: string;
+    price: number;
+    discountEnabled?: boolean;
+    discount?: {
+        discountEnabled?: boolean;
+        percentageOrPrice?: boolean;
+        discountPercentage?: number;
+        discountPrice?: number;
+        discountDateRange?: { from?: string | Date; to?: string | Date };
+    };
+};
+
 /**
  * Calculate departure price with discounts
  * @param departure - The departure object
@@ -346,8 +353,8 @@ export function calculateDeparturePrice(
     basePrice: number,
     salePrice?: number,
     saleEnabled?: boolean,
-    pricingOptions?: PricingOption[],
-    pricingGroups?: { label: string; options: PricingOption[] }[]
+    pricingOptions?: PriceableOption[],
+    pricingGroups?: { label: string; options: PriceableOption[] }[]
 ): {
     originalPrice: number;
     displayPrice: number;
@@ -359,7 +366,7 @@ export function calculateDeparturePrice(
 
     // Check if departure has specific pricing options
     if (departure.selectedPricingOptions && departure.selectedPricingOptions.length > 0) {
-        let selectedOption: PricingOption | undefined;
+        let selectedOption: PriceableOption | undefined;
 
         // First, try to find in flat pricingOptions array
         if (pricingOptions && pricingOptions.length > 0) {
@@ -385,7 +392,8 @@ export function calculateDeparturePrice(
             displayPrice = selectedOption.price;
 
             // Apply pricing option discount if enabled and within date range
-            if (selectedOption.discountEnabled && selectedOption.discount) {
+            // The server keeps the flag inside `discount`; older tours have it on the option itself.
+            if ((selectedOption.discountEnabled ?? selectedOption.discount?.discountEnabled) && selectedOption.discount) {
                 const now = new Date();
                 const discountStart = selectedOption.discount.discountDateRange?.from
                     ? new Date(selectedOption.discount.discountDateRange.from)
@@ -454,7 +462,7 @@ export function generateDepartureInstances(tourDates: TourDates): Departure[] {
 
     // Handle fixed schedule with recurrence
     else if (tourDates.scheduleType === 'fixed' && tourDates.isRecurring) {
-        const baseDate = tourDates.singleDateRange || tourDates.defaultDateRange;
+        const baseDate = tourDates.defaultDateRange;
         if (baseDate && tourDates.recurrencePattern && tourDates.recurrenceEndDate) {
             const baseDeparture: Departure = {
                 label: 'Fixed Schedule',
@@ -475,7 +483,7 @@ export function generateDepartureInstances(tourDates: TourDates): Departure[] {
 
     // Handle flexible or fixed without recurrence
     else if (tourDates.scheduleType === 'flexible' || tourDates.scheduleType === 'fixed') {
-        const dateRange = tourDates.singleDateRange || tourDates.defaultDateRange;
+        const dateRange = tourDates.defaultDateRange;
         if (dateRange) {
             instances.push({
                 label: tourDates.scheduleType === 'flexible' ? 'Flexible Schedule' : 'Fixed Schedule',
@@ -506,7 +514,7 @@ function generateRecurringInstances(
         return [departure];
     }
 
-    let currentDate = new Date(startDate);
+    const currentDate = new Date(startDate);
     let instanceCount = 0;
     const maxInstances = 100; // Safety limit
 

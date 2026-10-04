@@ -2,7 +2,7 @@ import { Metadata } from 'next';
 import { cache } from 'react';
 import { notFound } from 'next/navigation';
 import { getTourById, getLatestTours } from '@/lib/api/tours';
-import { Tour } from '@/lib/types';
+import type { Tour } from '@/types/types';
 import TourBanner from '@/components/tours/TourBanner';
 import { TourHeader } from '@/components/tours/TourHeader';
 import { TourFacts } from '@/components/tours/TourFacts';
@@ -147,7 +147,12 @@ export default async function SingleTourPage({ params }: PageProps) {
         // Handle related tours (non-critical, continue on failure)
         if (relatedResponse.status === 'fulfilled') {
             try {
-                relatedTours = relatedResponse.value?.data?.tours || relatedResponse.value?.data || relatedResponse.value?.tours || [];
+                // /tours/latest answers with the list itself or wrapped in { data } / { tours }.
+                const latest = relatedResponse.value as Tour[] | { data?: Tour[] | { tours?: Tour[] }; tours?: Tour[] } | undefined;
+                const wrapped = Array.isArray(latest) ? undefined : latest;
+                relatedTours = Array.isArray(latest)
+                    ? latest
+                    : (Array.isArray(wrapped?.data) ? wrapped.data : wrapped?.data?.tours) || wrapped?.tours || [];
 
                 // Filter out current tour and limit to 3
                 if (Array.isArray(relatedTours)) {
@@ -166,17 +171,17 @@ export default async function SingleTourPage({ params }: PageProps) {
             // Continue without related tours - this is not critical
             relatedTours = [];
         }
-    } catch (error: any) {
+    } catch (error) {
         console.error('Critical error in tour page:', error);
 
         // If it's a notFound error, let it propagate
-        if (error?.message?.includes('NEXT_NOT_FOUND')) {
+        if (error instanceof Error && error.message.includes('NEXT_NOT_FOUND')) {
             throw error;
         }
 
         // Otherwise, throw to error boundary
         throw new Error(
-            error?.message ||
+            (error instanceof Error && error.message) ||
             'An unexpected error occurred while loading the tour. Please try again.'
         );
     }

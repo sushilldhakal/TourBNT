@@ -32,18 +32,11 @@ export function GoogleMapsProvider({ children }: GoogleMapsProviderProps) {
         return !isGoogleMapsLoaded() && !hasGoogleMapsScript();
     });
     // Lazy load @react-google-maps/api (~250 KB) only when we need to inject the script
-    const [LoadScriptComponent, setLoadScriptComponent] = useState<React.ComponentType<{
-        googleMapsApiKey: string;
-        libraries: typeof libraries;
-        loadingElement: React.ReactNode;
-        children: ReactNode;
-    }> | null>(null);
+    const [LoadScriptComponent, setLoadScriptComponent] = useState<typeof import('@react-google-maps/api').LoadScript | null>(null);
 
     useEffect(() => {
-        if (isGoogleMapsLoaded()) {
-            setShouldLoad(false);
-            return;
-        }
+        // Already loaded: rendering checks that directly.
+        if (isGoogleMapsLoaded()) return;
         if (hasGoogleMapsScript()) {
             const checkInterval = setInterval(() => {
                 if (isGoogleMapsLoaded()) {

@@ -47,7 +47,7 @@ export function PaxPresets() {
     groupSize: 1,
   });
 
-  const { data: presets, isLoading, refetch } = usePaxPresets(user?.id, !!user?.id);
+  const { data: presets, isLoading, refetch } = usePaxPresets(user?.id ?? undefined, !!user?.id);
 
   const createMutation = useMutation({
     mutationFn: (data: Partial<PaxPreset>) => {

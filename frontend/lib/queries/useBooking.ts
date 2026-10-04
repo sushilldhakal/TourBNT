@@ -46,7 +46,8 @@ export const useProcessPayment = () => {
 export const useUserBookings = () => {
     return useQuery({
         queryKey: queryKeys.bookings.all(),
-        queryFn: getUserBookings,
+        // Not `queryFn: getUserBookings`: React Query's context object would be sent as query params.
+        queryFn: () => getUserBookings(),
         staleTime: 1000 * 60 * 5, // 5 minutes
     });
 };
@@ -104,7 +105,7 @@ export const useCancelBooking = () => {
     const cache = useCacheManager();
 
     return useMutation({
-        mutationFn: cancelBooking,
+        mutationFn: ({ bookingId, reason }: { bookingId: string; reason?: string }) => cancelBooking(bookingId, reason),
         onSuccess: () => {
             cache.invalidateBookings();
         },

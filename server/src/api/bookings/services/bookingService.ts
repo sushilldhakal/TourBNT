@@ -1,6 +1,6 @@
 import { randomBytes } from 'crypto';
-import { db, bookings, tours, users, tourAuthors } from '../../../db';
-import { eq, and, or, ilike, gte, lt, inArray, desc, asc, count, sql } from 'drizzle-orm';
+import { db, bookings, tours, users, tourAuthors, bookingStatusEnum, paymentStatusEnum } from '../../../db';
+import { eq, and, or, ilike, gte, lt, inArray, desc, asc, count, sql, type SQL } from 'drizzle-orm';
 import createHttpError from 'http-errors';
 import { calculateBookingPricing, type PaymentType } from '../utils/pricingCalculator';
 import { ItineraryRequestService, findMatchingFixedDeparture } from '../../tours/services/itineraryRequestService';
@@ -9,6 +9,31 @@ import { checkPromo, redeemPromo, releasePromo } from '../../promo/promoService'
 import { earningsForNewBooking } from '../../../services/payouts';
 
 type BookingRow = typeof bookings.$inferSelect;
+export type BookingStatus = BookingRow['status'];
+export type BookingPaymentStatus = BookingRow['paymentStatus'];
+
+export const isBookingStatus = (value: unknown): value is BookingStatus =>
+    typeof value === 'string' && (bookingStatusEnum.enumValues as readonly string[]).includes(value);
+export const isPaymentStatus = (value: unknown): value is BookingPaymentStatus =>
+    typeof value === 'string' && (paymentStatusEnum.enumValues as readonly string[]).includes(value);
+
+/** What the booking controller passes in to create a booking (already validated for presence). */
+export interface NewBookingInput {
+    tour: string;
+    departureDate: string | Date;
+    participants: { adults?: number; children?: number; infants?: number };
+    paymentType?: PaymentType;
+    pricingOptionId?: string | null;
+    promoCode?: string;
+    contactName: string;
+    contactEmail: string;
+    contactPhone: string;
+    specialRequests?: string | null;
+    isGuestBooking?: boolean;
+    user?: string;
+    guestInfo?: BookingRow['guestInfo'];
+    travelers?: unknown[];
+}
 
 /** Identifies the caller for an ownership-gated write; admins bypass the tour-ownership check entirely. */
 interface Requester {
@@ -41,7 +66,7 @@ function generateBookingReference(): string {
 }
 
 /** Batches tour/user lookups for a set of bookings and merges them in as `tour`/`user`. */
-async function attachRelations(rows: BookingRow[], opts: { tour?: boolean; user?: boolean } = { tour: true, user: true }): Promise<any[]> {
+async function attachRelations(rows: BookingRow[], opts: { tour?: boolean; user?: boolean } = { tour: true, user: true }) {
     if (rows.length === 0) return [];
 
     const tourIds = Array.from(new Set(rows.map((b) => b.tourId)));
@@ -66,7 +91,7 @@ async function attachRelations(rows: BookingRow[], opts: { tour?: boolean; user?
  * Page of bookings with their tour and user in ONE query (left joins), instead of fetching the page
  * and then a second round trip for the related rows. Same output shape as attachRelations.
  */
-async function selectBookingsPage(where: any, orderBy: any, limit: number, offset: number, opts: { user?: boolean } = { user: true }) {
+async function selectBookingsPage(where: SQL | undefined, orderBy: SQL, limit: number, offset: number, opts: { user?: boolean } = { user: true }) {
     const rows = await db
         .select({ booking: bookings, tour: TOUR_COLUMNS, user: USER_COLUMNS })
         .from(bookings)
@@ -200,7 +225,7 @@ export class BookingService {
         return (await BookingService.priceBooking(tour, participants, input.paymentType || 'full_payment', input.pricingOptionId ?? null, input.promoCode)).pricing;
     }
 
-    static async createBooking(bookingData: any): Promise<BookingRow> {
+    static async createBooking(bookingData: NewBookingInput): Promise<BookingRow> {
         if (!bookingData.tour || !bookingData.departureDate || !bookingData.participants) {
             throw createHttpError(400, 'Tour, departure date, and participants are required');
         }
@@ -307,8 +332,9 @@ export class BookingService {
     ) {
         const conditions = [];
         if (requester && !requester.isAdmin) conditions.push(inArray(bookings.tourId, BookingService.ownedTourIds(requester.id)));
-        if (filters.status) conditions.push(eq(bookings.status, filters.status as any));
-        if (filters.paymentStatus) conditions.push(eq(bookings.paymentStatus, filters.paymentStatus as any));
+        // Unknown values are ignored rather than sent to Postgres (where they'd fail as an invalid enum).
+        if (isBookingStatus(filters.status)) conditions.push(eq(bookings.status, filters.status));
+        if (isPaymentStatus(filters.paymentStatus)) conditions.push(eq(bookings.paymentStatus, filters.paymentStatus));
         if (filters.tourId) conditions.push(eq(bookings.tourId, filters.tourId));
         if (filters.q) {
             const like = `%${filters.q}%`;
@@ -320,7 +346,7 @@ export class BookingService {
         const orderFn = sortOrder === 'asc' ? asc : desc;
 
         const [items, [{ value: totalItems }]] = await Promise.all([
-            selectBookingsPage(where, orderFn(sortColumn(sortBy) as any), limit, (page - 1) * limit),
+            selectBookingsPage(where, orderFn(sortColumn(sortBy)), limit, (page - 1) * limit),
             db.select({ value: count() }).from(bookings).where(where),
         ]);
 
@@ -353,7 +379,7 @@ export class BookingService {
 
     static async getUserBookings(userId: string, paginationParams: PaginationParams, status?: string) {
         const conditions = [eq(bookings.userId, userId)];
-        if (status) conditions.push(eq(bookings.status, status as any));
+        if (isBookingStatus(status)) conditions.push(eq(bookings.status, status));
         const where = and(...conditions);
 
         const { page, limit } = paginationParams;
@@ -394,6 +420,7 @@ export class BookingService {
     }
 
     static async updateBookingStatus(bookingId: string, status: string, notes?: string, requester?: Requester) {
+        if (!isBookingStatus(status)) throw createHttpError(400, `Status must be one of: ${bookingStatusEnum.enumValues.join(', ')}`);
         if (requester && !requester.isAdmin) {
             const [existing] = await db.select({ tourId: bookings.tourId }).from(bookings).where(eq(bookings.id, bookingId)).limit(1);
             if (!existing) {
@@ -402,7 +429,7 @@ export class BookingService {
             await BookingService.assertTourAccess(existing.tourId, requester);
         }
 
-        const updateData: Partial<BookingRow> = { status: status as any, updatedAt: new Date() };
+        const updateData: Partial<BookingRow> = { status, updatedAt: new Date() };
 
         if (status === 'confirmed') {
             updateData.confirmedAt = new Date();
@@ -446,6 +473,7 @@ export class BookingService {
     }
 
     static async updatePaymentStatus(bookingId: string, paymentStatus: string, paidAmount?: number, transactionId?: string, requester?: Requester) {
+        if (!isPaymentStatus(paymentStatus)) throw createHttpError(400, `Payment status must be one of: ${paymentStatusEnum.enumValues.join(', ')}`);
         if (requester && !requester.isAdmin) {
             const [existing] = await db.select({ tourId: bookings.tourId }).from(bookings).where(eq(bookings.id, bookingId)).limit(1);
             if (!existing) {
@@ -455,7 +483,7 @@ export class BookingService {
         }
 
         const [prior] = await db.select({ paymentStatus: bookings.paymentStatus }).from(bookings).where(eq(bookings.id, bookingId)).limit(1);
-        const updateData: Partial<BookingRow> = { paymentStatus: paymentStatus as any, updatedAt: new Date() };
+        const updateData: Partial<BookingRow> = { paymentStatus, updatedAt: new Date() };
 
         if (paidAmount !== undefined) {
             updateData.paidAmount = paidAmount;

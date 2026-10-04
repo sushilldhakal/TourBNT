@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { useFormContext, Controller } from 'react-hook-form';
-import MultipleSelector, { Option } from '@/components/ui/multiple-selector';
+import { Option } from '@/components/ui/multiple-selector';
 import { FormField } from './FormField';
 import { MultiSelect } from '@/components/ui/MultiSelect';
 

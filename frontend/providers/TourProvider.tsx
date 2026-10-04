@@ -1,83 +1,66 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { useForm, useFieldArray, FieldValues } from 'react-hook-form';
+import React, { createContext, useContext, useEffect, useMemo, useRef } from 'react';
+import { useForm, useFieldArray, type UseFormReturn, type FieldArrayWithId } from 'react-hook-form';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { createTour, getSingleTour, updateTour } from '@/lib/api/tours';
 import { toast } from '@/components/ui/use-toast';
 import { useBreadcrumbs } from './BreadcrumbsProvider';
 import makeId from '@/lib/utils/makeId';
+import type { Tour } from '@/types/types';
+import type {
+    EditorCategory,
+    EditorDates,
+    EditorDateRange,
+    EditorDiscount,
+    EditorFact,
+    EditorFaq,
+    EditorGalleryItem,
+    EditorItineraryDay,
+    EditorPricing,
+    EditorPricingOption,
+    FactFieldType,
+    PricingCategory,
+    RichTextDoc,
+    ScheduleType,
+    TourEditorValues,
+} from '@/types/tourEditor';
 
 /**
  * Tour Provider Context
- * Migrated from dashboard/src/Provider/TourContext.tsx
- * Manages tour form state, editor content, and CRUD operations
+ * Manages the tour editor's form state and saving. The form holds TourEditorValues (see types/tourEditor.ts);
+ * `tourToEditorValues` and `buildTourFormData` below are the only places that convert to and from the API.
  */
 
-// Types
-export interface Tour {
-    _id?: string;
-    title: string;
-    code: string;
-    excerpt: string;
-    description: any;
-    tourStatus: 'draft' | 'published' | 'archived';
-    coverImage: string;
-    gallery: any[];
-    category: any[];
-    destination: any;
-    pricing: any;
-    pricingOptions: any[];
-    dates: any;
-    itinerary: any;
-    include: any;
-    exclude: any;
-    facts: any[];
-    faqs: any[];
-}
-
 interface TourContextType {
-    form: any;
+    form: UseFormReturn<TourEditorValues>;
     tourId?: string;
     isEditing: boolean;
-    editorContent: any;
-    setEditorContent: (content: any) => void;
-    inclusionsContent: any;
-    setInclusionsContent: (content: any) => void;
-    exclusionsContent: any;
-    setExclusionsContent: (content: any) => void;
-    itineraryContent: any;
-    setItineraryContent: (content: any) => void;
-    onSubmit: (values: FieldValues) => Promise<void>;
+    /** Rich text as loaded, for the editors' initial value. Edits live in the form (description/include/exclude). */
+    editorContent: RichTextDoc | null;
+    inclusionsContent: RichTextDoc | null;
+    exclusionsContent: RichTextDoc | null;
+    outlineContent: RichTextDoc | null;
+    onSubmit: (values: TourEditorValues) => Promise<void>;
     isLoading: boolean;
     isSaving: boolean;
 
     // Field arrays
-    itineraryFields: any[];
-    appendItinerary: (value?: Partial<any>) => void;
-    itineraryRemove: (index: number) => void;
-
-    factsFields: any[];
-    appendFacts: (value?: Partial<any>) => void;
+    factsFields: FieldArrayWithId<TourEditorValues, 'facts', 'id'>[];
+    appendFacts: (value?: Partial<EditorFact>) => void;
     factsRemove: (index: number) => void;
+    factsMove: (from: number, to: number) => void;
 
-    galleryFields: any[];
-    appendGallery: (value?: Partial<any>) => void;
+    galleryFields: FieldArrayWithId<TourEditorValues, 'gallery', 'id'>[];
+    appendGallery: (value?: Partial<EditorGalleryItem>) => void;
     galleryRemove: (index: number) => void;
     galleryMove: (from: number, to: number) => void;
 
-    faqFields: any[];
-    appendFaq: (value?: Partial<any>) => void;
+    faqFields: FieldArrayWithId<TourEditorValues, 'faqs', 'id'>[];
+    appendFaq: (value?: Partial<EditorFaq>) => void;
     faqRemove: (index: number) => void;
-
-    pricingOptionsFields: any[];
-    appendPricingOptions: (value?: Partial<any>) => void;
-    pricingOptionsRemove: (index: number) => void;
-
-    dateRangeFields: any[];
-    appendDateRange: (value?: Partial<any>) => void;
-    dateRangeRemove: (index: number) => void;
+    faqMove: (from: number, to: number) => void;
 
     // Helper functions
     handleGenerateCode: () => string;
@@ -95,376 +78,373 @@ export function useTourContext() {
 
 interface TourProviderProps {
     children: React.ReactNode;
-    defaultValues?: Partial<Tour>;
     isEditing?: boolean;
 }
 
-export function TourProvider({ children, defaultValues, isEditing = false }: TourProviderProps) {
+// ---------------------------------------------------------------------------
+// Defaults
+// ---------------------------------------------------------------------------
+
+const defaultDiscount = (): EditorDiscount => ({ discountEnabled: false, type: 'percentage', value: 0 });
+
+const DEFAULT_VALUES: TourEditorValues = {
+    title: '',
+    code: '',
+    excerpt: '',
+    tourStatus: 'Draft',
+    coverImage: '',
+    enquiry: true,
+    category: [],
+    gallery: [],
+    facts: [],
+    faqs: [],
+    itinerary: { options: [[]] },
+    pricing: {
+        price: 0,
+        pricePerPerson: true,
+        minSize: 1,
+        maxSize: 10,
+        pricingOptionsEnabled: false,
+        pricingOptions: [],
+        discount: defaultDiscount(),
+        paymentOptions: {
+            fullPaymentEnabled: true,
+            depositEnabled: false,
+            depositPercentage: 20,
+            payOnArrivalEnabled: false,
+        },
+    },
+    dates: {
+        scheduleType: 'flexible',
+        days: 0,
+        nights: 0,
+        isRecurring: false,
+        pricingCategory: [],
+        departures: [],
+    },
+};
+
+// ---------------------------------------------------------------------------
+// API tour -> editor values
+// ---------------------------------------------------------------------------
+
+const toDateRange = (range?: { from?: string | Date; to?: string | Date }): EditorDateRange | undefined =>
+    range?.from && range?.to ? { from: new Date(range.from), to: new Date(range.to) } : undefined;
+
+/** The API keeps a discount as percentageOrPrice + discountPercentage / discountPrice; the editor as type + value. */
+const toEditorDiscount = (d?: {
+    discountEnabled?: boolean;
+    percentageOrPrice?: boolean;
+    discountPercentage?: number;
+    discountPrice?: number;
+    discountDateRange?: { from?: string | Date; to?: string | Date };
+    discountCode?: string;
+    description?: string;
+}): EditorDiscount => ({
+    discountEnabled: Boolean(d?.discountEnabled),
+    type: d?.percentageOrPrice ? 'percentage' : 'price',
+    value: (d?.percentageOrPrice ? d?.discountPercentage : d?.discountPrice) ?? 0,
+    dateRange: toDateRange(d?.discountDateRange),
+    discountCode: d?.discountCode,
+    description: d?.description,
+});
+
+const PRICING_CATEGORIES: readonly PricingCategory[] = ['adult', 'child', 'senior', 'student', 'custom'];
+const SCHEDULE_TYPES: readonly ScheduleType[] = ['flexible', 'fixed', 'multiple'];
+const FACT_TYPES: readonly FactFieldType[] = ['Plain Text', 'Single Select', 'Multi Select'];
+
+/** Reads rich text stored as a JSON document (or a JSON string of one); anything else isn't editor content. */
+const toRichTextDoc = (value: unknown): RichTextDoc | null => {
+    let doc = value;
+    if (typeof doc === 'string') {
+        try { doc = JSON.parse(doc); } catch { return null; }
+    }
+    return doc && typeof doc === 'object' && !Array.isArray(doc) && 'type' in doc ? (doc as RichTextDoc) : null;
+};
+
+/** Rich text from a stored value, wrapping plain text (older tours) in a paragraph so the editor can show it. */
+const toEditableDoc = (value: unknown): RichTextDoc | null => {
+    const doc = toRichTextDoc(value);
+    if (doc || typeof value !== 'string' || !value.trim()) return doc;
+    return { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: value }] }] };
+};
+
+function tourToEditorValues(tour: Tour): TourEditorValues {
+    const pricingOptions: EditorPricingOption[] = (tour.pricingOptions ?? []).map((opt, index) => ({
+        id: opt.id || opt._id || `pricing_${Date.now()}_${index}`,
+        name: opt.name || '',
+        category: PRICING_CATEGORIES.includes(opt.category) ? opt.category : 'adult',
+        customCategory: opt.customCategory || '',
+        price: opt.price || 0,
+        isActive: opt.isActive,
+        paxRange: { min: opt.paxRange?.minPax ?? 1, max: opt.paxRange?.maxPax ?? 22 },
+        discount: toEditorDiscount({ ...opt.discount, discountEnabled: opt.discount?.discountEnabled ?? opt.discountEnabled }),
+    }));
+
+    const pricing: EditorPricing = {
+        price: tour.price ?? 0,
+        originalPrice: tour.originalPrice,
+        pricePerPerson: tour.pricePerPerson ?? true,
+        minSize: tour.minSize ?? 1,
+        maxSize: tour.maxSize ?? 10,
+        groupSize: tour.groupSize ?? undefined,
+        pricingOptionsEnabled: tour.pricingOptionsEnabled ?? false,
+        pricingOptions,
+        discount: toEditorDiscount(tour.discount),
+        priceLockDate: tour.priceLockDate ? new Date(tour.priceLockDate) : undefined,
+        paymentOptions: tour.paymentOptions ?? DEFAULT_VALUES.pricing.paymentOptions,
+    };
+
+    const td = tour.tourDates;
+    const dates: EditorDates = td
+        ? {
+            scheduleType: SCHEDULE_TYPES.includes(td.scheduleType as ScheduleType) ? (td.scheduleType as ScheduleType) : 'fixed',
+            days: td.days ?? 0,
+            nights: td.nights ?? 0,
+            dateRange: toDateRange(td.defaultDateRange),
+            isRecurring: Boolean(td.isRecurring),
+            recurrencePattern: td.recurrencePattern,
+            recurrenceInterval: td.recurrenceInterval,
+            recurrenceEndDate: td.recurrenceEndDate ? new Date(td.recurrenceEndDate) : undefined,
+            pricingCategory: td.pricingCategory ?? td.selectedPricingOptions ?? [],
+            departures: (td.departures ?? []).map((dep) => ({
+                id: dep.id || makeId(),
+                label: dep.label || 'Departure',
+                dateRange: toDateRange(dep.dateRange),
+                isRecurring: Boolean(dep.isRecurring),
+                recurrencePattern: dep.recurrencePattern,
+                recurrenceInterval: dep.recurrenceInterval,
+                recurrenceEndDate: dep.recurrenceEndDate ? new Date(dep.recurrenceEndDate) : undefined,
+                pricingCategory: dep.selectedPricingOptions ?? dep.pricingCategory ?? [],
+                capacity: dep.capacity,
+            })),
+        }
+        : DEFAULT_VALUES.dates;
+
+    const category: EditorCategory[] = (tour.category ?? []).map((cat) => ({
+        label: cat.name || cat.id,
+        value: cat.id,
+        id: cat.id,
+        name: cat.name,
+        disable: false,
+    }));
+
+    // The API stores a flat list of days; the editor works on { outline, options: [days] }. Keep each day's id and
+    // partners[] — they carry the linked hotel/restaurant/guide/transport.
+    const days: EditorItineraryDay[] = (tour.itinerary ?? []).map((item) => ({
+        id: item.id,
+        day: item.day || '',
+        title: item.title || '',
+        description: item.description || '',
+        destination: item.destination || '',
+        date: item.date,
+        partners: item.partners ?? [],
+    }));
+
+    return {
+        title: tour.title ?? '',
+        code: tour.code ?? '',
+        excerpt: tour.excerpt ?? '',
+        tourStatus: tour.tourStatus ?? 'Draft',
+        description: toRichTextDoc(tour.description) ?? tour.description ?? undefined,
+        coverImage: tour.coverImage ?? '',
+        file: tour.file ?? undefined,
+        outline: toEditableDoc(tour.outline) ?? undefined,
+        enquiry: tour.enquiry ?? true,
+        destination: tour.destinationId ?? undefined,
+        location: tour.location
+            ? { map: tour.location.map, zip: tour.location.zip, street: tour.location.street, city: tour.location.city, state: tour.location.state, country: tour.location.country, lat: tour.location.lat, lng: tour.location.lng }
+            : undefined,
+        include: toRichTextDoc(tour.include) ?? undefined,
+        exclude: toRichTextDoc(tour.exclude) ?? undefined,
+        category,
+        gallery: (tour.gallery ?? []).map((g) => ({ _id: g.id, image: g.image, caption: g.caption })),
+        facts: (tour.facts ?? []).map((fact) => ({
+            factId: fact.factId,
+            name: fact.title || fact.name || '',
+            title: fact.title || fact.name || '',
+            icon: fact.icon || 'info',
+            field_type: FACT_TYPES.includes(fact.field_type as FactFieldType) ? (fact.field_type as FactFieldType) : 'Plain Text',
+            value: fact.value ?? '',
+        })),
+        faqs: (tour.faqs ?? []).map((faq) => ({ faqId: faq.faqId, question: faq.question || '', answer: faq.answer || '' })),
+        itinerary: { options: [days] },
+        pricing,
+        dates,
+    };
+}
+
+// ---------------------------------------------------------------------------
+// Editor values -> API request
+// ---------------------------------------------------------------------------
+
+/** A comparable form of a value: Dates as ISO strings, so a snapshot and the current form compare cleanly. */
+const comparable = (value: unknown): string => JSON.stringify(value ?? null);
+
+/** The API's discount shape. */
+const toApiDiscount = (d: EditorDiscount) => ({
+    discountEnabled: d.discountEnabled,
+    percentageOrPrice: d.type === 'percentage',
+    discountPercentage: d.type === 'percentage' ? Number(d.value) || 0 : 0,
+    discountPrice: d.type === 'price' ? Number(d.value) || 0 : 0,
+    ...(d.dateRange ? { dateRange: d.dateRange, discountDateRange: d.dateRange } : {}),
+    ...(d.discountCode ? { discountCode: d.discountCode } : {}),
+    ...(d.description ? { description: d.description } : {}),
+});
+
+const daysAndNights = (range: EditorDateRange) => {
+    const days = Math.ceil(Math.abs(new Date(range.to).getTime() - new Date(range.from).getTime()) / 86_400_000);
+    return { days, nights: Math.max(0, days - 1) };
+};
+
+const richTextField = (value: RichTextDoc | string | undefined): string =>
+    typeof value === 'string' ? value : JSON.stringify(value ?? '');
+
+/**
+ * The multipart request for a save. On create everything is sent; on update only the sections that differ
+ * from what was loaded (`original`), so the server leaves the rest of the tour alone.
+ */
+function buildTourFormData(values: TourEditorValues, original: TourEditorValues | null): { formData: FormData; changed: number } {
+    const formData = new FormData();
+    let changed = 0;
+    const isDifferent = <K extends keyof TourEditorValues>(key: K) => !original || comparable(values[key]) !== comparable(original[key]);
+    const send = (key: string, value: string) => {
+        formData.append(key, value);
+        changed++;
+    };
+
+    for (const key of ['title', 'code', 'excerpt', 'tourStatus', 'coverImage', 'file', 'destination', 'map'] as const) {
+        if (values[key] !== undefined && isDifferent(key)) send(key, String(values[key] ?? ''));
+    }
+    if (isDifferent('enquiry')) send('enquiry', values.enquiry ? 'true' : 'false');
+    for (const key of ['description', 'include', 'exclude', 'outline'] as const) {
+        if (values[key] !== undefined && isDifferent(key)) send(key, richTextField(values[key]));
+    }
+
+    if (isDifferent('gallery')) {
+        send('gallery', JSON.stringify(values.gallery.filter((g) => g.image).map((g) => ({ image: g.image, ...(g.caption ? { caption: g.caption } : {}) }))));
+    }
+    if (isDifferent('facts')) {
+        send('facts', JSON.stringify(values.facts.map((f) => ({ factId: f.factId, title: f.title || f.name || '', field_type: f.field_type, value: f.value, icon: f.icon }))));
+    }
+    if (isDifferent('faqs')) {
+        send('faqs', JSON.stringify(values.faqs.map((f) => ({ faqId: f.faqId, question: f.question, answer: f.answer }))));
+    }
+    if (isDifferent('category')) {
+        send('category', JSON.stringify(values.category.map((c) => ({ categoryId: c.id || c.value, categoryName: c.name || c.label }))));
+    }
+    if (isDifferent('itinerary')) {
+        const days = values.itinerary.options[0] ?? [];
+        send('itinerary', JSON.stringify(days.map((day) => ({
+            ...(day.id ? { id: day.id } : {}),
+            day: day.day || '',
+            title: day.title || '',
+            description: day.description || '',
+            destination: day.destination || '',
+            ...(day.date ? { date: day.date } : {}),
+            // Linked hotel / restaurant / guide / transport for the day.
+            partners: day.partners ?? [],
+        }))));
+    }
+    if (values.location && isDifferent('location')) {
+        const l = values.location;
+        send('location', JSON.stringify({ map: l.map ?? '', zip: l.zip ?? '', street: l.street ?? '', city: l.city ?? '', state: l.state ?? '', country: l.country ?? '', lat: String(l.lat ?? 0), lng: String(l.lng ?? 0) }));
+    }
+
+    if (isDifferent('dates')) {
+        const d = values.dates;
+        const firstDeparture = d.departures[0]?.dateRange;
+        const span = d.scheduleType === 'fixed' && d.dateRange ? daysAndNights(d.dateRange)
+            : d.scheduleType === 'multiple' && firstDeparture ? daysAndNights(firstDeparture)
+                : { days: Number(d.days) || undefined, nights: Number(d.nights) || undefined };
+        send('dates', JSON.stringify({
+            scheduleType: d.scheduleType,
+            ...span,
+            dateRange: d.dateRange,
+            isRecurring: d.isRecurring,
+            recurrencePattern: d.recurrencePattern,
+            recurrenceInterval: d.recurrenceInterval ? Number(d.recurrenceInterval) : undefined,
+            recurrenceEndDate: d.recurrenceEndDate,
+            pricingCategory: d.pricingCategory,
+            departures: d.departures.map((dep) => ({
+                id: dep.id || makeId(),
+                label: dep.label || 'Departure',
+                dateRange: dep.dateRange,
+                ...(dep.dateRange ? daysAndNights(dep.dateRange) : {}),
+                isRecurring: dep.isRecurring,
+                recurrencePattern: dep.recurrencePattern,
+                recurrenceInterval: dep.recurrenceInterval ? Number(dep.recurrenceInterval) : undefined,
+                recurrenceEndDate: dep.recurrenceEndDate,
+                selectedPricingOptions: dep.pricingCategory,
+                pricingCategory: dep.pricingCategory,
+                capacity: dep.capacity ? Number(dep.capacity) : undefined,
+            })),
+        }));
+    }
+
+    if (isDifferent('pricing')) {
+        const p = values.pricing;
+        send('pricing', JSON.stringify({
+            pricePerPerson: p.pricePerPerson,
+            pricingOptionsEnabled: p.pricingOptionsEnabled,
+            paymentOptions: p.paymentOptions,
+            discount: toApiDiscount(p.discount),
+            ...(p.priceLockDate ? { priceLockDate: p.priceLockDate } : {}),
+        }));
+        formData.append('price', String(Number(p.price) || 0));
+        formData.append('minSize', String(Number(p.minSize) || 1));
+        formData.append('maxSize', String(Number(p.maxSize) || 10));
+        if (!p.pricePerPerson) formData.append('groupSize', String(Number(p.groupSize) || 1));
+        formData.append('pricingOptions', JSON.stringify(p.pricingOptions.map((option) => ({
+            id: option.id,
+            name: option.name || '',
+            category: option.category || 'adult',
+            customCategory: option.customCategory || '',
+            price: Number(option.price) || 0,
+            paxRange: { minPax: Number(option.paxRange?.min) || 1, maxPax: Number(option.paxRange?.max) || 22 },
+            discount: option.discount ? toApiDiscount(option.discount) : { discountEnabled: false },
+        }))));
+    }
+
+    return { formData, changed };
+}
+
+/** The tour id in a create response ({ tour } or the tour itself). */
+const createdTourId = (data: unknown): string | undefined => {
+    const d = data as { id?: string; _id?: string; tour?: { id?: string; _id?: string } } | undefined;
+    return d?.tour?.id || d?.id || d?.tour?._id || d?._id;
+};
+
+const errorMessage = (error: unknown, fallback: string) => (error instanceof Error && error.message) || fallback;
+
+// ---------------------------------------------------------------------------
+// Provider
+// ---------------------------------------------------------------------------
+
+export function TourProvider({ children, isEditing = false }: TourProviderProps) {
     const params = useParams();
     const router = useRouter();
     const queryClient = useQueryClient();
     const tourId = params?.id as string | undefined;
     const { setBreadcrumbs } = useBreadcrumbs();
 
-    // Editor states
-    const [editorContent, setEditorContent] = useState<any>(null);
-    const [inclusionsContent, setInclusionsContent] = useState<any>(null);
-    const [exclusionsContent, setExclusionsContent] = useState<any>(null);
-    const [itineraryContent, setItineraryContent] = useState<any>(null);
+    const form = useForm<TourEditorValues>({ defaultValues: DEFAULT_VALUES });
 
-    // Initialize form
-    const form = useForm<Tour>({
-        defaultValues: defaultValues as any || {
-            title: '',
-            code: '',
-            excerpt: '',
-            tourStatus: 'draft',
-            coverImage: '',
-            gallery: [],
-            category: [],
-            pricing: {
-                price: 0,
-                pricePerPerson: true,
-                minSize: 1,
-                maxSize: 10,
-                pricingOptionsEnabled: false,
-                pricingOptions: [],
-                discount: {
-                    discountEnabled: false,
-                    percentageOrPrice: false,
-                    discountPercentage: 0,
-                    discountPrice: 0,
-                },
-                paymentOptions: {
-                    fullPaymentEnabled: true,
-                    depositEnabled: false,
-                    depositPercentage: 20,
-                    payOnArrivalEnabled: false,
-                },
-            },
-            pricingOptions: [],
-            facts: [],
-            faqs: [],
-            itinerary: { outline: '', options: [[]] },
-            dates: {
-                departures: []
-            }
-        },
-    });
+    const { fields: factsFields, append: factsAppend, remove: factsRemove, move: factsMove } = useFieldArray({ control: form.control, name: 'facts' });
+    const { fields: faqFields, append: faqAppend, remove: faqRemove, move: faqMove } = useFieldArray({ control: form.control, name: 'faqs' });
+    const { fields: galleryFields, append: galleryAppend, remove: galleryRemove, move: galleryMove } = useFieldArray({ control: form.control, name: 'gallery' });
 
-    // Set up field arrays for dynamic form fields
-    const {
-        fields: itineraryFields,
-        append: itineraryAppend,
-        remove: itineraryRemove,
-    } = useFieldArray({
-        control: form.control,
-        // Same path the Itinerary tab edits: the form keeps days under itinerary.options[0].
-        name: 'itinerary.options.0' as any,
-    });
-
-    const {
-        fields: factsFields,
-        append: factsAppend,
-        remove: factsRemove,
-    } = useFieldArray({
-        control: form.control,
-        name: 'facts',
-    });
-
-    const {
-        fields: faqFields,
-        append: faqAppend,
-        remove: faqRemove,
-    } = useFieldArray({
-        control: form.control,
-        name: 'faqs',
-    });
-
-    const {
-        fields: galleryFields,
-        append: galleryAppend,
-        remove: galleryRemove,
-        move: galleryMove,
-    } = useFieldArray({
-        control: form.control,
-        name: 'gallery',
-    });
-
-    const {
-        fields: pricingOptionsFields,
-        append: pricingOptionsAppend,
-        remove: pricingOptionsRemove,
-    } = useFieldArray({
-        control: form.control,
-        name: 'pricingOptions',
-    });
-
-    const {
-        fields: dateRangeFields,
-        append: dateRangeAppend,
-        remove: dateRangeRemove,
-    } = useFieldArray({
-        control: form.control,
-        name: 'dates.departures',
-    });
-
-    // Create type-safe wrapper functions for field arrays
-    // These ensure proper default values and type safety
-    const appendItinerary = (value?: Partial<any>) => {
-        const defaultItem = {
-            day: '',
-            title: '',
-            description: '',
-            destination: '',
-            dateTime: new Date(),
-        };
-        itineraryAppend(value ? { ...defaultItem, ...value } : defaultItem);
-    };
-
-    const appendFacts = (value?: Partial<any>) => {
-        const defaultItem = {
-            title: '',
-            icon: 'info',
-            value: '',
-            field_type: 'Plain Text',
-        };
-        factsAppend(value ? { ...defaultItem, ...value } : defaultItem);
-    };
-
-    const appendGallery = (value?: Partial<any>) => {
+    const appendFacts = (value?: Partial<EditorFact>) =>
+        factsAppend({ title: '', icon: 'info', value: '', field_type: 'Plain Text', ...value });
+    const appendGallery = (value?: Partial<EditorGalleryItem>) =>
         galleryAppend({ tempId: makeId(), image: '', caption: '', ...value });
-    };
+    const appendFaq = (value?: Partial<EditorFaq>) =>
+        faqAppend({ question: '', answer: '', ...value });
 
-    const appendFaq = (value?: Partial<any>) => {
-        const defaultItem = {
-            question: '',
-            answer: '',
-        };
-        faqAppend(value ? { ...defaultItem, ...value } : defaultItem);
-    };
-
-    const appendPricingOptions = (value?: Partial<any>) => {
-        const defaultItem = {
-            id: makeId(),
-            name: '',
-            category: 'adult' as const,
-            customCategory: '',
-            price: 0,
-            discount: {
-                enabled: false,
-                options: [],
-            },
-            paxRange: {
-                minPax: 1,
-                maxPax: 10,
-            },
-        };
-        pricingOptionsAppend(value ? { ...defaultItem, ...value } : defaultItem);
-    };
-
-    const appendDateRange = (value?: Partial<any>) => {
-        const now = new Date();
-        const toDate = new Date();
-        toDate.setDate(now.getDate() + 7);
-
-        const defaultItem = {
-            id: makeId(),
-            label: 'New Departure',
-            dateRange: {
-                from: now,
-                to: toDate,
-            },
-            isRecurring: false,
-            recurrencePattern: undefined,
-            recurrenceEndDate: undefined,
-            selectedPricingOptions: [],
-        };
-        dateRangeAppend(value ? { ...defaultItem, ...value } : defaultItem);
-    };
-
-    // Helper function to generate unique tour code
     const handleGenerateCode = () => {
-        const generatedCode = makeId(6);
-        form.setValue('code', generatedCode);
+        const generatedCode = makeId();
+        form.setValue('code', generatedCode, { shouldDirty: true });
         return generatedCode;
-    };
-
-    // Data processing functions
-    // Process categories from API format to form format
-    const processCategories = (categories: unknown) => {
-        if (categories === null || categories === undefined) return categories;
-        if (typeof categories === 'string') {
-            try {
-                return JSON.parse(categories);
-            } catch (e) {
-                return categories;
-            }
-        }
-        if (Array.isArray(categories)) {
-            // The category MultiSelect works with { label, value, disable }; keep id/name too for the save path.
-            return categories.map((cat: any) => {
-                const id = typeof cat === 'string' ? cat : (cat.value || cat.id || cat.categoryId || cat._id);
-                const name = typeof cat === 'string' ? '' : (cat.label || cat.name || cat.categoryName || '');
-                return { label: name || String(id), value: id, disable: typeof cat === 'object' ? !!cat.disable : false, id, name };
-            });
-        }
-        return categories;
-    };
-
-    // Process itinerary from API format to form format
-    const processItinerary = (itinerary: unknown) => {
-        if (itinerary === null || itinerary === undefined) return itinerary;
-        if (typeof itinerary === 'string') {
-            try {
-                return JSON.parse(itinerary);
-            } catch (e) {
-                return itinerary;
-            }
-        }
-        if (Array.isArray(itinerary)) {
-            // API stores a flat list of days; the editor works on { outline, options: [days] }.
-            // Keep each day's id and partners[] — dropping them is what hid every linked
-            // hotel/restaurant/guide/transport and would wipe the links on save.
-            return {
-                outline: '',
-                options: [itinerary.map((item: Record<string, unknown>) => ({
-                    id: item.id,
-                    day: item.day || '',
-                    title: item.title || '',
-                    description: item.description || '',
-                    destination: item.destination || '',
-                    date: item.date,
-                    partners: Array.isArray(item.partners) ? item.partners : [],
-                }))],
-            };
-        }
-        return itinerary;
-    };
-
-    // Process pricing options from API format to form format
-    const processPricingOptions = (pricingOptions: unknown) => {
-        if (pricingOptions === null || pricingOptions === undefined) return pricingOptions;
-        if (Array.isArray(pricingOptions)) {
-            return pricingOptions.map((option: unknown, index: number) => {
-                const opt = option as Record<string, any>;
-                return {
-                    id: opt.id || `pricing_${Date.now()}_${index}_${Math.random().toString(36).substr(2, 9)}`,
-                    name: opt.name || '',
-                    category: opt.category || 'adult',
-                    customCategory: opt.customCategory || '',
-                    price: opt.price || 0,
-                    paxRange: {
-                        minPax: opt.paxRange?.minPax || opt.paxRange?.from || opt.minPax || 1,
-                        maxPax: opt.paxRange?.maxPax || opt.paxRange?.to || opt.maxPax || 10
-                    },
-                    minPax: opt.paxRange?.from || opt.minPax || 1,
-                    maxPax: opt.paxRange?.to || opt.maxPax || 10,
-                    discount: {
-                        discountEnabled: opt.discount?.discountEnabled || opt.discountEnabled || false,
-                        percentageOrPrice: opt.discount?.percentageOrPrice || opt.percentageOrPrice || false,
-                        discountPercentage: opt.discount?.discountPercentage || opt.discountPercentage || 0,
-                        discountPrice: opt.discount?.discountPrice || opt.discountPrice || 0,
-                        dateRange: opt.discount?.discountDateRange ? {
-                            from: new Date(opt.discount.discountDateRange.from),
-                            to: new Date(opt.discount.discountDateRange.to)
-                        } : (opt.discountDateRange ? {
-                            from: new Date(opt.discountDateRange.from),
-                            to: new Date(opt.discountDateRange.to)
-                        } : { from: new Date(), to: new Date() })
-                    }
-                };
-            });
-        }
-        return pricingOptions;
-    };
-
-    // Process pricing from API format (flat DB columns: price, pricePerPerson,
-    // minSize, maxSize, discount, pricingOptions, paymentOptions, ...) into the
-    // nested `pricing.*` shape the pricing tab's form fields actually read/write.
-    // Without this, editing an existing tour resets every pricing field
-    // (base price, discount, pricing options, payment options) to blank/default
-    // even though the data is saved correctly in the database.
-    const processPricingForForm = (tourData: Record<string, any>) => {
-        const discount = tourData.discount || {};
-        return {
-            price: tourData.price ?? 0,
-            originalPrice: tourData.originalPrice ?? 0,
-            basePrice: tourData.basePrice ?? 0,
-            pricePerPerson: tourData.pricePerPerson ?? true,
-            minSize: tourData.minSize ?? 1,
-            maxSize: tourData.maxSize ?? 10,
-            groupSize: tourData.groupSize ?? 1,
-            pricingOptionsEnabled: tourData.pricingOptionsEnabled ?? false,
-            pricingOptions: processPricingOptions(tourData.pricingOptions) || [],
-            discount: {
-                discountEnabled: discount.discountEnabled ?? false,
-                percentageOrPrice: discount.percentageOrPrice ?? false,
-                discountPercentage: discount.discountPercentage ?? 0,
-                discountPrice: discount.discountPrice ?? 0,
-                discountCode: discount.discountCode ?? '',
-                description: discount.description ?? '',
-                dateRange: discount.discountDateRange ? {
-                    from: new Date(discount.discountDateRange.from),
-                    to: new Date(discount.discountDateRange.to),
-                } : undefined,
-            },
-            priceLockedUntil: tourData.priceLockDate || undefined,
-            paymentOptions: tourData.paymentOptions || {
-                fullPaymentEnabled: true,
-                depositEnabled: false,
-                depositPercentage: 20,
-                payOnArrivalEnabled: false,
-            },
-        };
-    };
-
-    // Process tour dates from API format to form format
-    const processTourDates = (tourDates: any) => {
-        if (!tourDates) return undefined;
-
-        const processedDates = {
-            days: tourDates.days || 0,
-            nights: tourDates.nights || 0,
-            scheduleType: tourDates.scheduleType || 'flexible',
-            pricingCategory: Array.isArray(tourDates.pricingCategory)
-                ? tourDates.pricingCategory
-                : (tourDates.pricingCategory ? [tourDates.pricingCategory] : []),
-            isRecurring: Boolean(tourDates.isRecurring),
-            recurrencePattern: tourDates.recurrencePattern || 'weekly',
-            recurrenceInterval: tourDates.recurrenceInterval || 1,
-            recurrenceEndDate: tourDates.recurrenceEndDate ? new Date(tourDates.recurrenceEndDate) : undefined,
-            // Process defaultDateRange for fixed dates
-            dateRange: tourDates.defaultDateRange ? {
-                from: new Date(tourDates.defaultDateRange.from),
-                to: new Date(tourDates.defaultDateRange.to)
-            } : undefined,
-            // Process departures array for multiple departure dates
-            departures: Array.isArray(tourDates.departures) ? tourDates.departures.map((dep: any) => {
-                return {
-                    id: dep.id || makeId(),
-                    label: dep.label || 'Departure',
-                    dateRange: dep.dateRange ? {
-                        from: new Date(dep.dateRange.from),
-                        to: new Date(dep.dateRange.to)
-                    } : undefined,
-                    days: dep.days || 0,
-                    nights: dep.nights || 0,
-                    isRecurring: Boolean(dep.isRecurring),
-                    recurrencePattern: dep.recurrencePattern || undefined,
-                    recurrenceInterval: dep.recurrenceInterval || undefined,
-                    recurrenceEndDate: dep.recurrenceEndDate ? new Date(dep.recurrenceEndDate) : undefined,
-                    pricingCategory: Array.isArray(dep.selectedPricingOptions)
-                        ? dep.selectedPricingOptions
-                        : (Array.isArray(dep.pricingCategory)
-                            ? dep.pricingCategory
-                            : (dep.pricingCategory ? [dep.pricingCategory] : [])),
-                    capacity: dep.capacity || undefined
-                };
-            }) : []
-        };
-
-        return processedDates;
     };
 
     // Fetch tour data if editing
@@ -473,615 +453,64 @@ export function TourProvider({ children, defaultValues, isEditing = false }: Tou
         queryFn: () => getSingleTour(tourId!),
         enabled: !!tourId && isEditing,
     });
+    const loadedTour = fetchedTourData?.tour;
 
-    // Update form when data is fetched
+    // The values as loaded: the form starts from these, and a save sends only what differs from them.
+    const loadedValues = useMemo(() => (loadedTour ? tourToEditorValues(loadedTour) : null), [loadedTour]);
+    const savedValuesRef = useRef<TourEditorValues | null>(null);
+
     useEffect(() => {
-        if (fetchedTourData) {
-            // getSingleTour returns { tour, breadcrumbs, ... }; the old `.data?.tour` lookup never matched, so the form was reset with the wrapper object (every field empty).
-            const tourData = (fetchedTourData as any).tour ?? (fetchedTourData as any).data?.tour ?? fetchedTourData;
-
-            // Process data before resetting form
-            const processedData = {
-                ...tourData,
-                // Process categories using processCategories
-                category: processCategories(tourData.category),
-                // Process itinerary using processItinerary
-                itinerary: processItinerary(tourData.itinerary),
-                // Nest the flat DB pricing columns into `pricing.*` — this is what
-                // the pricing tab's form fields actually read (see TourPricingDates).
-                pricing: processPricingForForm(tourData),
-                // Process tour dates using processTourDates
-                // The API returns the column name (tourDates); older payloads used `dates`.
-                dates: processTourDates(tourData.tourDates ?? tourData.dates),
-                // Process facts preserving factId
-                facts: Array.isArray(tourData.facts) ? tourData.facts.map((fact: any) => ({
-                    factId: fact.factId || fact._id,
-                    title: fact.title || '',
-                    icon: fact.icon || 'info',
-                    value: fact.value || '',
-                    field_type: fact.field_type || 'Plain Text',
-                })) : [],
-                // Process FAQs preserving faqId
-                faqs: Array.isArray(tourData.faqs) ? tourData.faqs.map((faq: any) => ({
-                    faqId: faq.faqId || faq._id,
-                    question: faq.question || '',
-                    answer: faq.answer || '',
-                })) : [],
-            };
-
-            form.reset(processedData);
-
-            // Set breadcrumbs with tour title for dashboard
-            if (tourData.title) {
-                setBreadcrumbs([
-                    { label: 'Tours', href: '/dashboard/tours' },
-                    { label: tourData.title }
-                ]);
-            }
-
-            // Handle include/exclude content parsing
-            if (tourData.description) {
-                try {
-                    const desc = typeof tourData.description === 'string'
-                        ? JSON.parse(tourData.description)
-                        : tourData.description;
-                    setEditorContent(desc);
-                } catch (e) {
-                    console.error('Error parsing description:', e);
-                    setEditorContent(null);
-                }
-            }
-
-            if (tourData.include) {
-                try {
-                    const inc = typeof tourData.include === 'string'
-                        ? JSON.parse(tourData.include)
-                        : tourData.include;
-                    setInclusionsContent(inc);
-                } catch (e) {
-                    console.error('Error parsing inclusions:', e);
-                    setInclusionsContent(null);
-                }
-            }
-
-            if (tourData.exclude) {
-                try {
-                    const exc = typeof tourData.exclude === 'string'
-                        ? JSON.parse(tourData.exclude)
-                        : tourData.exclude;
-                    setExclusionsContent(exc);
-                } catch (e) {
-                    console.error('Error parsing exclusions:', e);
-                    setExclusionsContent(null);
-                }
-            }
-
-            // Set itineraryContent if available
-            if (tourData.itineraryContent) {
-                try {
-                    const itinContent = typeof tourData.itineraryContent === 'string'
-                        ? JSON.parse(tourData.itineraryContent)
-                        : tourData.itineraryContent;
-                    setItineraryContent(itinContent);
-                } catch (e) {
-                    console.error('Error parsing itinerary content:', e);
-                    setItineraryContent(null);
-                }
-            }
+        if (!loadedValues) return;
+        savedValuesRef.current = loadedValues;
+        form.reset(loadedValues);
+        if (loadedValues.title) {
+            setBreadcrumbs([{ label: 'Tours', href: '/dashboard/tours' }, { label: loadedValues.title }]);
         }
-    }, [fetchedTourData, form, setBreadcrumbs, tourId]);
+    }, [loadedValues, form, setBreadcrumbs]);
 
-    // Create mutation
+    // Initial content for the rich-text editors.
+    const editorContent = useMemo(() => toRichTextDoc(loadedTour?.description), [loadedTour]);
+    const inclusionsContent = useMemo(() => toRichTextDoc(loadedTour?.include), [loadedTour]);
+    const exclusionsContent = useMemo(() => toRichTextDoc(loadedTour?.exclude), [loadedTour]);
+    const outlineContent = useMemo(() => toEditableDoc(loadedTour?.outline), [loadedTour]);
+
     const createMutation = useMutation({
         mutationFn: (formData: FormData) => createTour(formData),
-        onSuccess: (data: any) => {
-            toast({
-                title: 'Success!',
-                description: 'Tour created successfully',
-            });
+        onSuccess: (data) => {
+            toast({ title: 'Success!', description: 'Tour created successfully' });
             queryClient.invalidateQueries({ queryKey: ['tours'] });
-            // Handle different response structures
-            const tourId = data?.tour?._id || data?._id;
-            if (tourId) {
-                router.push(`/dashboard/tours/edit/${tourId}`);
-            } else {
-                router.push('/dashboard/tours');
-            }
+            const newId = createdTourId(data);
+            router.push(newId ? `/dashboard/tours/edit/${newId}` : '/dashboard/tours');
         },
-        onError: (error: any) => {
-            toast({
-                variant: 'destructive',
-                title: 'Error creating tour',
-                description: error.message || 'Failed to create tour',
-            });
+        onError: (error) => {
+            toast({ variant: 'destructive', title: 'Error creating tour', description: errorMessage(error, 'Failed to create tour') });
         },
     });
 
-    // Update mutation
     const updateMutation = useMutation({
         mutationFn: (formData: FormData) => updateTour(tourId!, formData),
         onSuccess: () => {
-            toast({
-                title: 'Success!',
-                description: 'Tour updated successfully',
-            });
+            toast({ title: 'Success!', description: 'Tour updated successfully' });
             queryClient.invalidateQueries({ queryKey: ['tours'] });
             queryClient.invalidateQueries({ queryKey: ['tour', tourId] });
         },
-        onError: (error: any) => {
-            toast({
-                variant: 'destructive',
-                title: 'Error updating tour',
-                description: error.message || 'Failed to update tour',
-            });
+        onError: (error) => {
+            toast({ variant: 'destructive', title: 'Error updating tour', description: errorMessage(error, 'Failed to update tour') });
         },
     });
 
-    // Helper functions for form submission
-
-    // Helper: recursively process values to remove functions, etc.
-    const processValue = (value: unknown): unknown => {
-        if (value === null || value === undefined) return value;
-        if (typeof value === "function") {
-            if (value === String) return "";
-            if (value === Number) return 0;
-            if (value === Boolean) return false;
-            if (value === Date) return new Date();
-            if (value === Array) return [];
-            if (value === Object) return {};
-            return null;
+    const onSubmit = async (values: TourEditorValues) => {
+        const editingExisting = isEditing && !!tourId;
+        const { formData, changed } = buildTourFormData(values, editingExisting ? savedValuesRef.current : null);
+        if (changed === 0) {
+            toast({ title: 'Nothing to save', description: 'No changes since the last save.' });
+            return;
         }
-        if (Array.isArray(value)) return value.map(processValue);
-        if (typeof value === "object") {
-            const result: Record<string, unknown> = {};
-            for (const key in value) {
-                if (Object.prototype.hasOwnProperty.call(value, key)) {
-                    result[key] = processValue((value as Record<string, unknown>)[key]);
-                }
-            }
-            return result;
-        }
-        return value;
-    };
-
-    // Helper: check if a field has changed
-    const hasChanged = (key: string, newValue: unknown): boolean => {
-        const originalTour = (fetchedTourData as any)?.tour ?? fetchedTourData ?? {};
-
-        // Special handling for gallery
-        if (key === 'gallery') {
-            return JSON.stringify(newValue) !== JSON.stringify(originalTour.gallery);
-        }
-
-        const parts = key.split(".");
-        let origValue: unknown = originalTour;
-        for (const part of parts) {
-            if (origValue === null || origValue === undefined) {
-                return true;
-            }
-            origValue = (origValue as Record<string, unknown>)[part];
-        }
-        if (origValue === undefined) return newValue !== undefined;
-        if (Array.isArray(newValue)) {
-            return (
-                origValue === undefined ||
-                !Array.isArray(origValue) ||
-                origValue.length !== newValue.length ||
-                JSON.stringify(origValue) !== JSON.stringify(newValue)
-            );
-        }
-        if (typeof newValue === "object" && newValue !== null) {
-            if (newValue instanceof Date) {
-                return !(origValue instanceof Date) || (origValue as Date).getTime() !== (newValue as Date).getTime();
-            }
-            return JSON.stringify(origValue) !== JSON.stringify(newValue);
-        }
-        return origValue !== newValue;
-    };
-
-    // Helper: should a field be included in the submit
-    const shouldIncludeField = (field: string, value: unknown, isCreating: boolean) => {
-        // Always include gallery field if it has values
-        if (field === 'gallery' && Array.isArray(value) && value.length > 0) {
-            return true;
-        }
-
-        const shouldInclude = isCreating || hasChanged(field, value);
-        return shouldInclude;
-    };
-
-    // Helper function to calculate days and nights from date range
-    const calculateDaysNights = (dateRange: { from: Date; to: Date }) => {
-        const diffTime = Math.abs(dateRange.to.getTime() - dateRange.from.getTime());
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        return {
-            days: diffDays,
-            nights: Math.max(0, diffDays - 1)
-        };
-    };
-
-    // Submit handler
-    const onSubmit = async (values: FieldValues) => {
-        const formData = new FormData();
-        const processedValues = processValue(values) as Record<string, unknown>;
-        const isCreating = !tourId;
-
-        // Top-level fields to process
-        const topLevelFields = [
-            "title", "code", "excerpt", "description", "tourStatus", "coverImage",
-            "file", "outline-solid", "include", "exclude", "map", "destination", "gallery"
-        ];
-
-        formData.append("id", tourId || "");
-        let changedFieldCount = 0;
-
-        // Process top-level fields
-        topLevelFields.forEach((field) => {
-            if (processedValues[field] !== undefined && shouldIncludeField(field, processedValues[field], isCreating)) {
-                changedFieldCount++;
-
-                // Process special fields (description, include, exclude)
-                if (field === "description" && editorContent) {
-                    formData.append(field, JSON.stringify(editorContent));
-                } else if (field === "include" && inclusionsContent) {
-                    formData.append(field, JSON.stringify(inclusionsContent));
-                } else if (field === "exclude" && exclusionsContent) {
-                    formData.append(field, JSON.stringify(exclusionsContent));
-                } else if (field === "gallery") {
-                    // Handle gallery data (remove temp IDs)
-                    const galleryData = processedValues[field];
-                    if (Array.isArray(galleryData)) {
-                        const processedGallery = galleryData.map(item => {
-                            if (typeof item === 'string') {
-                                return item;
-                            }
-
-                            const cleanItem = { ...item };
-
-                            // Remove client-side temporary ID if it exists
-                            if (cleanItem.tempId) {
-                                delete cleanItem.tempId;
-                            }
-
-                            // Only include _id if it's a valid MongoDB ObjectId (24 chars)
-                            if (cleanItem._id && (typeof cleanItem._id !== 'string' || cleanItem._id.length !== 24)) {
-                                delete cleanItem._id;
-                            }
-
-                            return cleanItem;
-                        });
-
-                        formData.append('gallery', JSON.stringify(processedGallery));
-                    }
-                } else if (field === "file") {
-                    const fileValue = processedValues.file;
-                    if (Array.isArray(fileValue) && fileValue.length > 0) {
-                        formData.append(field, String(fileValue[0] || ""));
-                    } else {
-                        formData.append(field, String(fileValue || ""));
-                    }
-                } else {
-                    formData.append(field, String(processedValues[field] || ""));
-                }
-            }
-        });
-
-        // Handle facts and FAQs
-        if (values.facts && hasChanged('facts', values.facts)) {
-            changedFieldCount++;
-            formData.append("facts", JSON.stringify(values.facts));
-        }
-
-        if (values.faqs && hasChanged('faqs', values.faqs)) {
-            changedFieldCount++;
-            formData.append("faqs", JSON.stringify(values.faqs));
-        }
-
-        // Note: discount fields (discountEnabled/discountPrice/discountPercentage/
-        // discountDateRange) are appended once, below, as part of the main pricing
-        // block — appending them here too would create duplicate FormData keys,
-        // which multer/Express turn into arrays and silently break parsing.
-
-        // Process dates with departures and calculate days/nights from date ranges
-        if (shouldIncludeField('dates', values.dates, isCreating)) {
-            changedFieldCount++;
-
-            const datesData = values.dates || {};
-            let calculatedDays: number | undefined;
-            let calculatedNights: number | undefined;
-
-            // Calculate days/nights based on schedule type
-            if (datesData.scheduleType === 'flexible') {
-                calculatedDays = datesData.days ? Number(datesData.days) : undefined;
-                calculatedNights = datesData.nights ? Number(datesData.nights) : undefined;
-            } else if (datesData.scheduleType === 'fixed' && datesData.dateRange) {
-                const dateRange = {
-                    from: new Date(datesData.dateRange.from),
-                    to: new Date(datesData.dateRange.to)
-                };
-                const calculated = calculateDaysNights(dateRange);
-                calculatedDays = calculated.days;
-                calculatedNights = calculated.nights;
-            } else if (datesData.scheduleType === 'multiple' && Array.isArray(datesData.departures) && datesData.departures.length > 0) {
-                const firstDeparture = datesData.departures[0];
-                if (firstDeparture?.dateRange) {
-                    const dateRange = {
-                        from: new Date(firstDeparture.dateRange.from),
-                        to: new Date(firstDeparture.dateRange.to)
-                    };
-                    const calculated = calculateDaysNights(dateRange);
-                    calculatedDays = calculated.days;
-                    calculatedNights = calculated.nights;
-                }
-            } else {
-                calculatedDays = datesData.days ? Number(datesData.days) : undefined;
-                calculatedNights = datesData.nights ? Number(datesData.nights) : undefined;
-            }
-
-            // Create formatted dates object
-            const formattedDates = {
-                scheduleType: datesData.scheduleType || 'flexible',
-                days: calculatedDays,
-                nights: calculatedNights,
-                dateRange: datesData.dateRange ? {
-                    from: new Date(datesData.dateRange.from),
-                    to: new Date(datesData.dateRange.to)
-                } : undefined,
-                isRecurring: Boolean(datesData.isRecurring),
-                recurrencePattern: datesData.recurrencePattern || undefined,
-                recurrenceInterval: datesData.recurrenceInterval ? Number(datesData.recurrenceInterval) : undefined,
-                recurrenceEndDate: datesData.recurrenceEndDate ? new Date(datesData.recurrenceEndDate) : undefined,
-                pricingCategory: datesData.pricingCategory || undefined,
-                departures: Array.isArray(datesData.departures) ? datesData.departures.map((departure: any) => {
-                    let depDays: number | undefined;
-                    let depNights: number | undefined;
-
-                    if (departure.dateRange) {
-                        const depDateRange = {
-                            from: new Date(departure.dateRange.from),
-                            to: new Date(departure.dateRange.to)
-                        };
-                        const calculated = calculateDaysNights(depDateRange);
-                        depDays = calculated.days;
-                        depNights = calculated.nights;
-                    }
-
-                    return {
-                        id: departure.id || makeId(),
-                        label: departure.label || 'Departure',
-                        dateRange: departure.dateRange ? {
-                            from: new Date(departure.dateRange.from),
-                            to: new Date(departure.dateRange.to)
-                        } : undefined,
-                        days: depDays,
-                        nights: depNights,
-                        isRecurring: Boolean(departure.isRecurring),
-                        recurrencePattern: departure.recurrencePattern || undefined,
-                        recurrenceInterval: departure.recurrenceInterval ? Number(departure.recurrenceInterval) : undefined,
-                        recurrenceEndDate: departure.recurrenceEndDate ? new Date(departure.recurrenceEndDate) : undefined,
-                        pricingCategory: departure.pricingCategory || undefined,
-                        capacity: departure.capacity ? Number(departure.capacity) : undefined
-                    };
-                }) : []
-            };
-
-            formData.append("dates", JSON.stringify(formattedDates));
-        }
-
-        // Process pricing data. The pricing tab (TourPricingDates) only ever
-        // writes to the nested `pricing.*` path via setValue — there is no
-        // top-level `values.price`/`values.minSize` field in this form — so
-        // every numeric field here must read from `values.pricing` first,
-        // falling back to a legacy top-level value for back-compat.
-        const pricingValues = values.pricing || {};
-        if (shouldIncludeField('pricing.price', pricingValues.price, isCreating) ||
-            shouldIncludeField('minSize', values.minSize, isCreating) ||
-            shouldIncludeField('maxSize', values.maxSize, isCreating) ||
-            shouldIncludeField('pricing.discount', pricingValues.discount, isCreating) ||
-            shouldIncludeField('pricing.pricingOptionsEnabled', pricingValues.pricingOptionsEnabled, isCreating) ||
-            shouldIncludeField('pricing.paymentOptions', pricingValues.paymentOptions, isCreating) ||
-            shouldIncludeField('priceLockedUntil', pricingValues.priceLockedUntil, isCreating)) {
-            changedFieldCount++;
-
-            const priceValue = pricingValues.price !== undefined && pricingValues.price !== null
-                ? Number(pricingValues.price)
-                : Number(values.price) || 0;
-
-            let minSizeValue = 1;
-            let maxSizeValue = 10;
-
-            if (values.minSize !== undefined && values.minSize !== null) {
-                minSizeValue = Number(values.minSize);
-            } else if (pricingValues.minSize !== undefined && pricingValues.minSize !== null) {
-                minSizeValue = Number(pricingValues.minSize);
-            }
-
-            if (values.maxSize !== undefined && values.maxSize !== null) {
-                maxSizeValue = Number(values.maxSize);
-            } else if (pricingValues.maxSize !== undefined && pricingValues.maxSize !== null) {
-                maxSizeValue = Number(pricingValues.maxSize);
-            }
-
-            // The server (extractTourFields) reads discount fields from a nested
-            // `pricing.discount.*` object, not flat siblings — nest them here to
-            // match, otherwise discountPercentage/percentageOrPrice/dateRange are
-            // silently unreachable regardless of what the seller configured.
-            const discountValues = pricingValues.discount || {};
-            const pricingObject: any = {
-                price: priceValue,
-                originalPrice: Number(pricingValues.originalPrice) || 0,
-                basePrice: Number(pricingValues.basePrice) || 0,
-                minSize: minSizeValue,
-                maxSize: maxSizeValue,
-                pricingOptionsEnabled: Boolean(pricingValues.pricingOptionsEnabled),
-                pricePerPerson: pricingValues.pricePerPerson !== undefined ? Boolean(pricingValues.pricePerPerson) : true,
-                paymentOptions: pricingValues.paymentOptions || undefined,
-                discount: {
-                    discountEnabled: Boolean(discountValues.discountEnabled ?? values.discountEnabled),
-                    percentageOrPrice: Boolean(discountValues.percentageOrPrice),
-                    discountPercentage: Number(discountValues.discountPercentage) || 0,
-                    discountPrice: Number(discountValues.discountPrice ?? values.discountPrice) || 0,
-                },
-            };
-
-            if (pricingValues.priceLockedUntil) {
-                pricingObject.priceLockDate = new Date(pricingValues.priceLockedUntil);
-            }
-
-            if (discountValues.dateRange) {
-                const fromDate = discountValues.dateRange.from ? new Date(discountValues.dateRange.from) : new Date();
-                const toDate = discountValues.dateRange.to ? new Date(discountValues.dateRange.to) : new Date();
-
-                pricingObject.discount.dateRange = {
-                    from: !isNaN(fromDate.getTime()) ? fromDate : new Date(),
-                    to: !isNaN(toDate.getTime()) ? toDate : new Date()
-                };
-            }
-
-            formData.append("pricing", JSON.stringify(pricingObject));
-            formData.append("price", String(priceValue));
-            formData.append("minSize", String(minSizeValue));
-            formData.append("maxSize", String(maxSizeValue));
-            formData.append("pricePerPerson", String(Boolean(pricingObject.pricePerPerson)));
-        }
-
-        // Format pricing options with discounts. These live at `pricing.pricingOptions`
-        // (a field array registered under that path in TourPricingDates), not the
-        // top-level `values.pricingOptions`.
-        const pricingOptionsValues = pricingValues.pricingOptions;
-        if (pricingOptionsValues && Array.isArray(pricingOptionsValues) && pricingOptionsValues.length > 0) {
-            const flatPricingOptions = pricingOptionsValues.map((option: any, index: number) => {
-                const optionId = option.id || `option_${Date.now()}_${index}`;
-                const optionDiscount = option.discount;
-                const hasOptionDiscount = optionDiscount && optionDiscount.discountEnabled;
-
-                let minPax = option.minPax ? Number(option.minPax) : 1;
-                let maxPax = option.maxPax ? Number(option.maxPax) : 22;
-
-                if (Array.isArray(option.paxRange)) {
-                    if (option.paxRange[0] !== undefined && option.paxRange[0] !== null) {
-                        minPax = Number(option.paxRange[0]) || minPax;
-                    }
-                    if (option.paxRange[1] !== undefined && option.paxRange[1] !== null) {
-                        maxPax = Number(option.paxRange[1]) || maxPax;
-                    }
-                } else if (option.paxRange && typeof option.paxRange === 'object') {
-                    if (option.paxRange.from !== undefined) {
-                        minPax = Number(option.paxRange.from) || minPax;
-                    }
-                    if (option.paxRange.to !== undefined) {
-                        maxPax = Number(option.paxRange.to) || maxPax;
-                    }
-                }
-
-                return {
-                    id: optionId,
-                    name: option.name || "",
-                    category: option.category || "adult",
-                    customCategory: option.customCategory || "",
-                    price: option.price ? Number(option.price) : 0,
-                    discount: hasOptionDiscount ? {
-                        discountEnabled: true,
-                        discountPrice: optionDiscount.discountPrice ? Number(optionDiscount.discountPrice) : 0,
-                        discountDateRange: optionDiscount.dateRange ? {
-                            from: new Date(optionDiscount.dateRange.from),
-                            to: new Date(optionDiscount.dateRange.to)
-                        } : undefined,
-                        percentageOrPrice: Boolean(optionDiscount.percentageOrPrice),
-                        discountPercentage: optionDiscount.percentageOrPrice ? Number(optionDiscount.discountPercentage) : undefined,
-                    } : {
-                        discountEnabled: false
-                    },
-                    paxRange: {
-                        from: minPax,
-                        to: maxPax
-                    },
-                    minPax: minPax,
-                    maxPax: maxPax
-                };
-            });
-
-            formData.append("pricingOptions", JSON.stringify(flatPricingOptions));
-        }
-
-        // Handle boolean fields
-        ['enquiry', 'features'].forEach(key => {
-            if (values[key] !== undefined && shouldIncludeField(key, values[key], isCreating)) {
-                changedFieldCount++;
-                const boolValue = values[key] ? "true" : "false";
-                formData.append(key, boolValue);
-            }
-        });
-
-        // Format category data properly
-        if (values.category && Array.isArray(values.category) && hasChanged('category', values.category)) {
-            changedFieldCount++;
-            const formattedCategory = values.category.map((item: any) => ({
-                categoryId: typeof item.categoryId === 'function' ? item.categoryId() :
-                    item.categoryId || item.id || item.value || '',
-                categoryName: typeof item.categoryName === 'function' ? item.categoryName() :
-                    item.categoryName || item.name || item.label || '',
-                disable: Boolean(item.disable || !item.isActive)
-            }));
-            formData.append("category", JSON.stringify(formattedCategory));
-        }
-
-        // Handle itinerary
-        if (values.itinerary !== undefined && shouldIncludeField('itinerary', values.itinerary, isCreating)) {
-            changedFieldCount++;
-
-            let itineraryItems: any[] = [];
-
-            if (values.itinerary && typeof values.itinerary === 'object' && Array.isArray(values.itinerary.options)) {
-                // options is [ [day, day, ...] ] — the days live in the first array.
-                itineraryItems = Array.isArray(values.itinerary.options[0]) ? values.itinerary.options[0] : values.itinerary.options;
-            } else if (Array.isArray(values.itinerary)) {
-                itineraryItems = values.itinerary;
-            } else if (values.itinerary && values.itinerary.length !== undefined) {
-                itineraryItems = Array.from(values.itinerary);
-            }
-
-            const formattedItinerary = itineraryItems.map((item: any) => {
-                return {
-                    ...(item.id ? { id: item.id } : {}),
-                    day: item.day || '',
-                    title: typeof item.title === 'string' ? item.title : String(item.title || ''),
-                    description: typeof item.description === 'string' ? item.description : String(item.description || ''),
-                    dateTime: item.dateTime instanceof Date ? item.dateTime : new Date(),
-                    destination: item.destination || '',
-                    // Linked hotel / restaurant / guide / transport for the day.
-                    partners: Array.isArray(item.partners) ? item.partners : [],
-                };
-            });
-
-            formData.append("itinerary", JSON.stringify(formattedItinerary));
-        }
-
-        // Handle location data
-        if (processedValues.location && shouldIncludeField("location", processedValues.location, isCreating)) {
-            changedFieldCount++;
-            const locationData = processedValues.location as Record<string, unknown>;
-            const originalTour = (fetchedTourData as any)?.tour ?? fetchedTourData ?? {};
-            const fullLocation = {
-                map: locationData.map || originalTour.location?.map || "",
-                zip: locationData.zip || originalTour.location?.zip || "",
-                street: locationData.street || originalTour.location?.street || "",
-                city: locationData.city || originalTour.location?.city || "",
-                state: locationData.state || originalTour.location?.state || "",
-                country: locationData.country || originalTour.location?.country || "",
-                lat: locationData.lat?.toString() || "0",
-                lng: locationData.lng?.toString() || "0",
-            };
-            formData.append("location", JSON.stringify(fullLocation));
-        }
-
-        // Execute mutation only if there are changed fields
-        if (changedFieldCount > 0) {
-            if (isEditing && tourId) {
-                await updateMutation.mutateAsync(formData);
-            } else {
-                await createMutation.mutateAsync(formData);
-            }
+        if (editingExisting) {
+            await updateMutation.mutateAsync(formData);
+            savedValuesRef.current = values;
+        } else {
+            await createMutation.mutateAsync(formData);
         }
     };
 
@@ -1090,43 +519,28 @@ export function TourProvider({ children, defaultValues, isEditing = false }: Tou
         tourId,
         isEditing,
         editorContent,
-        setEditorContent,
         inclusionsContent,
-        setInclusionsContent,
         exclusionsContent,
-        setExclusionsContent,
-        itineraryContent,
-        setItineraryContent,
+        outlineContent,
         onSubmit,
         isLoading,
         isSaving: createMutation.isPending || updateMutation.isPending,
 
-        // Field arrays
-        itineraryFields,
-        appendItinerary,
-        itineraryRemove,
-
         factsFields,
         appendFacts,
         factsRemove,
+        factsMove,
 
         galleryFields,
         appendGallery,
         galleryRemove,
         galleryMove,
+
         faqFields,
         appendFaq,
         faqRemove,
+        faqMove,
 
-        pricingOptionsFields,
-        appendPricingOptions,
-        pricingOptionsRemove,
-
-        dateRangeFields,
-        appendDateRange,
-        dateRangeRemove,
-
-        // Helper functions
         handleGenerateCode,
     };
 

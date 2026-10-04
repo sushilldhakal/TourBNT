@@ -13,7 +13,7 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation } from '@tanstack/react-query';
 import { useCacheManager, useUserSettings } from '@/lib/queries';
-import { userSetting, getDecryptedApiKey } from '@/lib/api/users';
+import { updateMySettings, getMyDecryptedApiKey } from '@/lib/api/users';
 import { getUserId } from '@/lib/utils/auth';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
@@ -21,7 +21,6 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter }
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -92,7 +91,7 @@ export function SettingsPage() {
     const { invalidateUserSettings } = useCacheManager();
     const userSettingUpdate = useMutation({
         mutationFn: ({ userId, formData }: { userId: string; formData: FormData }) =>
-            userSetting(userId, formData),
+            updateMySettings(formData),
         onSuccess: () => {
             setDecryptedKeys({});
             setVisibleKeys({});
@@ -164,7 +163,7 @@ export function SettingsPage() {
                 GOOGLE_API_KEY: 'google_api_key',
             };
 
-            const response = await getDecryptedApiKey(userId, keyTypeMap[keyType]) as { key?: string };
+            const response = await getMyDecryptedApiKey(keyTypeMap[keyType]) as { key?: string };
 
             if (response && response.key !== undefined) {
                 if (response.key === '') {
@@ -216,7 +215,8 @@ export function SettingsPage() {
     const isKeySet = (key: string): boolean => {
         if (!data) return false;
 
-        const settingsData = data.settings || data;
+        type KeyFlags = { openaiApiKey?: unknown; googleApiKey?: unknown };
+        const settingsData = ((data as { settings?: KeyFlags }).settings || data) as KeyFlags;
 
         switch (key) {
             case 'OPENAI_API_KEY':

@@ -1,5 +1,4 @@
 import { Request, Response, NextFunction } from 'express';
-import createHttpError from 'http-errors';
 import {
   db,
   businessPartners,
@@ -37,8 +36,7 @@ async function generateUniqueSlug(name: string): Promise<string> {
   const base = toSlug(name) || 'business';
   let slug = base;
   let suffix = 1;
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
+  for (;;) {
     const [existing] = await db.select({ id: businessPartners.id }).from(businessPartners).where(eq(businessPartners.slug, slug)).limit(1);
     if (!existing) return slug;
     suffix += 1;

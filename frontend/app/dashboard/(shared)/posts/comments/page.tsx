@@ -72,7 +72,7 @@ const createColumns = (
             header: "User",
             cell: ({ row }) => {
                 const user = row.getValue("user") as User | null;
-                if (!user || !user._id) {
+                if (!user || !user.id) {
                     return (
                         <div className="truncate max-w-[100px] text-muted-foreground">
                             Anonymous
@@ -81,7 +81,7 @@ const createColumns = (
                 }
                 return (
                     <div className="truncate max-w-[100px]">
-                        <Link href={`/dashboard/users/${user._id}`} className="text-primary hover:underline">
+                        <Link href={`/dashboard/users/${user.id}`} className="text-primary hover:underline">
                             {user.name || 'Unknown'}
                         </Link>
                     </div>
@@ -103,7 +103,7 @@ const createColumns = (
                                     variant="ghost"
                                     size="sm"
                                     className="h-8 text-primary hover:text-primary"
-                                    onClick={() => handleAcceptComment(comment._id || comment.id)}
+                                    onClick={() => handleAcceptComment(comment.id)}
                                 >
                                     Accept
                                 </Button>
@@ -111,7 +111,7 @@ const createColumns = (
                                     variant="ghost"
                                     size="sm"
                                     className="h-8 text-destructive hover:text-destructive"
-                                    onClick={() => handleDeleteComment(comment._id || comment.id)}
+                                    onClick={() => handleDeleteComment(comment.id)}
                                 >
                                     Delete
                                 </Button>
@@ -126,12 +126,12 @@ const createColumns = (
             header: "Response to",
             cell: ({ row }) => {
                 const post = row.getValue("post") as Post;
-                if (!post || !post._id) {
+                if (!post || !post.id) {
                     return <div className="truncate max-w-[200px] text-muted-foreground">Unknown Post</div>;
                 }
                 return (
                     <div className="truncate max-w-[200px]">
-                        <Link href={`/dashboard/posts/edit/${post._id}`} className="text-primary hover:underline">
+                        <Link href={`/dashboard/posts/edit/${post.id}`} className="text-primary hover:underline">
                             {post.title || 'Untitled'}
                         </Link>
                     </div>
@@ -283,7 +283,7 @@ export default function CommentsPage() {
 
     const handleBulkAccept = () => {
         const selectedRows = table.getSelectedRowModel().rows;
-        const selectedIds = selectedRows.map((row) => row.original._id || row.original.id);
+        const selectedIds = selectedRows.map((row) => row.original.id);
 
         // Accept each comment individually
         selectedIds.forEach((commentId) => {
@@ -298,7 +298,7 @@ export default function CommentsPage() {
 
     const handleBulkDelete = () => {
         const selectedRows = table.getSelectedRowModel().rows;
-        const selectedIds = selectedRows.map((row) => row.original._id || row.original.id);
+        const selectedIds = selectedRows.map((row) => row.original.id);
         deleteMutation.mutate(selectedIds.join(', '));
         // Clear selection after bulk delete
         setRowSelection({});

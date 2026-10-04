@@ -21,7 +21,7 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { useTourContext } from '@/providers/TourProvider';
-import type { GalleryItem } from '@/lib/schemas/tourEditor';
+import type { EditorGalleryItem as GalleryItem } from '@/types/tourEditor';
 import { Gallery } from '@/components/dashboard/gallery/Gallery';
 import Image from 'next/image';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
@@ -197,7 +197,7 @@ export function TourGallery() {
                         Full screen image viewer with navigation controls
                     </DialogDescription>
                     <div className="relative w-full h-[70vh] flex items-center justify-center bg-muted rounded-md">
-                        {gallery[selectedIndex] ? (
+                        {gallery[selectedIndex]?.image ? (
                             <Image
                                 src={gallery[selectedIndex].image}
                                 alt={`Gallery ${selectedIndex + 1}`}
@@ -357,7 +357,7 @@ function GalleryImageItem({
                 className="aspect-video w-full cursor-pointer"
                 onClick={onClick}
             >
-                {imageError ? (
+                {imageError || !item.image ? (
                     <div className="w-full h-full flex flex-col items-center justify-center bg-secondary/50 text-muted-foreground">
                         <ImageIcon className="h-8 w-8 mb-2" />
                         <p className="text-xs">Failed to load</p>
@@ -365,7 +365,7 @@ function GalleryImageItem({
                 ) : (
                     <Image
                         src={item.image}
-                        alt={item.alt || `Gallery ${index + 1}`}
+                        alt={item.caption || `Gallery ${index + 1}`}
                         width={100}
                         height={100}
                         className="w-full h-full object-cover"

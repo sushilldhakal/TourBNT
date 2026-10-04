@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import dynamic from "next/dynamic";
 
 import { useForm } from "react-hook-form";
@@ -17,7 +17,6 @@ import { Badge } from "@/components/ui/badge";
 import { addCategory, getAvailableCategoriesPage, bulkAddCategories } from '@/lib/api/categories';
 import { ExistingItemsPicker } from '@/components/dashboard/shared/ExistingItemsPicker';
 import { Gallery } from "@/components/dashboard/gallery/Gallery";
-import { CategoryData } from "@/types/types";
 import type { CategoryFormData } from "@/types/category";
 import type { JSONContent } from "novel";
 
@@ -136,11 +135,11 @@ const AddCategory = ({ onCategoryAdded }: { onCategoryAdded: (created?: unknown)
                         const page = await getAvailableCategoriesPage(params);
                         return {
                             ...page,
-                            items: page.items.map((c: any) => ({
-                                id: c.id ?? c._id,
+                            items: page.items.map((c) => ({
+                                id: c.id,
                                 title: c.name,
                                 subtitle: typeof c.description === 'string' ? c.description.slice(0, 80) : undefined,
-                                imageUrl: c.imageUrl,
+                                imageUrl: c.imageUrl ?? undefined,
                             })),
                         };
                     }}

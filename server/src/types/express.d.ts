@@ -1,5 +1,4 @@
 import { Multer } from 'multer';
-import { Request } from "express";
 import { PgUser } from "../api/user/userRepo.pg";
 /**
  * Authenticated user information
@@ -29,7 +28,7 @@ declare global {
         useHybrid: boolean; // Flag to indicate if hybrid pagination should be used
       };
       // Filter/sort middleware
-      filters?: Record<string, any>;
+      filters?: Record<string, string | undefined>;
       sort?: {
         field: string;
         order: 'asc' | 'desc';

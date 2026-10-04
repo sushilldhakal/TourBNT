@@ -66,7 +66,7 @@ function applyDiscountToSubtotal(subtotal: number, discount: DiscountConfig | un
 }
 
 /** The tour's flat per-unit price before any per-category pricing options — sale price takes precedence over the discount config. */
-function baseUnitPrice(tour: TourRow, now: Date): number {
+function baseUnitPrice(tour: TourRow): number {
   if (tour.saleEnabled && tour.salePrice != null) return tour.salePrice;
   return tour.price ?? 0;
 }
@@ -113,7 +113,7 @@ function calculateBasePricing(
 
   if (tour.pricePerPerson === false) {
     // Flat group price — participant counts don't multiply the price.
-    let groupPrice = baseUnitPrice(tour, now);
+    let groupPrice = baseUnitPrice(tour);
     if (!(tour.saleEnabled && tour.salePrice != null)) {
       groupPrice = applyDiscountToSubtotal(groupPrice, tour.discount as DiscountConfig, now);
     }
@@ -152,7 +152,7 @@ function calculateBasePricing(
       ? applyDiscountToSubtotal(childUnit * participants.children, childOption.discount, now)
       : applyDiscountToSubtotal(childUnit * participants.children, adultOption.discount, now);
   } else {
-    adultUnit = baseUnitPrice(tour, now);
+    adultUnit = baseUnitPrice(tour);
     childUnit = adultUnit * DEFAULT_CHILD_PRICE_RATIO;
 
     const rawSubtotal = adultUnit * participants.adults + childUnit * participants.children;

@@ -2,6 +2,7 @@ import express from 'express';
 import { cacheRoute } from '../../middlewares/cacheMiddleware';
 import { sendSuccess, sendError, HTTP_STATUS } from '../../utils/apiResponse';
 import { getAgencyWithTours, listAgencies } from './services/tourBusinessService';
+import { errorMessage, errorStatus } from '../../utils/errors';
 
 const agencyRouter = express.Router();
 
@@ -12,8 +13,8 @@ agencyRouter.get('/', cacheRoute('agencies-list', 60), async (req, res) => {
   const search = typeof req.query.search === 'string' && req.query.search.trim() ? req.query.search.trim() : undefined;
   try {
     return sendSuccess(res, await listAgencies({ page, limit, search }), 'Agencies retrieved successfully');
-  } catch (err: any) {
-    return sendError(res, err?.message ?? 'Could not load agencies', err?.status ?? HTTP_STATUS.INTERNAL_SERVER_ERROR);
+  } catch (err) {
+    return sendError(res, errorMessage(err) ?? 'Could not load agencies', errorStatus(err) ?? HTTP_STATUS.INTERNAL_SERVER_ERROR);
   }
 });
 
@@ -21,8 +22,8 @@ agencyRouter.get('/', cacheRoute('agencies-list', 60), async (req, res) => {
 agencyRouter.get('/:agencyId', cacheRoute('agency-detail', 60), async (req, res) => {
   try {
     return sendSuccess(res, await getAgencyWithTours(req.params.agencyId), 'Agency retrieved successfully');
-  } catch (err: any) {
-    return sendError(res, err?.message ?? 'Could not load agency', err?.status ?? HTTP_STATUS.INTERNAL_SERVER_ERROR);
+  } catch (err) {
+    return sendError(res, errorMessage(err) ?? 'Could not load agency', errorStatus(err) ?? HTTP_STATUS.INTERNAL_SERVER_ERROR);
   }
 });
 

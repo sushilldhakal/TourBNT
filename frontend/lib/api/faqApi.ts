@@ -21,10 +21,10 @@ export const getAllFaqs = async (page: number = 1, limit: number = 10) => {
  * Get FAQs for a specific user (Owner or Admin)
  * @param userId - User ID
  */
-export const getUserFaq = async (userId: string): Promise<FaqData[]> => {
+export const getUserFaq = async (userId: string): Promise<{ data?: FaqData[] }> => {
     try {
         const response = await api.get(`/faqs/user/${userId}`);
-        return extractResponseData(response) as FaqData[];
+        return extractResponseData(response) as { data?: FaqData[] };
     } catch (error) {
         throw handleApiError(error, 'fetching user FAQs');
     }
@@ -38,9 +38,9 @@ export const getUserFaq = async (userId: string): Promise<FaqData[]> => {
 export const getSingleFaq = async (faqId: string) => {
     try {
         const response = await api.get(`/faqs/${faqId}`);
-        const data = extractResponseData(response);
+        const data = extractResponseData<FaqData | { faq: FaqData }>(response);
         // Server returns { faq: ... }, extract just the faq
-        return (data as any)?.faq || data;
+        return 'faq' in data ? data.faq : data;
     } catch (error) {
         throw handleApiError(error, 'fetching single FAQ');
     }

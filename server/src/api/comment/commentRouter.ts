@@ -14,13 +14,13 @@ const commentRouter = express.Router();
 /**
  * GET /api/v1/comments — admin sees all comments, sellers see comments on their own posts.
  */
-commentRouter.get('/', authenticate, authorizeRoles('admin', 'seller') as any, paginationMiddleware(), getAllComments);
+commentRouter.get('/', authenticate, authorizeRoles('admin', 'seller'), paginationMiddleware(), getAllComments);
 
 /**
  * GET /api/v1/comments/unapproved/count — dashboard moderation badge count.
  * Must stay ahead of /:commentId/replies below (a literal path, not a param).
  */
-commentRouter.get('/unapproved/count', authenticate, authorizeRoles('admin', 'seller') as any, getUnapprovedCommentsCount);
+commentRouter.get('/unapproved/count', authenticate, authorizeRoles('admin', 'seller'), getUnapprovedCommentsCount);
 
 /**
  * GET /api/v1/comments/:commentId/replies — fully implemented but never

@@ -21,7 +21,8 @@ import { ContentContainer } from "@/components/layout/PublicLayoutClient";
 const ReviewSlider = () => {
     const [api, setApi] = React.useState<CarouselApi>();
     const [current, setCurrent] = React.useState(0);
-    const [count, setCount] = React.useState(0);
+    // Dots: one per scroll position, once the carousel is ready.
+    const count = api ? api.scrollSnapList().length : 0;
 
     const { data, isPending, isError } = useHomeFeed();
     const approvedReviews = React.useMemo(() => {
@@ -42,9 +43,9 @@ const ReviewSlider = () => {
 
     React.useEffect(() => {
         if (!api) return;
-        setCount(api.scrollSnapList().length);
-        setCurrent(api.selectedScrollSnap());
-        api.on("select", () => setCurrent(api.selectedScrollSnap()));
+        const onSelect = () => setCurrent(api.selectedScrollSnap());
+        api.on("select", onSelect);
+        return () => { api.off("select", onSelect); };
     }, [api]);
 
     if (isPending) {

@@ -1,6 +1,5 @@
 'use client';
 
-import { formatPrice } from '@/lib/tourUtils';
 import { Badge } from '@/components/ui/badge';
 import { AlertCircle } from 'lucide-react';
 import { Price } from '@/components/common/Price';
@@ -11,7 +10,6 @@ interface BasePricingProps {
     salePrice?: number;
     pricePerPerson?: boolean;
     priceLockDate?: string;
-    currency?: string;
 }
 
 export function BasePricing({
@@ -20,7 +18,6 @@ export function BasePricing({
     salePrice,
     pricePerPerson = true,
     priceLockDate,
-    currency = '$',
 }: BasePricingProps) {
     const displayPrice = saleEnabled && salePrice ? salePrice : basePrice;
     const hasDiscount = saleEnabled && salePrice && salePrice < basePrice;

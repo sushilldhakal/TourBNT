@@ -4,9 +4,7 @@ import { HTTP_STATUS } from '../utils/apiResponse';
 /**
  * Filter parameters interface
  */
-export interface FilterParams {
-    [key: string]: any;
-}
+export type FilterParams = Record<string, string | undefined>;
 
 /**
  * Sort parameters interface
@@ -14,18 +12,6 @@ export interface FilterParams {
 export interface SortParams {
     field: string;
     order: 'asc' | 'desc';
-}
-
-/**
- * Extend Express Request to include filter and sort params
- */
-declare global {
-    namespace Express {
-        interface Request {
-            filters?: FilterParams;
-            sort?: SortParams;
-        }
-    }
 }
 
 /**
@@ -50,8 +36,9 @@ export const filterSortMiddleware = (
         // Parse filters
         const filters: FilterParams = {};
         for (const key of allowedFilters) {
-            if (req.query[key]) {
-                filters[key] = req.query[key];
+            const value = req.query[key];
+            if (typeof value === 'string' && value) {
+                filters[key] = value;
             }
         }
 

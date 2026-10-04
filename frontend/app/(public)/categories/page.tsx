@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { getAllCategories } from '@/lib/api/categories';
+import { listFrom } from '@/lib/api/apiClient';
 
 // Serve cached HTML and refresh it in the background at most once a minute (ISR).
 export const revalidate = 60;
@@ -19,9 +20,7 @@ interface CategoryItem {
 export default async function CategoriesPage() {
     let categories: CategoryItem[] = [];
     try {
-        const res: any = await getAllCategories();
-        const list = Array.isArray(res) ? res : (res?.data ?? res?.items ?? []);
-        categories = Array.isArray(list) ? list : [];
+        categories = listFrom<CategoryItem>(await getAllCategories(), 'data', 'items');
     } catch {
         categories = [];
     }

@@ -14,7 +14,7 @@ import { useAuth } from "@/lib/hooks/useAuth";
 import { useMutation } from "@tanstack/react-query";
 import { useCategoryById, useCacheManager } from "@/lib/queries";
 import { updateCategory } from "@/lib/api/categories";
-import { CategoryData, DescriptionContent, TourObject, TourTitle } from "@/types/types";
+import { DescriptionContent, TourObject, TourTitle } from "@/types/types";
 import Image from "next/image";
 import { toast } from "@/components/ui/use-toast";
 import { MultiSelect } from "@/components/ui/MultiSelect";
@@ -45,7 +45,7 @@ export const EditCategoryDialog = ({ categoryId, open, onOpenChange, onSuccess }
 
     const { category, isLoading } = useCategoryById(categoryId, open && !!categoryId);
 
-    const form = useForm({
+    const form = useForm<{ name: string; description: string; imageUrl: string; featuredTours: string[]; reason: string }>({
         defaultValues: {
             name: '',
             description: '',

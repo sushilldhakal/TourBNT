@@ -11,7 +11,12 @@ import { HelpCircle, MessageCircle, Plus } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { faqSchema } from "@/lib/schemas/tourEditor";
+
+// A new FAQ needs both parts (the tour editor's faqSchema allows blanks for partially filled tours).
+const faqSchema = z.object({
+    question: z.string().trim().min(1, 'Question is required'),
+    answer: z.string().trim().min(1, 'Answer is required'),
+});
 
 type FaqFormData = z.infer<typeof faqSchema>;
 

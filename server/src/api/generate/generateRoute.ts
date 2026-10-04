@@ -7,7 +7,7 @@ const generateRouter = express.Router();
 //routes
 
 
-generateRouter.post('/', authenticate,  applyRateLimiting, generateCompletion as any);
+generateRouter.post('/', authenticate,  applyRateLimiting, generateCompletion);
 
 
 

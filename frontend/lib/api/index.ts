@@ -43,7 +43,6 @@ export {
 export {
     getUserById,
     updateUser,
-    uploadAvatar,
 } from './users';
 
 // Gallery API functions moved to mediaApi.ts

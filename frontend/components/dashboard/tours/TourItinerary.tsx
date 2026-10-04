@@ -30,16 +30,11 @@ import { LogisticsStatusPanel } from './LogisticsStatusPanel';
  */
 
 export function TourItinerary() {
-    const { form } = useTourContext();
-    const { register, setValue, watch, control, formState: { errors } } = form;
-    const [outlineContent, setOutlineContent] = React.useState<any>(null);
-    const [isInitialized, setIsInitialized] = React.useState(false);
+    const { form, outlineContent } = useTourContext();
+    const { setValue, control } = form;
     const [deleteIndex, setDeleteIndex] = React.useState<number | null>(null);
     const [openDays, setOpenDays] = React.useState<string[]>([]);
     const [openNewest, setOpenNewest] = React.useState(false);
-
-    // Watch itinerary structure
-    const itinerary = watch('itinerary') || {};
 
     // Field array for itinerary items
     const { fields, append, remove, move } = useFieldArray({
@@ -47,34 +42,12 @@ export function TourItinerary() {
         name: 'itinerary.options.0', // Using first option array for simplicity
     });
 
-    // Initialize outline content from existing data
-    React.useEffect(() => {
-        if (!isInitialized && itinerary.outline) {
-            try {
-                const outline = typeof itinerary.outline === 'string'
-                    ? JSON.parse(itinerary.outline)
-                    : itinerary.outline;
-                setOutlineContent(outline);
-                setIsInitialized(true);
-            } catch (e) {
-                console.error('Error parsing outline:', e);
-                setIsInitialized(true);
-            }
-        }
-    }, [itinerary.outline, isInitialized]);
-
-    React.useEffect(() => {
-        if (!openNewest || fields.length === 0) return;
+    // Open a day just added once it is in the field array (adjusting state during render, not in an effect).
+    if (openNewest && fields.length > 0) {
         const newestId = fields[fields.length - 1].id;
-        setOpenDays((current) => (current.includes(newestId) ? current : [...current, newestId]));
         setOpenNewest(false);
-    }, [fields, openNewest]);
-
-    // Handle outline content change
-    const handleOutlineChange = (content: any) => {
-        setOutlineContent(content);
-        setValue('itinerary.outline', JSON.stringify(content));
-    };
+        if (!openDays.includes(newestId)) setOpenDays([...openDays, newestId]);
+    }
 
     // Handle drag start
     const handleDragStart = (e: React.DragEvent, index: number) => {
@@ -128,19 +101,14 @@ export function TourItinerary() {
                 <CardContent>
                     <NovelEditor
                         initialValue={outlineContent}
-                        onContentChange={handleOutlineChange}
-                        placeholder="List what's included in the tour (e.g., accommodation, meals, transportation, activities)..."
+                        onContentChange={(content) => setValue('outline', content, { shouldDirty: true })}
+                        placeholder="A short overview of the route (e.g., Kathmandu → Pokhara → Annapurna Base Camp)..."
                         minHeight="250px"
                         enableAI={false}
                         enableGallery={true}
                     />
-                    {(errors.include as any) && (
-                        <p className="text-sm text-destructive mt-2">
-                            {(errors.include as any)?.message as string}
-                        </p>
-                    )}
                     <p className="text-sm text-muted-foreground mt-2">
-                        Tip: Use bullet points to make the list easy to read. Press '/' for formatting options.
+                        Tip: Use bullet points to make the list easy to read. Press &apos;/&apos; for formatting options.
                     </p>
                 </CardContent>
             </Card>

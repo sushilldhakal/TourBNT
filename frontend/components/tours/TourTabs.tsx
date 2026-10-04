@@ -1,6 +1,6 @@
 'use client';
 
-import { Tour } from '@/types/types';
+import type { Departure, RichText, Tour } from '@/types/types';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import RichTextRenderer from '@/components/RichTextRenderer';
 import { ItineraryAccordion } from './ItineraryAccordion';
@@ -17,7 +17,7 @@ import { CheckCircle2, XCircle } from 'lucide-react';
 
 interface TourTabsProps {
     tour: Tour;
-    onBookNow?: (departure: any) => void;
+    onBookNow?: (departure: Departure) => void;
     /** Destination list from relatedData for resolving itinerary destination IDs to names */
     destinations?: { id: string; name: string }[];
 }
@@ -84,7 +84,7 @@ export function TourTabs({ tour, onBookNow, destinations }: TourTabsProps) {
                     {tour.itinerary && tour.itinerary.length > 0 ? (
                         <ItineraryAccordion
                             itinerary={tour.itinerary}
-                            outline={tour.outline}
+                            outline={tour.outline ?? undefined}
                             destinations={destinations}
                         />
                     ) : (
@@ -103,7 +103,7 @@ export function TourTabs({ tour, onBookNow, destinations }: TourTabsProps) {
                     saleEnabled={tour.saleEnabled}
                     salePrice={tour.salePrice}
                     pricePerPerson={tour.pricePerPerson}
-                    priceLockDate={tour.priceLockDate}
+                    priceLockDate={tour.priceLockDate ?? undefined}
                 />
 
                 {/* Advanced Pricing Options */}
@@ -136,7 +136,7 @@ export function TourTabs({ tour, onBookNow, destinations }: TourTabsProps) {
                     {tour.faqs && tour.faqs.length > 0 ? (
                         <Accordion type="single" collapsible className="w-full">
                             {tour.faqs.map((faq, index) => (
-                                <AccordionItem key={faq._id || faq.id || index} value={`faq-${index}`}>
+                                <AccordionItem key={faq.id || faq.faqId || index} value={`faq-${index}`}>
                                     <AccordionTrigger
                                         className="text-left text-sm sm:text-base"
                                         aria-label={`Question: ${faq.question}`}
@@ -161,11 +161,16 @@ export function TourTabs({ tour, onBookNow, destinations }: TourTabsProps) {
 }
 
 interface InclusionsExclusionsProps {
-    inclusions?: string;
-    exclusions?: string;
+    inclusions?: RichText;
+    exclusions?: RichText;
 }
 
-function InclusionsExclusions({ inclusions, exclusions }: InclusionsExclusionsProps) {
+/** Rich text (string) or a list; an empty list (the database default) means nothing to show. */
+const hasContent = (v?: RichText) => (Array.isArray(v) ? v.length > 0 : !!v);
+
+function InclusionsExclusions({ inclusions: rawInclusions, exclusions: rawExclusions }: InclusionsExclusionsProps) {
+    const inclusions = hasContent(rawInclusions) ? rawInclusions : undefined;
+    const exclusions = hasContent(rawExclusions) ? rawExclusions : undefined;
     if (!inclusions && !exclusions) {
         return null;
     }
@@ -177,7 +182,7 @@ function InclusionsExclusions({ inclusions, exclusions }: InclusionsExclusionsPr
                 <section className="bg-card border rounded-lg p-4 sm:p-6" aria-labelledby="inclusions-heading">
                     <div className="flex items-center gap-2 mb-3 sm:mb-4">
                         <CheckCircle2 className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 dark:text-green-400 shrink-0" aria-hidden="true" />
-                        <h3 id="inclusions-heading" className="text-base sm:text-lg font-semibold">What's Included</h3>
+                        <h3 id="inclusions-heading" className="text-base sm:text-lg font-semibold">What&apos;s Included</h3>
                     </div>
                     <div className="text-sm">
                         <RichTextRenderer content={inclusions} />
@@ -190,7 +195,7 @@ function InclusionsExclusions({ inclusions, exclusions }: InclusionsExclusionsPr
                 <section className="bg-card border rounded-lg p-4 sm:p-6" aria-labelledby="exclusions-heading">
                     <div className="flex items-center gap-2 mb-3 sm:mb-4">
                         <XCircle className="h-4 w-4 sm:h-5 sm:w-5 text-red-600 dark:text-red-400 shrink-0" aria-hidden="true" />
-                        <h3 id="exclusions-heading" className="text-base sm:text-lg font-semibold">What's Not Included</h3>
+                        <h3 id="exclusions-heading" className="text-base sm:text-lg font-semibold">What&apos;s Not Included</h3>
                     </div>
                     <div className="text-sm">
                         <RichTextRenderer content={exclusions} />

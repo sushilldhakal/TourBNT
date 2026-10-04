@@ -83,7 +83,7 @@ export const parsePaginationParams = (req: Request): PaginationOptions => {
 
   return {
     page,
-    limit: limit as any, // Type assertion for compatibility
+    limit,
     skip,
     sortBy,
     sortOrder,

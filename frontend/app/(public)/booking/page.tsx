@@ -24,8 +24,9 @@ export default function BookingsPage() {
     useEffect(() => {
         let cancelled = false;
         getUserBookings({ limit: 50 })
-            .then((res: { data?: BookingItem[]; items?: BookingItem[]; bookings?: BookingItem[] }) => {
+            .then((raw) => {
                 if (cancelled) return;
+                const res = raw as { data?: BookingItem[]; items?: BookingItem[]; bookings?: BookingItem[] } | undefined;
                 const list = res?.data ?? res?.items ?? res?.bookings ?? [];
                 setBookings(Array.isArray(list) ? list : []);
                 setAuthError(false);
@@ -54,7 +55,7 @@ export default function BookingsPage() {
             {authError ? (
                 <div className="text-center py-16 bg-card border border-border rounded-lg">
                     <p className="text-xl text-muted-foreground mb-4">Sign in to view your bookings</p>
-                    <Link href="/login" className="text-primary hover:text-primary/80">
+                    <Link href="/auth/login?redirect=/booking" className="text-primary hover:text-primary/80">
                         Sign in
                     </Link>
                     <span className="text-muted-foreground mx-2">or</span>
@@ -66,7 +67,7 @@ export default function BookingsPage() {
                 <div className="text-center py-16 text-muted-foreground">Loading...</div>
             ) : bookings.length === 0 ? (
                 <div className="text-center py-16 bg-card border border-border rounded-lg">
-                    <p className="text-xl text-muted-foreground mb-4">You don't have any bookings yet</p>
+                    <p className="text-xl text-muted-foreground mb-4">You don&apos;t have any bookings yet</p>
                     <Link href="/tours" className="text-primary hover:text-primary/80">
                         Browse Tours
                     </Link>

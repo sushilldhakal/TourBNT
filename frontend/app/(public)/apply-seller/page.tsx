@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Building2, Check, CheckCircle2, FileText, Landmark, Loader2, Upload, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -146,11 +146,12 @@ export default function ApplySellerPage() {
     const set = (name: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setForm((f) => ({ ...f, [name]: e.target.value }));
     const setValue = (name: string) => (value: string) => setForm((f) => ({ ...f, [name]: value }));
 
-    // Prefill from the account once it has loaded.
-    useEffect(() => {
-        if (!user?.id) return;
-        setForm((f) => ({ ...f, contactPerson: f.contactPerson || user.name || '', phone: f.phone || (user as { phone?: string }).phone || '' }));
-    }, [user?.id, user]);
+    // Prefill from the account once it has loaded (adjusted while rendering, once per account).
+    const [prefilledFor, setPrefilledFor] = useState<string | null>(null);
+    if (user?.id && prefilledFor !== user.id) {
+        setPrefilledFor(user.id);
+        setForm((f) => ({ ...f, contactPerson: f.contactPerson || user.name || '', phone: f.phone || user.phone || '' }));
+    }
 
     const missing = useMemo(() => REQUIRED_BY_STEP[step].filter(([k]) => !form[k]?.trim()).map(([, label]) => label), [step, form]);
     const missingDocs = DOCUMENTS.filter((d) => d.required && !(docs[d.key]?.length));
@@ -206,7 +207,7 @@ export default function ApplySellerPage() {
                 <p>You need an account to apply as a seller.</p>
                 <div className="flex justify-center gap-3">
                     <Button asChild><Link href="/auth/login">Log in</Link></Button>
-                    <Button asChild variant="outline"><Link href="/auth/register">Create account</Link></Button>
+                    <Button asChild variant="outline"><Link href="/auth/login?form=signup&redirect=/apply-seller">Create account</Link></Button>
                 </div>
             </CardContent></Card>
         );

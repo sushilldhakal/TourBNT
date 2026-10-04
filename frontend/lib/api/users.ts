@@ -1,4 +1,4 @@
-import { api, serverApi, handleApiError, extractResponseData } from './apiClient';
+import { api, serverApi, handleApiError, extractResponseData, isRecord } from './apiClient';
 import useUserStore, { User } from '../store/useUserStore';
 
 /**
@@ -81,31 +81,31 @@ export const loginWithPasskey = async (keepMeSignedIn = false): Promise<User> =>
 };
 
 /** Reads the user out of a login response, puts them in the store, and returns them. */
-function storeUserFromAuthResponse(response: any): User {
+function storeUserFromAuthResponse(response: { data?: unknown }): User {
     const body = response?.data;
-    let userData: any = null;
-    if (body?.data) {
-        const data = body.data;
-        userData = data?.user ?? data;
-    } else if (body?.user) {
-        userData = body.user;
-    } else if (body?.id || body?.email) {
-        userData = body;
+    let userData: Record<string, unknown> | null = null;
+    if (isRecord(body)) {
+        if (isRecord(body.data)) {
+            userData = isRecord(body.data.user) ? body.data.user : body.data;
+        } else if (isRecord(body.user)) {
+            userData = body.user;
+        } else if (body.id || body.email) {
+            userData = body;
+        }
     }
 
-    if (!userData || (typeof userData !== 'object')) {
+    if (!userData) {
         throw new Error('Invalid login response: no user data');
     }
 
-    const normalizedRoles: string = Array.isArray(userData.roles)
-        ? (userData.roles[0] ?? '')
-        : (userData.roles ?? '');
+    const roles = userData.roles;
+    const normalizedRoles: string = Array.isArray(roles) ? String(roles[0] ?? '') : String(roles ?? '');
 
-    const normalizedUser: User = {
+    const normalizedUser = {
         ...userData,
-        id: userData.id?.toString?.() ?? userData.id ?? null,
+        id: userData.id != null ? String(userData.id) : null,
         roles: normalizedRoles,
-    };
+    } as User;
 
     // Update store immediately
     useUserStore.getState().setUser(normalizedUser);
@@ -425,67 +425,6 @@ export const deleteSellerApplication = async (userId: string) => {
     } catch (error) {
         throw handleApiError(error, 'deleting seller application');
     }
-};
-
-// ============================================================================
-// LEGACY/COMPATIBILITY FUNCTIONS (Deprecated - use /me routes instead)
-// ============================================================================
-
-/**
- * @deprecated Use updateMyProfile instead
- * Update user settings (legacy - use updateMySettings instead)
- */
-export const userSetting = async (userId: string, data: FormData) => {
-    console.warn('userSetting is deprecated. Use updateMySettings instead.');
-    return updateMySettings(data);
-};
-
-/**
- * @deprecated Use getMySettings instead
- * Get user settings (legacy - use getMySettings instead)
- */
-export const getUserSetting = async (userId: string) => {
-    console.warn('getUserSetting is deprecated. Use getMySettings instead.');
-    return getMySettings();
-};
-
-/**
- * @deprecated Use getMyDecryptedApiKey instead
- * Get decrypted API key (legacy - use getMyDecryptedApiKey instead)
- */
-export const getDecryptedApiKey = async (userId: string, keyType: string) => {
-    console.warn('getDecryptedApiKey is deprecated. Use getMyDecryptedApiKey instead.');
-    return getMyDecryptedApiKey(keyType);
-};
-
-/**
- * @deprecated Use changeMyPassword instead
- * Change user password (legacy - use changeMyPassword instead)
- */
-export const changeUserPassword = async (
-    userId: string,
-    data: { currentPassword: string; newPassword: string }
-) => {
-    console.warn('changeUserPassword is deprecated. Use changeMyPassword instead.');
-    return changeMyPassword(data);
-};
-
-/**
- * @deprecated Use uploadMyAvatar instead
- * Upload user avatar (legacy - use uploadMyAvatar instead)
- */
-export const uploadAvatar = async (userId: string, avatarData: File | FormData | string) => {
-    console.warn('uploadAvatar is deprecated. Use uploadMyAvatar instead.');
-    return uploadMyAvatar(avatarData);
-};
-
-/**
- * @deprecated Use getMyAvatar instead
- * Get user avatar (legacy - use getMyAvatar instead)
- */
-export const getUserAvatar = async (userId: string) => {
-    console.warn('getUserAvatar is deprecated. Use getMyAvatar instead.');
-    return getMyAvatar();
 };
 
 // ============================================================================

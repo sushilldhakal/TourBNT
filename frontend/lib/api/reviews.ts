@@ -1,4 +1,4 @@
-import { api, handleApiError, extractResponseData } from './apiClient';
+import { api, handleApiError, extractResponseData, apiErrorStatus } from './apiClient';
 
 /**
  * Review API Methods
@@ -90,8 +90,8 @@ export const getReviewEligibility = async (tourId: string): Promise<ReviewEligib
     try {
         const response = await api.get(`/tours/${tourId}/reviews/eligibility`);
         return (response.data?.data ?? { canReview: false }) as ReviewEligibility;
-    } catch (error: any) {
-        if (error?.response?.status === 401) {
+    } catch (error) {
+        if (apiErrorStatus(error) === 401) {
             return { canReview: false, reason: 'not_signed_in', message: 'Sign in to review a tour you have taken.' };
         }
         throw handleApiError(error, 'checking review eligibility');

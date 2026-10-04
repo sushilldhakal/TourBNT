@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { getPosts } from '@/lib/api/posts';
+import { listFrom } from '@/lib/api/apiClient';
 import type { PostListItem } from '@/types/post';
 
 // Serve cached HTML and refresh it in the background at most once a minute (ISR).
@@ -13,9 +14,7 @@ export default async function BlogPage({ searchParams }: { searchParams: Promise
     const tag = typeof rawTag === 'string' ? rawTag.trim().slice(0, 50) : '';
     let posts: PostListItem[] = [];
     try {
-        const res: any = await getPosts({ limit: 24, tag: tag || undefined });
-        const list = res?.data ?? res?.items ?? res?.posts ?? [];
-        posts = Array.isArray(list) ? list : [];
+        posts = listFrom<PostListItem>(await getPosts({ limit: 24, tag: tag || undefined }), 'data', 'items', 'posts');
     } catch {
         posts = [];
     }

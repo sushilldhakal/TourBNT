@@ -1,4 +1,4 @@
-import { api } from './apiClient';
+import { api, apiErrorMessage } from './apiClient';
 
 export interface PromoCode {
     id: string;
@@ -20,7 +20,7 @@ export interface PromoCode {
 
 export type PromoInput = Partial<Pick<PromoCode, 'code' | 'description' | 'discountType' | 'discountValue' | 'maxDiscountAmount' | 'minBookingAmount' | 'startsAt' | 'expiresAt' | 'maxUses' | 'isActive' | 'tourIds'>>;
 
-const message = (e: any, fallback: string) => new Error(e?.response?.data?.error?.message ?? e?.response?.data?.message ?? e?.message ?? fallback);
+const message = (e: unknown, fallback: string) => new Error(apiErrorMessage(e, fallback));
 
 export const listPromoCodes = async (): Promise<PromoCode[]> => {
     try { return (await api.get('/promo-codes')).data.data; } catch (e) { throw message(e, 'Could not load promo codes.'); }

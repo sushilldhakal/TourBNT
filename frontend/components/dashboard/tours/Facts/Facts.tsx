@@ -104,8 +104,8 @@ const TourFacts = () => {
     const filteredFacts = facts?.data?.filter((fact: FactData) =>
         fact.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (fact.field_type?.toLowerCase().includes(searchQuery.toLowerCase()) || false) ||
-        (Array.isArray(fact.value) && fact.value.some((val: string) =>
-            val.toLowerCase().includes(searchQuery.toLowerCase())
+        (Array.isArray(fact.value) && fact.value.some((val) =>
+            (typeof val === 'object' ? val.label ?? val.value : val).toLowerCase().includes(searchQuery.toLowerCase())
         ))
     );
 
@@ -209,7 +209,7 @@ const TourFacts = () => {
                                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                                     {filteredFacts.map((fact, index) => (
                                         <SingleFact
-                                            key={fact._id || `fact-${index}`}
+                                            key={fact.id || fact._id || `fact-${index}`}
                                             fact={fact}
                                             DeleteFact={handleDeleteFacts}
                                         />
@@ -250,7 +250,7 @@ const TourFacts = () => {
                                     </table>
                                 </div>
                             )
-                        ) : facts?.length ? (
+                        ) : facts?.data?.length ? (
                             <div className="text-center py-12" role="status" aria-live="polite">
                                 <Search className="h-12 w-12 text-muted-foreground mx-auto mb-4" aria-hidden="true" />
                                 <h3 className="font-semibold text-lg mb-2">No matching facts found</h3>
@@ -264,7 +264,7 @@ const TourFacts = () => {
                                 <h3 className="font-semibold text-lg mb-2">No facts added yet</h3>
                                 <p className="text-sm text-muted-foreground max-w-md mx-auto mb-6">
                                     Facts provide important information about your tours.
-                                    They'll appear here once added.
+                                    They&apos;ll appear here once added.
                                 </p>
                                 <Button
                                     onClick={() => setIsAddFactOpen(true)}

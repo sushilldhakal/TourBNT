@@ -12,6 +12,7 @@ import {
   sendValidationError,
 } from '../../../utils/apiResponse';
 import { invalidateTours } from '../../../services/cacheInvalidation';
+import type { StoredTourFact } from '../../tours/tourTypes';
 
 export const getUserFacts = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -147,7 +148,7 @@ export const updateFacts = async (req: Request, res: Response, next: NextFunctio
       .where(sql`EXISTS (SELECT 1 FROM jsonb_array_elements(${tours.facts}) elem WHERE elem->>'factId' = ${factId})`);
 
     for (const tour of affectedTours) {
-      const updatedTourFacts = (tour.facts as any[]).map((f) =>
+      const updatedTourFacts = ((tour.facts ?? []) as StoredTourFact[]).map((f) =>
         f.factId === factId ? { ...f, title: updatedFact.name, icon: updatedFact.icon, field_type: updatedFact.fieldType } : f
       );
       await db.update(tours).set({ facts: updatedTourFacts, updatedAt: new Date() }).where(eq(tours.id, tour.id));

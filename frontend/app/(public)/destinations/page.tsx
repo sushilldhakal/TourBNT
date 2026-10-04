@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { getAllDestinations } from '@/lib/api/destinations';
+import { listFrom } from '@/lib/api/apiClient';
 
 // Serve cached HTML and refresh it in the background at most once a minute (ISR).
 export const revalidate = 60;
@@ -20,9 +21,7 @@ interface DestinationItem {
 export default async function DestinationsPage() {
     let destinations: DestinationItem[] = [];
     try {
-        const res: any = await getAllDestinations();
-        const list = Array.isArray(res) ? res : (res?.data ?? res?.items ?? []);
-        destinations = Array.isArray(list) ? list : [];
+        destinations = listFrom<DestinationItem>(await getAllDestinations(), 'data', 'items');
     } catch {
         destinations = [];
     }

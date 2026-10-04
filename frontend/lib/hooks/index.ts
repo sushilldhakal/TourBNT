@@ -6,6 +6,7 @@
  */
 
 export * from './useAuth';
+export * from './useIsClient';
 export * from './useRole';
 export * from './useGooglePlacesAutocomplete';
 export * from './gallery';

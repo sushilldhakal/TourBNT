@@ -14,6 +14,7 @@ import { db, tours, businessPartners, businessPartnerUnitTypes, itineraryPartner
 import { eq, and, inArray } from 'drizzle-orm';
 import { processItineraryData } from '../api/tours/utils/dataProcessors';
 import { randomUUID } from 'crypto';
+import { isItineraryRole } from '../api/tours/tourTypes';
 
 const TOUR_ID = process.argv[2] || '52f4fcc5-2289-4b21-8780-3105423d4605';
 
@@ -169,17 +170,17 @@ async function main() {
 
   const log = (m: string) => console.log(`[${new Date().toISOString().slice(11, 19)}] ${m}`);
   const chunk = <T,>(a: T[], n = 100) => Array.from({ length: Math.ceil(a.length / n) }, (_, k) => a.slice(k * n, k * n + n));
-  const processed = processItineraryData(itinerary) as Array<any>;
+  const processed = processItineraryData(itinerary);
 
   // 1. The tour row.
   log('Updating tour…');
   await db.update(tours).set({
-    tourStatus: 'Published', itinerary: processed as any, tourDates: tourDates as any, outline, gallery: gallery as any,
+    tourStatus: 'Published', itinerary: processed, tourDates, outline, gallery,
     enquiry: true, pricePerPerson: true, discount: null, fixedDeparture: true, multipleDates: true,
     pricingOptions: [
-      { id: 'opt-adult', name: 'Adult', price: tour.price ?? 1390, category: 'adult', paxRange: { min: 1, max: 12 }, discountEnabled: false, isActive: true },
-      { id: 'opt-child', name: 'Child', price: Math.round((tour.price ?? 1390) * 0.6), category: 'child', paxRange: { min: 1, max: 12 }, discountEnabled: false, isActive: true },
-    ] as any,
+      { id: 'opt-adult', name: 'Adult', price: tour.price ?? 1390, category: 'adult', paxRange: { minPax: 1, maxPax: 12 }, discountEnabled: false, isActive: true },
+      { id: 'opt-child', name: 'Child', price: Math.round((tour.price ?? 1390) * 0.6), category: 'child', paxRange: { minPax: 1, maxPax: 12 }, discountEnabled: false, isActive: true },
+    ],
     updatedAt: new Date(),
   }).where(eq(tours.id, TOUR_ID));
 
@@ -189,7 +190,8 @@ async function main() {
   await db.delete(tourItineraryPartners).where(eq(tourItineraryPartners.tourId, TOUR_ID));
   const linkRows: Array<typeof tourItineraryPartners.$inferInsert & { id: string }> = [];
   processed.forEach((day) => {
-    (day.partners as any[]).forEach((p, idx) => {
+    day.partners.forEach((p, idx) => {
+      if (!isItineraryRole(p.role)) return;
       linkRows.push({
         id: randomUUID(), tourId: TOUR_ID, dayId: day.id, role: p.role, businessPartnerId: p.businessPartnerId ?? null, name: p.name,
         notes: p.notes ?? null, sortOrder: idx, unitsRequested: typeof p.unitsRequested === 'number' ? p.unitsRequested : null,
@@ -213,7 +215,7 @@ async function main() {
       if (!l.businessPartnerId) return;
       const dayIdx = processed.findIndex((d) => d.id === l.dayId);
       const day = processed[dayIdx];
-      const pj = (day.partners as any[]).find((x) => x.role === l.role);
+      const pj = day.partners.find((x) => x.role === l.role);
       n++;
       let status: 'pending' | 'confirmed' | 'held' | 'countered' | 'declined' | 'expired' = 'pending';
       if (di === 0) status = l.businessPartnerId === tashiId ? 'countered' : n % 11 === 0 ? 'declined' : n % 7 === 0 ? 'held' : n % 13 === 0 ? 'pending' : 'confirmed';
@@ -236,15 +238,15 @@ async function main() {
         counterDate: status === 'countered' ? serviceDate : null,
         counterNotes: status === 'countered' ? 'We only have part of that capacity free — can offer fewer rooms for the same night.' : null,
         version: status === 'pending' ? 1 : 2, sourceDepartureDate: dep, createdAt: created, updatedAt: responded ?? created,
-      } as any);
-      eventRows.push({ id: randomUUID(), requestId: id, fromStatus: null, toStatus: 'pending', actorId: tour.createdAt ? null : null, actorRole: 'agency', unitsAtEvent: units, notes: 'Request created', createdAt: created } as any);
+      });
+      eventRows.push({ id: randomUUID(), requestId: id, fromStatus: null, toStatus: 'pending', actorId: null, actorRole: 'agency', unitsAtEvent: units, notes: 'Request created', createdAt: created });
       if (status !== 'pending') {
         eventRows.push({
           id: randomUUID(), requestId: id, fromStatus: 'pending', toStatus: status, actorId: status === 'expired' ? null : owner,
           actorRole: status === 'expired' ? 'system' : 'partner', unitsAtEvent: units,
           notes: status === 'expired' ? 'No response before deadline' : status === 'declined' ? 'Fully booked on that date — sorry!' : status === 'countered' ? 'Offered fewer rooms' : 'Responded',
           createdAt: responded ?? new Date(now - 6 * 3600000),
-        } as any);
+        });
       }
     });
   });

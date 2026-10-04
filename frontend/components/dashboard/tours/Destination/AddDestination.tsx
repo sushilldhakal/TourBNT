@@ -15,7 +15,6 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { useCacheManager } from '@/lib/queries';
 import { addDestination, getAvailableDestinationsPage, bulkAddDestinations } from '@/lib/api/destinations';
 import { ExistingItemsPicker } from '@/components/dashboard/shared/ExistingItemsPicker';
-import { DestinationTypes, TourTitle } from "@/types/types";
 import type { DestinationFormData } from "@/types/destination";
 import { Gallery } from "@/components/dashboard/gallery/Gallery";
 import type { JSONContent } from "novel";
@@ -160,11 +159,11 @@ const AddDestination = ({ onDestinationAdded }: AddDestinationProps) => {
                                 const page = await getAvailableDestinationsPage(params);
                                 return {
                                     ...page,
-                                    items: page.items.map((d: any) => ({
-                                        id: d.id ?? d._id,
+                                    items: page.items.map((d) => ({
+                                        id: d.id,
                                         title: d.name,
                                         subtitle: [d.city, d.region, d.country].filter(Boolean).join(', '),
-                                        imageUrl: d.coverImage,
+                                        imageUrl: d.coverImage ?? undefined,
                                     })),
                                 };
                             }}

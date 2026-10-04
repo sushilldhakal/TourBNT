@@ -3,7 +3,7 @@
 import { Command as CommandPrimitive, useCommandState } from 'cmdk';
 import { X } from 'lucide-react';
 import * as React from 'react';
-import { forwardRef, useEffect } from 'react';
+import { forwardRef, useEffect, useRef, useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Command, CommandGroup, CommandItem, CommandList } from '@/components/ui/command';
@@ -236,23 +236,29 @@ const MultipleSelector = React.forwardRef<MultipleSelectorRef, MultipleSelectorP
             };
         }, [open]);
 
+        // A new `value` from the parent replaces the selection (adjusted while rendering, not in an effect).
+        const [syncedValue, setSyncedValue] = useState(value);
+        if (value && value !== syncedValue) {
+            setSyncedValue(value);
+            setSelected(value);
+        }
+
+        // New static `options` replace the list (compared by content: callers often pass a fresh array).
+        const optionsKey = !arrayOptions || onSearch ? null : JSON.stringify(transToGroupOption(arrayOptions, groupBy));
+        const [syncedOptionsKey, setSyncedOptionsKey] = useState(optionsKey);
+        if (optionsKey !== null && optionsKey !== syncedOptionsKey) {
+            setSyncedOptionsKey(optionsKey);
+            setOptions(JSON.parse(optionsKey) as GroupOption);
+        }
+
+        // The latest search callbacks, so a parent's inline function doesn't re-run the search effects.
+        const searchRef = useRef({ onSearch, onSearchSync });
         useEffect(() => {
-            if (value) {
-                setSelected(value);
-            }
-        }, [value]);
+            searchRef.current = { onSearch, onSearchSync };
+        });
 
         useEffect(() => {
-            if (!arrayOptions || onSearch) {
-                return;
-            }
-            const newOption = transToGroupOption(arrayOptions || [], groupBy);
-            if (JSON.stringify(newOption) !== JSON.stringify(options)) {
-                setOptions(newOption);
-            }
-        }, [arrayDefaultOptions, arrayOptions, groupBy, onSearch, options]);
-
-        useEffect(() => {
+            const { onSearchSync } = searchRef.current;
             const doSearchSync = () => {
                 const res = onSearchSync?.(debouncedSearchTerm);
                 setOptions(transToGroupOption(res || [], groupBy));
@@ -274,6 +280,7 @@ const MultipleSelector = React.forwardRef<MultipleSelectorRef, MultipleSelectorP
         }, [debouncedSearchTerm, groupBy, open, triggerSearchOnFocus]);
 
         useEffect(() => {
+            const { onSearch } = searchRef.current;
             const doSearch = async () => {
                 setIsLoading(true);
                 const res = await onSearch?.(debouncedSearchTerm);
@@ -358,7 +365,7 @@ const MultipleSelector = React.forwardRef<MultipleSelectorRef, MultipleSelectorP
             [options, selected],
         );
 
-        const commandFilter = React.useCallback(() => {
+        const commandFilter = () => {
             if (commandProps?.filter) {
                 return commandProps.filter;
             }
@@ -369,7 +376,7 @@ const MultipleSelector = React.forwardRef<MultipleSelectorRef, MultipleSelectorP
                 };
             }
             return undefined;
-        }, [creatable, commandProps?.filter]);
+        };
 
         return (
             <Command
@@ -458,7 +465,7 @@ const MultipleSelector = React.forwardRef<MultipleSelectorRef, MultipleSelectorP
                             }}
                             onFocus={(event) => {
                                 setOpen(true);
-                                triggerSearchOnFocus && onSearch?.(debouncedSearchTerm);
+                                if (triggerSearchOnFocus) onSearch?.(debouncedSearchTerm);
                                 inputProps?.onFocus?.(event);
                             }}
                             placeholder={hidePlaceholderWhenSelected && selected.length !== 0 ? '' : placeholder}

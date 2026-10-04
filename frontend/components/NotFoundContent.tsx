@@ -38,7 +38,7 @@ export function NotFoundContent() {
                         Page Not Found
                     </h1>
                     <p className="text-xl text-muted-foreground max-w-md mx-auto">
-                        Oops! The page you're looking for seems to have wandered off on its own adventure.
+                        Oops! The page you&apos;re looking for seems to have wandered off on its own adventure.
                     </p>
 
                     <motion.div

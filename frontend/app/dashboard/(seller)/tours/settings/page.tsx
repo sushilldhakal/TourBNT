@@ -3,7 +3,6 @@
 import React, { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { PricingPresets, DatePresets, PaxPresets, DiscountPresets, ContentPresets, ItineraryPresets, TourTemplatePresets } from '@/components/dashboard/tours/Setting';
 import { Settings2, DollarSign, Calendar, Users, Percent, FileText, Route, LayoutTemplate, Info, CheckCircle2, Lightbulb } from 'lucide-react';
 import { DashboardCardHeader } from '@/components/dashboard/layout/CardHeader';

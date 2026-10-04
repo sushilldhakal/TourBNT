@@ -1,3 +1,4 @@
+import type { FactData } from "@/types/facts";
 import { api, extractResponseData, handleApiError } from "./apiClient";
 
 /**
@@ -36,9 +37,9 @@ export const getUserFacts = async (userId: string) => {
 export const getSingleFacts = async (factId: string) => {
     try {
         const response = await api.get(`/facts/${factId}`);
-        const data = extractResponseData(response);
+        const data = extractResponseData<FactData | { facts: FactData }>(response);
         // Server returns { facts: ... }, extract just the facts
-        return (data as any)?.facts || data;
+        return 'facts' in data ? data.facts : data;
     } catch (error) {
         throw handleApiError(error, 'fetching single fact');
     }

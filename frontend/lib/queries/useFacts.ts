@@ -8,9 +8,10 @@ import { queryKeys } from './queryKeys';
 import type { FactData } from '@/types/facts';
 
 export function useFacts(userId: string | null, enabled = true) {
-    return useQuery<FactData[]>({
+    // The API answers { success, data: FactData[] }; callers read `.data`.
+    return useQuery<{ data?: FactData[] }>({
         queryKey: queryKeys.facts.list(userId),
-        queryFn: () => getUserFacts(userId!),
+        queryFn: async () => (await getUserFacts(userId!)) as { data?: FactData[] },
         enabled: !!userId && enabled,
         staleTime: 5 * 60 * 1000,
     });

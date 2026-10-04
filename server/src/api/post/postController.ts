@@ -177,8 +177,7 @@ export const deletePost = async (req: Request, res: Response, next: NextFunction
     await db.delete(posts).where(eq(posts.id, postId));
     res.status(HTTP_STATUS.NO_CONTENT).send();
   } catch (err) {
-    console.error('Error deleting post:', err);
-    return sendNotFoundError(res, 'Failed to delete post');
+    next(err);
   }
 };
 

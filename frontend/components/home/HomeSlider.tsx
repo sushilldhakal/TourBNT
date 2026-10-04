@@ -12,7 +12,6 @@ import type { Tour } from "@/types/types";
 
 const HomeSlider = () => {
     const { data, isPending } = useHomeFeed();
-    const toursList = data?.tours ?? [];
 
     const [current, setCurrent] = useState(0);
     const [progress, setProgress] = useState(0);
@@ -22,13 +21,14 @@ const HomeSlider = () => {
     const slideInterval = 8000;
 
     const sortedTours = useMemo(() => {
-        if (!toursList?.length) return [];
+        const toursList = data?.tours ?? [];
+        if (!toursList.length) return [];
 
         return [...toursList]
             .sort((a: Tour, b: Tour) =>
                 new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
             .slice(0, 5);
-    }, [toursList]);
+    }, [data?.tours]);
 
     useEffect(() => {
         if (!autoplayEnabled || sortedTours.length === 0) return;
@@ -53,8 +53,13 @@ const HomeSlider = () => {
         return () => clearInterval(intervalId);
     }, [autoplayEnabled, sortedTours.length, current]);
 
-    useEffect(() => {
+    // Go to a slide, restarting its progress bar.
+    const goTo = (next: number | ((prev: number) => number)) => {
+        setCurrent(next);
         setProgress(0);
+    };
+
+    useEffect(() => {
         const handleScroll = () => {
             const parallaxContainers = document.querySelectorAll('.parallax-container');
             parallaxContainers.forEach((container) => {
@@ -65,7 +70,7 @@ const HomeSlider = () => {
         };
         window.addEventListener('scroll', handleScroll);
         return () => window.removeEventListener('scroll', handleScroll);
-    }, [current]);
+    }, []);
 
     const handleMouseEnter = () => setAutoplayEnabled(false);
     const handleMouseLeave = () => setAutoplayEnabled(true);
@@ -100,9 +105,9 @@ const HomeSlider = () => {
 
         if (Math.abs(diff) > 50) {
             if (diff > 0) {
-                setCurrent((prev) => (prev + 1) % sortedTours.length);
+                goTo((prev) => (prev + 1) % sortedTours.length);
             } else {
-                setCurrent((prev) => (prev === 0 ? sortedTours.length - 1 : prev - 1));
+                goTo((prev) => (prev === 0 ? sortedTours.length - 1 : prev - 1));
             }
         }
 
@@ -218,7 +223,7 @@ const HomeSlider = () => {
                             "relative flex items-center justify-center transition-all duration-500 ease-in-out",
                             current === index ? "scale-110" : "hover:scale-105"
                         )}
-                        onClick={() => setCurrent(index)}
+                        onClick={() => goTo(index)}
                         aria-label={`Go to slide ${index + 1}`}
                     >
                         {current === index ? (

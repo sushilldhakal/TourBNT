@@ -35,7 +35,7 @@ const getTourPricing = (tour: Tour): TourPricing => {
             displayPrice = firstOption.price;
 
             const discountData = firstOption.discount;
-            if (discountData && discountData.discountDateRange) {
+            if (discountData?.discountEnabled && discountData.discountDateRange?.from && discountData.discountDateRange.to) {
                 const now = new Date();
                 const discountStart = new Date(discountData.discountDateRange.from);
                 const discountEnd = new Date(discountData.discountDateRange.to);
@@ -112,11 +112,11 @@ export default function TourCard({ tour, viewMode }: TourCardProps) {
                     </Link>
 
                     {/* Availability Dates */}
-                    {tour.tourDates && tour.tourDates.startDate && tour.tourDates.endDate && (
+                    {tour.tourDates?.defaultDateRange?.from && tour.tourDates.defaultDateRange.to && (
                         <div className="flex items-center text-xs sm:text-sm text-muted-foreground">
                             <Calendar className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-1.5 flex-shrink-0" />
                             <span className="truncate">
-                                {new Date(tour.tourDates.startDate).toLocaleDateString()} - {new Date(tour.tourDates.endDate).toLocaleDateString()}
+                                {new Date(tour.tourDates.defaultDateRange.from).toLocaleDateString()} - {new Date(tour.tourDates.defaultDateRange.to).toLocaleDateString()}
                             </span>
                         </div>
                     )}
@@ -247,11 +247,11 @@ export default function TourCard({ tour, viewMode }: TourCardProps) {
                     )}
 
                     {/* Availability with calendar icon */}
-                    {tour.tourDates && tour.tourDates.startDate && tour.tourDates.endDate && (
+                    {tour.tourDates?.defaultDateRange?.from && tour.tourDates.defaultDateRange.to && (
                         <div className="flex items-center text-xs sm:text-sm text-muted-foreground">
                             <Calendar className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-1.5 flex-shrink-0" />
                             <span className="truncate">
-                                {new Date(tour.tourDates.startDate).toLocaleDateString()} - {new Date(tour.tourDates.endDate).toLocaleDateString()}
+                                {new Date(tour.tourDates.defaultDateRange.from).toLocaleDateString()} - {new Date(tour.tourDates.defaultDateRange.to).toLocaleDateString()}
                             </span>
                         </div>
                     )}

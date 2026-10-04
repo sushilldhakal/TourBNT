@@ -3,6 +3,7 @@ import { db, globalDestinations, sellerDestinationPreferences, sellerSettings, u
 import { eq, and, or, ilike, ne, desc, isNull, isNotNull, inArray, sql } from 'drizzle-orm';
 import type { SellerInfo } from '../../user/userTypes';
 import * as notifications from '../../notifications/notificationController';
+import { isApprovalStatus } from '../../../db/enums';
 
 // Get all approved destinations (public)
 /**
@@ -10,11 +11,12 @@ import * as notifications from '../../notifications/notificationController';
  * `longitude` fields (the dashboard form sends multipart, where nested objects don't survive).
  * undefined = none sent; null = sent but not a valid position.
  */
-function readCoordinates(body: Record<string, any>): { latitude: number; longitude: number } | null | undefined {
-  let c = body?.coordinates;
+function readCoordinates(body: Record<string, unknown>): { latitude: number; longitude: number } | null | undefined {
+  let c: unknown = body?.coordinates;
   if (typeof c === 'string') { try { c = JSON.parse(c); } catch { return null; } }
-  const rawLat = c?.latitude ?? body?.latitude;
-  const rawLng = c?.longitude ?? body?.longitude;
+  const coords = (c && typeof c === 'object' ? c : {}) as { latitude?: unknown; longitude?: unknown };
+  const rawLat = coords.latitude ?? body?.latitude;
+  const rawLng = coords.longitude ?? body?.longitude;
   if ((rawLat === undefined || rawLat === '') && (rawLng === undefined || rawLng === '')) return undefined;
   const latitude = Number(rawLat);
   const longitude = Number(rawLng);
@@ -342,7 +344,7 @@ export const getAllDestinationsAdmin = async (req: Request, res: Response) => {
     const { approvalStatus } = req.query;
     const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? '200'), 10) || 200, 1), 500);
     const page = Math.max(parseInt(String(req.query.page ?? '1'), 10) || 1, 1);
-    const where = typeof approvalStatus === 'string' && approvalStatus ? eq(globalDestinations.approvalStatus, approvalStatus as any) : undefined;
+    const where = isApprovalStatus(approvalStatus) ? eq(globalDestinations.approvalStatus, approvalStatus) : undefined;
 
     const [rows, [{ count }]] = await Promise.all([
       db

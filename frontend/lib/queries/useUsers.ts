@@ -3,7 +3,7 @@
  */
 
 import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
-import { getUsers, getUserById, getCurrentUser, getUserSetting } from '@/lib/api/users';
+import { getUsers, getUserById, getCurrentUser, getMySettings } from '@/lib/api/users';
 import { queryKeys } from './queryKeys';
 
 export function useUserById(userId: string | undefined, enabled = true) {
@@ -59,7 +59,7 @@ export function useCurrentUserProfile(enabled = true) {
 export function useUserSettings(userId: string | undefined, enabled = true) {
     return useQuery({
         queryKey: queryKeys.userSettings.all(),
-        queryFn: () => getUserSetting(userId!),
+        queryFn: () => getMySettings(),
         enabled: !!userId && enabled,
         staleTime: 1000 * 60 * 5,
     });

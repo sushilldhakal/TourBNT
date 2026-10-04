@@ -11,7 +11,7 @@ import { useUserLocation } from '@/lib/hooks/useUserLocation';
 import { useRef, useCallback, useEffect, useState, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { format, parseISO } from 'date-fns';
-import { Tour } from '@/types';
+import type { Tour } from '@/types/types';
 import type { TourListFilters } from '@/lib/api/tours';
 import { PRICE_MAX, PRICE_MIN } from '@/lib/tourSearchUrl';
 
@@ -130,7 +130,7 @@ export function ToursClient() {
     }, [handleObserver]);
 
     // Flatten all pages of tours
-    const allTours = toursData?.pages.flatMap((page) => page?.data ?? []) ?? [];
+    const allTours = useMemo(() => toursData?.pages.flatMap((page) => page?.data ?? []) ?? [], [toursData]);
 
 
     // Dynamic price range generation
@@ -185,16 +185,13 @@ export function ToursClient() {
             };
         }
         if (keyword.trim()) return { destinationIds: undefined, categoryIds: undefined, near: undefined };
-        const shown = allTours.slice(0, 12) as any[];
         const dests = new Set<string>();
         const cats = new Set<string>();
-        for (const t of shown) {
+        for (const t of allTours.slice(0, 12)) {
             const d = t.destinationId ?? (typeof t.destination === 'string' ? t.destination : t.destination?.id);
-            if (d) dests.add(String(d));
-            const list = Array.isArray(t.category) ? t.category : t.category ? [t.category] : [];
-            for (const c of list) {
-                const id = typeof c === 'string' ? c : c?.id ?? c?.value;
-                if (id) cats.add(String(id));
+            if (d) dests.add(d);
+            for (const c of t.category ?? []) {
+                if (c.id) cats.add(c.id);
             }
         }
         return { destinationIds: dests.size ? [...dests] : undefined, categoryIds: cats.size ? [...cats] : undefined, near: userCoords ?? undefined };
@@ -420,8 +417,8 @@ export function ToursClient() {
                                         >
                                             {filteredTours.map((tour, index) => (
                                                 <TourCard
-                                                    key={(tour as { id?: string }).id ?? (tour as { id?: string }).id ?? `tour-${index}`}
-                                                    tour={tour as Tour}
+                                                    key={tour.id ?? `tour-${index}`}
+                                                    tour={tour}
                                                     viewMode={viewMode}
                                                 />
                                             ))}

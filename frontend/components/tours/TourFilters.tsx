@@ -56,12 +56,12 @@ export default function TourFilters({
     // Get selected filter labels
     const getSelectedCategoryName = () => {
         if (selectedCategory === 'all') return null;
-        return categories.find(c => c._id === selectedCategory)?.name;
+        return categories.find(c => (c as { _id?: string })._id === selectedCategory || c.id === selectedCategory)?.name;
     };
 
     const getSelectedDestinationName = () => {
         if (selectedDestination === 'all') return null;
-        return destinations.find(d => d._id === selectedDestination)?.name;
+        return destinations.find(d => (d as { _id?: string })._id === selectedDestination || d.id === selectedDestination)?.name;
     };
 
     const getSelectedPriceLabel = () => {

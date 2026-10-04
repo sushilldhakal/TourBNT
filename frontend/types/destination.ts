@@ -78,7 +78,7 @@ export interface CreateDestinationDTO {
         latitude: number;
         longitude: number;
     };
-    metadata?: any;
+    metadata?: Record<string, unknown>;
 }
 
 // For updating destinations
@@ -93,7 +93,7 @@ export interface UpdateDestinationDTO {
         latitude: number;
         longitude: number;
     };
-    metadata?: any;
+    metadata?: Record<string, unknown>;
 }
 
 // For updating user destination settings

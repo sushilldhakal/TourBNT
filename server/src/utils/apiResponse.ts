@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { HttpError } from 'http-errors';
 import { config } from '../config/config';
 import { logger } from './logger';
-import { normalizeDoc } from './normalizeDoc';
+import { errorStatus, postgresErrorOf } from './errors';
 
 /**
  * HTTP Status Codes Constants
@@ -52,47 +52,12 @@ export interface ValidationError {
 export interface PaginationMeta {
     page: number;
     limit: number;
-    totalItems: number;
-    totalPages: number;
+    /** null on keyset ("cursor") pages, which skip the count. */
+    totalItems: number | null;
+    totalPages: number | null;
+    /** Opaque cursor for the next keyset page; null when there is none. */
+    nextCursor?: string | null;
 }
-
-/**
- * Recursively normalize nested documents in an object
- */
-const normalizeNested = (obj: any): any => {
-    if (!obj || typeof obj !== 'object') {
-        return obj;
-    }
-
-    // Dates (and other non-plain objects) have no own enumerable properties,
-    // so recursing into them with Object.entries below would silently turn
-    // them into {}. Return them as-is; JSON.stringify serializes Dates via
-    // their own toJSON() when the response is sent.
-    if (obj instanceof Date) {
-        return obj;
-    }
-
-    if (Array.isArray(obj)) {
-        return obj.map(item => normalizeNested(item));
-    }
-
-    // Check if this is a Mongoose document
-    if (typeof obj.toObject === 'function') {
-        return normalizeDoc(obj);
-    }
-
-    // Handle plain objects with potential nested documents
-    const result: any = {};
-    for (const [key, value] of Object.entries(obj)) {
-        if (value && typeof value === 'object') {
-            result[key] = normalizeNested(value);
-        } else {
-            result[key] = value;
-        }
-    }
-
-    return result;
-};
 
 /**
  * Get client IP address from request
@@ -111,43 +76,40 @@ function getClientIp(req: Request): string {
 // ============================================================================
 
 /**
- * Send success response with automatic data normalization
+ * Send a success response
  */
 export const sendSuccess = (
     res: Response,
-    data: any,
+    data: unknown,
     message: string = 'Success',
     statusCode: number = HTTP_STATUS.OK
 ) => {
-    const normalizedData = normalizeNested(data);
-
     res.status(statusCode).json({
         success: true,
         message,
-        data: normalizedData
+        data
     });
 };
 
 /**
- * Send paginated response with automatic data normalization
+ * Send a paginated response
  * Standard format: { success, items, pagination, message }
  */
 export const sendPaginatedResponse = (
     res: Response,
-    items: any[],
+    items: unknown[],
     pagination: PaginationMeta,
     message: string = 'Success'
 ) => {
-    const normalizedItems = normalizeDoc(items);
-
     res.status(HTTP_STATUS.OK).json({
         success: true,
-        items: normalizedItems,
+        items,
         pagination: {
             page: pagination.page,
             limit: pagination.limit,
             totalItems: pagination.totalItems,
-            totalPages: pagination.totalPages
+            totalPages: pagination.totalPages,
+            ...(pagination.nextCursor !== undefined ? { nextCursor: pagination.nextCursor } : {}),
         },
         message
     });
@@ -165,13 +127,13 @@ export const sendError = (
     message: string = 'Error',
     statusCode: number = HTTP_STATUS.INTERNAL_SERVER_ERROR,
     code: ErrorCode = 'SERVER_ERROR',
-    errors?: any
+    errors?: unknown
 ) => {
     res.status(statusCode).json({
         success: false,
         message,
         code,
-        ...(errors && { errors })
+        ...(errors !== undefined && errors !== null ? { errors } : {})
     });
 };
   
@@ -272,8 +234,8 @@ export const errorHandler = (
     let statusCode: number = HTTP_STATUS.INTERNAL_SERVER_ERROR;
     if ('statusCode' in err && err.statusCode) {
         statusCode = err.statusCode as number;
-    } else if ((err as any).status) {
-        statusCode = (err as any).status as number;
+    } else if (errorStatus(err)) {
+        statusCode = errorStatus(err) as number;
     }
 
     const message = err.message || 'Internal Server Error';
@@ -285,24 +247,26 @@ export const errorHandler = (
         method: req.method,
         path: req.path,
         clientIp: getClientIp(req),
-        userId: (req as any).user?.id,
+        userId: req.user?.id,
         errorName: err.name,
         ...(config.env === 'development' && { stack: err.stack })
     });
 
+    // Postgres errors arrive wrapped by Drizzle ("Failed query: ..."), with the database error as `cause`.
+    const dbError = postgresErrorOf(err);
+
     // Handle Postgres unique constraint violation (SQL state 23505)
-    if ((err as any).code === '23505') {
-        const detail: string = (err as any).detail || '';
-        const match = detail.match(/^Key \(([^)]+)\)=/);
-        const field = match?.[1] || (err as any).constraint_name || 'unknown';
+    if (dbError?.code === '23505') {
+        const match = (dbError.detail || '').match(/^Key \(([^)]+)\)=/);
+        const field = match?.[1] || dbError.constraint_name || 'unknown';
         return sendConflictError(res, `${field} already exists`);
     }
 
     // Handle Postgres foreign key violation (SQL state 23503)
-    if ((err as any).code === '23503') {
+    if (dbError?.code === '23503') {
         return sendValidationError(res, 'Referenced resource does not exist', [{
-            field: (err as any).constraint_name || 'unknown',
-            message: (err as any).detail || 'Foreign key constraint violation'
+            field: dbError.constraint_name || 'unknown',
+            message: dbError.detail || 'Foreign key constraint violation'
         }]);
     }
 
@@ -318,8 +282,8 @@ export const errorHandler = (
     // Handle HTTP errors with status codes
     if (statusCode === HTTP_STATUS.BAD_REQUEST) {
         // Check if error has validation details
-        const details = (err as any).details;
-        if (details && Array.isArray(details)) {
+        const details = (err as { details?: unknown }).details;
+        if (Array.isArray(details)) {
             return sendValidationError(res, message, details);
         }
         return sendValidationError(res, message);
@@ -348,7 +312,7 @@ export const errorHandler = (
 /**
  * 404 Not Found handler middleware
  */
-export const notFoundHandler = (req: Request, res: Response, next: NextFunction) => {
+export const notFoundHandler = (req: Request, res: Response, _next: NextFunction) => {
     logger.warn('Route not found', {
         method: req.method,
         path: req.path,

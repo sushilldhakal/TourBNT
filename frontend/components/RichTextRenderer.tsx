@@ -1,7 +1,8 @@
 import React from 'react';
 
 interface RichTextRendererProps {
-    content: string | string[] | any;
+    /** A rich-text document (or its JSON string), HTML, or plain text. */
+    content: unknown;
     className?: string;
 }
 
@@ -71,7 +72,7 @@ const safeColor = (c: unknown): string | null => {
 
 const LINK_CLASSES = 'text-primary underline underline-offset-2 hover:text-primary/80 transition-colors';
 
-const parseRichText = (content: string | string[] | any): { __html: string } => {
+const parseRichText = (content: unknown): { __html: string } => {
     if (!content) return { __html: "No content available" };
 
     if (Array.isArray(content)) {
@@ -82,7 +83,7 @@ const parseRichText = (content: string | string[] | any): { __html: string } => 
         }
     }
 
-    const contentStr = typeof content === 'string' ? content : String(content);
+    const contentStr = typeof content === 'string' ? content : typeof content === 'object' ? JSON.stringify(content) : String(content);
     const isLikelyJSON = contentStr.trim().startsWith('{') && contentStr.trim().endsWith('}');
 
     if (isLikelyJSON) {

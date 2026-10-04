@@ -1,3 +1,5 @@
+import type { DocumentUploadResult } from '../../services/sellerDocumentService';
+
 // Interface for seller information (stored as JSONB on users.seller_info)
 export interface SellerInfo {
   [key: string]: unknown;
@@ -44,7 +46,7 @@ export interface SellerInfo {
   rejectionReason?: string;
   rejectedAt?: Date;
   reapplicationCount?: number;
-  documents?: any;
+  documents?: DocumentUploadResult;
   contactPerson?: string;
   phone?: string;
   alternatePhone?: string;

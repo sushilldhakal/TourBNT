@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { loginUser } from "@/lib/api/users";
-import { api, extractResponseData } from "@/lib/api/apiClient";
+import { api, apiErrorMessage, extractResponseData } from "@/lib/api/apiClient";
 import useUserStore, { type User } from "@/lib/store/useUserStore";
 import { canAccessDashboard } from "@/lib/utils/roles";
 import { Mail, Lock, UserIcon, Phone, CheckCircle2, Loader2, EyeIcon, EyeOffIcon } from "lucide-react";
@@ -91,17 +91,18 @@ function LoginPageContent() {
     const [showRegisterPassword, setShowRegisterPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-    const [showForm, setShowForm] = useState<'login' | 'signup' | 'forgot' | 'verify'>('login');
+    // ?form=signup|forgot (or a password-reset link's ?forgottoken) opens that form.
+    const formParam = searchParams.get('form');
+    const urlForm = searchParams.get('forgottoken') || formParam === 'forgot' ? 'forgot' : formParam === 'signup' ? 'signup' : null;
+    const [showForm, setShowForm] = useState<'login' | 'signup' | 'forgot' | 'verify'>(urlForm ?? 'login');
+    const [appliedUrlForm, setAppliedUrlForm] = useState(urlForm);
+    if (urlForm !== appliedUrlForm) {
+        setAppliedUrlForm(urlForm);
+        if (urlForm) setShowForm(urlForm);
+    }
     const [keepMeSignedIn, setKeepMeSignedIn] = useState(false);
     const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
-
-    // Check for form parameter in URL
-    useEffect(() => {
-        const form = searchParams.get('form');
-        if (form === 'signup') setShowForm('signup');
-        if (form === 'forgot') setShowForm('forgot');
-    }, [searchParams]);
 
     // Refs
     const loginEmailRef = useRef<HTMLInputElement>(null);
@@ -122,7 +123,6 @@ function LoginPageContent() {
 
     useEffect(() => {
         const token = searchParams.get('token');
-        const forgotToken = searchParams.get('forgottoken');
 
         if (token) {
             // Verify email
@@ -135,19 +135,12 @@ function LoginPageContent() {
                     setShowForm('login');
                 })
                 .catch((error: unknown) => {
-                    const msg = error && typeof error === 'object' && 'response' in error
-                        ? (error as { response?: { data?: { message?: string } } }).response?.data?.message
-                        : undefined;
                     toast({
                         title: 'Verification Failed',
-                        description: msg ?? 'Verification failed',
+                        description: apiErrorMessage(error, 'Verification failed'),
                         variant: 'destructive',
                     });
                 });
-        }
-
-        if (forgotToken) {
-            setShowForm('forgot');
         }
     }, [searchParams, toast]);
 
@@ -168,7 +161,7 @@ function LoginPageContent() {
         setIsLoggingIn(true);
         try {
             // Login - server sets httpOnly cookie and returns user data
-            const user = await loginUser({ email, password, keepMeSignedIn });
+            await loginUser({ email, password, keepMeSignedIn });
 
             toast({
                 title: 'Login Successful',

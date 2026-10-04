@@ -237,7 +237,7 @@ const TourFaqs = () => {
                                     </table>
                                 </div>
                             )
-                        ) : faqs?.length ? (
+                        ) : faqs?.data?.length ? (
                             <div className="text-center py-8">
                                 <Search className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                                 <h3 className="font-medium text-lg mb-1">No matching FAQs found</h3>
@@ -249,7 +249,7 @@ const TourFaqs = () => {
                                 <h3 className="font-medium text-lg mb-2">No FAQs added yet</h3>
                                 <p className="text-muted-foreground max-w-md mx-auto mb-6">
                                     Create FAQs to answer common questions about your tours.
-                                    They'll appear here once added.
+                                    They&apos;ll appear here once added.
                                 </p>
                                 <Button
                                     onClick={() => setIsAddFaqOpen(true)}

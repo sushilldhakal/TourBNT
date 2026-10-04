@@ -66,7 +66,6 @@ export interface Comment {
     post: Post;
     createdAt: string;
     status: "pending" | "approved" | "rejected";
-    id: string;
     approve: boolean;
     created_at: string;
 }
@@ -92,7 +91,8 @@ export interface Category {
 
 export interface CategoryData {
     id: string;
-    id?: string | null;
+    /** Set by normalizeCategories (useCategories.ts); the user-category id the dashboard edits by. */
+    _id?: string;
     name: string;
     description: string;
     imageUrl?: string;
@@ -192,15 +192,16 @@ export interface EditDestinationDialogProps {
 
 // Discount types
 // Control presence with discountEnabled, not with type: 'none'
+/** A discount as the API stores it on a tour or on one of its pricing options. */
 export interface Discount {
-    type: 'percentage' | 'price';
-    value: number;
-    dateRange?: DateRange;
     discountEnabled?: boolean;
-    discountDateRange?: { from: string; to: string };
+    /** true = percentage off (discountPercentage), false = fixed amount off (discountPrice). */
     percentageOrPrice?: boolean;
     discountPercentage?: number;
     discountPrice?: number;
+    discountDateRange?: { from?: string; to?: string };
+    discountCode?: string;
+    description?: string;
 }
 
 // Gallery types
@@ -233,15 +234,30 @@ export interface TourGalleryItem {
 export type { FactData } from './facts';
 
 // Itinerary types
+export interface ItineraryPartner {
+    role: 'transport' | 'accommodation' | 'guide' | 'meals' | 'other';
+    businessPartnerId?: string;
+    name: string;
+    notes?: string;
+    // Enriched at read time from the live business record when businessPartnerId is set.
+    businessPartnerSlug?: string;
+    businessPartnerType?: string;
+    businessPartnerRating?: number;
+    businessPartnerReviewCount?: number;
+}
+
+/** One itinerary day. Dates arrive from the API as ISO strings. */
 export interface Itinerary {
+    id?: string;
     day?: string;
     title: string;
     description: string;
-    dateTime?: Date;
+    dateTime?: Date | string;
     date?: string | Date;
     time?: string;
     destination?: string;
     outline?: string;
+    partners?: ItineraryPartner[];
 }
 
 // FAQ types – canonical in faq.ts
@@ -253,63 +269,62 @@ export interface DateRange {
     to: string;
 }
 
-// Tour Dates and Departure types
-// FINAL, CLEAN TourDates structure - lock this
-export interface TourDates {
-    type: 'flexible' | 'fixed' | 'multiple';
-
-    days?: number;
-    nights?: number;
-
-     // For fixed type
-     dateRange?: DateRange;
-
-     // For multiple type
-     departures?: Departure[];
- 
-     // Recurrence
-     recurrence?: RecurrenceConfig; // Use the RecurrenceConfig interface below
- 
-     selectedPricingOptions?: string[];
-     capacity?: number; // ADD THIS for fixed dates
-}
-
-export interface RecurrenceConfig {
-    enabled: boolean;
-    pattern?: 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'yearly';
-    endDate?: string; // Date string
-}
+// Tour dates as the server stores them (see server processTourDatesData).
+export type RecurrencePattern = 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'yearly';
 
 export interface Departure {
-    id: string; // MAKE REQUIRED
+    id?: string;
     label: string;
     dateRange: DateRange;
-    selectedPricingOptions?: string[];
-    recurrence?: RecurrenceConfig; // ADD THIS
     capacity?: number;
+    selectedPricingOptions?: string[];
+    pricingCategory?: string[];
+    isRecurring?: boolean;
+    recurrencePattern?: RecurrencePattern;
+    recurrenceInterval?: number;
+    recurrenceEndDate?: string;
 }
 
-// Pax Range types
+export interface TourDates {
+    scheduleType: 'flexible' | 'fixed' | 'multiple' | 'recurring';
+    days?: number;
+    nights?: number;
+    /** The fixed date range (scheduleType 'fixed'). */
+    defaultDateRange?: DateRange;
+    departures?: Departure[];
+    isRecurring?: boolean;
+    recurrencePattern?: RecurrencePattern;
+    recurrenceInterval?: number;
+    recurrenceEndDate?: string;
+    selectedPricingOptions?: string[];
+    pricingCategory?: string[];
+}
+
 export interface PaxRange {
-    min: number;
-    max: number;
+    minPax: number;
+    maxPax: number;
 }
 
-// Pricing Option types
 export interface PricingOption {
-    _id?: string;
     id?: string;
+    /** Only on legacy rows; use `id`. */
+    _id?: string;
     name: string;
     price: number;
     category: 'adult' | 'child' | 'senior' | 'student' | 'custom';
     customCategory?: string;
-    description?: string; // Booking/summary display
-    maxTravelers?: number; // Booking flow
-    // Required when pricing options are enabled - prevents half-configured options
-    paxRange: PaxRange;
+    description?: string;
+    maxTravelers?: number;
+    paxRange?: PaxRange;
+    /** Legacy rows keep the flag here; current ones keep it in `discount.discountEnabled`. */
     discountEnabled?: boolean;
-    isActive: boolean;
     discount?: Discount;
+    isActive?: boolean;
+}
+
+export interface PricingGroup {
+    label: string;
+    options: PricingOption[];
 }
 
 // Location types
@@ -331,132 +346,108 @@ export interface Location {
     lng?: number;
 }
 
-// Tour types
+/** Rich text as the editor stores it (a JSON document), or older plain-text / HTML / list content. */
+export type RichText = string | string[] | { type: string; content?: unknown[] };
+
+/** A fact copied onto a tour. The editor stores `title`; older copies have `name`. */
+export interface TourFact {
+    id?: string;
+    factId?: string;
+    name?: string;
+    title?: string;
+    icon?: string;
+    field_type?: 'Plain Text' | 'Single Select' | 'Multi Select';
+    value?: string | string[] | Array<{ label?: string; value?: string }>;
+}
+
+export interface TourFaq {
+    id?: string;
+    faqId?: string;
+    question: string;
+    answer: string;
+}
+
+export interface TourGalleryImage {
+    id?: string;
+    image: string;
+    caption?: string;
+    sortOrder?: number;
+    isFeatured?: boolean;
+}
+
+export interface TourAuthor {
+    id: string;
+    name: string;
+    email?: string;
+    roles?: string;
+}
+
+export interface TourPaymentOptions {
+    fullPaymentEnabled: boolean;
+    depositEnabled: boolean;
+    depositPercentage: number;
+    payOnArrivalEnabled: boolean;
+}
+
+/** A tour exactly as GET /tours/:id (and the tour lists) return it. The one Tour type in the app. */
 export interface Tour {
     id: string;
     title: string;
     code: string;
-    description: string; // MAKE REQUIRED (remove ?)
-    excerpt?: string;
-    duration?: number; // Days (booking/summary display)
-    
-    // Author - ADD THIS
-    author: string | User | string[];
-    
-    coverImage?: string; // MAKE OPTIONAL (server has it optional)
-    
-    // File - ADD THIS
-    file?: string; // PDF or other files
-    
-    images?: string[]; // This can stay for compatibility
-    
-    createdAt: string;
-    updatedAt: string;
-    tourStatus: 'Draft' | 'Published' | 'Archived'; // ADD 'Draft' and 'Archived'
+    description?: string;
+    excerpt?: string | null;
+    tourStatus: 'Draft' | 'Published' | 'Archived';
+    coverImage?: string | null;
+    file?: string | null;
+    outline?: string | null;
+    destinationId?: string | null;
+    /** Present when the request asked for related data. */
+    destination?: string | Destination;
+    author?: TourAuthor[];
+    category?: Category[];
 
-    // Category & Destination - CHANGE TO ARRAYS
-    category: string[] | Category[]; // CHANGE from single to array
-    destination?: string | Destination; // Keep as single (server has it as single optional)
+    itinerary?: Itinerary[];
+    include?: RichText;
+    exclude?: RichText;
+    facts?: TourFact[];
+    faqs?: TourFaq[];
+    gallery?: TourGalleryImage[];
+    location?: Location;
+    map?: string;
 
-    // Location - matches, but add missing fields
-    location?: {
-        id?: string;
-        street?: string;
-        city?: string;
-        state?: string;
-        country?: string;
-        lat?: number;
-        lng?: number;
-    };
-    map?: string; // ADD THIS separate field
-
-    // Pricing - ADD missing fields
     price: number;
-    originalPrice?: number; // ADD THIS for "was $X, now $Y"
-    
-    pricePerPerson?: boolean; // MAKE OPTIONAL (server has it optional)
-    groupSize?: number; // ADD THIS
-    
-    // Rename paxRange to minSize/maxSize
-    minSize: number; // ADD THIS (replaces paxRange.min)
-    maxSize: number; // ADD THIS (replaces paxRange.max)
-    // REMOVE paxRange?: PaxRange;
-
-    pricingOptionsEnabled?: boolean;
-    pricingOptions?: PricingOption[];
+    pricePerPerson?: boolean;
+    minSize?: number;
+    maxSize?: number;
+    groupSize?: number | null;
     saleEnabled?: boolean;
     salePrice?: number;
-
-    discountEnabled?: boolean; // MAKE OPTIONAL (add ?)
+    originalPrice?: number;
+    priceLockDate?: string | null;
+    discountEnabled?: boolean;
     discount?: Discount;
+    pricingOptionsEnabled?: boolean;
+    pricingOptions?: PricingOption[];
+    pricingGroups?: PricingGroup[];
+    paymentOptions?: TourPaymentOptions;
 
-    priceLockDate?: string;
-
-    // Content - UPDATE types
-    include?: string[]; // CHANGE from string to string[]
-    exclude?: string[]; // CHANGE from string to string[]
-    outline?: string;
-
-    // Gallery - UPDATE structure
-    gallery?: Array<{
-        id?: string;
-        image: string;
-        sortOrder?: number;
-        isFeatured?: boolean;
-    }>; // Simplified from GalleryItem
-
-    // Facts - UPDATE structure
-    facts?: Array<{
-        id?: string;
-        factId?: string; // ADD THIS
-        title?: string;
-        field_type?: "Plain Text" | "Single Select" | "Multi Select";
-        value?: string[] | Array<{ label: string; value: string; }>;
-        icon?: string;
-    }>;
-
-    // Itinerary - UPDATE structure
-    itinerary?: Array<{
-        _id?: string;
-        day?: string;
-        title: string;
-        description: string;
-        dateTime?: string;
-        date?: string;
-        destination?: string;
-    }>;
-
-    // FAQs - UPDATE structure
-    faqs?: Array<{
-        id?: string;
-        faqId?: string; // ADD THIS
-        question: string;
-        answer: string;
-    }>;
-
-    // Tour dates
     tourDates?: TourDates;
+    fixedDeparture?: boolean;
+    multipleDates?: boolean;
+    /** Days, where a list shows a duration. */
+    duration?: number;
 
-    // Reviews - UPDATE
     reviews?: Review[];
     averageRating?: number;
     reviewCount?: number;
-    approvedReviewCount?: number; // ADD THIS
-
-    // Other fields - ADD THESE
+    approvedReviewCount?: number;
     views?: number;
     bookingCount?: number;
     isSpecialOffer?: boolean;
     enquiry?: boolean;
-    
-    // REMOVE these if not in server
-    // maxGroupSize?: number; - use maxSize instead
-    // minAge?: number; - not in server types
-    // highlights?: string[]; - not in server types
-    // included?: string[]; - use include instead
-    // excluded?: string[]; - use exclude instead
-    // seller?: string | User; - use author instead
-    // featured?: boolean; - not in server types
+
+    createdAt: string;
+    updatedAt: string;
 }
 // Tour API Response types
 export interface TourResponse {
@@ -539,4 +530,27 @@ export interface PromoCode {
     createdBy: string;
     createdAt: string;
     updatedAt: string;
+}
+
+/** Minimal tour for relatedData.similarTours. */
+export interface SimilarTourRelated {
+    id: string;
+    title: string;
+    slug?: string;
+    coverImage?: string;
+    price?: number;
+    averageRating?: number;
+    reviewCount?: number;
+    tourStatus?: string;
+}
+
+/** Optional related sections from GET /tours/:id?include=... */
+export interface RelatedData {
+    author?: Array<{ id: string; name: string; email?: string }>;
+    destination?: { id: string; name: string; country?: string; region?: string; description?: string };
+    destinations?: Array<{ id: string; name: string }>;
+    categories?: Array<{ id: string; name: string; description?: string }>;
+    similarTours?: SimilarTourRelated[];
+    pricingInsights?: Record<string, unknown>;
+    availability?: Record<string, unknown>;
 }

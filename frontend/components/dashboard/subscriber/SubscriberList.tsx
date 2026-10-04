@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Mail, Search, Trash2, Loader2, AlertCircle } from 'lucide-react';
+import { Mail, Search, Trash2, Loader2 } from 'lucide-react';
 import { getSubscribers, unsubscribeEmail, Subscriber, SubscribersResponse } from '@/lib/api/subscribers';
 import { DataTable } from '@/components/dashboard/DataTable';
 import { ColumnDef } from '@tanstack/react-table';

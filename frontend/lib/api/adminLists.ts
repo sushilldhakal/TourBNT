@@ -19,7 +19,7 @@ export interface PagedResult<T, C = Record<string, number>> {
     counts?: C;
 }
 
-const normalize = <T, C = Record<string, number>>(body: any): PagedResult<T, C> => ({
+const normalize = <T, C = Record<string, number>>(body: Partial<PagedResult<T, C>> | null | undefined): PagedResult<T, C> => ({
     items: body?.items ?? [],
     pagination: body?.pagination ?? { page: 1, limit: 10, totalItems: 0, totalPages: 0 },
     counts: body?.counts,

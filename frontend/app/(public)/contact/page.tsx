@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { createConversation } from '@/lib/api/conversations';
 import { toast } from '@/components/ui/use-toast';
 import { useAuth } from '@/lib/hooks/useAuth';
@@ -19,15 +19,17 @@ export default function ContactPage() {
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    useEffect(() => {
-        if (!isLoggedIn) return;
+    // Prefill from the signed-in account (adjusted while rendering, once per account).
+    const [prefilledFor, setPrefilledFor] = useState<string | null>(null);
+    if (isLoggedIn && user.id && prefilledFor !== user.id) {
+        setPrefilledFor(user.id);
         setFormData((prev) => ({
             ...prev,
             name: user.name ?? prev.name,
             email: user.email ?? prev.email,
             phone: user.phone ?? prev.phone,
         }));
-    }, [isLoggedIn, user.name, user.email, user.phone]);
+    }
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -84,7 +86,7 @@ export default function ContactPage() {
                 <div className="text-center mb-12">
                     <h1 className="text-4xl font-bold mb-4">Contact Us</h1>
                     <p className="text-xl text-muted-foreground">
-                        Have questions? We'd love to hear from you.
+                        Have questions? We&apos;d love to hear from you.
                     </p>
                 </div>
 

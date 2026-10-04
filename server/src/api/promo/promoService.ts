@@ -1,6 +1,7 @@
 import createHttpError from 'http-errors';
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db, promoCodes, tours, tourAuthors, users } from '../../db';
+import { isUniqueViolation } from '../../utils/errors';
 
 type PromoRow = typeof promoCodes.$inferSelect;
 
@@ -170,8 +171,8 @@ export async function createPromo(requester: Requester, input: PromoInput) {
   try {
     const [row] = await db.insert(promoCodes).values({ ...(values as typeof promoCodes.$inferInsert), ownerId: requester.id }).returning();
     return row;
-  } catch (err: any) {
-    if (err?.code === '23505' || err?.cause?.code === '23505') throw createHttpError(409, 'A promo code with that name already exists.');
+  } catch (err) {
+    if (isUniqueViolation(err)) throw createHttpError(409, 'A promo code with that name already exists.');
     throw err;
   }
 }
@@ -189,8 +190,8 @@ export async function updatePromo(requester: Requester, id: string, input: Promo
   try {
     const [row] = await db.update(promoCodes).set({ ...values, updatedAt: new Date() }).where(eq(promoCodes.id, id)).returning();
     return row;
-  } catch (err: any) {
-    if (err?.code === '23505' || err?.cause?.code === '23505') throw createHttpError(409, 'A promo code with that name already exists.');
+  } catch (err) {
+    if (isUniqueViolation(err)) throw createHttpError(409, 'A promo code with that name already exists.');
     throw err;
   }
 }

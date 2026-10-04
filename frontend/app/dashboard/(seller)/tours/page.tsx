@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { useCacheManager, useMyTours } from '@/lib/queries';
 import { deleteTour } from '@/lib/api/tours';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { DashboardCardHeader } from '@/components/dashboard/layout/CardHeader';
 import {
     CirclePlus,
@@ -221,13 +221,13 @@ export default function ToursPage() {
                             {
                                 label: 'Edit Tour',
                                 icon: <Edit3 className="h-3 w-3" />,
-                                href: `/dashboard/tours/edit/${tour._id}`,
+                                href: `/dashboard/tours/edit/${tour.id}`,
                             },
                             {
                                 label: 'Delete Tour',
                                 icon: <Trash2 className="h-3 w-3" />,
                                 onClick: () => {
-                                    if (!tour._id) {
+                                    if (!tour.id) {
                                         toast({
                                             title: 'Error',
                                             description: 'Tour ID is missing. Cannot delete tour.',
@@ -235,7 +235,7 @@ export default function ToursPage() {
                                         });
                                         return;
                                     }
-                                    handleDeleteTour(tour._id);
+                                    handleDeleteTour(tour.id);
                                 },
                                 variant: 'destructive',
                             },
@@ -293,7 +293,7 @@ export default function ToursPage() {
                     data={tableData}
                     columns={columns}
                     place="Filter Tours..."
-                    colum="title"
+                    column="title"
                     initialColumnVisibility={{ actions: false }}
                     serverSidePagination={{
                         totalCount: totalTours,

@@ -82,7 +82,7 @@ export interface UpdateCategoryDTO {
     name?: string;
     description?: string;
     imageUrl?: string;
-    metadata?: any;
+    metadata?: Record<string, unknown>;
 }
 
 // For updating user category settings

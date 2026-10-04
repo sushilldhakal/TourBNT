@@ -1,4 +1,3 @@
-import { Suspense } from 'react';
 import { notFound } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -212,7 +211,7 @@ export default async function BookingConfirmationPage({
                     {/* Next Steps */}
                     <Card>
                         <CardHeader>
-                            <CardTitle>What's Next?</CardTitle>
+                            <CardTitle>What&apos;s Next?</CardTitle>
                         </CardHeader>
                         <CardContent>
                             <div className="space-y-4">
@@ -223,7 +222,7 @@ export default async function BookingConfirmationPage({
                                     <div>
                                         <p className="font-medium">Check Your Email</p>
                                         <p className="text-sm text-muted-foreground">
-                                            We've sent a confirmation email with your booking voucher and detailed itinerary
+                                            We&apos;ve sent a confirmation email with your booking voucher and detailed itinerary
                                         </p>
                                     </div>
                                 </div>

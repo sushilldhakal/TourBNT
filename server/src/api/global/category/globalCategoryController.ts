@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { db, globalCategories, sellerCategoryPreferences, sellerSettings, users, tours, tourCategories, tourAuthors } from '../../../db';
 import { eq, and, or, ilike, desc, inArray, sql } from 'drizzle-orm';
 import type { SellerInfo } from '../../user/userTypes';
+import { isApprovalStatus } from '../../../db/enums';
 
 type CategoryRow = typeof globalCategories.$inferSelect;
 
@@ -417,7 +418,7 @@ export const getAllCategoriesAdmin = async (req: Request, res: Response) => {
     const { approvalStatus } = req.query;
     const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? '200'), 10) || 200, 1), 500);
     const page = Math.max(parseInt(String(req.query.page ?? '1'), 10) || 1, 1);
-    const where = typeof approvalStatus === 'string' && approvalStatus ? eq(globalCategories.approvalStatus, approvalStatus as any) : undefined;
+    const where = isApprovalStatus(approvalStatus) ? eq(globalCategories.approvalStatus, approvalStatus) : undefined;
 
     const [rows, [{ count }]] = await Promise.all([
       db

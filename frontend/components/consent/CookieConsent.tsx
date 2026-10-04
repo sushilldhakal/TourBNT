@@ -3,22 +3,27 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { getConsent, onConsentSettingsOpen, openConsentSettings, setConsent } from '@/lib/consent';
+import { onConsentSettingsOpen, openConsentSettings, setConsent, useConsent } from '@/lib/consent';
+import { useIsClient } from '@/lib/hooks/useIsClient';
 
 /** The cookie notice. Shown until the visitor chooses; can be reopened from the footer. */
 export function CookieConsent() {
-    const [open, setOpen] = useState(false);
+    const isClient = useIsClient();
+    const consent = useConsent();
+    // Chosen this visit (covers storage being blocked, where the choice can't be read back).
+    const [dismissed, setDismissed] = useState(false);
+    // Reopened from a "Cookie settings" link.
+    const [reopened, setReopened] = useState(false);
 
-    useEffect(() => {
-        if (!getConsent()) setOpen(true);
-        return onConsentSettingsOpen(() => setOpen(true));
-    }, []);
+    useEffect(() => onConsentSettingsOpen(() => setReopened(true)), []);
 
+    const open = reopened || (isClient && !consent && !dismissed);
     if (!open) return null;
 
     const choose = (analytics: boolean) => {
         setConsent(analytics);
-        setOpen(false);
+        setDismissed(true);
+        setReopened(false);
     };
 
     return (

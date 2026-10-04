@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { BookingService } from '../services/bookingService';
+import { BookingService, type NewBookingInput } from '../services/bookingService';
 import { ItineraryRequestService } from '../../tours/services/itineraryRequestService';
 import { getBookingInvoice as getInvoice } from '../services/invoiceService';
 import { assertCanViewBooking, canViewBooking } from '../services/bookingAccess';
@@ -13,21 +13,22 @@ import createHttpError from 'http-errors';
 export const createBooking = async (req: Request
 , res: Response, next: NextFunction) => {
     try {
-        const { tourId, tourTitle, tourCode, departureDate, participants, contactInfo, specialRequests, paymentType, pricingOptionId, promoCode } = req.body;
+        const { tourId, departureDate, participants, contactInfo, specialRequests, paymentType, pricingOptionId, promoCode } = req.body;
 
         // Validate required fields. Pricing is computed server-side from the
         // tour's own stored configuration — the client never supplies it.
         if (!tourId || !departureDate || !participants || !contactInfo) {
             throw createHttpError(400, 'Missing required booking information');
         }
+        if (!contactInfo.fullName || !contactInfo.email || !contactInfo.phone) {
+            throw createHttpError(400, 'Contact name, email and phone are required');
+        }
 
         // Determine if this is a guest booking
         const isGuestBooking = !req.user;
 
-        const bookingData: any = {
+        const bookingData: NewBookingInput = {
             tour: tourId,
-            tourTitle,
-            tourCode,
             departureDate,
             participants,
             paymentType,
@@ -87,7 +88,7 @@ export const getAllBookings = async (req: Request
         const pageLimit = typeof limit === 'number' ? limit : 10;
 
         // Get filters from middleware
-        const filters: any = req.filters || {};
+        const filters: { status?: string; paymentStatus?: string; tourId?: string; q?: string } = { ...(req.filters || {}) };
 
         // Get sort params from middleware
         const sortBy = req.sort?.field || 'createdAt';

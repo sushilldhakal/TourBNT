@@ -5,8 +5,8 @@ import jwt, { sign } from "jsonwebtoken";
 import { createHash, createHmac, randomBytes } from "crypto";
 import { OAuth2Client } from "google-auth-library";
 import { validationResult } from "express-validator";
-import { db, users } from "../../db";
-import { eq, desc, asc, count, sql, ilike, or, and, inArray, type SQL } from "drizzle-orm";
+import { db, users, userRoleEnum } from "../../db";
+import { eq, desc, asc, count, sql, ilike, or, type SQL } from "drizzle-orm";
 import { config } from "../../config/config";
 import { claimOnce } from "../../config/redisClient";
 import { sendResetPasswordEmail as sendResetPasswordEmailMaileroo, sendVerificationEmail as sendVerificationEmailMaileroo } from "../../controller/maileroo";
@@ -151,7 +151,7 @@ export const googleLogin = async (req: Request, res: Response, next: NextFunctio
   try {
     const user = await findOrCreateSocialUser({ provider: 'google', providerId: payload.sub, email: payload.email, name: payload.name, picture: payload.picture });
     return sendSuccess(res, { user: startSession(res, user, !!keepMeSignedIn) }, 'Login successful');
-  } catch (err: any) {
+  } catch (err) {
     console.error('Error while signing in with Google:', err);
     next(createHttpError(500, 'Error while signing in with Google'));
   }
@@ -223,7 +223,7 @@ export const facebookLogin = async (req: Request, res: Response, next: NextFunct
     const picture = profile.picture?.data?.is_silhouette ? null : profile.picture?.data?.url ?? null;
     const user = await findOrCreateSocialUser({ provider: 'facebook', providerId: profile.id!, email: profile.email, name: profile.name, picture });
     return sendSuccess(res, { user: startSession(res, user, !!keepMeSignedIn) }, 'Login successful');
-  } catch (err: any) {
+  } catch (err) {
     console.error('Error while signing in with Facebook:', err);
     next(createHttpError(500, 'Error while signing in with Facebook'));
   }
@@ -288,7 +288,10 @@ export const getCurrentUser = async (req: Request, res: Response, next: NextFunc
 export const getAllUsers = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const conditions: SQL[] = [];
-    if (req.filters?.roles) conditions.push(eq(users.role, req.filters.roles));
+    const roleFilter = req.filters?.roles;
+    if (roleFilter && (userRoleEnum.enumValues as readonly string[]).includes(roleFilter)) {
+      conditions.push(eq(users.role, roleFilter as (typeof userRoleEnum.enumValues)[number]));
+    }
     if (req.filters?.sellerStatus === 'pending') {
       conditions.push(sql`${users.sellerInfo} IS NOT NULL AND (${users.sellerInfo}->>'isApproved')::boolean IS NOT TRUE AND (${users.sellerInfo}->>'rejectionReason') IS NULL`);
     } else if (req.filters?.sellerStatus === 'approved') {

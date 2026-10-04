@@ -7,7 +7,8 @@
  * Requirements: 1.1, 2.1, 5.1
  */
 
-import { api, handleApiError, extractResponseData } from './apiClient';
+import axios from 'axios';
+import { api, handleApiError, extractResponseData, apiErrorMessage, apiErrorStatus } from './apiClient';
 import type {
     MediaQueryResponse,
     MediaQueryParams,
@@ -21,10 +22,34 @@ import type {
     ResourceType,
 } from '@/types/gallery';
 
+/** A media_assets row as the gallery endpoints return it. */
+interface RawMediaItem {
+    id: string;
+    kind?: 'image' | 'video' | 'pdf';
+    publicId?: string | null;
+    url?: string | null;
+    secureUrl?: string | null;
+    format?: string | null;
+    width?: number;
+    height?: number;
+    bytes?: number | null;
+    uploadedAt?: string;
+    createdAt?: string;
+    resourceType?: string | null;
+    thumbnailUrl?: string;
+    originalFilename?: string | null;
+    displayName?: string;
+    title?: string | null;
+    description?: string | null;
+    tags?: string[] | null;
+}
+
+const TAB_BY_KIND: Record<NonNullable<RawMediaItem['kind']>, MediaTab> = { image: 'images', video: 'videos', pdf: 'pdfs' };
+
 /**
  * Transform backend media item to frontend MediaItem format
  */
-function transformMediaItem(item: any, mediaType: MediaTab): MediaItem {
+function transformMediaItem(item: RawMediaItem, mediaType: MediaTab): MediaItem {
     // Determine media type
     let type: MediaType = 'image';
     if (mediaType === 'videos') {
@@ -51,7 +76,7 @@ function transformMediaItem(item: any, mediaType: MediaTab): MediaItem {
         width: item.width,
         height: item.height,
         bytes: item.bytes || 0,
-        createdAt: item.uploadedAt || new Date().toISOString(),
+        createdAt: item.uploadedAt || item.createdAt || new Date().toISOString(),
         resourceType,
         thumbnailUrl: item.thumbnailUrl,
         originalFilename: item.originalFilename || item.displayName || item.title || 'Untitled',
@@ -91,9 +116,9 @@ export async function getAllMedia(
         // since we need both data (list) and pagination info. This endpoint (getMedia) returns
         // paginated lists under `items`, not `data` — fall back to `data` for resilience only.
         const fullResponse = response.data;
-        const rawResources = fullResponse.items ?? fullResponse.data ?? [];
+        const rawResources: RawMediaItem[] = fullResponse.items ?? fullResponse.data ?? [];
         // Transform each item to match frontend MediaItem interface
-        const resources = rawResources.map((item: any) => transformMediaItem(item, mediaType));
+        const resources = rawResources.map((item) => transformMediaItem(item, mediaType));
 
 
         // Extract pagination info from server response
@@ -152,72 +177,23 @@ export async function uploadMedia(
             },
         });
 
-        // Get the full response first, then extract data appropriately
-        const fullResponse = response.data; // This is the full server response
-        const data = extractResponseData<any>(response); // This extracts the nested data
-
-        // Debug: Log both structures
-        console.log('📤 Upload - Full response:', fullResponse);
-        console.log('📤 Upload - Extracted data:', data);
-
-        // Handle the actual server response structure
-        // Server returns: { success: true, message: "...", data: { gallery: { images: [...], videos: [...], PDF: [...] } } }
-        // extractResponseData returns just the gallery object from response.data.data
-        let resources: any[] = [];
-        let urls: string[] = [];
-
-        // The extracted data IS the gallery object, but it might be nested
-        if (data && data.gallery && (data.gallery.images || data.gallery.videos || data.gallery.PDF)) {
-            // Handle nested gallery structure: data = { gallery: { images: [...], videos: [...], PDF: [...] } }
-            const gallery = data.gallery;
-            const allItems = [
-                ...(gallery.images || []),
-                ...(gallery.videos || []),
-                ...(gallery.PDF || [])
-            ];
-
-            resources = allItems;
-            urls = allItems.map((item: any) => item.url || item.secure_url).filter(Boolean);
-            console.log('📤 Upload - Found items in nested gallery:', allItems.length);
-        } else if (data && (data.images || data.videos || data.PDF)) {
-            // Handle direct gallery structure: data = { images: [...], videos: [...], PDF: [...] }
-            const allItems = [
-                ...(data.images || []),
-                ...(data.videos || []),
-                ...(data.PDF || [])
-            ];
-
-            resources = allItems;
-            urls = allItems.map((item: any) => item.url || item.secure_url).filter(Boolean);
-            console.log('📤 Upload - Found items in direct gallery arrays:', allItems.length);
-        } else {
-            // Fallback for other response structures
-            resources = data.resources ?? data.data ?? [];
-            urls = data.urls || data.secureUrls || [];
-
-            // If we have resources but no URLs, extract URLs from resources
-            if (urls.length === 0 && resources.length > 0) {
-                urls = resources.map((r: any) => r.secureUrl || r.url).filter(Boolean);
-            }
-            console.log('📤 Upload - Using fallback structure:', resources.length);
-        }
-
-        console.log('📤 Upload - Final result:', {
-            urls: urls.length,
-            resources: resources.length,
-            success: fullResponse.success
-        });
+        // Server returns { success, message, data: { items: [media_assets rows] } }.
+        const fullResponse = response.data as { success?: boolean; message?: string };
+        const data = extractResponseData<{ items?: RawMediaItem[] }>(response);
+        const resources = (data?.items ?? []).map((item) => transformMediaItem(item, item.kind ? TAB_BY_KIND[item.kind] : 'images'));
+        const urls = resources.map((r) => r.secureUrl || r.url).filter(Boolean);
 
         return {
             success: fullResponse.success !== false,
-            urls: urls,
-            resources: resources,
+            urls,
+            resources,
             message: fullResponse.message,
         };
-    } catch (error: any) {
+    } catch (error) {
         // Handle specific error cases with detailed messages
-        const statusCode = error.statusCode || error.response?.status;
-        const errorMessage = error.message || error.response?.data?.message;
+        const statusCode = apiErrorStatus(error) ?? 0;
+        const errorMessage = apiErrorMessage(error, '');
+        const errorCode = axios.isAxiosError(error) ? error.code : undefined;
 
         // File size errors (413 Payload Too Large)
         if (statusCode === 413 || errorMessage?.toLowerCase().includes('file size') || errorMessage?.toLowerCase().includes('too large')) {
@@ -234,14 +210,14 @@ export async function uploadMedia(
         }
 
         // Network errors
-        if (error.code === 'ECONNABORTED' || error.code === 'ERR_NETWORK' || errorMessage?.toLowerCase().includes('network')) {
+        if (errorCode === 'ECONNABORTED' || errorCode === 'ERR_NETWORK' || errorMessage?.toLowerCase().includes('network')) {
             throw new Error(
                 'Network error occurred during upload. Please check your internet connection and try again.'
             );
         }
 
         // Timeout errors
-        if (error.code === 'ETIMEDOUT' || errorMessage?.toLowerCase().includes('timeout')) {
+        if (errorCode === 'ETIMEDOUT' || errorMessage?.toLowerCase().includes('timeout')) {
             throw new Error(
                 'Upload timed out. This may be due to slow connection or large file sizes. Please try again.'
             );
@@ -311,10 +287,11 @@ export async function deleteMedia(
         });
 
         // No return value needed for successful deletion
-    } catch (error: any) {
+    } catch (error) {
         // Handle specific error cases with detailed messages
-        const statusCode = error.statusCode || error.response?.status;
-        const errorMessage = error.message || error.response?.data?.message;
+        const statusCode = apiErrorStatus(error) ?? 0;
+        const errorMessage = apiErrorMessage(error, '');
+        const errorCode = axios.isAxiosError(error) ? error.code : undefined;
 
         // Authentication errors (401 Unauthorized)
         if (statusCode === 401) {
@@ -338,14 +315,14 @@ export async function deleteMedia(
         }
 
         // Network errors
-        if (error.code === 'ECONNABORTED' || error.code === 'ERR_NETWORK' || errorMessage?.toLowerCase().includes('network')) {
+        if (errorCode === 'ECONNABORTED' || errorCode === 'ERR_NETWORK' || errorMessage?.toLowerCase().includes('network')) {
             throw new Error(
                 'Network error occurred during deletion. Please check your internet connection and try again.'
             );
         }
 
         // Timeout errors
-        if (error.code === 'ETIMEDOUT' || errorMessage?.toLowerCase().includes('timeout')) {
+        if (errorCode === 'ETIMEDOUT' || errorMessage?.toLowerCase().includes('timeout')) {
             throw new Error(
                 'Deletion request timed out. Please try again.'
             );
@@ -387,7 +364,8 @@ export function extractPublicId(url: string): string | undefined {
  * @param width - Desired thumbnail width (default: 300px)
  * @returns Transformed URL with thumbnail parameters, or the original URL as-is
  */
-export function getThumbnailUrl(url: string, _width: number = 300): string {
+export function getThumbnailUrl(url: string, width: number = 300): string {
+    void width;
     return url;
 }
 
@@ -511,7 +489,7 @@ export async function updateMedia(
         else if (mediaType === 'PDF' || mediaType === 'pdfs') backendMediaType = 'raw';
 
         // Send as JSON since uploadNone expects form fields, not files
-        const body: any = {};
+        const body: { title?: string; description?: string; tags?: string[] } = {};
         if (title !== undefined) body.title = title;
         if (description !== undefined) body.description = description;
         if (tags !== undefined) body.tags = tags; // Send as array, not JSON string
@@ -524,10 +502,11 @@ export async function updateMedia(
         });
 
         // No return value needed for successful update
-    } catch (error: any) {
+    } catch (error) {
         // Handle specific error cases with detailed messages
-        const statusCode = error.statusCode || error.response?.status;
-        const errorMessage = error.message || error.response?.data?.message;
+        const statusCode = apiErrorStatus(error) ?? 0;
+        const errorMessage = apiErrorMessage(error, '');
+        const errorCode = axios.isAxiosError(error) ? error.code : undefined;
 
         // Authentication errors (401 Unauthorized)
         if (statusCode === 401) {
@@ -551,7 +530,7 @@ export async function updateMedia(
         }
 
         // Network errors
-        if (error.code === 'ECONNABORTED' || error.code === 'ERR_NETWORK' || errorMessage?.toLowerCase().includes('network')) {
+        if (errorCode === 'ECONNABORTED' || errorCode === 'ERR_NETWORK' || errorMessage?.toLowerCase().includes('network')) {
             throw new Error(
                 'Network error occurred during update. Please check your internet connection and try again.'
             );

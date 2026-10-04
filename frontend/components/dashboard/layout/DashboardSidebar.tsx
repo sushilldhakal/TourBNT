@@ -2,13 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import {
-    Package2, Home, FileText, Users, Image, Settings, Mail, LayoutDashboard,
-    ChevronDown, ChevronRight, Plus, List, MapPin, FolderTree, Lightbulb,
-    HelpCircle, Calendar, Star, Wrench, MessageSquare, UserPlus, Briefcase,
-    PanelLeftClose, PanelLeft,
-    UserCog, CalendarCheck, Compass, Utensils, Truck, Gauge
-} from 'lucide-react';
+import { Package2, Home, FileText, Users, Image, Settings, Mail, LayoutDashboard, ChevronDown, ChevronRight, Plus, List, MapPin, FolderTree, Lightbulb, HelpCircle, Calendar, Star, Wrench, MessageSquare, Briefcase, PanelLeftClose, PanelLeft, UserCog, CalendarCheck, Compass, Utensils, Truck, Gauge } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState, useMemo } from 'react';
 import {

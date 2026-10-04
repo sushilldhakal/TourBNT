@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import Script from 'next/script';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { getConsent, onConsentChange } from '@/lib/consent';
+import { useConsent } from '@/lib/consent';
 
 declare global {
     interface Window {
@@ -19,14 +19,9 @@ const GA_ID = process.env.NEXT_PUBLIC_GA_ID;
  * cookies. If they later decline, it stops loading on the next page view. Renders nothing otherwise.
  */
 export function Analytics() {
-    const [allowed, setAllowed] = useState(false);
+    const allowed = !!useConsent()?.analytics;
     const pathname = usePathname();
     const search = useSearchParams();
-
-    useEffect(() => {
-        setAllowed(!!getConsent()?.analytics);
-        return onConsentChange((c) => setAllowed(c.analytics));
-    }, []);
 
     useEffect(() => {
         if (!allowed || !GA_ID || typeof window.gtag !== 'function') return;

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { Home, ChevronRight, MessageCircle, Loader2, ArrowLeft } from 'lucide-react';
+import { ChevronRight, MessageCircle, Loader2, ArrowLeft } from 'lucide-react';
 import {
     getConversation,
     getConversationMessages,
@@ -106,7 +106,7 @@ export default function SingleEnquiryPage() {
                 ? 'default'
                 : 'outline';
         return (
-            <Badge variant={variant as any} className="text-xs">
+            <Badge variant={variant} className="text-xs">
                 {label}
             </Badge>
         );
@@ -187,7 +187,6 @@ export default function SingleEnquiryPage() {
 
     const createdAtLabel = new Date(conversation.createdAt).toLocaleString();
     const tour = conversation.tourId;
-    const tourTitle = tour?.title;
     const tourCode = tour?.code;
     const tourSlug = tour?.slug ?? tour?.id;
     const isTourEnquiry = conversation.type === 'enquiry' && !!tour;

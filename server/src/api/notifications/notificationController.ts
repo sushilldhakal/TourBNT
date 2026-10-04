@@ -3,7 +3,6 @@ import { db, notifications, users } from '../../db';
 import { eq, and, desc, count } from 'drizzle-orm';
 import { Request } from '../../middlewares/authenticate';
 import { HTTP_STATUS, sendSuccess } from '../../utils/apiResponse';
-import { normalizeDoc } from '../../utils/normalizeDoc';
 
 // Get notifications for authenticated user
 export const getUserNotifications = async (req: Request, res: Response) => {
@@ -44,7 +43,7 @@ export const getUserNotifications = async (req: Request, res: Response) => {
     // directly instead.
     return res.status(HTTP_STATUS.OK).json({
       success: true,
-      items: normalizeDoc(items),
+      items,
       pagination: {
         page,
         limit: pageLimit,

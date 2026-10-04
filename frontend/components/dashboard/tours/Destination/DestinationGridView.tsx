@@ -4,7 +4,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { MapPin, Edit, Trash2, Power, X, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { DestinationTypes, TourTitle, type DestinationGridViewProps } from "@/types/types";
+import { DestinationTypes, type DestinationGridViewProps } from "@/types/types";
 import { useCacheManager, useTourTitlesByIds } from '@/lib/queries';
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useEffect, useMemo, useState } from "react";

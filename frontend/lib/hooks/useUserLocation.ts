@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useIsClient } from './useIsClient';
 
 export interface UserCoords {
     lat: number;
@@ -31,49 +32,47 @@ function readStored(): UserCoords | null {
  * can offer a button that calls `request()`. Coordinates are kept for the browser session only.
  */
 export function useUserLocation() {
-    const [coords, setCoords] = useState<UserCoords | null>(null);
-    const [status, setStatus] = useState<LocationStatus>('checking');
+    const isClient = useIsClient();
+    // Read once on the client: geolocation support and coordinates kept from earlier in this session.
+    const supported = isClient && typeof navigator !== 'undefined' && !!navigator.geolocation;
+    const stored = useMemo(() => (isClient ? readStored() : null), [isClient]);
+    const [located, setLocated] = useState<UserCoords | null>(null);
+    // Status from the permission check or a request(); null until one has run.
+    const [checked, setChecked] = useState<Exclude<LocationStatus, 'checking' | 'unsupported'> | null>(null);
 
     const request = useCallback(() => {
-        if (typeof navigator === 'undefined' || !navigator.geolocation) {
-            setStatus('unsupported');
-            return;
-        }
-        setStatus('loading');
+        if (typeof navigator === 'undefined' || !navigator.geolocation) return;
+        setChecked('loading');
         navigator.geolocation.getCurrentPosition(
             (pos) => {
                 const next = { lat: round(pos.coords.latitude), lng: round(pos.coords.longitude) };
                 try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch { /* storage blocked: fine */ }
-                setCoords(next);
-                setStatus('ready');
+                setLocated(next);
+                setChecked('ready');
             },
-            () => setStatus('denied'),
+            () => setChecked('denied'),
             { enableHighAccuracy: false, timeout: 8000, maximumAge: 10 * 60 * 1000 },
         );
     }, []);
 
     useEffect(() => {
-        if (typeof navigator === 'undefined' || !navigator.geolocation) {
-            setStatus('unsupported');
-            return;
-        }
-        const stored = readStored();
-        if (stored) {
-            setCoords(stored);
-            setStatus('ready');
-            return;
-        }
+        if (!supported || stored) return;
         // Already granted earlier -> use it without asking again. Never trigger a prompt from here.
-        if (!navigator.permissions?.query) {
-            setStatus('prompt');
-            return;
-        }
+        if (!navigator.permissions?.query) return;
         navigator.permissions.query({ name: 'geolocation' as PermissionName }).then((p) => {
             if (p.state === 'granted') request();
-            else if (p.state === 'denied') setStatus('denied');
-            else setStatus('prompt');
-        }).catch(() => setStatus('prompt'));
-    }, [request]);
+            else setChecked(p.state === 'denied' ? 'denied' : 'prompt');
+        }).catch(() => setChecked('prompt'));
+    }, [supported, stored, request]);
+
+    const coords = located ?? stored;
+    let status: LocationStatus;
+    if (!isClient) status = 'checking';
+    else if (!supported) status = 'unsupported';
+    else if (checked) status = checked;
+    else if (stored) status = 'ready';
+    // No permissions API to ask: offer the button.
+    else status = typeof navigator.permissions?.query === 'function' ? 'checking' : 'prompt';
 
     return { coords, status, request };
 }

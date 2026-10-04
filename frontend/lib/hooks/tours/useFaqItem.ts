@@ -7,7 +7,7 @@ import { useCacheManager } from '@/lib/queries/cacheUtils';
 import { useSingleFaq } from '@/lib/queries/useFaq';
 import { toast } from '@/components/ui/use-toast';
 import { updateFaq } from '@/lib/api/faqApi';
-import type { FaqData, UseFaqItemProps } from '@/types/faq';
+import type { UseFaqItemProps } from '@/types/faq';
 
 // Validation schema
 const faqSchema = z.object({
@@ -39,8 +39,7 @@ export const useFaqItem = ({ faq, DeleteFaq }: UseFaqItemProps) => {
     // Update form values when entering edit mode or when data loads
     useEffect(() => {
         if (isEditMode && !isInitializingRef.current) {
-            // Extract FAQ data - handle both { faq: ... } and direct FAQ object
-            const faqData = (faqSingle as any)?.faq || faqSingle;
+            const faqData = faqSingle;
 
             if (faqData && (faqData.question || faqData.answer)) {
                 isInitializingRef.current = true;
@@ -97,7 +96,7 @@ export const useFaqItem = ({ faq, DeleteFaq }: UseFaqItemProps) => {
         // Data is already validated by the form schema
         try {
             await updateFaqMutation.mutateAsync(data);
-        } catch (error) {
+        } catch {
             toast({
                 title: 'Failed to update FAQ',
                 description: 'Please try again later.',

@@ -345,8 +345,9 @@ export const tours = pgTable('tours', {
   // Flexible/nested structures kept as JSONB (itinerary steps, facts/faqs
   // snapshots, gallery items, pricing options, discount rules, tour dates).
   itinerary: jsonb('itinerary').$type<unknown[]>().default([]),
-  include: jsonb('include').$type<string[]>().default([]),
-  exclude: jsonb('exclude').$type<string[]>().default([]),
+  // Rich text from the editor (a JSON document); older rows may hold a plain list.
+  include: jsonb('include').$type<unknown>().default([]),
+  exclude: jsonb('exclude').$type<unknown>().default([]),
   facts: jsonb('facts').$type<unknown[]>().default([]),
   faqs: jsonb('faqs').$type<unknown[]>().default([]),
   gallery: jsonb('gallery').$type<unknown[]>().default([]),

@@ -1,5 +1,7 @@
+import { useSyncExternalStore } from 'react';
+
 export interface CartBooking {
-    _id: string;
+    id: string;
     bookingReference: string;
     tourTitle: string;
     tourCode: string;
@@ -147,4 +149,50 @@ export function getCartTotals() {
         total,
         itemCount: bookings.length
     };
+}
+
+const CART_KEY = 'cartBookings';
+const EMPTY_CART: CartBooking[] = [];
+let cachedRaw: string | null = null;
+let cachedCart: CartBooking[] = EMPTY_CART;
+
+/** The cart as stored, parsed once per change so React sees a stable snapshot. */
+function cartSnapshot(): CartBooking[] {
+    let raw: string | null = null;
+    try {
+        raw = localStorage.getItem(CART_KEY);
+    } catch {
+        return EMPTY_CART;
+    }
+    if (raw !== cachedRaw) {
+        cachedRaw = raw;
+        try {
+            const parsed: unknown = raw ? JSON.parse(raw) : [];
+            cachedCart = Array.isArray(parsed) ? (parsed as CartBooking[]) : EMPTY_CART;
+        } catch {
+            cachedCart = EMPTY_CART;
+        }
+    }
+    return cachedCart;
+}
+
+function subscribeToCart(onChange: () => void): () => void {
+    window.addEventListener('cartUpdated', onChange);
+    // Other tabs.
+    window.addEventListener('storage', onChange);
+    return () => {
+        window.removeEventListener('cartUpdated', onChange);
+        window.removeEventListener('storage', onChange);
+    };
+}
+
+/** The cart's bookings, kept in sync with localStorage (empty during server rendering). */
+export function useCartBookings(): CartBooking[] {
+    return useSyncExternalStore(subscribeToCart, cartSnapshot, () => EMPTY_CART);
+}
+
+/** Replace the cart's bookings. */
+export function saveCart(bookings: CartBooking[]): void {
+    localStorage.setItem(CART_KEY, JSON.stringify(bookings));
+    window.dispatchEvent(new Event('cartUpdated'));
 }

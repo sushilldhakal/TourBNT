@@ -34,17 +34,13 @@ export function DualRangeSlider({
 }: DualRangeSliderProps) {
     const [localValue, setLocalValue] = useState<[number, number]>(value || defaultValue)
     const [isDragging, setIsDragging] = useState<"min" | "max" | null>(null)
-    const [inputValues, setInputValues] = useState<[string, string]>([
-        (value?.[0] || defaultValue[0]).toString(),
-        (value?.[1] || defaultValue[1]).toString()
-    ])
+    // Text typed into the min/max boxes; null shows the current value (so dragging updates the boxes).
+    const [drafts, setDrafts] = useState<[string | null, string | null]>([null, null])
     const sliderRef = useRef<HTMLDivElement>(null)
 
     const currentValue = value || localValue
 
-    React.useEffect(() => {
-        setInputValues([currentValue[0].toString(), currentValue[1].toString()])
-    }, [currentValue])
+    const inputValues: [string, string] = [drafts[0] ?? currentValue[0].toString(), drafts[1] ?? currentValue[1].toString()]
 
     const getPercentage = (val: number) => ((val - min) / (max - min)) * 100
 
@@ -61,7 +57,7 @@ export function DualRangeSlider({
     )
 
     const handleInputChange = (type: "min" | "max", inputValue: string) => {
-        setInputValues((prev) => (type === "min" ? [inputValue, prev[1]] : [prev[0], inputValue]))
+        setDrafts((prev) => (type === "min" ? [inputValue, prev[1]] : [prev[0], inputValue]))
 
         const numValue = Number.parseFloat(inputValue)
         if (!isNaN(numValue)) {
@@ -230,6 +226,7 @@ export function DualRangeSlider({
                                 type="number"
                                 value={inputValues[0]}
                                 onChange={(e) => handleInputChange("min", e.target.value)}
+                                onBlur={() => setDrafts((prev) => [null, prev[1]])}
                                 className="w-20 pl-8 pr-2 py-1 text-sm border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                                 min={min}
                                 max={max}
@@ -250,6 +247,7 @@ export function DualRangeSlider({
                                 type="number"
                                 value={inputValues[1]}
                                 onChange={(e) => handleInputChange("max", e.target.value)}
+                                onBlur={() => setDrafts((prev) => [prev[0], null])}
                                 className="w-20 pl-8 pr-2 py-1 text-sm border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                                 min={min}
                                 max={max}

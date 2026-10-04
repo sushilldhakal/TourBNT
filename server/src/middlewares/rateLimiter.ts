@@ -1,5 +1,6 @@
 import rateLimit from 'express-rate-limit';
-import { RedisStore } from 'rate-limit-redis';
+import { RedisStore, type RedisReply } from 'rate-limit-redis';
+import type { Request } from 'express';
 import { HTTP_STATUS } from '../utils/apiResponse';
 import { metricsCollector } from '../utils/metrics';
 import { getRedisClient } from '../config/redisClient';
@@ -16,7 +17,8 @@ import { getRedisClient } from '../config/redisClient';
 const makeStore = (prefix: string) =>
     new RedisStore({
         prefix,
-        sendCommand: (...args: string[]) => (getRedisClient() as any).call(...args),
+        // ioredis answers with the raw Redis reply, which is what RedisStore expects.
+        sendCommand: (command: string, ...args: string[]) => getRedisClient().call(command, ...args) as Promise<RedisReply>,
     });
 
 /**
@@ -37,7 +39,7 @@ export function isInternalRequest(req: { socket: { remoteAddress?: string }; hea
 /**
  * Get client IP address from request
  */
-function getClientIp(req: any): string {
+function getClientIp(req: Request): string {
     // req.ip is already resolved through the trusted proxies (see config/trustProxy.ts). The first
     // X-Forwarded-For entry is whatever the client typed, so it must not be used directly.
     return req.ip || req.socket.remoteAddress || 'unknown';

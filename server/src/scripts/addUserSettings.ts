@@ -1,3 +1,4 @@
+import { createInterface } from 'readline';
 import { config as dotenvConfig } from 'dotenv';
 import path from 'path';
 import { db, userSettings } from '../db';
@@ -31,7 +32,7 @@ const addUserSettings = async () => {
                 hasGoogle: !!existingSettings.googleApiKey
             });
 
-            const readline = require('readline').createInterface({
+            const readline = createInterface({
                 input: process.stdin,
                 output: process.stdout
             });

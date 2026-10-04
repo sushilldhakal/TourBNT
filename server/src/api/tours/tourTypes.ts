@@ -353,7 +353,7 @@ export interface Discount {
 export interface FactValue {
   value?: string;
   label?: string;
-  [key: string]: any; // Adjust this if you have specific keys or values
+  [key: string]: unknown;
 }
 
 export interface Destination {
@@ -369,4 +369,41 @@ export interface Destination {
   userId: string;
   createdAt: Date;
   updatedAt: Date;
+}
+
+/** Roles an itinerary partner can play on a day. */
+export const ITINERARY_ROLES = ['transport', 'accommodation', 'guide', 'meals', 'other'] as const;
+export type ItineraryRole = (typeof ITINERARY_ROLES)[number];
+export const isItineraryRole = (value: unknown): value is ItineraryRole =>
+  typeof value === 'string' && (ITINERARY_ROLES as readonly string[]).includes(value);
+
+/** A partner on an itinerary day, as stored in tours.itinerary (see processItineraryData). */
+export interface StoredItineraryPartner {
+  role: string;
+  name: string;
+  businessPartnerId?: string;
+  notes?: string;
+  time?: string;
+  endTime?: string;
+  unitsRequested?: number;
+  unitType?: string;
+  unitTypeId?: string;
+  [extra: string]: unknown;
+}
+
+/** An itinerary day as stored in tours.itinerary. */
+export interface StoredItineraryDay {
+  id?: string;
+  partners?: StoredItineraryPartner[];
+  [extra: string]: unknown;
+}
+
+/** A fact as copied onto a tour (tours.facts). */
+export interface StoredTourFact {
+  factId?: string;
+  title?: string;
+  field_type?: string;
+  value?: unknown;
+  icon?: string;
+  [extra: string]: unknown;
 }

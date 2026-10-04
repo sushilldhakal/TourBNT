@@ -8,25 +8,9 @@ import { Badge } from '@/components/ui/badge';
 import { searchBusinessPartners, BusinessPartner, BusinessPartnerType } from '@/lib/api/businessPartners';
 import { useUnitTypes } from '@/lib/queries';
 import { useTourContext } from '@/providers/TourProvider';
+import type { EditorItineraryPartner, ItineraryPartnerRole } from '@/types/tourEditor';
 
-export type ItineraryPartnerRole = 'transport' | 'accommodation' | 'guide' | 'meals' | 'other';
-
-interface ItineraryPartner {
-    role: ItineraryPartnerRole;
-    businessPartnerId?: string;
-    name: string;
-    notes?: string;
-    /** "HH:mm" — a single sitting point for role='meals', or the start of an engagement window for role='guide' (paired with endTime below). Feeds the partner's confirmation request. */
-    time?: string;
-    /** "HH:mm" — end of a guide's engagement window (e.g. "17:00" for a 9-5 day). Lets isTimeSlotAvailable check for real scheduling conflicts instead of a pooled daily count. */
-    endTime?: string;
-    /** How many rooms/seats/covers the agency is asking for — the actual quantity a request reserves against the partner's capacity, distinct from traveler headcount. */
-    unitsRequested?: number;
-    /** Free-text override of what's being asked for, e.g. "Deluxe room". Defaults to the partner's own unit label (room/seat/slot) when unset. */
-    unitType?: string;
-    /** Structured link to one of the linked partner's own configured unit types (see businessPartnerUnitTypes) — set when picked from the dropdown, so capacity is checked per-type. Null/unset when the partner has none configured yet or unitType is still free text. */
-    unitTypeId?: string;
-}
+type ItineraryPartner = EditorItineraryPartner;
 
 const ROLE_TO_TYPES: Record<ItineraryPartnerRole, BusinessPartnerType[]> = {
     transport: ['transport'],
@@ -46,7 +30,7 @@ const QUANTITY_LABEL: Record<string, string> = {
 
 interface BusinessPartnerPickerProps {
     /** react-hook-form path to this day's itinerary item, e.g. `itinerary.options.0.3` */
-    basePath: string;
+    basePath: `itinerary.options.0.${number}`;
     role: ItineraryPartnerRole;
     label: string;
     placeholder: string;
@@ -61,8 +45,8 @@ interface BusinessPartnerPickerProps {
 export function BusinessPartnerPicker({ basePath, role, label, placeholder }: BusinessPartnerPickerProps) {
     const { form } = useTourContext();
     const { getValues, setValue, watch } = form;
-    const partnersPath = `${basePath}.partners`;
-    const partners: ItineraryPartner[] = watch(partnersPath) || [];
+    const partnersPath = `${basePath}.partners` as const;
+    const partners: ItineraryPartner[] = watch(partnersPath) ?? [];
     const current = partners.find((p) => p?.role === role);
 
     // Real, partner-configured unit types (hotel room types, restaurant meal
@@ -82,7 +66,7 @@ export function BusinessPartnerPicker({ basePath, role, label, placeholder }: Bu
     }, [current?.businessPartnerId]);
 
     const upsert = (patch: Partial<ItineraryPartner> | null) => {
-        const existing: ItineraryPartner[] = getValues(partnersPath) || [];
+        const existing: ItineraryPartner[] = getValues(partnersPath) ?? [];
         const withoutRole = existing.filter((p) => p?.role !== role);
         if (patch === null) {
             setValue(partnersPath, withoutRole, { shouldDirty: true });

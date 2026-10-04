@@ -275,6 +275,8 @@ function DepartureCard({
     const pricing = calculateDeparturePrice(
         departure,
         basePrice,
+        salePrice,
+        saleEnabled,
         pricingOptions
     );
 

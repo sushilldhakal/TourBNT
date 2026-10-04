@@ -310,11 +310,21 @@ export const getUserToursTitle = async (userId: string) => {
 };
 
 
+/** A global destination offered to a seller to add. */
+export interface AvailableDestination {
+    id: string;
+    name: string;
+    city?: string | null;
+    region?: string | null;
+    country?: string | null;
+    coverImage?: string | null;
+}
+
 /** Approved destinations the seller doesn't have yet — server-side search + paging. */
 export const getAvailableDestinationsPage = async (params: { search?: string; page: number; limit: number }) => {
     try {
         const response = await api.get('/global/destinations/available', { params });
-        const body = response.data as { data?: any[]; pagination?: { totalItems: number; totalPages: number } };
+        const body = response.data as { data?: AvailableDestination[]; pagination?: { totalItems: number; totalPages: number } };
         return { items: body.data ?? [], totalItems: body.pagination?.totalItems ?? 0, totalPages: body.pagination?.totalPages ?? 1 };
     } catch (error) {
         throw handleApiError(error, 'fetching available destinations');

@@ -2,6 +2,7 @@ import { db, tours, globalDestinations, businessPartners } from '../../../db';
 import { eq, inArray } from 'drizzle-orm';
 import createHttpError from 'http-errors';
 import { geocodePlace, getCachedGeocode, type GeocodeBias } from '../../../services/geocodeService';
+import type { StoredItineraryDay, StoredItineraryPartner } from '../tourTypes';
 
 export interface RouteStop {
   /** e.g. "2B" (or just "7" when the day has a single stop). */
@@ -46,7 +47,7 @@ const norm = (s: string) => s.trim().toLowerCase();
 export async function buildTourRouteMap(tourId: string) {
   const [tour] = await db.select({ itinerary: tours.itinerary, destinationId: tours.destinationId }).from(tours).where(eq(tours.id, tourId)).limit(1);
   if (!tour) throw createHttpError(404, 'Tour not found');
-  const itinerary = (Array.isArray(tour.itinerary) ? tour.itinerary : []) as Array<Record<string, any>>;
+  const itinerary = (Array.isArray(tour.itinerary) ? tour.itinerary : []) as StoredItineraryDay[];
 
   const [destinations, tourDest] = await Promise.all([
     db.select({ id: globalDestinations.id, name: globalDestinations.name, city: globalDestinations.city, country: globalDestinations.country, lat: globalDestinations.latitude, lng: globalDestinations.longitude }).from(globalDestinations),
@@ -60,7 +61,7 @@ export async function buildTourRouteMap(tourId: string) {
   const bias: GeocodeBias | undefined = anchor ? { viewbox: { west: anchor.lng - 1.2, east: anchor.lng + 1.2, south: anchor.lat - 1.2, north: anchor.lat + 1.2 } } : undefined;
   const withCoords = destinations.filter((d) => typeof d.lat === 'number' && typeof d.lng === 'number');
 
-  const partnerIds = [...new Set(itinerary.flatMap((d) => (d.partners ?? []).map((p: any) => p?.businessPartnerId)).filter(Boolean))] as string[];
+  const partnerIds = [...new Set(itinerary.flatMap((d) => (d.partners ?? []).map((p) => p?.businessPartnerId)).filter((id): id is string => !!id))];
   const partnerRows = partnerIds.length
     ? await db.select({ id: businessPartners.id, name: businessPartners.name, destinationId: businessPartners.destinationId, details: businessPartners.details }).from(businessPartners).where(inArray(businessPartners.id, partnerIds))
     : [];
@@ -116,8 +117,8 @@ export async function buildTourRouteMap(tourId: string) {
       continue;
     }
 
-    const partners = (Array.isArray(d.partners) ? d.partners : []) as Array<Record<string, any>>;
-    const own = (p: Record<string, any>): Coord | null => {
+    const partners = Array.isArray(d.partners) ? d.partners : [];
+    const own = (p: StoredItineraryPartner): Coord | null => {
       const live = p.businessPartnerId ? partnerById.get(p.businessPartnerId) : undefined;
       const det = (live?.details ?? {}) as { latitude?: number; longitude?: number };
       const own: Coord | null =
@@ -153,7 +154,7 @@ export async function buildTourRouteMap(tourId: string) {
     const dayNo = i + 1;
     days.push({
       day: dayNo,
-      title: d.title ?? '',
+      title: typeof d.title === 'string' ? d.title : '',
       place,
       stops: pieces.map((s, idx) => ({ ...s, day: dayNo, place, label: pieces.length === 1 ? String(dayNo) : `${dayNo}${String.fromCharCode(65 + idx)}` })),
     });

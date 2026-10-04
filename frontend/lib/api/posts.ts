@@ -31,13 +31,6 @@ export const getPosts =  async ({
 };
 
 /**
- * Get all posts (alias for getPosts)
- */
-export const getPost = async (id: string) => {
-    return getPosts();
-};
-
-/**
  * Get all posts by current user dashboard
  * Supports pagination with optional parameters
  */

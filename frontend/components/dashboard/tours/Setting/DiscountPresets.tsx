@@ -51,7 +51,7 @@ export function DiscountPresets() {
     value: 0,
   });
 
-  const { data: presets, isLoading, refetch } = useDiscountPresets(user?.id, !!user?.id);
+  const { data: presets, isLoading, refetch } = useDiscountPresets(user?.id ?? undefined, !!user?.id);
 
   const createMutation = useMutation({
     mutationFn: (data: Partial<DiscountPreset>) => {

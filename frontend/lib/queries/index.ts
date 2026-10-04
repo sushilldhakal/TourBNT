@@ -40,7 +40,6 @@ export {
     useRejectChangeRequest as useRejectCategoryChangeRequest,
 } from './useCategories';
 export * from './useBooking';
-export * from './useTourMutation';
 export * from './useMedia';
 export * from './useMediaUpdate';
 export * from './usePosts';

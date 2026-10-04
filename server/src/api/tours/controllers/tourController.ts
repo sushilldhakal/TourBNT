@@ -6,6 +6,8 @@ import { asyncAuthHandler } from '../../../utils/routeWrapper';
 import { optionalViewer } from '../../../middlewares/optionalViewer';
 import { RESPONSE_MESSAGES } from '../utils/constants';
 import { generateUniqueCode } from '../utils/codeGenerator';
+import { errorMessage, errorStatus } from '../../../utils/errors';
+import type { StoredTourFact } from '../tourTypes';
 
 /**
  * Tour Controller
@@ -44,12 +46,12 @@ export const getAllTours = asyncAuthHandler(async (req: Request, res: Response) 
     return sendPaginatedResponse(res, result.items, {
       page: result.page,
       limit: result.limit,
-      totalItems: result.totalItems as number,
-      totalPages: result.totalPages as number,
+      totalItems: result.totalItems,
+      totalPages: result.totalPages,
       ...(result.nextCursor !== undefined ? { nextCursor: result.nextCursor } : {}),
-    } as any, 'Tours retrieved successfully');
-  } catch (error: any) {
-    return sendError(res, error.message || 'Failed to fetch tours', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    }, 'Tours retrieved successfully');
+  } catch (error) {
+    return sendError(res, errorMessage(error) || 'Failed to fetch tours', HTTP_STATUS.INTERNAL_SERVER_ERROR);
   }
 });
 
@@ -64,21 +66,19 @@ export const getTour = asyncAuthHandler(async (req: Request, res: Response) => {
   // doesn't exist yet. Archived tours stay viewable so old links from past travellers still work.
   if (tour.tourStatus === 'Draft') {
     const viewer = await optionalViewer(req);
-    const authorIds = (Array.isArray(tour.author) ? tour.author : []).map((a: { id?: string }) => a?.id);
+    const authorIds = tour.author.map((a) => a.id);
     if (!viewer || (!viewer.isAdmin && !authorIds.includes(viewer.id))) {
       return sendError(res, 'Tour not found', HTTP_STATUS.NOT_FOUND);
     }
   }
 
   if (tour.facts) {
-    tour.facts = tour.facts.map((fact: any) => {
-      let factValue = fact.value;
-      if (Array.isArray(factValue) && factValue.length > 0) {
-        if (typeof factValue[0] === 'object' && factValue[0].value) {
-          factValue = factValue.map((item: any) => item.value);
-        }
-      }
-      return { ...fact, value: factValue };
+    // Multi-select values stored as { label, value } pairs go out as plain values.
+    tour.facts = (tour.facts as StoredTourFact[]).map((fact) => {
+      const value = Array.isArray(fact.value) && fact.value.length > 0 && typeof fact.value[0] === 'object' && (fact.value[0] as { value?: unknown })?.value
+        ? fact.value.map((item: { value?: unknown }) => item.value)
+        : fact.value;
+      return { ...fact, value };
     });
   }
 
@@ -117,7 +117,7 @@ export const updateTour = asyncAuthHandler(async (req: Request, res: Response) =
     return sendError(res, RESPONSE_MESSAGES.UNAUTHORIZED, HTTP_STATUS.UNAUTHORIZED);
   }
 
-  const updateData = extractTourFields(req);
+  const updateData = extractTourFields(req, { partial: true });
   Object.keys(updateData).forEach((key) => {
     if (updateData[key] === undefined) delete updateData[key];
   });
@@ -242,7 +242,7 @@ export const getMyTours = asyncAuthHandler(async (req: Request, res: Response) =
 
   const result = await TourService.getUserTours(userId, isAdmin, { page, limit });
 
-  const items = result.items.map((tour: any) => ({
+  const items = result.items.map((tour) => ({
     id: tour.id,
     title: tour.title,
     coverImage: tour.coverImage,
@@ -357,8 +357,8 @@ export const getTourRouteMap = async (req: Request, res: Response) => {
   const { buildTourRouteMap } = await import('../services/tourRouteMapService');
   try {
     return sendSuccess(res, await buildTourRouteMap(req.params.tourId), 'Route map retrieved successfully');
-  } catch (err: any) {
-    return sendError(res, err?.message ?? 'Could not build route map', err?.status ?? HTTP_STATUS.INTERNAL_SERVER_ERROR);
+  } catch (err) {
+    return sendError(res, errorMessage(err) ?? 'Could not build route map', errorStatus(err) ?? HTTP_STATUS.INTERNAL_SERVER_ERROR);
   }
 };
 
@@ -367,7 +367,7 @@ export const getTourBusinessInfo = async (req: Request, res: Response) => {
   const { getTourBusiness } = await import('../services/tourBusinessService');
   try {
     return sendSuccess(res, await getTourBusiness(req.params.tourId), 'Business retrieved successfully');
-  } catch (err: any) {
-    return sendError(res, err?.message ?? 'Could not load business', err?.status ?? HTTP_STATUS.INTERNAL_SERVER_ERROR);
+  } catch (err) {
+    return sendError(res, errorMessage(err) ?? 'Could not load business', errorStatus(err) ?? HTTP_STATUS.INTERNAL_SERVER_ERROR);
   }
 };

@@ -298,11 +298,19 @@ export const getAllCategoriesAdmin = async () => {
 };
 
 
+/** A global category offered to a seller to add. */
+export interface AvailableCategory {
+    id: string;
+    name: string;
+    description?: string | null;
+    imageUrl?: string | null;
+}
+
 /** Approved categories the seller doesn't have yet — server-side search + paging. */
 export const getAvailableCategoriesPage = async (params: { search?: string; page: number; limit: number }) => {
     try {
         const response = await api.get('/global/categories/available', { params });
-        const body = response.data as { data?: any[]; pagination?: { totalItems: number; totalPages: number } };
+        const body = response.data as { data?: AvailableCategory[]; pagination?: { totalItems: number; totalPages: number } };
         return { items: body.data ?? [], totalItems: body.pagination?.totalItems ?? 0, totalPages: body.pagination?.totalPages ?? 1 };
     } catch (error) {
         throw handleApiError(error, 'fetching available categories');

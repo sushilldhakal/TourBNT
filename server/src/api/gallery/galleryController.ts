@@ -60,7 +60,7 @@ export const getSingleMedia = async (req: Request
     };
 
     return sendSuccess(res, mediaResponse, 'Media retrieved successfully');
-  } catch (error: any) {
+  } catch (error) {
     console.error('getSingleMedia Error:', error);
     next(error);
   }

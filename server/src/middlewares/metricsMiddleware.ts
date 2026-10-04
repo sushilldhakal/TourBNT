@@ -18,8 +18,8 @@ function getClientIp(req: Request): string {
  * Get user ID from request if authenticated
  */
 function getUserId(req: Request): string | undefined {
-    // Assuming user is attached to request by auth middleware
-    return (req as any).user?.id || (req as any).user?._id?.toString();
+    // Set by the authenticate middleware.
+    return req.user?.id;
 }
 
 /**
@@ -33,7 +33,7 @@ export const metricsMiddleware = (req: Request, res: Response, next: NextFunctio
     const originalEnd = res.end;
 
     // Override res.end to capture metrics when response is sent
-    res.end = function (this: Response, ...args: any[]): Response {
+    const endWithMetrics = function (this: Response, ...args: unknown[]): Response {
         const responseTime = Date.now() - startTime;
         const userId = getUserId(req);
 
@@ -54,17 +54,17 @@ export const metricsMiddleware = (req: Request, res: Response, next: NextFunctio
                 endpoint: req.path,
                 method: req.method,
                 statusCode: res.statusCode,
-                errorMessage: (res as any).errorMessage || `HTTP ${res.statusCode}`,
+                errorMessage: `HTTP ${res.statusCode}`,
                 timestamp: new Date().toISOString(),
                 clientIp,
                 userId
             });
         }
 
-        // Call the original end function with proper arguments
-        // @ts-ignore - Complex overload signature
-        return originalEnd.apply(this, args);
+        // Call the original end function with the same arguments (it has several overloads).
+        return (originalEnd as (...endArgs: unknown[]) => Response).apply(this, args);
     };
+    res.end = endWithMetrics as Response['end'];
 
     next();
 };

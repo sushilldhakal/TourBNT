@@ -23,7 +23,7 @@ import { body } from 'express-validator';
 import { authenticate, authorizeRoles, requireOwnerOrAdmin } from "../../middlewares/authenticate";
 import { paginationMiddleware } from "../../middlewares/pagination";
 import { filterSortMiddleware } from "../../middlewares/filterSort";
-import { upload, uploadNone, uploadAvatar as uploadAvatarMiddleware, uploadSellerDocs } from '../../middlewares/multer';
+import { uploadNone, uploadAvatar as uploadAvatarMiddleware, uploadSellerDocs } from '../../middlewares/multer';
 import { authLimiter } from '../../middlewares/rateLimiter';
 import { sendValidationError } from '../../utils/apiResponse';
 
@@ -588,7 +588,7 @@ userRouter.patch('/:userId/reject-seller', authenticate, authorizeRoles('admin')
  *         description: Forbidden - Admin access required
  */
 userRouter.patch('/:userId/seller-status', authenticate, authorizeRoles('admin'), async (req: express.Request, res: express.Response, next: express.NextFunction) => {
-  const { status, rejectionReason } = req.body;
+  const { status } = req.body;
   if (status === 'approved') {
     return approveSellerApplication(req, res, next);
   } else if (status === 'rejected') {

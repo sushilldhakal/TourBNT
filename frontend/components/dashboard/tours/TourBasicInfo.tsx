@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { useUserCategories, useApprovedCategories } from '@/lib/queries';
 import { useDestinationsRoleBased } from '@/lib/queries/useDestinations';
 import { DestinationTypes } from '@/types/types';

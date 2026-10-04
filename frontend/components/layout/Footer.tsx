@@ -2,8 +2,6 @@
 
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/use-toast';
 import { useMutation } from '@tanstack/react-query';
 import { useCompanyInfo } from '@/lib/queries/useCompanyInfo';
@@ -11,12 +9,6 @@ import { subscribeEmail } from '@/lib/api/subscribers';
 import { ContentContainer } from './PublicLayoutClient';
 import { CookieSettingsButton } from '@/components/consent/CookieConsent';
 import dynamic from 'next/dynamic';
-
-// Lazy load the ToastAction - only loads when there's an error
-const ToastAction = dynamic(() =>
-    import('@/components/ui/toast').then(m => ({ default: m.ToastAction })),
-    { ssr: false }
-);
 
 // Lazy load the subscriber banner - only loads when scrolled to footer
 const SubscriberBanner = dynamic(() => import('./SubscriberBanner'), {
