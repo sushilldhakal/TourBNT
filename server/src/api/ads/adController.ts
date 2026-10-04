@@ -16,7 +16,8 @@ import { HTTP_STATUS, sendSuccess, sendPaginatedResponse, sendValidationError, s
 import * as notifications from '../notifications/notificationController';
 import { uploadAdImage as uploadAdImageFile } from '../../services/adImageService';
 import { claimOnce } from '../../config/redisClient';
-import { findMatchingAds, invalidateLiveAds, previewAdPlacements, resolveNearbyContext, resolveSearchContext, resolveTourContext, type AdContext } from './adTargeting';
+import { findMatchingAds, invalidateLiveAds, toPublicAd, previewAdPlacements, resolveNearbyContext, resolveSearchContext, resolveTourContext, type AdContext } from './adTargeting';
+import { optionalViewer } from '../../middlewares/optionalViewer';
 import { addMonths, getAdPricing, normaliseAdOrder, priceAdOrder, updateAdPricing } from './adPricing';
 
 type AdRow = typeof advertisements.$inferSelect;
@@ -289,10 +290,18 @@ export const getAdById = async (req: Request, res: Response, next: NextFunction)
     const { adId } = req.params;
     const [ad] = await db.select().from(advertisements).where(eq(advertisements.id, adId)).limit(1);
     if (!ad) return sendNotFoundError(res, 'Ad not found');
-    if (!(await isAdOwnerOrAdmin(ad, req)) && !(ad.approvalStatus === 'approved' && ad.campaignStatus === 'active')) {
+    // Public route, so `authenticate` hasn't run: read the signed-in viewer (if any) from the cookie.
+    const viewer = await optionalViewer(req);
+    let canSeeAll = viewer?.isAdmin ?? false;
+    if (viewer && !canSeeAll) {
+      const [partner] = await db.select({ ownerId: businessPartners.ownerId }).from(businessPartners).where(eq(businessPartners.id, ad.businessPartnerId)).limit(1);
+      canSeeAll = partner?.ownerId === viewer.id;
+    }
+    if (canSeeAll) return sendSuccess(res, ad, 'Ad retrieved successfully');
+    if (!(ad.approvalStatus === 'approved' && ad.campaignStatus === 'active')) {
       return sendForbiddenError(res, 'Not authorized to view this ad');
     }
-    return sendSuccess(res, ad, 'Ad retrieved successfully');
+    return sendSuccess(res, toPublicAd(ad), 'Ad retrieved successfully');
   } catch (error) {
     next(error);
   }
