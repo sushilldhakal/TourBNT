@@ -1,5 +1,6 @@
 import express from 'express';
 import { authenticate, authorizeRoles } from '../../middlewares/authenticate';
+import { withRowLevelSecurity } from '../../middlewares/rowLevelSecurity';
 import { asyncAuthHandler } from '../../utils/routeWrapper';
 import { sendSuccess } from '../../utils/apiResponse';
 import { notifyPayoutPaid } from '../../services/emailService';
@@ -18,6 +19,7 @@ import {
 
 const router = express.Router();
 router.use(authenticate);
+router.use(withRowLevelSecurity);
 
 const who = (req: express.Request) => ({ id: req.user!.id, isAdmin: req.user!.roles.includes('admin') });
 

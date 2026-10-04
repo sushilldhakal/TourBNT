@@ -148,6 +148,13 @@
       "when": 1790998809258,
       "tag": "0020_passkeys_facebook",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1791053457413,
+      "tag": "0021_row_level_security",
+      "breakpoints": true
     }
   ]
 }
