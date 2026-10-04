@@ -543,3 +543,14 @@ export interface SimilarTourRelated {
     reviewCount?: number;
     tourStatus?: string;
 }
+
+/** Optional related sections from GET /tours/:id?include=... */
+export interface RelatedData {
+    author?: Array<{ id: string; name: string; email?: string }>;
+    destination?: { id: string; name: string; country?: string; region?: string; description?: string };
+    destinations?: Array<{ id: string; name: string }>;
+    categories?: Array<{ id: string; name: string; description?: string }>;
+    similarTours?: SimilarTourRelated[];
+    pricingInsights?: Record<string, unknown>;
+    availability?: Record<string, unknown>;
+}

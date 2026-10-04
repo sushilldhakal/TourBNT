@@ -24,7 +24,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertCircle } from 'lucide-react';
 import { TabsContent } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { deleteTour } from '@/lib/api/tours';
 import { toast } from '@/components/ui/use-toast';
 import { DashboardCardHeader } from '@/components/dashboard/layout/CardHeader';
@@ -71,7 +71,6 @@ function TourForm() {
     const { invalidateTours } = useCacheManager();
     const { form, onSubmit, isLoading, isSaving, tourId } = useTourContext();
     const { handleSubmit, formState: { errors }, watch } = form;
-    const [submitError, setSubmitError] = React.useState<string | null>(null);
     const [showDeleteDialog, setShowDeleteDialog] = React.useState(false);
 
     const tourTitle = watch('title');
@@ -86,7 +85,7 @@ function TourForm() {
             invalidateTours();
             router.push('/dashboard/tours');
         },
-        onError: (error: any) => {
+        onError: (error: Error) => {
             toast({
                 variant: 'destructive',
                 title: 'Error deleting tour',
@@ -95,22 +94,10 @@ function TourForm() {
         },
     });
 
-    const submitWithLog = React.useCallback(
-        (values: Parameters<typeof onSubmit>[0]) => {
-            console.log('[Edit Tour] Payload sent to server (format):', JSON.stringify(values, null, 2));
-            console.log('[Edit Tour] Payload (object):', values);
-            return onSubmit(values);
-        },
-        [onSubmit]
-    );
-
     const handleSave = async () => {
-        const current = form.getValues();
-        console.log('[Edit Tour] Save clicked – current form values (format):', JSON.stringify(current, null, 2));
-        console.log('[Edit Tour] Save clicked – current form values (object):', current);
         try {
-            await handleSubmit(submitWithLog)();
-        } catch (error: any) {
+            await handleSubmit(onSubmit)();
+        } catch (error) {
             console.error('Failed to update tour:', error);
         }
     };
@@ -140,7 +127,7 @@ function TourForm() {
                 actions={
                     <>
                         <Button variant="destructive" onClick={() => setShowDeleteDialog(true)}>Delete</Button>
-                        <Button>Update Tour</Button>
+                        <Button onClick={handleSave} disabled={isSaving}>{isSaving ? 'Saving...' : 'Update Tour'}</Button>
                     </>
                 }
             />
@@ -149,17 +136,18 @@ function TourForm() {
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>Delete Tour</DialogTitle>
+                        <DialogDescription>
+                            Delete &ldquo;{tourTitle || 'this tour'}&rdquo;? This cannot be undone.
+                        </DialogDescription>
                     </DialogHeader>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>Cancel</Button>
+                        <Button variant="destructive" onClick={handleDelete} disabled={deleteMutation.isPending}>
+                            {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
-            {submitError && (
-                <Alert variant="destructive">
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertTitle>Error</AlertTitle>
-                    <AlertDescription>{submitError}</AlertDescription>
-                </Alert>
-            )}
-
             {hasErrors && (
                 <Alert variant="destructive">
                     <AlertCircle className="h-4 w-4" />
@@ -171,7 +159,7 @@ function TourForm() {
             )}
 
             <FormProvider {...form}>
-                <form onSubmit={handleSubmit(submitWithLog)}>
+                <form onSubmit={handleSubmit(onSubmit)}>
                     <ApplyPresetsBar />
                     <TourEditorLayout onSave={handleSave} saveLabel="Update Tour">
                         <TabsContent value="overview" className="mt-0">

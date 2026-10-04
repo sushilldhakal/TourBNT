@@ -1,5 +1,5 @@
 import { api, serverApi, handleApiError, extractResponseData, extractList } from './apiClient';
-import type { Tour } from '@/types/types';
+import type { RelatedData, Tour } from '@/types/types';
 
 /**
  * Tour API Methods
@@ -282,18 +282,26 @@ export const getLatestTours = async () => {
  * When omitted, server returns default relatedData for edit (author, destination, categories).
  * Returns data in shape { tour, relatedData?, breadcrumbs?, meta? }.
  */
+/** GET /tours/:id: the tour plus whatever related data was asked for. */
+export interface SingleTourResponse {
+    tour: Tour;
+    relatedData?: RelatedData;
+    breadcrumbs?: { label: string; url: string }[];
+    meta?: Record<string, unknown>;
+}
+
 export const getSingleTour = async (
     tourId: string,
     options?: { include?: string[] }
-): Promise<{ tour: any; relatedData?: any; breadcrumbs?: { label: string; url: string }[]; meta?: any }> => {
+): Promise<SingleTourResponse> => {
     try {
         const query =
             options?.include && options.include.length > 0
                 ? `?include=${options.include.join(',')}`
                 : '';
         const response = await api.get(`/tours/${tourId}${query}`);
-        const raw = extractResponseData(response) as { data?: any; tour?: any; breadcrumbs?: any[] };
-        const data = raw?.data ?? raw;
+        const raw = extractResponseData(response) as SingleTourResponse & { data?: SingleTourResponse };
+        const data: SingleTourResponse = raw?.data ?? raw;
         if (data?.tour) {
             return {
                 tour: data.tour,

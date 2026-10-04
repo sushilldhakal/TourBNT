@@ -21,7 +21,7 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { useTourContext } from '@/providers/TourProvider';
-import type { GalleryItem } from '@/lib/schemas/tourEditor';
+import type { EditorGalleryItem as GalleryItem } from '@/types/tourEditor';
 import { Gallery } from '@/components/dashboard/gallery/Gallery';
 import Image from 'next/image';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';

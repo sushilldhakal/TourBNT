@@ -35,6 +35,7 @@ import { MultiSelect } from '@/components/ui/MultiSelect';
 import { useTourContext } from '@/providers/TourProvider';
 import { getUserFacts } from '@/lib/api/factsApi';
 import type { FactData } from '@/types/facts';
+import type { EditorFact, FactValue } from '@/types/tourEditor';
 import Icon from '@/components/Icon';
 import { getUserId } from '@/lib/utils/auth';
 import AddFact from './Facts/AddFacts';
@@ -172,7 +173,13 @@ export function TourFacts() {
     };
 
     // ✅ HELPER: Render value input based on field type
-    const renderValueInput = (index: number, currentFact: FactData) => {
+    /** A plain-text / single-select fact's value: stored as a string, or as a one-item list. */
+    const factText = (value: FactValue | undefined): string => {
+        const first = Array.isArray(value) ? value[0] : value;
+        return typeof first === 'object' && first !== null ? first.value ?? first.label ?? '' : first ?? '';
+    };
+
+    const renderValueInput = (index: number, currentFact: EditorFact) => {
         if (!currentFact?.field_type) return null;
 
         const fieldType = currentFact.field_type;
@@ -189,8 +196,8 @@ export function TourFacts() {
                             <FormLabel>Fact Details</FormLabel>
                             <FormControl>
                                 <Input
-                                    value={field.value?.[0] || ''}
-                                    onChange={(e) => field.onChange([e.target.value])}
+                                    value={factText(field.value)}
+                                    onChange={(e) => field.onChange(e.target.value)}
                                     placeholder={`Enter ${currentFact.name || 'fact details'}`}
                                 />
                             </FormControl>
@@ -221,9 +228,9 @@ export function TourFacts() {
                                         >
                                             <span className={cn(
                                                 "truncate",
-                                                !field.value?.[0] && "text-muted-foreground"
+                                                !factText(field.value) && "text-muted-foreground"
                                             )}>
-                                                {field.value?.[0] || "Select an option"}
+                                                {factText(field.value) || "Select an option"}
                                             </span>
                                             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                         </Button>
@@ -400,7 +407,7 @@ export function TourFacts() {
                                                                                     className="w-full justify-between"
                                                                                     onClick={(e) => e.stopPropagation()}
                                                                                 >
-                                                                                    <span className={cn("truncate", !currentFact?.Name && "text-muted-foreground")}>
+                                                                                    <span className={cn("truncate", !currentFact?.name && "text-muted-foreground")}>
                                                                                         {currentFact?.name || "Select a fact"}
                                                                                     </span>
                                                                                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />

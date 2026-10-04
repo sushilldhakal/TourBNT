@@ -24,17 +24,13 @@ import { DashboardCardHeader } from '@/components/dashboard/layout/CardHeader';
 function TourForm() {
     const router = useRouter();
     const { form, onSubmit, isSaving } = useTourContext();
-    const { handleSubmit, watch, formState: { errors } } = form;
-    const [submitError] = React.useState<string | null>(null);
+    const { handleSubmit, formState: { errors } } = form;
 
-  
+
     const handleSave = async () => {
-        const current = form.getValues();
-        console.log('[Add Tour] Save clicked – current form values (format):', JSON.stringify(current, null, 2));
-        console.log('[Add Tour] Save clicked – current form values (object):', current);
         try {
             await handleSubmit(onSubmit)();
-        } catch (error: any) {
+        } catch (error) {
             console.error('Failed to create tour:', error);
         }
     };
@@ -77,14 +73,6 @@ function TourForm() {
                     </Button>
                 }
             />
-
-            {submitError && (
-                <Alert variant="destructive">
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertTitle>Error</AlertTitle>
-                    <AlertDescription>{submitError}</AlertDescription>
-                </Alert>
-            )}
 
             {hasErrors && (
                 <Alert variant="destructive">

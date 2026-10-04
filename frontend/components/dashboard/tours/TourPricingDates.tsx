@@ -9,7 +9,9 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { useTourContext } from '@/providers/TourProvider';
 import { usePricingPresets, usePaxPresets, useDiscountPresets } from '@/lib/queries';
 import { queryKeys } from '@/lib/queries/queryKeys';
-import { createPaxPreset, createDiscountPreset, createPricingPreset, type PaxPreset, type DiscountPreset, type PricingOptionPreset } from '@/lib/api/tourSettingsApi';
+import { createPaxPreset, createDiscountPreset, createPricingPreset, type PaxPreset, type DiscountPreset, type PricingOptionPreset, type PricingOption as PresetPricingOption } from '@/lib/api/tourSettingsApi';
+import type { EditorDateRange, EditorPricingOption, PricingCategory, ScheduleType } from '@/types/tourEditor';
+import type { RecurrencePattern } from '@/types/types';
 import type { DateRange } from 'react-day-picker';
 import {
     Calendar as CalendarIcon,
@@ -68,6 +70,27 @@ function cacheCreatedPreset<T extends { _id?: string; id?: string }>(
         const id = presetIdOf(preset);
         if (!id || list.some((item) => presetIdOf(item) === id)) return list;
         return [preset, ...list];
+    });
+}
+
+/** A pricing-options preset's option as an editor pricing option (presets keep the price as basePrice). */
+function presetOptionToEditor(option: PresetPricingOption): EditorPricingOption {
+    const discount = option.discount;
+    return getDefaultPricingOption({
+        name: option.name || '',
+        category: option.category || 'adult',
+        customCategory: option.customCategory || '',
+        price: option.basePrice ?? 0,
+        isActive: option.isActive ?? true,
+        discount: {
+            discountEnabled: !!option.discountEnabled,
+            type: discount?.type || 'percentage',
+            value: discount?.value || 0,
+            dateRange: discount?.dateRange?.from && discount.dateRange.to
+                ? { from: new Date(discount.dateRange.from), to: new Date(discount.dateRange.to) }
+                : undefined,
+        },
+        paxRange: { min: option.paxRange?.min || 1, max: option.paxRange?.max || 22 },
     });
 }
 
@@ -245,7 +268,7 @@ export function TourPricingDates() {
                                 placeholder="0.00"
                                 className="pl-10"
                                 value={price}
-                                onChange={(e) => setValue('pricing.price', e.target.value === '' ? '' : e.target.value)}
+                                onChange={(e) => setValue('pricing.price', e.target.valueAsNumber || 0)}
                                 onBlur={(e) => setValue('pricing.price', parseFloat(e.target.value) || 0)}
                             />
                         </div>
@@ -386,7 +409,7 @@ export function TourPricingDates() {
                                         min="1"
                                         className="pl-10"
                                         value={minSize}
-                                        onChange={(e) => setValue('pricing.minSize', e.target.value)}
+                                        onChange={(e) => setValue('pricing.minSize', e.target.valueAsNumber || 0)}
                                         onBlur={(e) => setValue('pricing.minSize', parseInt(e.target.value) || 1)}
                                     />
                                 </div>
@@ -403,7 +426,7 @@ export function TourPricingDates() {
                                         min="1"
                                         className="pl-10"
                                         value={maxSize}
-                                        onChange={(e) => setValue('pricing.maxSize', e.target.value)}
+                                        onChange={(e) => setValue('pricing.maxSize', e.target.valueAsNumber || 0)}
                                         onBlur={(e) => setValue('pricing.maxSize', parseInt(e.target.value) || 1)}
                                     />
                                 </div>
@@ -564,7 +587,7 @@ export function TourPricingDates() {
                                 <Label>Discount Type</Label>
                                 <RadioGroup
                                     value={pricing.discount?.type || 'percentage'}
-                                    onValueChange={(value) => setValue('pricing.discount.type', value)}
+                                    onValueChange={(value) => setValue('pricing.discount.type', value === 'price' ? 'price' : 'percentage')}
                                 >
                                     <div className="flex items-center space-x-2">
                                         <RadioGroupItem value="percentage" id="percentage" />
@@ -670,29 +693,7 @@ export function TourPricingDates() {
                                                     if (selectedPreset && selectedPreset.options && Array.isArray(selectedPreset.options)) {
                                                         // Add each option from the preset to the form
                                                         selectedPreset.options.forEach((presetOption) => {
-                                                            // Convert preset option to form format
-                                                            // The preset uses 'basePrice' but form uses 'price'
-                                                            const presetPrice = presetOption.basePrice ?? 0;
-                                                            const formOption = {
-                                                                name: presetOption.name || '',
-                                                                category: presetOption.category || 'adult',
-                                                                customCategory: presetOption.customCategory || '',
-                                                                price: presetPrice,
-                                                                discountEnabled: presetOption.discountEnabled || false,
-                                                                discount: presetOption.discount ? {
-                                                                    type: presetOption.discount.type || 'percentage',
-                                                                    value: presetOption.discount.value || 0,
-                                                                    dateRange: presetOption.discount.dateRange ? {
-                                                                        from: presetOption.discount.dateRange.from ? new Date(presetOption.discount.dateRange.from) : undefined,
-                                                                        to: presetOption.discount.dateRange.to ? new Date(presetOption.discount.dateRange.to) : undefined,
-                                                                    } : undefined,
-                                                                } : undefined,
-                                                                paxRange: presetOption.paxRange ? {
-                                                                    min: presetOption.paxRange.min || 1,
-                                                                    max: presetOption.paxRange.max || 22,
-                                                                } : { min: 1, max: 22 },
-                                                                isActive: presetOption.isActive !== undefined ? presetOption.isActive : true,
-                                                            };
+                                                            const formOption = presetOptionToEditor(presetOption);
                                                             appendPricingOption(formOption);
                                                         });
                                                     }
@@ -756,26 +757,7 @@ export function TourPricingDates() {
                                                 setValue('pricingPresetIds', [...currentIds, id]);
                                             }
                                             (preset.options || []).forEach((presetOption) => {
-                                                appendPricingOption({
-                                                    name: presetOption.name || '',
-                                                    category: presetOption.category || 'adult',
-                                                    customCategory: presetOption.customCategory || '',
-                                                    price: presetOption.basePrice ?? 0,
-                                                    discountEnabled: presetOption.discountEnabled || false,
-                                                    discount: presetOption.discount ? {
-                                                        type: presetOption.discount.type || 'percentage',
-                                                        value: presetOption.discount.value || 0,
-                                                        dateRange: presetOption.discount.dateRange ? {
-                                                            from: presetOption.discount.dateRange.from ? new Date(presetOption.discount.dateRange.from) : undefined,
-                                                            to: presetOption.discount.dateRange.to ? new Date(presetOption.discount.dateRange.to) : undefined,
-                                                        } : undefined,
-                                                    } : undefined,
-                                                    paxRange: presetOption.paxRange ? {
-                                                        min: presetOption.paxRange.min || 1,
-                                                        max: presetOption.paxRange.max || 22,
-                                                    } : { min: 1, max: 22 },
-                                                    isActive: presetOption.isActive !== undefined ? presetOption.isActive : true,
-                                                });
+                                                appendPricingOption(presetOptionToEditor(presetOption));
                                             });
                                         }}
                                     />
@@ -928,7 +910,7 @@ export function TourPricingDates() {
                         <Label>Schedule Type</Label>
                         <RadioGroup
                             value={scheduleType}
-                            onValueChange={(value) => setValue('dates.scheduleType', value)}
+                            onValueChange={(value) => setValue('dates.scheduleType', value as ScheduleType)}
                         >
                             <div className="flex items-center space-x-2">
                                 <RadioGroupItem value="flexible" id="flexible" />
@@ -1083,7 +1065,7 @@ export function TourPricingDates() {
                                     <Label>Recurrence Pattern</Label>
                                     <Select
                                         value={dates.recurrencePattern || 'daily'}
-                                        onValueChange={(value) => setValue('dates.recurrencePattern', value)}
+                                        onValueChange={(value) => setValue('dates.recurrencePattern', value as RecurrencePattern)}
                                     >
                                         <SelectTrigger>
                                             <SelectValue />
@@ -1142,7 +1124,7 @@ function PricingOptionItem({ index, onRemove }: PricingOptionItemProps) {
     const { register, setValue, watch } = useTourContext().form;
     const { user } = useAuth();
     const option = watch(`pricing.pricingOptions.${index}`) || {};
-    const discountEnabled = option.discountEnabled || false;
+    const discountEnabled = option.discount?.discountEnabled || false;
     const paxRange = option.paxRange || { min: 1, max: 22 };
 
     const { data: discountPresets = [], isLoading: isLoadingDiscountPresets } = useDiscountPresets(user?.id ?? undefined, !!user?.id);
@@ -1216,7 +1198,7 @@ function PricingOptionItem({ index, onRemove }: PricingOptionItemProps) {
                     </Label>
                     <Select
                         value={option.category || 'adult'}
-                        onValueChange={(value) => setValue(`pricing.pricingOptions.${index}.category`, value)}
+                        onValueChange={(value) => setValue(`pricing.pricingOptions.${index}.category`, value as PricingCategory)}
                     >
                         <SelectTrigger>
                             <SelectValue />
@@ -1315,7 +1297,7 @@ function PricingOptionItem({ index, onRemove }: PricingOptionItemProps) {
                     </div>
                     <Switch
                         checked={discountEnabled}
-                        onCheckedChange={(checked) => setValue(`pricing.pricingOptions.${index}.discountEnabled`, checked)}
+                        onCheckedChange={(checked) => setValue(`pricing.pricingOptions.${index}.discount.discountEnabled`, checked)}
                     />
                 </div>
 
@@ -1438,7 +1420,7 @@ function PricingOptionItem({ index, onRemove }: PricingOptionItemProps) {
                             <Label>Discount Type</Label>
                             <RadioGroup
                                 value={option.discount?.type || 'percentage'}
-                                onValueChange={(value) => setValue(`pricing.pricingOptions.${index}.discount.type`, value)}
+                                onValueChange={(value) => setValue(`pricing.pricingOptions.${index}.discount.type`, value === 'price' ? 'price' : 'percentage')}
                             >
                                 <div className="flex items-center space-x-2">
                                     <RadioGroupItem value="percentage" id={`option-${index}-percentage`} />
@@ -1503,443 +1485,159 @@ function PricingOptionItem({ index, onRemove }: PricingOptionItemProps) {
     );
 }
 
+/** "Mar 04, 2026", or "Mar 04, 2026 - Mar 10, 2026" for a range. */
+function formatRange(range: DateRange | undefined): string | null {
+    if (!range?.from) return null;
+    return range.to ? `${format(range.from, 'LLL dd, y')} - ${format(range.to, 'LLL dd, y')}` : format(range.from, 'LLL dd, y');
+}
+
+interface DateFieldProps {
+    value: Date | undefined;
+    onChange: (date: Date | undefined) => void;
+    placeholder: string;
+}
+
+/** A single date picker with a clear button. */
+function DateField({ value, onChange, placeholder }: DateFieldProps) {
+    const date = value ? new Date(value) : undefined;
+    return (
+        <div className="flex gap-2">
+            <Popover>
+                <PopoverTrigger asChild>
+                    <Button variant="outline" className="justify-start px-2.5 font-normal flex-1">
+                        <CalendarIcon data-icon="inline-start" className="h-4 w-4" />
+                        {date ? format(date, 'LLL dd, y') : <span>{placeholder}</span>}
+                    </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-max !animate-none p-0" style={{ width: 'max-content', padding: 0, animation: 'none' }} align="start">
+                    <Calendar mode="single" captionLayout="dropdown" selected={date} onSelect={onChange} initialFocus />
+                </PopoverContent>
+            </Popover>
+            {date && (
+                <Button type="button" variant="ghost" size="icon" onClick={() => onChange(undefined)} className="shrink-0">
+                    <X className="h-4 w-4" />
+                </Button>
+            )}
+        </div>
+    );
+}
+
+interface DateRangeFieldProps {
+    label: string;
+    value: EditorDateRange | undefined;
+    /** Called with a complete range, or undefined when cleared. */
+    onChange: (range: EditorDateRange | undefined) => void;
+    placeholder: string;
+    hint?: string;
+}
+
 /**
- * Recurrence End Date Picker Component
- * Single date picker for recurrence end date
+ * A date-range picker with a clear button. A half-picked range (start date only) stays local until the end
+ * date is picked, so the form only ever holds complete ranges.
  */
+function DateRangeField({ label, value, onChange, placeholder, hint }: DateRangeFieldProps) {
+    const [pending, setPending] = useState<DateRange | undefined>(undefined);
+    const saved: DateRange | undefined = value?.from ? { from: new Date(value.from), to: value.to ? new Date(value.to) : undefined } : undefined;
+    const shown = pending ?? saved;
+
+    const handleSelect = (range: DateRange | undefined) => {
+        if (range?.from && range.to) {
+            setPending(undefined);
+            onChange({ from: range.from, to: range.to });
+        } else {
+            setPending(range);
+        }
+    };
+
+    const handleClear = () => {
+        setPending(undefined);
+        onChange(undefined);
+    };
+
+    return (
+        <div className="space-y-2">
+            <Label>{label}</Label>
+            <div className="flex gap-2">
+                <Popover onOpenChange={(open) => { if (!open) setPending(undefined); }}>
+                    <PopoverTrigger asChild>
+                        <Button variant="outline" className="justify-start px-2.5 font-normal flex-1">
+                            <CalendarIcon data-icon="inline-start" className="h-4 w-4" />
+                            {formatRange(shown) ?? <span>{placeholder}</span>}
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-max !animate-none p-0" style={{ width: 'max-content', padding: 0, animation: 'none' }} align="start">
+                        <Calendar
+                            mode="range"
+                            captionLayout="dropdown"
+                            defaultMonth={shown?.from}
+                            selected={shown}
+                            onSelect={handleSelect}
+                            numberOfMonths={2}
+                        />
+                    </PopoverContent>
+                </Popover>
+                {shown?.from && (
+                    <Button type="button" variant="ghost" size="icon" onClick={handleClear} className="shrink-0">
+                        <X className="h-4 w-4" />
+                    </Button>
+                )}
+            </div>
+            {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+        </div>
+    );
+}
+
 function RecurrenceEndDatePicker() {
     const { setValue, watch } = useTourContext().form;
-    const recurrenceEndDate = watch('dates.recurrenceEndDate');
-    const [date, setDate] = useState<Date | undefined>(
-        recurrenceEndDate ? new Date(recurrenceEndDate) : undefined
-    );
-
-    // Sync local state with form state when form value changes
-    React.useEffect(() => {
-        if (recurrenceEndDate) {
-            setDate(new Date(recurrenceEndDate));
-        } else {
-            setDate(undefined);
-        }
-    }, [recurrenceEndDate]);
-
-    const handleDateChange = (selectedDate: Date | undefined) => {
-        setDate(selectedDate);
-        if (selectedDate) {
-            setValue('dates.recurrenceEndDate', selectedDate);
-        } else {
-            setValue('dates.recurrenceEndDate', undefined);
-        }
-    };
-
-    const handleClear = () => {
-        setDate(undefined);
-        setValue('dates.recurrenceEndDate', undefined);
-    };
-
-    return (
-        <div className="flex gap-2">
-            <Popover>
-                <PopoverTrigger asChild>
-                    <Button
-                        variant="outline"
-                        className="justify-start px-2.5 font-normal flex-1"
-                    >
-                        <CalendarIcon data-icon="inline-start" className="h-4 w-4" />
-                        {date ? (
-                            format(date, "LLL dd, y")
-                        ) : (
-                            <span>Pick an end date (optional)</span>
-                        )}
-                    </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-max !animate-none p-0" style={{ width: "max-content", padding: 0, animation: "none" }} align="start">
-                    <Calendar
-                        mode="single"
-                        captionLayout="dropdown"
-                        selected={date}
-                        onSelect={handleDateChange}
-                        initialFocus
-                    />
-                </PopoverContent>
-            </Popover>
-            {date && (
-                <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={handleClear}
-                    className="shrink-0"
-                >
-                    <X className="h-4 w-4" />
-                </Button>
-            )}
-        </div>
-    );
+    return <DateField value={watch('dates.recurrenceEndDate')} onChange={(date) => setValue('dates.recurrenceEndDate', date)} placeholder="Pick an end date (optional)" />;
 }
 
-/**
- * Price Lock Date Picker Component
- * Single date picker for price lock date
- */
 function PriceLockDatePicker() {
     const { setValue, watch } = useTourContext().form;
-    const priceLockDate = watch('pricing.priceLockDate');
-    const [date, setDate] = useState<Date | undefined>(
-        priceLockDate ? new Date(priceLockDate) : undefined
-    );
-
-    // Sync local state with form state when form value changes
-    React.useEffect(() => {
-        if (priceLockDate) {
-            setDate(new Date(priceLockDate));
-        } else {
-            setDate(undefined);
-        }
-    }, [priceLockDate]);
-
-    const handleDateChange = (selectedDate: Date | undefined) => {
-        setDate(selectedDate);
-        if (selectedDate) {
-            setValue('pricing.priceLockDate', selectedDate);
-        } else {
-            setValue('pricing.priceLockDate', undefined);
-        }
-    };
-
-    const handleClear = () => {
-        setDate(undefined);
-        setValue('pricing.priceLockDate', undefined);
-    };
-
-    return (
-        <div className="flex gap-2">
-            <Popover>
-                <PopoverTrigger asChild>
-                    <Button
-                        variant="outline"
-                        className="justify-start px-2.5 font-normal flex-1"
-                    >
-                        <CalendarIcon data-icon="inline-start" className="h-4 w-4" />
-                        {date ? (
-                            format(date, "LLL dd, y")
-                        ) : (
-                            <span>Pick a date (optional)</span>
-                        )}
-                    </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-max !animate-none p-0" style={{ width: "max-content", padding: 0, animation: "none" }} align="start">
-                    <Calendar
-                        mode="single"
-                        captionLayout="dropdown"
-                        selected={date}
-                        onSelect={handleDateChange}
-                        initialFocus
-                    />
-                </PopoverContent>
-            </Popover>
-            {date && (
-                <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={handleClear}
-                    className="shrink-0"
-                >
-                    <X className="h-4 w-4" />
-                </Button>
-            )}
-        </div>
-    );
+    return <DateField value={watch('pricing.priceLockDate')} onChange={(date) => setValue('pricing.priceLockDate', date)} placeholder="Pick a date (optional)" />;
 }
 
-/**
- * Discount Date Range Component
- * Date range picker for discount validity
- */
 function DiscountDateRange() {
     const { setValue, watch } = useTourContext().form;
-    const dateRange = watch('pricing.discount.dateRange') || {};
-    const [date, setDate] = useState<DateRange | undefined>({
-        from: dateRange.from ? new Date(dateRange.from) : undefined,
-        to: dateRange.to ? new Date(dateRange.to) : undefined,
-    });
-
-    // Sync local state with form state when form value changes (e.g., from preset)
-    React.useEffect(() => {
-        if (dateRange.from || dateRange.to) {
-            setDate({
-                from: dateRange.from ? new Date(dateRange.from) : undefined,
-                to: dateRange.to ? new Date(dateRange.to) : undefined,
-            });
-        } else if (!dateRange.from && !dateRange.to) {
-            setDate(undefined);
-        }
-    }, [dateRange.from, dateRange.to]);
-
-    const handleDateChange = (range: DateRange | undefined) => {
-        setDate(range);
-        if (range) {
-            setValue('pricing.discount.dateRange', range);
-        } else {
-            setValue('pricing.discount.dateRange', undefined);
-        }
-    };
-
-    const handleClear = () => {
-        setDate(undefined);
-        setValue('pricing.discount.dateRange', undefined);
-    };
-
     return (
-        <div className="space-y-2">
-            <Label>Discount Valid Period (Optional)</Label>
-            <div className="flex gap-2">
-                <Popover>
-                    <PopoverTrigger asChild>
-                        <Button
-                            variant="outline"
-                            className="justify-start px-2.5 font-normal flex-1"
-                        >
-                            <CalendarIcon data-icon="inline-start" className="h-4 w-4" />
-                            {date?.from ? (
-                                date.to ? (
-                                    <>
-                                        {format(date.from, "LLL dd, y")} -{" "}
-                                        {format(date.to, "LLL dd, y")}
-                                    </>
-                                ) : (
-                                    format(date.from, "LLL dd, y")
-                                )
-                            ) : (
-                                <span>Pick a date range (optional)</span>
-                            )}
-                        </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-max !animate-none p-0" style={{ width: "max-content", padding: 0, animation: "none" }} align="start">
-                        <Calendar
-                            mode="range"
-                            captionLayout="dropdown"
-                            defaultMonth={date?.from}
-                            selected={date}
-                            onSelect={handleDateChange}
-                            numberOfMonths={2}
-                        />
-                    </PopoverContent>
-                </Popover>
-                {date?.from && (
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={handleClear}
-                        className="shrink-0"
-                    >
-                        <X className="h-4 w-4" />
-                    </Button>
-                )}
-            </div>
-            <p className="text-xs text-muted-foreground">
-                Leave empty to make discount always active
-            </p>
-        </div>
+        <DateRangeField
+            label="Discount Valid Period (Optional)"
+            value={watch('pricing.discount.dateRange')}
+            onChange={(range) => setValue('pricing.discount.dateRange', range)}
+            placeholder="Pick a date range (optional)"
+            hint="Leave empty to make discount always active"
+        />
     );
 }
 
-/**
- * Pricing Option Discount Date Range Component
- * Date range picker for pricing option discount validity
- */
-interface PricingOptionDiscountDateRangeProps {
-    index: number;
-}
-
-function PricingOptionDiscountDateRange({ index }: PricingOptionDiscountDateRangeProps) {
+function PricingOptionDiscountDateRange({ index }: { index: number }) {
     const { setValue, watch } = useTourContext().form;
-    const dateRange = watch(`pricing.pricingOptions.${index}.discount.dateRange`) || {};
-    const [date, setDate] = useState<DateRange | undefined>({
-        from: dateRange.from ? new Date(dateRange.from) : undefined,
-        to: dateRange.to ? new Date(dateRange.to) : undefined,
-    });
-
-    // Sync local state with form state when form value changes
-    React.useEffect(() => {
-        if (dateRange.from || dateRange.to) {
-            const newDate: DateRange = {
-                from: dateRange.from ? new Date(dateRange.from) : undefined,
-                to: dateRange.to ? new Date(dateRange.to) : undefined,
-            } as DateRange;
-            setDate(newDate);
-        } else if (!dateRange.from && !dateRange.to) {
-            setDate(undefined);
-        }
-    }, [dateRange.from, dateRange.to]);
-
-    const handleDateChange = (range: DateRange | undefined) => {
-        setDate(range);
-        if (range) {
-            setValue(`pricing.pricingOptions.${index}.discount.dateRange`, range);
-        } else {
-            setValue(`pricing.pricingOptions.${index}.discount.dateRange`, undefined);
-        }
-    };
-
-    const handleClear = () => {
-        setDate(undefined);
-        setValue(`pricing.pricingOptions.${index}.discount.dateRange`, undefined);
-    };
-
     return (
-        <div className="space-y-2">
-            <Label>Discount Valid Period (Optional)</Label>
-            <div className="flex gap-2">
-                <Popover>
-                    <PopoverTrigger asChild>
-                        <Button
-                            variant="outline"
-                            className="justify-start px-2.5 font-normal flex-1"
-                        >
-                            <CalendarIcon data-icon="inline-start" className="h-4 w-4" />
-                            {date?.from ? (
-                                date.to ? (
-                                    <>
-                                        {format(date.from, "LLL dd, y")} -{" "}
-                                        {format(date.to, "LLL dd, y")}
-                                    </>
-                                ) : (
-                                    format(date.from, "LLL dd, y")
-                                )
-                            ) : (
-                                <span>Pick a date range (optional)</span>
-                            )}
-                        </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-max !animate-none p-0" style={{ width: "max-content", padding: 0, animation: "none" }} align="start">
-                        <Calendar
-                            mode="range"
-                            captionLayout="dropdown"
-                            defaultMonth={date?.from}
-                            selected={date}
-                            onSelect={handleDateChange}
-                            numberOfMonths={2}
-                        />
-                    </PopoverContent>
-                </Popover>
-                {date?.from && (
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={handleClear}
-                        className="shrink-0"
-                    >
-                        <X className="h-4 w-4" />
-                    </Button>
-                )}
-            </div>
-            <p className="text-xs text-muted-foreground">
-                Leave empty to make discount always active
-            </p>
-        </div>
+        <DateRangeField
+            label="Discount Valid Period (Optional)"
+            value={watch(`pricing.pricingOptions.${index}.discount.dateRange`)}
+            onChange={(range) => setValue(`pricing.pricingOptions.${index}.discount.dateRange`, range)}
+            placeholder="Pick a date range (optional)"
+            hint="Leave empty to make discount always active"
+        />
     );
 }
 
-/**
- * Fixed Date Range Component
- * Single date range for fixed schedule tours
- */
+/** The single date range of a fixed-schedule tour; picking it fills in days and nights. */
 function FixedDateRange() {
     const { setValue, watch } = useTourContext().form;
-    const dateRange = watch('dates.dateRange') || {};
-    const [date, setDate] = useState<DateRange | undefined>({
-        from: dateRange.from ? new Date(dateRange.from) : undefined,
-        to: dateRange.to ? new Date(dateRange.to) : undefined,
-    });
-
-    // Sync local state with form state when form value changes
-    React.useEffect(() => {
-        if (dateRange.from || dateRange.to) {
-            setDate({
-                from: dateRange.from ? new Date(dateRange.from) : undefined,
-                to: dateRange.to ? new Date(dateRange.to) : undefined,
-            });
-        } else if (!dateRange.from && !dateRange.to) {
-            setDate(undefined);
-        }
-    }, [dateRange.from, dateRange.to]);
-
-    const handleDateChange = (range: DateRange | undefined) => {
-        setDate(range);
-        if (range) {
-            setValue('dates.dateRange', range);
-
-            // Auto-calculate days and nights
-            if (range.from && range.to) {
-                const { days, nights } = calculateDaysNights(range.from, range.to);
+    return (
+        <DateRangeField
+            label="Tour Date Range"
+            value={watch('dates.dateRange')}
+            onChange={(range) => {
+                setValue('dates.dateRange', range);
+                const { days, nights } = range ? calculateDaysNights(range.from, range.to) : { days: 0, nights: 0 };
                 setValue('dates.days', days);
                 setValue('dates.nights', nights);
-            }
-        } else {
-            setValue('dates.dateRange', undefined);
-        }
-    };
-
-    const handleClear = () => {
-        setDate(undefined);
-        setValue('dates.dateRange', undefined);
-        setValue('dates.days', 0);
-        setValue('dates.nights', 0);
-    };
-
-    return (
-        <div className="space-y-2">
-            <Label>Tour Date Range</Label>
-            <div className="flex gap-2">
-                <Popover>
-                    <PopoverTrigger asChild>
-                        <Button
-                            variant="outline"
-                            className="justify-start px-2.5 font-normal flex-1"
-                        >
-                            <CalendarIcon data-icon="inline-start" className="h-4 w-4" />
-                            {date?.from ? (
-                                date.to ? (
-                                    <>
-                                        {format(date.from, "LLL dd, y")} -{" "}
-                                        {format(date.to, "LLL dd, y")}
-                                    </>
-                                ) : (
-                                    format(date.from, "LLL dd, y")
-                                )
-                            ) : (
-                                <span>Pick a date range</span>
-                            )}
-                        </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-max !animate-none p-0" style={{ width: "max-content", padding: 0, animation: "none" }} align="start">
-                        <Calendar
-                            mode="range"
-                            captionLayout="dropdown"
-                            defaultMonth={date?.from}
-                            selected={date}
-                            onSelect={handleDateChange}
-                            numberOfMonths={2}
-                        />
-                    </PopoverContent>
-                </Popover>
-                {date?.from && (
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={handleClear}
-                        className="shrink-0"
-                    >
-                        <X className="h-4 w-4" />
-                    </Button>
-                )}
-            </div>
-        </div>
+            }}
+            placeholder="Pick a date range"
+        />
     );
 }
 
@@ -1954,40 +1652,7 @@ interface DepartureItemProps {
 
 function DepartureItem({ index, onRemove }: DepartureItemProps) {
     const { register, setValue, watch } = useTourContext().form;
-    const departure = watch(`dates.departures.${index}`) || {};
-    const [date, setDate] = useState<DateRange | undefined>({
-        from: departure.dateRange?.from ? new Date(departure.dateRange.from) : undefined,
-        to: departure.dateRange?.to ? new Date(departure.dateRange.to) : undefined,
-    });
-
-    // Sync local state with form state when form value changes
-    React.useEffect(() => {
-        const dateRange = departure.dateRange || {};
-        if (dateRange.from || dateRange.to) {
-            setDate({
-                from: dateRange.from ? new Date(dateRange.from) : undefined,
-                to: dateRange.to ? new Date(dateRange.to) : undefined,
-            });
-        } else if (!dateRange.from && !dateRange.to) {
-            setDate(undefined);
-        }
-    }, [departure.dateRange]);
-
-    const handleDateChange = (range: DateRange | undefined) => {
-        setDate(range);
-        if (range) {
-            setValue(`dates.departures.${index}.dateRange`, range);
-
-            // Auto-calculate days and nights
-            if (range.from && range.to) {
-                const { days, nights } = calculateDaysNights(range.from, range.to);
-                setValue(`dates.departures.${index}.days`, days);
-                setValue(`dates.departures.${index}.nights`, nights);
-            }
-        } else {
-            setValue(`dates.departures.${index}.dateRange`, undefined);
-        }
-    };
+    const departure = watch(`dates.departures.${index}`);
 
     return (
         <Card>
@@ -2016,60 +1681,17 @@ function DepartureItem({ index, onRemove }: DepartureItemProps) {
                     />
                 </div>
 
-                {/* Date Range */}
-                <div className="space-y-2">
-                    <Label>Date Range</Label>
-                    <div className="flex gap-2">
-                        <Popover>
-                            <PopoverTrigger asChild>
-                                <Button
-                                    variant="outline"
-                                    className="justify-start px-2.5 font-normal flex-1"
-                                >
-                                    <CalendarIcon data-icon="inline-start" className="h-4 w-4" />
-                                    {date?.from ? (
-                                        date.to ? (
-                                            <>
-                                                {format(date.from, "LLL dd, y")} -{" "}
-                                                {format(date.to, "LLL dd, y")}
-                                            </>
-                                        ) : (
-                                            format(date.from, "LLL dd, y")
-                                        )
-                                    ) : (
-                                        <span>Pick a date range</span>
-                                    )}
-                                </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-max !animate-none p-0" style={{ width: "max-content", padding: 0, animation: "none" }} align="start">
-                                <Calendar
-                                    mode="range"
-                                    captionLayout="dropdown"
-                                    defaultMonth={date?.from}
-                                    selected={date}
-                                    onSelect={handleDateChange}
-                                    numberOfMonths={2}
-                                />
-                            </PopoverContent>
-                        </Popover>
-                        {date?.from && (
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => {
-                                    setDate(undefined);
-                                    setValue(`dates.departures.${index}.dateRange`, undefined);
-                                    setValue(`dates.departures.${index}.days`, 0);
-                                    setValue(`dates.departures.${index}.nights`, 0);
-                                }}
-                                className="shrink-0"
-                            >
-                                <X className="h-4 w-4" />
-                            </Button>
-                        )}
-                    </div>
-                </div>
+                <DateRangeField
+                    label="Date Range"
+                    value={departure?.dateRange}
+                    onChange={(range) => {
+                        setValue(`dates.departures.${index}.dateRange`, range);
+                        const { days, nights } = range ? calculateDaysNights(range.from, range.to) : { days: 0, nights: 0 };
+                        setValue(`dates.departures.${index}.days`, days);
+                        setValue(`dates.departures.${index}.nights`, nights);
+                    }}
+                    placeholder="Pick a date range"
+                />
 
                 {/* Capacity */}
                 <div className="space-y-2">

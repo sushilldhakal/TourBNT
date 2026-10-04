@@ -298,6 +298,8 @@ function NovelEditorCore({
                     )}
                     editorProps={editorProps}
                     onUpdate={({ editor }) => handleUpdate(editor as EditorInstance)}
+                    // Leaving the editor (e.g. clicking Save) must not wait out the debounce, or the last edits are lost.
+                    onBlur={() => debouncedUpdates.flush()}
                     onCreate={({ editor }) => handleCreate(editor as EditorInstance)}
                     slotAfter={<ImageResizer />}
                 >
