@@ -33,7 +33,9 @@ export function proxy(request: NextRequest) {  // Changed from 'middleware' to '
     // uses the live role.
     const role = roleFromToken(request.cookies.get('token')?.value);
     if (role && isRegularUser(role)) {
-        return NextResponse.redirect(new URL('/account', request.url));
+        const booking = path.match(/^\/dashboard\/bookings\/([^/]+)/);
+        const destination = booking ? `/booking/${booking[1]}` : '/account';
+        return NextResponse.redirect(new URL(destination, request.url));
     }
     if (role && canAccessDashboard(role) && !canAccessDashboardPath(path, role)) {
         return NextResponse.redirect(new URL(DASHBOARD_PREFIX, request.url));

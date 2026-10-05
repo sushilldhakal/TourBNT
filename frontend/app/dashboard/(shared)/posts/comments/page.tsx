@@ -260,6 +260,8 @@ export default function CommentsPage() {
         [handleAcceptComment, handleDeleteComment]
     );
 
+    // TanStack Table returns functions the React compiler cannot memoize.
+    // eslint-disable-next-line react-hooks/incompatible-library
     const table = useReactTable({
         data: comments,
         columns,

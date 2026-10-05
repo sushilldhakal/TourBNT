@@ -113,7 +113,7 @@ export const baseNavigationItems: NavigationItem[] = [
         adminOnly: true,
     },
     {
-        href: '/dashboard/bookings',
+        href: '/account?tab=bookings',
         label: 'My Bookings',
         icon: CalendarCheck,
         roles: ['user'],

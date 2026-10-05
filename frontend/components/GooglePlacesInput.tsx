@@ -27,7 +27,7 @@ export const GooglePlacesInput = forwardRef<HTMLInputElement, GooglePlacesInputP
         },
         externalRef
     ) => {
-        const { inputRef } = useGooglePlacesAutocomplete({
+        const { bindInput } = useGooglePlacesAutocomplete({
             onPlaceSelected,
             types,
             componentRestrictions,
@@ -42,11 +42,7 @@ export const GooglePlacesInput = forwardRef<HTMLInputElement, GooglePlacesInputP
                 )}
                 <Input
                     ref={(node) => {
-                        // Handle both refs
-                        if (inputRef) {
-                             
-                            (inputRef as React.MutableRefObject<HTMLInputElement | null>).current = node;
-                        }
+                        bindInput(node);
                         if (typeof externalRef === 'function') {
                             externalRef(node);
                         } else if (externalRef) {

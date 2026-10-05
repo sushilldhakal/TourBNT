@@ -25,39 +25,23 @@ import {
 } from '@/components/ui/alert-dialog';
 import type { PostComment } from '@/types/post';
 
-// Helper function to convert any ID value to string (handles ObjectId objects and buffers)
-const idToString = (id: any): string => {
+/** Turns an id from the API (string, or a leftover Mongo buffer object) into a string. */
+const idToString = (id: unknown): string => {
     if (!id) return '';
     if (typeof id === 'string') return id;
 
-    // Handle MongoDB ObjectId buffer objects
     if (typeof id === 'object') {
-        // Check if it's a buffer object with numeric keys
-        if (id.buffer || (id['0'] !== undefined && typeof id['0'] === 'number')) {
-            // This is a buffer object - try to extract hex string
-            const buffer = id.buffer || id;
-            if (buffer && typeof buffer === 'object') {
-                const bytes = Object.values(buffer).filter((v): v is number => typeof v === 'number');
-                if (bytes.length === 12) {
-                    // Convert bytes to hex string (MongoDB ObjectId is 12 bytes = 24 hex chars)
-                    return bytes.map(b => b.toString(16).padStart(2, '0')).join('');
-                }
-            }
+        const record = id as { buffer?: unknown; toString?: () => string; _id?: unknown };
+        const buffer = record.buffer && typeof record.buffer === 'object' ? record.buffer : record;
+        const bytes = Object.values(buffer as Record<string, unknown>).filter((value): value is number => typeof value === 'number');
+        if (bytes.length === 12) {
+            return bytes.map((byte) => byte.toString(16).padStart(2, '0')).join('');
         }
-
-        // Try toString() method
-        if (id.toString && typeof id.toString === 'function') {
-            const stringValue = id.toString();
-            // Avoid returning "[object Object]"
-            if (stringValue !== '[object Object]') {
-                return stringValue;
-            }
+        if (typeof record.toString === 'function') {
+            const stringValue = record.toString();
+            if (stringValue !== '[object Object]') return stringValue;
         }
-
-        // Try _id property (nested ObjectId)
-        if (id._id) {
-            return idToString(id._id);
-        }
+        if (record._id) return idToString(record._id);
     }
 
     return String(id);
@@ -70,10 +54,10 @@ const getCommentId = (comment: PostComment): string => {
 };
 
 // Helper function to normalize comment data (convert _id to id, ensure strings)
-const normalizeComment = (comment: Partial<PostComment> & { _id?: any; id?: any }): PostComment => {
+const normalizeComment = (comment: Partial<PostComment>): PostComment => {
     const commentId = idToString(comment.id || comment._id);
-    const userId = comment.user ? idToString(comment.user.id || (comment.user as any)._id) : '';
-    const user_id = comment.user ? idToString((comment.user as any)._id || comment.user.id) : '';
+    const userId = comment.user ? idToString(comment.user.id || comment.user._id) : '';
+    const user_id = comment.user ? idToString(comment.user._id || comment.user.id) : '';
 
     return {
         ...comment,
@@ -93,7 +77,7 @@ const normalizeComment = (comment: Partial<PostComment> & { _id?: any; id?: any 
         likes: comment.likes ?? 0,
         views: comment.views ?? 0,
         createdAt: comment.createdAt || new Date().toISOString(),
-        replies: comment.replies?.map((reply) => normalizeComment(reply as any)) || [],
+        replies: comment.replies?.map((reply) => normalizeComment(reply)) || [],
     };
 };
 
@@ -110,6 +94,7 @@ const CommentComponent = ({ comment: initialComment, depth = 0, onRemove, onRefr
     // Normalize comment data to ensure id and _id are both available
     const normalizedComment = normalizeComment(initialComment);
     const [comment, setComment] = useState(normalizedComment);
+    const [seenComment, setSeenComment] = useState(initialComment);
     const [isReplying, setIsReplying] = useState(false);
     const [replyContent, setReplyContent] = useState('');
     const [isLiked, setIsLiked] = useState(normalizedComment.isLiked || false);
@@ -117,12 +102,12 @@ const CommentComponent = ({ comment: initialComment, depth = 0, onRemove, onRefr
     const { userId } = useAuth();
     const replyInputRef = useRef<HTMLInputElement>(null);
 
-    // ✅ Update local state when parent refetches and passes new data
-    useEffect(() => {
-        const newNormalized = normalizeComment(initialComment);
-        setComment(newNormalized);
-        setIsLiked(newNormalized.isLiked || false);
-    }, [initialComment]);
+    if (initialComment !== seenComment) {
+        const next = normalizeComment(initialComment);
+        setSeenComment(initialComment);
+        setComment(next);
+        setIsLiked(next.isLiked || false);
+    }
 
     // Auto-focus reply input when it appears
     useEffect(() => {
@@ -140,13 +125,12 @@ const CommentComponent = ({ comment: initialComment, depth = 0, onRemove, onRefr
         const idFromInitial = getCommentId(initialComment);
 
         // Also try direct extraction from initialComment (might have _id but not id)
-        const directId = idToString((initialComment as any)?._id || (initialComment as any)?.id);
+        const directId = idToString(initialComment._id || initialComment.id);
 
         const finalId = idFromComment || idFromNormalized || idFromInitial || directId;
 
-
         return idToString(finalId);
-    }, [comment, normalizedComment, initialComment, depth]);
+    }, [comment, normalizedComment, initialComment]);
 
     // Normalize replies that are already in the comment data (no need to fetch separately)
     // Replies are already populated by the backend in getCommentsByPost
@@ -154,7 +138,7 @@ const CommentComponent = ({ comment: initialComment, depth = 0, onRemove, onRefr
         if (comment.replies && Array.isArray(comment.replies) && comment.replies.length > 0) {
             // Check if replies are already objects (populated) or just IDs
             const normalizedReplies: PostComment[] = comment.replies
-                .filter((reply: any) => {
+                .filter((reply: PostComment | string) => {
                     // Filter out ID strings, keep only objects
                     if (!reply) return false;
                     if (typeof reply === 'string') return false; // Skip ID strings
@@ -190,15 +174,16 @@ const CommentComponent = ({ comment: initialComment, depth = 0, onRemove, onRefr
             }
             return likeComment(commentId, userId);
         },
-        onSuccess: (data: any) => {
+        onSuccess: (data: unknown) => {
+            const result = data as { likes?: number; isLiked?: boolean };
             setComment(prevComment => ({
                 ...prevComment,
-                likes: data?.likes ?? prevComment.likes
+                likes: result?.likes ?? prevComment.likes
             }));
-            setIsLiked(data?.isLiked ?? false);
+            setIsLiked(result?.isLiked ?? false);
             toast({
-                title: data?.isLiked ? 'Liked' : 'Unliked',
-                description: data?.isLiked ? 'You liked this comment' : 'You unliked this comment',
+                title: result?.isLiked ? 'Liked' : 'Unliked',
+                description: result?.isLiked ? 'You liked this comment' : 'You unliked this comment',
                 duration: 2000,
             });
         },
@@ -227,7 +212,7 @@ const CommentComponent = ({ comment: initialComment, depth = 0, onRemove, onRefr
         },
         onSuccess: async (data) => {
             // ✅ Check if reply was converted to sibling (due to depth limit)
-            const metadata = (data as any)._metadata;
+            const metadata = (data as { _metadata?: { wasConvertedToSibling?: boolean } })._metadata;
             const wasConvertedToSibling = metadata?.wasConvertedToSibling;
 
             // Reset reply form first

@@ -667,13 +667,14 @@ function CapacityTab({ businessPartnerId, businessType }: { businessPartnerId: s
     const [defaultDailyCapacity, setDefaultDailyCapacity] = useState('');
     const [overrideDate, setOverrideDate] = useState('');
     const [overrideCapacity, setOverrideCapacity] = useState('');
+    const capacityKey = capacity ? `${capacity.unitLabel}:${capacity.defaultDailyCapacity}` : null;
+    const [seededCapacity, setSeededCapacity] = useState<string | null>(null);
 
-    useEffect(() => {
-        if (capacity) {
-            setUnitLabel(capacity.unitLabel);
-            setDefaultDailyCapacity(String(capacity.defaultDailyCapacity));
-        }
-    }, [capacity]);
+    if (capacity && capacityKey !== seededCapacity) {
+        setSeededCapacity(capacityKey);
+        setUnitLabel(capacity.unitLabel);
+        setDefaultDailyCapacity(String(capacity.defaultDailyCapacity));
+    }
 
     const invalidate = () => {
         queryClient.invalidateQueries({ queryKey: ['business-partners', businessPartnerId, 'capacity'] });

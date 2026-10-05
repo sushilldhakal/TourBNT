@@ -10,6 +10,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import Icon from '@/components/Icon';
 import type { MediaItem } from '@/types/gallery';
@@ -57,16 +58,18 @@ function LazyImage({
                     <Icon name="hi/HiPhotograph" size={32} className="text-muted-foreground" />
                 </div>
             )}
-            <img
+            <Image
                 src={src}
                 alt={alt}
+                fill
+                unoptimized
+                sizes="(max-width: 768px) 50vw, 25vw"
                 className={cn(
-                    'w-full h-full object-cover transition-opacity duration-300',
+                    'object-cover transition-opacity duration-300',
                     isLoaded ? 'opacity-100' : 'opacity-0'
                 )}
                 onLoad={() => setIsLoaded(true)}
                 onError={() => setHasError(true)}
-                loading="lazy"
             />
         </div>
     );

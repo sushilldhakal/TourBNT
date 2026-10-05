@@ -20,6 +20,7 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
+import Image from 'next/image';
 import {
     Dialog,
     DialogContent,
@@ -292,6 +293,8 @@ function FilePreviewList({
             }
         });
 
+        // Blob URLs only exist in the browser, so the preview map is filled from this effect.
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- syncs React state to URL.createObjectURL
         setPreviews(newPreviews);
 
         return () => {
@@ -361,9 +364,12 @@ function FilePreviewList({
                         >
                             <div className="flex-shrink-0 w-12 h-12 rounded-md overflow-hidden bg-muted flex items-center justify-center">
                                 {preview ? (
-                                    <img
+                                    <Image
                                         src={preview}
                                         alt={`Preview of ${file.name}`}
+                                        width={48}
+                                        height={48}
+                                        unoptimized
                                         className="w-full h-full object-cover"
                                     />
                                 ) : (
@@ -628,13 +634,15 @@ export function MediaUpload({
 }: MediaUploadProps) {
     const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
     const [validationErrors, setValidationErrors] = useState<Record<number, string>>({});
+    const [wasOpen, setWasOpen] = useState(open);
 
-    useEffect(() => {
+    if (open !== wasOpen) {
+        setWasOpen(open);
         if (!open) {
             setSelectedFiles([]);
             setValidationErrors({});
         }
-    }, [open]);
+    }
 
     const formatFileSize = (bytes: number): string => {
         if (bytes === 0) return '0 Bytes';
@@ -673,13 +681,13 @@ export function MediaUpload({
         return errors;
     };
 
-    const handleFilesSelected = useCallback((newFiles: File[]) => {
+    const handleFilesSelected = (newFiles: File[]) => {
         const combinedFiles = [...selectedFiles, ...newFiles];
         const limitedFiles = combinedFiles.slice(0, maxFiles);
 
         setSelectedFiles(limitedFiles);
         setValidationErrors(validateFiles(limitedFiles));
-    }, [selectedFiles, maxFiles, acceptedTypes, maxSize]);
+    };
 
     const removeFile = (index: number) => {
         const newFiles = selectedFiles.filter((_, i) => i !== index);

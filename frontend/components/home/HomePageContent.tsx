@@ -1,6 +1,6 @@
 'use client';
 
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useSyncExternalStore, type ReactNode } from 'react';
 import { motion } from 'motion/react';
 import Search from '@/components/home/Search';
 import HomeSlider from '@/components/home/HomeSlider';
@@ -23,17 +23,38 @@ const fadeInUp = {
     }
 };
 
-const staggerContainer = {
-    hidden: { opacity: 0 },
-    visible: {
-        opacity: 1,
-        transition: { staggerChildren: 0.2 }
-    }
-};
-
 const SectionSkeleton = () => (
     <div className="w-full h-64 bg-muted animate-pulse rounded-lg" />
 );
+
+/**
+ * Motion's initial="hidden" styles differ from the server HTML and cause a hydration mismatch.
+ * The first paint is a plain div (same on server and client); the scroll animation starts after mount.
+ */
+function subscribe() {
+    return () => {};
+}
+
+/** False during server render and hydration, true after the client takes over. */
+function useAfterHydration() {
+    return useSyncExternalStore(subscribe, () => true, () => false);
+}
+
+function Reveal({ children, className }: { children: ReactNode; className?: string }) {
+    const ready = useAfterHydration();
+    if (!ready) return <div className={className}>{children}</div>;
+    return (
+        <motion.div
+            className={className}
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, margin: '-100px' }}
+            variants={fadeInUp}
+        >
+            {children}
+        </motion.div>
+    );
+}
 
 export function HomePageContent() {
     return (
@@ -60,88 +81,54 @@ export function HomePageContent() {
                 </div>
             </div>
 
-            <motion.div
-                className="py-16"
-                initial="hidden"
-                whileInView="visible"
-                viewport={{ once: true, margin: "-100px" }}
-                variants={fadeInUp}
-            >
+            <Reveal className="py-16">
                 <div className="w-full px-4 transition-all duration-300">
                     <ContentContainer>
-                        <motion.div
-                            className="grid grid-cols-1 md:grid-cols-3 gap-8"
-                            variants={staggerContainer}
-                        >
-                            <motion.div className="col-span-2" variants={fadeInUp}>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                            <div className="col-span-2">
                                 <Suspense fallback={<SectionSkeleton />}>
                                     <LatestTour />
                                 </Suspense>
-                            </motion.div>
-                            <motion.div className="col-span-1" variants={fadeInUp}>
+                            </div>
+                            <div className="col-span-1">
                                 <Suspense fallback={<SectionSkeleton />}>
                                     <TourByPricing />
                                 </Suspense>
-                            </motion.div>
-                        </motion.div>
+                            </div>
+                        </div>
                     </ContentContainer>
                 </div>
-            </motion.div>
+            </Reveal>
 
-            <motion.div
-                initial="hidden"
-                whileInView="visible"
-                viewport={{ once: true, margin: "-100px" }}
-                variants={fadeInUp}
-            >
+            <Reveal>
                 <Suspense fallback={<SectionSkeleton />}>
                     <WhyUs />
                 </Suspense>
-            </motion.div>
+            </Reveal>
 
-            <motion.div
-                initial="hidden"
-                whileInView="visible"
-                viewport={{ once: true, margin: "-100px" }}
-                variants={fadeInUp}
-            >
+            <Reveal>
                 <Suspense fallback={<SectionSkeleton />}>
                     <ExploreCategories />
                 </Suspense>
-            </motion.div>
+            </Reveal>
 
-            <motion.div
-                initial="hidden"
-                whileInView="visible"
-                viewport={{ once: true, margin: "-100px" }}
-                variants={fadeInUp}
-            >
+            <Reveal>
                 <Suspense fallback={<SectionSkeleton />}>
                     <DestinationTour />
                 </Suspense>
-            </motion.div>
+            </Reveal>
 
-            <motion.div
-                initial="hidden"
-                whileInView="visible"
-                viewport={{ once: true, margin: "-100px" }}
-                variants={fadeInUp}
-            >
+            <Reveal>
                 <Suspense fallback={<SectionSkeleton />}>
                     <ReviewSlider />
                 </Suspense>
-            </motion.div>
+            </Reveal>
 
-            <motion.div
-                initial="hidden"
-                whileInView="visible"
-                viewport={{ once: true, margin: "-100px" }}
-                variants={fadeInUp}
-            >
+            <Reveal>
                 <Suspense fallback={<SectionSkeleton />}>
                     <RecentBlog />
                 </Suspense>
-            </motion.div>
+            </Reveal>
         </>
     );
 }

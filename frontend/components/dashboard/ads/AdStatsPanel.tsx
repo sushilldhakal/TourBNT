@@ -1,5 +1,6 @@
 'use client';
 
+import { useSyncExternalStore } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -14,11 +15,23 @@ export function describePlan(ad: Pick<Advertisement, 'billingModel' | 'durationM
     return `Monthly · ${ad.durationMonths} month${ad.durationMonths === 1 ? '' : 's'} · ${price}`;
 }
 
+let openedAt = 0;
+function subscribeToClock() {
+    return () => {};
+}
+function clientOpenedAt() {
+    if (openedAt === 0) openedAt = Date.now();
+    return openedAt;
+}
+function useOpenedAt() {
+    return useSyncExternalStore(subscribeToClock, clientOpenedAt, () => 0);
+}
+
 /** Review / payment / delivery state as badges. */
 export function AdStatusBadges({ ad }: { ad: Advertisement }) {
     const review = ad.approvalStatus;
-    const now = Date.now();
-    const scheduled = ad.campaignStatus === 'active' && ad.startDate && new Date(ad.startDate).getTime() > now;
+    const now = useOpenedAt();
+    const scheduled = now > 0 && ad.campaignStatus === 'active' && ad.startDate && new Date(ad.startDate).getTime() > now;
     const viewsUsedUp = ad.billingModel === 'per_view' && ad.viewQuota != null && ad.impressionCount >= ad.viewQuota;
     const delivery = review !== 'approved' || !ad.isPaid
         ? null
@@ -97,9 +110,11 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 /** Views per day as bars, clicks as a dark cap on each bar. */
 function DailyChart({ stats, days }: { stats: AdStats; days: number }) {
+    const now = useOpenedAt();
     const byDate = new Map(stats.daily.map((d) => [String(d.date).slice(0, 10), d]));
+    if (now === 0) return null;
     const series = Array.from({ length: days }, (_, i) => {
-        const date = new Date(Date.now() - (days - 1 - i) * 86_400_000).toISOString().slice(0, 10);
+        const date = new Date(now - (days - 1 - i) * 86_400_000).toISOString().slice(0, 10);
         const row = byDate.get(date);
         return { date, impressions: row?.impressions ?? 0, clicks: row?.clicks ?? 0 };
     });

@@ -33,7 +33,8 @@ export default function DashboardLayout({
 
         // Travellers have their own page, with the public header and footer, at /account.
         if (isRegularUser(user.roles)) {
-            router.replace('/account');
+            const booking = pathname.match(/^\/dashboard\/bookings\/([^/]+)/);
+            router.replace(booking ? `/booking/${booking[1]}` : '/account');
             return;
         }
 

@@ -10,8 +10,8 @@
 'use client';
 
 import React, { useEffect, useRef, useCallback } from 'react';
+import Image from 'next/image';
 import { cn } from '@/lib/utils';
-import { debounce } from '@/lib/utils/debounce';
 import Icon from '@/components/Icon';
 
 // Import the new simplified components
@@ -51,7 +51,7 @@ function LazyImage({
 }) {
     const [isLoaded, setIsLoaded] = React.useState(false);
     const [isInView, setIsInView] = React.useState(false);
-    const imgRef = useRef<HTMLImageElement>(null);
+    const imgRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         const img = imgRef.current;
@@ -86,15 +86,17 @@ function LazyImage({
             ) : null}
 
             {isInView && (
-                <img
+                <Image
                     src={src}
                     alt={alt}
+                    fill
+                    unoptimized
+                    sizes="(max-width: 768px) 50vw, 25vw"
                     className={cn(
-                        'w-full h-full object-cover transition-opacity duration-300',
+                        'object-cover transition-opacity duration-300',
                         isLoaded ? 'opacity-100' : 'opacity-0'
                     )}
                     onLoad={() => setIsLoaded(true)}
-                    loading="lazy"
                 />
             )}
         </div>
@@ -127,20 +129,12 @@ export function MediaGrid({
      * Triggers onLoadMore when the trigger element comes into view
      * Debounced to prevent excessive calls
      */
-    const handleIntersection = useCallback(
-        debounce((entries: IntersectionObserverEntry[]) => {
-            const [entry] = entries;
-
-            // Load more when:
-            // 1. The trigger is visible
-            // 2. We have more items to load
-            // 3. We're not already fetching
-            if (entry.isIntersecting && hasMore && !isFetchingMore) {
-                onLoadMore();
-            }
-        }, 150), // Debounce by 150ms to prevent rapid calls
-        [hasMore, isFetchingMore, onLoadMore]
-    );
+    const handleIntersection = useCallback((entries: IntersectionObserverEntry[]) => {
+        const [entry] = entries;
+        if (entry?.isIntersecting && hasMore && !isFetchingMore) {
+            onLoadMore();
+        }
+    }, [hasMore, isFetchingMore, onLoadMore]);
 
     /**
      * Set up Intersection Observer for infinite scroll
@@ -257,21 +251,19 @@ export function MediaGrid({
         const grid = gridRef.current;
         if (!grid) return;
 
-        grid.addEventListener('keydown', handleGridKeyDown as any);
+        const onKeyDown = (event: Event) => {
+            if (event instanceof KeyboardEvent) handleGridKeyDown(event);
+        };
+        grid.addEventListener('keydown', onKeyDown);
 
         return () => {
-            grid.removeEventListener('keydown', handleGridKeyDown as any);
+            grid.removeEventListener('keydown', onKeyDown);
         };
     }, [handleGridKeyDown]);
 
-    /**
-     * Update focused index when items change
-     */
-    useEffect(() => {
-        if (focusedIndex >= items.length && items.length > 0) {
-            setFocusedIndex(items.length - 1);
-        }
-    }, [items.length, focusedIndex]);
+    if (items.length > 0 && focusedIndex >= items.length) {
+        setFocusedIndex(items.length - 1);
+    }
 
     // Render list view
     if (viewMode === 'list') {

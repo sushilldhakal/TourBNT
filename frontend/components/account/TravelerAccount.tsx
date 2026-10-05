@@ -78,10 +78,12 @@ export function TravelerAccount() {
     const name = useUserStore((state) => state.user.name);
     const requested = searchParams.get('tab');
     const [tab, setTab] = useState<AccountTab>(isTab(requested) ? requested : 'bookings');
+    const [seenRequest, setSeenRequest] = useState(requested);
 
-    useEffect(() => {
+    if (requested !== seenRequest) {
+        setSeenRequest(requested);
         if (isTab(requested)) setTab(requested);
-    }, [requested]);
+    }
 
     useEffect(() => {
         if (isHydrated && !isAuthenticated) {

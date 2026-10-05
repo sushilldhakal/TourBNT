@@ -150,7 +150,7 @@ export function BookingCard({ booking, onCancel, onDownloadVoucher }: BookingCar
                         className="flex-1"
                         asChild
                     >
-                        <Link href={`/dashboard/bookings/${booking.id}`}>
+                        <Link href={`/booking/${booking.id}`}>
                             <Eye className="h-4 w-4 mr-2" />
                             View Details
                         </Link>

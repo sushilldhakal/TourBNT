@@ -1,12 +1,10 @@
 'use client';
 
 import Image from 'next/image';
-import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ShoppingCart, Trash2, Calendar, Clock, Users, ShieldCheck, CreditCard, Tag, Plus, Minus } from 'lucide-react';
+import { ShoppingCart, Trash2, Calendar, Clock, Users, ShieldCheck, CreditCard, Plus, Minus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { format } from 'date-fns';
 import { toast } from '@/components/ui/use-toast';
 import { CheckoutSteps } from '@/components/cart/CheckoutSteps';
@@ -16,8 +14,6 @@ import { useIsClient } from '@/lib/hooks/useIsClient';
 export default function CartClient() {
     const router = useRouter();
     const cartBookings = useCartBookings();
-    const [promoCode, setPromoCode] = useState('');
-    const [discount, setDiscount] = useState(0);
     const isLoading = !useIsClient();
 
     const handleRemove = (bookingReference: string) => {
@@ -71,31 +67,7 @@ export default function CartClient() {
         });
     };
 
-    const applyPromoCode = () => {
-        if (promoCode.toUpperCase() === 'SAVE10') {
-            setDiscount(0.1);
-            toast({
-                title: 'Promo code applied!',
-                description: '10% discount has been applied to your order.',
-            });
-        } else if (promoCode.toUpperCase() === 'SAVE20') {
-            setDiscount(0.2);
-            toast({
-                title: 'Promo code applied!',
-                description: '20% discount has been applied to your order.',
-            });
-        } else if (promoCode) {
-            toast({
-                title: 'Invalid promo code',
-                description: 'The promo code you entered is not valid.',
-                variant: 'destructive',
-            });
-        }
-    };
-
-    const subtotal = cartBookings.reduce((sum, booking) => sum + booking.pricing.totalPrice, 0);
-    const discountAmount = subtotal * discount;
-    const total = subtotal - discountAmount;
+    const total = cartBookings.reduce((sum, booking) => sum + booking.pricing.totalPrice, 0);
 
     if (isLoading) {
         return (
@@ -254,29 +226,9 @@ export default function CartClient() {
                                 </Card>
                             ))}
 
-                            {/* Promo Code Card */}
-                            <Card className="p-6">
-                                <div className="flex items-center gap-2 mb-4">
-                                    <Tag className="w-5 h-5 text-primary" />
-                                    <h3 className="font-semibold">Have a promo code?</h3>
-                                </div>
-                                <div className="flex gap-2">
-                                    <Input
-                                        placeholder="Enter promo code"
-                                        value={promoCode}
-                                        onChange={(e) => setPromoCode(e.target.value)}
-                                        className="flex-1"
-                                    />
-                                    <Button onClick={applyPromoCode} variant="outline">
-                                        Apply
-                                    </Button>
-                                </div>
-                                {discount > 0 && (
-                                    <p className="text-sm text-primary mt-2">
-                                        ✓ Promo code applied - {discount * 100}% off!
-                                    </p>
-                                )}
-                            </Card>
+                            <p className="text-sm text-muted-foreground">
+                                Promo codes are applied on the tour page when you book, and the price here is the amount that will be charged.
+                            </p>
                         </div>
 
                         {/* Order Summary */}
@@ -288,16 +240,9 @@ export default function CartClient() {
                                     <div className="flex justify-between text-muted-foreground">
                                         <span>Subtotal ({cartBookings.length} booking{cartBookings.length > 1 ? 's' : ''})</span>
                                         <span className="font-medium text-foreground">
-                                            ${subtotal.toLocaleString()}
+                                            ${total.toLocaleString()}
                                         </span>
                                     </div>
-
-                                    {discount > 0 && (
-                                        <div className="flex justify-between text-primary">
-                                            <span>Discount ({discount * 100}% off)</span>
-                                            <span className="font-medium">-${discountAmount.toLocaleString()}</span>
-                                        </div>
-                                    )}
 
                                     <div className="flex justify-between text-muted-foreground">
                                         <span>Service Fee</span>

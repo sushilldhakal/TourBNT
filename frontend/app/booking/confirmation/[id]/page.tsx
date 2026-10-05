@@ -201,7 +201,7 @@ export default async function BookingConfirmationPage({
                             Download Voucher
                         </Button>
                         <Button size="lg" variant="outline" className="w-full" asChild>
-                            <Link href="/dashboard/bookings">
+                            <Link href="/account?tab=bookings">
                                 View My Bookings
                                 <ArrowRight className="h-4 w-4 ml-2" />
                             </Link>

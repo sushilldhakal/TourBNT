@@ -105,5 +105,9 @@ export function useGooglePlacesAutocomplete({
     };
   }, [onPlaceSelected, parseAddressComponents, types, componentRestrictions]);
 
-  return { inputRef };
+  const bindInput = useCallback((node: HTMLInputElement | null) => {
+    inputRef.current = node;
+  }, []);
+
+  return { bindInput };
 }

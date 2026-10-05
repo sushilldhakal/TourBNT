@@ -10,6 +10,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import Image from 'next/image';
 import {
     Dialog,
     DialogContent,
@@ -38,11 +39,8 @@ export function MediaLightbox({
     onIndexChange,
 }: MediaLightboxProps) {
     const [isZoomed, setIsZoomed] = useState(false);
-    const [touchStart, setTouchStart] = useState<number | null>(null);
-    const [touchEnd, setTouchEnd] = useState<number | null>(null);
     const thumbnailRefs = useRef<(HTMLButtonElement | null)[]>([]);
     const contentRef = useRef<HTMLDivElement>(null);
-    const imageRef = useRef<HTMLImageElement>(null);
     
     // Drag state for panning zoomed images
     const [isDragging, setIsDragging] = useState(false);
@@ -57,10 +55,16 @@ export function MediaLightbox({
     const currentItem = items[currentIndex];
     const hasPrevious = currentIndex > 0;
     const hasNext = currentIndex < items.length - 1;
+    const [zoomForIndex, setZoomForIndex] = useState(currentIndex);
 
-    // Minimum swipe distance (in px)
-    const minSwipeDistance = 50;
-    const dragThreshold = 100; // Minimum drag distance to trigger navigation
+    if (zoomForIndex !== currentIndex) {
+        setZoomForIndex(currentIndex);
+        setIsZoomed(false);
+        setImagePosition({ x: 0, y: 0 });
+        setIsDragging(false);
+    }
+
+    const dragThreshold = 100;
 
     // Format file size for display
     const formatFileSize = (bytes: number): string => {
@@ -133,13 +137,6 @@ export function MediaLightbox({
         }
     }, [open, goToPrevious, goToNext, onOpenChange]);
 
-    // Reset zoom and position when item changes
-    useEffect(() => {
-        setIsZoomed(false);
-        setImagePosition({ x: 0, y: 0 });
-        setIsDragging(false);
-    }, [currentIndex]);
-
     // Auto-scroll thumbnail into view
     useEffect(() => {
         if (thumbnailRefs.current[currentIndex]) {
@@ -191,22 +188,15 @@ export function MediaLightbox({
 
     // Touch/Swipe handlers
     const onTouchStart = (e: React.TouchEvent) => {
-        const clientX = e.targetTouches[0].clientX;
-        setTouchEnd(null);
-        setTouchStart(clientX);
-        handleNavigationDragStart(clientX);
+        handleNavigationDragStart(e.targetTouches[0].clientX);
     };
 
     const onTouchMove = (e: React.TouchEvent) => {
-        const clientX = e.targetTouches[0].clientX;
-        setTouchEnd(clientX);
-        handleNavigationDragMove(clientX);
+        handleNavigationDragMove(e.targetTouches[0].clientX);
     };
 
     const onTouchEnd = () => {
         handleNavigationDragEnd();
-        setTouchStart(null);
-        setTouchEnd(null);
     };
 
     // Mouse drag handlers for desktop navigation
@@ -340,10 +330,12 @@ export function MediaLightbox({
                         onTouchMove={handleTouchMoveDrag}
                         onTouchEnd={handleTouchEndDrag}
                     >
-                        <img
-                            ref={imageRef}
+                        <Image
                             src={currentItem.secureUrl}
                             alt={currentItem.title || currentItem.originalFilename || 'Media item'}
+                            width={currentItem.width || 1600}
+                            height={currentItem.height || 1200}
+                            unoptimized
                             className={cn(
                                 'max-w-full max-h-full object-contain transition-transform duration-300',
                                 isZoomed ? 'scale-150 cursor-grab active:cursor-grabbing' : 'cursor-zoom-in',
@@ -478,9 +470,12 @@ export function MediaLightbox({
                                 }}
                             >
                                 {items[currentIndex - 1].mediaType === 'image' && (
-                                    <img
+                                    <Image
                                         src={items[currentIndex - 1].secureUrl}
                                         alt="Previous"
+                                        width={items[currentIndex - 1].width || 1600}
+                                        height={items[currentIndex - 1].height || 1200}
+                                        unoptimized
                                         className="max-w-full max-h-full object-contain"
                                     />
                                 )}
@@ -502,9 +497,12 @@ export function MediaLightbox({
                                 }}
                             >
                                 {items[currentIndex + 1].mediaType === 'image' && (
-                                    <img
+                                    <Image
                                         src={items[currentIndex + 1].secureUrl}
                                         alt="Next"
+                                        width={items[currentIndex + 1].width || 1600}
+                                        height={items[currentIndex + 1].height || 1200}
+                                        unoptimized
                                         className="max-w-full max-h-full object-contain"
                                     />
                                 )}
@@ -573,11 +571,13 @@ export function MediaLightbox({
                                         title={item.title || item.originalFilename || `Item ${actualIndex + 1}`}
                                     >
                                         {item.mediaType === 'image' ? (
-                                            <img
+                                            <Image
                                                 src={item.secureUrl}
                                                 alt={item.title || item.originalFilename || `Thumbnail ${actualIndex + 1}`}
-                                                className="w-full h-full object-cover"
-                                                loading="lazy"
+                                                fill
+                                                unoptimized
+                                                sizes="64px"
+                                                className="object-cover"
                                             />
                                         ) : item.mediaType === 'video' ? (
                                             <div className="w-full h-full bg-gray-800 flex items-center justify-center">

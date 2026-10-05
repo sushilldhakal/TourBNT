@@ -15,7 +15,29 @@ import { useGalleryState } from '@/lib/hooks/gallery';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { cn } from '@/lib/utils';
 import Icon from '@/components/Icon';
-import type { MediaItem } from '@/types/gallery';
+import type { MediaItem, ResourceType } from '@/types/gallery';
+
+/** Gallery rows can arrive in the current shape or the older snake_case API shape. */
+interface GalleryRecord {
+    id?: string;
+    _id?: string;
+    resourceType?: ResourceType;
+    resource_type?: ResourceType;
+    format?: string;
+    originalFilename?: string;
+    original_filename?: string;
+    secureUrl?: string;
+    secure_url?: string;
+    publicId?: string;
+    public_id?: string;
+    width?: number;
+    height?: number;
+    bytes?: number;
+    createdAt?: string;
+    created_at?: string;
+    title?: string;
+    tags?: string[];
+}
 
 // Import the new simplified components
 import { MediaGrid } from './MediaGrid';
@@ -111,7 +133,6 @@ export function Gallery({
         selectedArray,
         lastSelectedId,
         setActiveTab,
-        setViewMode,
         toggleViewMode,
         selectItem,
         selectRange,
@@ -177,38 +198,33 @@ export function Gallery({
     /**
      * Convert API media items to MediaItem format for lightbox
      */
-    const convertToMediaItem = useCallback((item: any): MediaItem => {
-        // Determine media type based on resource type and file extension
-        let mediaType: 'image' | 'video' | 'pdf' = 'pdf'; // default fallback
-
-        if (item.resourceType === 'image') {
-            mediaType = 'image';
-        } else if (item.resourceType === 'video') {
-            mediaType = 'video';
-        } else if (item.resourceType === 'raw') {
-            // Check if it's a PDF
-            const isPDF = item.format === 'pdf' ||
-                item.originalFilename?.toLowerCase().endsWith('.pdf') ||
-                item.original_filename?.toLowerCase().endsWith('.pdf') ||
-                item.secureUrl?.toLowerCase().includes('.pdf') ||
-                item.secure_url?.toLowerCase().includes('.pdf');
-            mediaType = isPDF ? 'pdf' : 'pdf'; // default to pdf for raw files
-        }
+    const convertToMediaItem = useCallback((item: GalleryRecord): MediaItem => {
+        const resourceType = item.resourceType || item.resource_type || 'raw';
+        const filename = item.originalFilename || item.original_filename || '';
+        const url = item.secureUrl || item.secure_url || '';
+        const isPdf = item.format === 'pdf' || filename.toLowerCase().endsWith('.pdf') || url.toLowerCase().includes('.pdf');
+        const mediaType: MediaItem['mediaType'] = resourceType === 'image'
+            ? 'image'
+            : resourceType === 'video'
+                ? 'video'
+                : isPdf
+                    ? 'pdf'
+                    : 'pdf';
 
         return {
-            id: item.id || item._id,
-            publicId: item.publicId || item.public_id,
-            url: item.secureUrl || item.secure_url,
-            secureUrl: item.secureUrl || item.secure_url,
+            id: item.id || item._id || '',
+            publicId: item.publicId || item.public_id || '',
+            url,
+            secureUrl: url,
             mediaType,
-            format: item.format,
+            format: item.format || '',
             width: item.width,
             height: item.height,
-            bytes: item.bytes,
-            createdAt: item.createdAt || item.created_at,
-            resourceType: item.resourceType || item.resource_type,
-            originalFilename: item.originalFilename || item.original_filename,
-            title: item.title || item.originalFilename || item.original_filename,
+            bytes: item.bytes || 0,
+            createdAt: item.createdAt || item.created_at || '',
+            resourceType,
+            originalFilename: filename || undefined,
+            title: item.title || filename || undefined,
             tags: item.tags || [],
         };
     }, []);
@@ -261,7 +277,7 @@ export function Gallery({
     /**
      * Handle media click for lightbox
      */
-    const handleMediaClick = useCallback((media: any) => {
+    const handleMediaClick = useCallback((media: { id: string }) => {
         // Convert all media types to MediaItem format for lightbox
         const allLightboxItems = filteredItems.map(convertToMediaItem);
         const mediaIndex = allLightboxItems.findIndex(item => item.id === media.id);

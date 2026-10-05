@@ -9,7 +9,7 @@
 
 'use client';
 
-import React, { useCallback, useState, useEffect } from 'react';
+import React, { useCallback, useState } from 'react';
 import { cn } from '@/lib/utils';
 import Icon from '@/components/Icon';
 import Image from 'next/image';
@@ -81,6 +81,7 @@ export function MediaPanel({
         description: '',
         tags: [],
     });
+    const [seenEditSeed, setSeenEditSeed] = useState<string | null>(null);
 
     // Use the media update hook
     const updateMutation = useMediaUpdate({
@@ -90,19 +91,19 @@ export function MediaPanel({
         showToast: true,
     });
 
-    /**
-     * Initialize edit form with selected item data
-     */
-    useEffect(() => {
-        if (isSingleSelection && showEditDialog) {
-            const item = selectedItems[0];
+    const editItem = isSingleSelection ? selectedItems[0] : undefined;
+    const editSeed = showEditDialog ? editItem?.id ?? null : null;
+
+    if (editSeed !== seenEditSeed) {
+        setSeenEditSeed(editSeed);
+        if (editItem && editSeed) {
             setEditFormData({
-                title: item.title || item.originalFilename || '',
-                description: item.description || '',
-                tags: item.tags || [],
+                title: editItem.title || editItem.originalFilename || '',
+                description: editItem.description || '',
+                tags: editItem.tags || [],
             });
         }
-    }, [isSingleSelection, selectedItems, showEditDialog]);
+    }
 
     /**
      * Handle bulk delete - show confirmation dialog
@@ -544,8 +545,8 @@ export function MobileMediaPanel({
     selectedItems,
     onClose,
     onDelete,
-    onEdit,
-    onClearSelection,
+    onEdit: _onEdit,
+    onClearSelection: _onClearSelection,
     isDeleting = false,
     className,
 }: MediaPanelProps) {

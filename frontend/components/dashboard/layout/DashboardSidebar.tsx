@@ -120,7 +120,7 @@ const baseNavigationItems: NavigationItem[] = [
         icon: UserCog
     },
     {
-        href: '/dashboard/bookings',
+        href: '/account?tab=bookings',
         label: 'My Bookings',
         icon: CalendarCheck,
         roles: ['user'],
