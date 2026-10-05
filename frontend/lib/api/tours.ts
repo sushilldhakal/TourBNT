@@ -182,14 +182,16 @@ export interface SingleTourResponse {
 
 export const getSingleTour = async (
     tourId: string,
-    options?: { include?: string[] }
+    options?: { include?: string[]; cookie?: string }
 ): Promise<SingleTourResponse> => {
     try {
         const query =
             options?.include && options.include.length > 0
                 ? `?include=${options.include.join(',')}`
                 : '';
-        const response = await api.get(`/tours/${tourId}${query}`);
+        const response = await api.get(`/tours/${tourId}${query}`, {
+            headers: options?.cookie ? { Cookie: options.cookie } : undefined,
+        });
         const raw = extractResponseData(response) as SingleTourResponse & { data?: SingleTourResponse };
         const data: SingleTourResponse = raw?.data ?? raw;
         if (data?.tour) {

@@ -21,7 +21,6 @@ import { getViewPreference, setViewPreference } from "@/lib/utils/viewPreference
 import { useAuth } from "@/lib/hooks/useAuth";
 import { isAdminOrSeller } from "@/lib/utils/roles";
 import Image from "next/image";
-import { GoogleMapsProvider } from "@/providers/GoogleMapsProvider";
 import RichTextRenderer from "@/components/RichTextRenderer";
 
 const Destination = () => {
@@ -131,9 +130,7 @@ const Destination = () => {
             {isAddingDestination && (
                 <>
                     <Separator className="my-4" />
-                    <GoogleMapsProvider>
-                        <AddDestination onDestinationAdded={handleDestinationAdded} />
-                    </GoogleMapsProvider>
+                    <AddDestination onDestinationAdded={handleDestinationAdded} />
                 </>
             )}
 

@@ -29,7 +29,6 @@ const addUserSettings = async () => {
             console.log('Settings already exist for this user');
             console.log('Current settings:', {
                 hasOpenAI: !!existingSettings.openaiApiKey,
-                hasGoogle: !!existingSettings.googleApiKey
             });
 
             const readline = createInterface({
@@ -50,15 +49,12 @@ const addUserSettings = async () => {
 
         // Get credentials from environment variables
         const openaiApiKey = process.env.OPENAI_API_KEY || '';
-        const googleApiKey = process.env.GOOGLE_API_KEY || '';
 
         console.log('Creating/updating settings with credentials from .env...');
         console.log('OpenAI API Key:', openaiApiKey ? openaiApiKey.substring(0, 5) + '...' : 'Not set');
-        console.log('Google API Key:', googleApiKey ? googleApiKey.substring(0, 5) + '...' : 'Not set');
 
         // Encrypt sensitive data
         const encryptedOpenAI = openaiApiKey ? encrypt(openaiApiKey) : '';
-        const encryptedGoogle = googleApiKey ? encrypt(googleApiKey) : '';
 
         // Create or update settings
         const [settings] = await db
@@ -66,13 +62,11 @@ const addUserSettings = async () => {
             .values({
                 userId,
                 openaiApiKey: encryptedOpenAI,
-                googleApiKey: encryptedGoogle,
             })
             .onConflictDoUpdate({
                 target: userSettings.userId,
                 set: {
                     openaiApiKey: encryptedOpenAI,
-                    googleApiKey: encryptedGoogle,
                     updatedAt: new Date(),
                 },
             })

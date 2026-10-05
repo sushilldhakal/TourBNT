@@ -134,13 +134,6 @@ const nextConfig = {
               priority: 25,
             },
 
-            // Google Maps
-            maps: {
-              name: "maps",
-              test: /[\\/]node_modules[\\/](@react-google-maps)[\\/]/,
-              priority: 25,
-            },
-
             // Other vendor libraries used in multiple places
             lib: {
               name: "lib",

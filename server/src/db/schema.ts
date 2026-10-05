@@ -197,7 +197,6 @@ export const userSettings = pgTable('user_settings', {
   id: id(),
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   openaiApiKey: text('openai_api_key').default(''),
-  googleApiKey: text('google_api_key').default(''),
   ...timestamps,
 }, (table) => ({
   userIdx: uniqueIndex('user_settings_user_idx').on(table.userId),

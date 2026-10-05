@@ -6,8 +6,15 @@ import { Calendar, Clock, Star } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import RichTextRenderer from '@/components/RichTextRenderer';
+import { format, isValid, parseISO } from 'date-fns';
 import { Tour, Category, TourPricing } from '@/types/types';
 import { Price } from '@/components/common/Price';
+
+/** Same calendar text on the server and in the browser. toLocaleDateString() follows the machine locale and breaks hydration. */
+function formatTourDate(value: string): string {
+    const date = parseISO(value.slice(0, 10));
+    return isValid(date) ? format(date, 'MMM d, yyyy') : value;
+}
 
 interface TourCardProps {
     tour: Tour;
@@ -116,7 +123,7 @@ export default function TourCard({ tour, viewMode }: TourCardProps) {
                         <div className="flex items-center text-xs sm:text-sm text-muted-foreground">
                             <Calendar className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-1.5 flex-shrink-0" />
                             <span className="truncate">
-                                {new Date(tour.tourDates.defaultDateRange.from).toLocaleDateString()} - {new Date(tour.tourDates.defaultDateRange.to).toLocaleDateString()}
+                                {formatTourDate(tour.tourDates.defaultDateRange.from)} - {formatTourDate(tour.tourDates.defaultDateRange.to)}
                             </span>
                         </div>
                     )}
@@ -251,7 +258,7 @@ export default function TourCard({ tour, viewMode }: TourCardProps) {
                         <div className="flex items-center text-xs sm:text-sm text-muted-foreground">
                             <Calendar className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-1.5 flex-shrink-0" />
                             <span className="truncate">
-                                {new Date(tour.tourDates.defaultDateRange.from).toLocaleDateString()} - {new Date(tour.tourDates.defaultDateRange.to).toLocaleDateString()}
+                                {formatTourDate(tour.tourDates.defaultDateRange.from)} - {formatTourDate(tour.tourDates.defaultDateRange.to)}
                             </span>
                         </div>
                     )}

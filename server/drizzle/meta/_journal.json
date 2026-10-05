@@ -155,6 +155,13 @@
       "when": 1791053457413,
       "tag": "0021_row_level_security",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1791230000000,
+      "tag": "0022_drop_google_maps_key",
+      "breakpoints": true
     }
   ]
 }

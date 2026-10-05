@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { FormProvider } from 'react-hook-form';
 import { useMutation } from '@tanstack/react-query';
 import { useCacheManager } from '@/lib/queries/cacheUtils';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, ExternalLink } from 'lucide-react';
 import { TourProvider, useTourContext } from '@/providers/TourProvider';
 import { TourEditorLayout } from '@/components/dashboard/tours/TourEditorLayout';
 import {
@@ -126,6 +126,14 @@ function TourForm() {
                 }}
                 actions={
                     <>
+                        {tourId && (
+                            <Button variant="outline" asChild>
+                                <a href={`/tours/${tourId}`} target="_blank" rel="noreferrer">
+                                    <ExternalLink className="h-4 w-4" />
+                                    View Tour
+                                </a>
+                            </Button>
+                        )}
                         <Button variant="destructive" onClick={() => setShowDeleteDialog(true)}>Delete</Button>
                         <Button onClick={handleSave} disabled={isSaving}>{isSaving ? 'Saving...' : 'Update Tour'}</Button>
                     </>

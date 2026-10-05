@@ -253,7 +253,7 @@ export const updateMySettings = async (data: FormData) => {
 
 /**
  * Get decrypted API key for current user
- * @param keyType - Type of API key (openai_api_key, google_api_key)
+ * @param keyType - Type of API key (openai_api_key)
  */
 export const getMyDecryptedApiKey = async (keyType: string) => {
     try {

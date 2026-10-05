@@ -23,8 +23,8 @@ const NovelEditor = dynamic(() => import("@/components/dashboard/editor/NovelEdi
 // Leaflet needs the browser.
 const LocationPicker = dynamic(() => import("./LocationPicker"), { ssr: false, loading: () => <div className="h-64 w-full animate-pulse rounded-lg bg-muted" /> });
 import type { LatLng } from "./LocationPicker";
-import { PlaceResult } from "@/lib/hooks/useGooglePlacesAutocomplete";
-import { GooglePlacesInput } from "@/components/GooglePlacesInput";
+import { PlaceSearch } from "./PlaceSearch";
+import type { PlaceHit } from "@/lib/places";
 import Image from "next/image";
 
 
@@ -85,13 +85,11 @@ const AddDestination = ({ onDestinationAdded }: AddDestinationProps) => {
         }
     });
 
-    // Handle place selection from Google Places
-    const handlePlaceSelected = useCallback((place: PlaceResult) => {
-        // Auto-fill location fields from Google Places
+    const handlePlaceSelected = useCallback((place: PlaceHit) => {
         form.setValue('city', place.city, { shouldDirty: true });
-        form.setValue('region', place.state, { shouldDirty: true });
+        form.setValue('region', place.region, { shouldDirty: true });
         form.setValue('country', place.country, { shouldDirty: true });
-        if (place.lat != null && place.lng != null) setPosition({ latitude: place.lat, longitude: place.lng });
+        setPosition({ latitude: place.lat, longitude: place.lng });
 
         // If name is empty, suggest the city name
         if (!form.getValues('name')) {
@@ -253,7 +251,7 @@ const AddDestination = ({ onDestinationAdded }: AddDestinationProps) => {
                                         )}
                                     />
 
-                                    {/* Google Places Search Section */}
+                                    {/* OpenStreetMap place search */}
                                     <div className="space-y-3">
                                         <div className="flex items-center justify-between">
                                             <FormLabel className="text-sm font-medium">Location Details</FormLabel>
@@ -269,15 +267,7 @@ const AddDestination = ({ onDestinationAdded }: AddDestinationProps) => {
 
                                         {!showManualEntry && (
                                             <div className="space-y-2">
-                                                <GooglePlacesInput
-                                                    onPlaceSelected={handlePlaceSelected}
-                                                    placeholder="Search for city, region, or country..."
-                                                    icon="pin"
-                                                    types={['(cities)', '(regions)']}
-                                                />
-                                                <p className="text-xs text-muted-foreground">
-                                                    Search and select a location to auto-fill city, region, and country
-                                                </p>
+                                                <PlaceSearch onSelect={handlePlaceSelected} />
                                             </div>
                                         )}
                                     </div>

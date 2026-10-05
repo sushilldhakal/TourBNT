@@ -434,7 +434,7 @@ async function seed() {
   await insertChunked(S.sellerSettings, sellers.map((s) => ({ sellerId: s.id, categorySettings: { autoAcceptNewCategories: true, defaultVisibility: true, hideEmptyCategories: false }, destinationSettings: { autoAcceptNewDestinations: true, defaultVisibility: true, groupByCountry: false, showPopularFirst: true } })));
   await insertChunked(S.sellerCategoryPreferences, sellers.flatMap((s) => shuffle(allCats).slice(0, 4).map((c, i) => ({ sellerId: s.id, categoryId: c.id, isFavorite: i === 0, sortOrder: i, lastUsed: daysFromNow(-int(1, 30)) }))));
   await insertChunked(S.sellerDestinationPreferences, sellers.flatMap((s) => shuffle(allDests).slice(0, 4).map((d, i) => ({ sellerId: s.id, destinationId: d.id, isFavorite: i === 0, sortOrder: i, lastUsed: daysFromNow(-int(1, 30)) }))));
-  await insertChunked(S.userSettings, sellers.map((s) => ({ userId: s.id, openaiApiKey: '', googleApiKey: '' })));
+  await insertChunked(S.userSettings, sellers.map((s) => ({ userId: s.id, openaiApiKey: '' })));
 
   await insertChunked(S.mediaAssets, sellers.flatMap((s, si) => [
     ...Array.from({ length: 4 }, (_, k) => ({ userId: s.id, kind: 'image' as const, url: img(`gallery-${si}-${k}`), secureUrl: img(`gallery-${si}-${k}`), originalFilename: `photo-${k + 1}.jpg`, displayName: `Photo ${k + 1}`, publicId: `${s.id}/photo-${k + 1}`, width: 1200, height: 800, format: 'jpg', resourceType: 'image', tags: ['demo', 'tour'], bytes: int(120000, 900000), assetFolder: slugify(s.company) })),

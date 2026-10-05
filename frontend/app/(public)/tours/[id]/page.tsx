@@ -1,5 +1,6 @@
 import { Metadata } from 'next';
 import { cache } from 'react';
+import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { getTourById, getLatestTours } from '@/lib/api/tours';
 import type { Tour } from '@/types/types';
@@ -14,7 +15,12 @@ import { richToPlainText, jsonLdString, tourJsonLd, breadcrumbJsonLd } from '@/l
 
 // generateMetadata and the page both need the tour: cache() makes that one API call per
 // request instead of two (the detail endpoint also counts a view, which was counted twice).
-const getTourOnce = cache((id: string) => getTourById(id));
+const getTourOnce = cache(async (id: string) => {
+    // The page renders on the server, which does not send the browser's auth cookie on its own.
+    // Forwarding it lets an admin or the tour's seller open a draft the way a traveller would see a published tour.
+    const cookie = (await cookies()).getAll().map((item) => `${item.name}=${item.value}`).join('; ');
+    return getTourById(id, cookie ? { cookie } : undefined);
+});
 
 interface PageProps {
     params: Promise<{

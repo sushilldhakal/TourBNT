@@ -2,7 +2,7 @@
  * SettingsPage Component
  *
  * Main settings page for managing API integrations.
- * Handles OpenAI and Google Maps API keys.
+ * Handles the OpenAI API key.
  */
 
 'use client';
@@ -31,7 +31,6 @@ import {
     KeyRound,
     Loader2,
     BrainCircuit,
-    MapPin,
     CheckCircle2,
     AlertCircle,
     Info as InfoIcon,
@@ -46,7 +45,6 @@ import { DashboardCardHeader } from '../layout/CardHeader';
 
 const formSchema = z.object({
     OPENAI_API_KEY: z.string().optional(),
-    GOOGLE_API_KEY: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -59,7 +57,6 @@ export function SettingsPage() {
     const [activeTab, setActiveTab] = useState('openai');
     const [initialValues, setInitialValues] = useState<FormValues>({
         OPENAI_API_KEY: '',
-        GOOGLE_API_KEY: '',
     });
 
     const { toast } = useToast();
@@ -71,13 +68,12 @@ export function SettingsPage() {
         resolver: zodResolver(formSchema),
         defaultValues: {
             OPENAI_API_KEY: '',
-            GOOGLE_API_KEY: '',
         },
     });
 
     // Keys are never sent back in the clear: once settings load, the form starts blank.
     useEffect(() => {
-        if (data) form.reset({ OPENAI_API_KEY: '', GOOGLE_API_KEY: '' });
+        if (data) form.reset({ OPENAI_API_KEY: '' });
     }, [data, form]);
 
     const { invalidateUserSettings } = useCacheManager();
@@ -121,15 +117,6 @@ export function SettingsPage() {
             hasChanges = true;
         }
 
-        if (
-            values.GOOGLE_API_KEY &&
-            values.GOOGLE_API_KEY.trim() !== '' &&
-            values.GOOGLE_API_KEY !== initialValues.GOOGLE_API_KEY
-        ) {
-            formData.append('GOOGLE_API_KEY', values.GOOGLE_API_KEY);
-            hasChanges = true;
-        }
-
         if (hasChanges && userId) {
             userSettingUpdate.mutate({ userId, formData });
         } else {
@@ -152,7 +139,6 @@ export function SettingsPage() {
 
             const keyTypeMap: Record<string, string> = {
                 OPENAI_API_KEY: 'openai_api_key',
-                GOOGLE_API_KEY: 'google_api_key',
             };
 
             const response = await getMyDecryptedApiKey(keyTypeMap[keyType]) as { key?: string };
@@ -207,17 +193,10 @@ export function SettingsPage() {
     const isKeySet = (key: string): boolean => {
         if (!data) return false;
 
-        type KeyFlags = { openaiApiKey?: unknown; googleApiKey?: unknown };
+        type KeyFlags = { openaiApiKey?: unknown };
         const settingsData = ((data as { settings?: KeyFlags }).settings || data) as KeyFlags;
 
-        switch (key) {
-            case 'OPENAI_API_KEY':
-                return !!settingsData.openaiApiKey;
-            case 'GOOGLE_API_KEY':
-                return !!settingsData.googleApiKey;
-            default:
-                return false;
-        }
+        return key === 'OPENAI_API_KEY' && !!settingsData.openaiApiKey;
     };
 
     const getPlaceholder = (key: string): string => {
@@ -359,76 +338,6 @@ export function SettingsPage() {
         </Card>
     );
 
-    const renderGoogleMapsContent = () => (
-        <Card className="pt-0">
-            <CardHeader className="bg-gradient-to-r from-primary/5 to-primary/10 border-b pt-4 rounded-t-xl">
-                <div className="flex items-center gap-2">
-                    <div className="bg-primary/10 p-2 rounded-full">
-                        <MapPin className="h-5 w-5 text-primary" />
-                    </div>
-                    <div>
-                        <CardTitle>Google Maps Integration</CardTitle>
-                        <CardDescription>Configure Google Maps API for location services</CardDescription>
-                    </div>
-                </div>
-            </CardHeader>
-            <CardContent className="p-6 space-y-6">
-                <div className="bg-primary/5 p-4 rounded-lg border border-primary/10">
-                    <div className="flex gap-3">
-                        <InfoIcon className="h-5 w-5 text-primary shrink-0 mt-0.5" />
-                        <div>
-                            <p className="text-sm text-primary-foreground dark:text-primary">
-                                Visit the{' '}
-                                <Link
-                                    className="text-primary font-medium inline-flex items-center hover:underline"
-                                    target="_blank"
-                                    href="https://developers.google.com/maps/documentation/javascript/get-api-key"
-                                >
-                                    Google Cloud Console <ExternalLink className="h-3 w-3 ml-0.5" />
-                                </Link>{' '}
-                                to create a free account. Google provides $200 in free monthly credit, which allows
-                                for approximately 100,000 API calls.
-                            </p>
-                            <p className="text-sm text-primary-foreground dark:text-primary mt-2">
-                                After creating an account, follow the steps to{' '}
-                                <Link
-                                    className="text-primary font-medium inline-flex items-center hover:underline"
-                                    target="_blank"
-                                    href="https://developers.google.com/maps/documentation/javascript/get-api-key"
-                                >
-                                    get an API key <ExternalLink className="h-3 w-3 ml-0.5" />
-                                </Link>{' '}
-                                and enable the necessary Google Maps services.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-
-                {renderApiKeyField('GOOGLE_API_KEY', 'Google Maps API Key')}
-
-                <Separator className="my-4" />
-
-                <div className="space-y-2">
-                    <h3 className="text-sm font-medium">Features enabled with Google Maps</h3>
-                    <ul className="space-y-2 text-sm">
-                        <li className="flex items-center gap-2">
-                            <CheckCircle2 className="h-4 w-4 text-primary" />
-                            <span>Location autocomplete</span>
-                        </li>
-                        <li className="flex items-center gap-2">
-                            <CheckCircle2 className="h-4 w-4 text-primary" />
-                            <span>Interactive maps</span>
-                        </li>
-                        <li className="flex items-center gap-2">
-                            <CheckCircle2 className="h-4 w-4 text-primary" />
-                            <span>Distance calculations</span>
-                        </li>
-                    </ul>
-                </div>
-            </CardContent>
-        </Card>
-    );
-
     return (
         <div className="container mx-auto py-8 px-4 max-w-6xl">
             <DashboardCardHeader
@@ -455,16 +364,6 @@ export function SettingsPage() {
                                                 <BrainCircuit className="h-4 w-4" />
                                                 <span>OpenAI</span>
                                                 {isKeySet('OPENAI_API_KEY') && (
-                                                    <CheckCircle2 className="h-3 w-3 ml-auto text-primary" />
-                                                )}
-                                            </TabsTrigger>
-                                            <TabsTrigger
-                                                value="google"
-                                                className="w-full justify-start gap-2 data-[state=active]:bg-primary/10 data-[state=active]:text-primary"
-                                            >
-                                                <MapPin className="h-4 w-4" />
-                                                <span>Google Maps</span>
-                                                {isKeySet('GOOGLE_API_KEY') && (
                                                     <CheckCircle2 className="h-3 w-3 ml-auto text-primary" />
                                                 )}
                                             </TabsTrigger>
@@ -527,9 +426,6 @@ export function SettingsPage() {
                                     <>
                                         <TabsContent value="openai" className="mt-0 space-y-6">
                                             {renderOpenAIContent()}
-                                        </TabsContent>
-                                        <TabsContent value="google" className="mt-0 space-y-6">
-                                            {renderGoogleMapsContent()}
                                         </TabsContent>
                                     </>
                                 )}

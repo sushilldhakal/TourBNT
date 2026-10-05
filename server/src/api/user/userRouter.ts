@@ -248,8 +248,6 @@ userRouter.get('/me/avatar', authenticate, getUserAvatar);
  *             properties:
  *               openAIKey:
  *                 type: string
- *               GOOGLE_API_KEY:
- *                 type: string
  *     responses:
  *       200:
  *         description: Settings updated successfully
@@ -273,7 +271,7 @@ userRouter.patch('/me/settings', uploadNone, authenticate, addOrUpdateSettings);
  *         name: keyType
  *         schema:
  *           type: string
- *         description: Type of API key (openai_api_key, google_api_key)
+ *         description: Type of API key (openai_api_key)
  *     responses:
  *       200:
  *         description: API key retrieved successfully

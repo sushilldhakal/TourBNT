@@ -11,7 +11,7 @@ export const addOrUpdateSettings = async (req: Request, res: Response, next: Nex
     if (!userId) {
       return next(createHttpError(401, 'Not authenticated'));
     }
-    const { OPENAI_API_KEY, GOOGLE_API_KEY } = req.body;
+    const { OPENAI_API_KEY } = req.body;
 
     const [existing] = await db.select().from(userSettings).where(eq(userSettings.userId, userId)).limit(1);
 
@@ -22,13 +22,11 @@ export const addOrUpdateSettings = async (req: Request, res: Response, next: Nex
         .values({
           userId,
           openaiApiKey: OPENAI_API_KEY ? encrypt(OPENAI_API_KEY) : '',
-          googleApiKey: GOOGLE_API_KEY ? encrypt(GOOGLE_API_KEY) : '',
         })
         .returning();
     } else {
       const updates: Partial<typeof userSettings.$inferInsert> = { updatedAt: new Date() };
       if (OPENAI_API_KEY !== undefined) updates.openaiApiKey = encrypt(OPENAI_API_KEY);
-      if (GOOGLE_API_KEY !== undefined) updates.googleApiKey = encrypt(GOOGLE_API_KEY);
 
       [settings] = await db.update(userSettings).set(updates).where(eq(userSettings.userId, userId)).returning();
     }
@@ -36,7 +34,6 @@ export const addOrUpdateSettings = async (req: Request, res: Response, next: Nex
     const responseSettings = {
       ...settings,
       openaiApiKey: OPENAI_API_KEY || (settings.openaiApiKey ? '••••••••' : ''),
-      googleApiKey: GOOGLE_API_KEY || (settings.googleApiKey ? '••••••••' : ''),
     };
 
     sendSuccess(res, responseSettings, 'Settings saved successfully');
@@ -57,14 +54,13 @@ export const getUserSettings = async (req: Request, res: Response) => {
     if (!settings) {
       [settings] = await db
         .insert(userSettings)
-        .values({ userId, openaiApiKey: '', googleApiKey: '' })
+        .values({ userId, openaiApiKey: '' })
         .returning();
     }
 
     const responseSettings = {
       ...settings,
       openaiApiKey: settings.openaiApiKey ? '••••••••' : '',
-      googleApiKey: settings.googleApiKey ? '••••••••' : '',
     };
 
     sendSuccess(res, responseSettings, 'Settings retrieved successfully');
@@ -96,10 +92,6 @@ export const getDecryptedApiKey = async (req: Request, res: Response) => {
         decryptedKey = decrypt(settings.openaiApiKey || '');
         fallbackKey = process.env.OPENAI_API_KEY || '';
         break;
-      case 'google_api_key':
-        decryptedKey = decrypt(settings.googleApiKey || '');
-        fallbackKey = process.env.GOOGLE_API_KEY || '';
-        break;
       default:
         return sendValidationError(res, 'Invalid key type requested');
     }
@@ -110,9 +102,6 @@ export const getDecryptedApiKey = async (req: Request, res: Response) => {
       switch (keyType) {
         case 'openai_api_key':
           updates = { openaiApiKey: encrypt(fallbackKey) };
-          break;
-        case 'google_api_key':
-          updates = { googleApiKey: encrypt(fallbackKey) };
           break;
       }
 

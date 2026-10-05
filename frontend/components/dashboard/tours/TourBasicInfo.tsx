@@ -31,7 +31,6 @@ import { MultiSelect } from '@/components/ui/MultiSelect';
 
 import { Gallery } from '@/components/dashboard/gallery/Gallery';
 import { useTourContext } from '@/providers/TourProvider';
-import { GoogleMapsProvider } from '@/providers/GoogleMapsProvider';
 import AddDestination from './Destination/AddDestination';
 import AddCategory from './Category/AddCategory';
 import Image from 'next/image';
@@ -682,15 +681,13 @@ export function TourBasicInfo() {
                             Create a destination here. It is saved to your destination list.
                         </DialogDescription>
                     </DialogHeader>
-                    <GoogleMapsProvider>
-                        <AddDestination
-                            onDestinationAdded={(created) => {
-                                setAddDestinationOpen(false);
-                                const id = createdId(created);
-                                if (id) setValue('destination', id, { shouldDirty: true, shouldValidate: true });
-                            }}
-                        />
-                    </GoogleMapsProvider>
+                    <AddDestination
+                        onDestinationAdded={(created) => {
+                            setAddDestinationOpen(false);
+                            const id = createdId(created);
+                            if (id) setValue('destination', id, { shouldDirty: true, shouldValidate: true });
+                        }}
+                    />
                 </DialogContent>
             </Dialog>
             <Dialog open={addCategoryOpen} onOpenChange={setAddCategoryOpen}>
