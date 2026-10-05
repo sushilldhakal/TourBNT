@@ -388,6 +388,7 @@ export interface StoredItineraryPartner {
   unitsRequested?: number;
   unitType?: string;
   unitTypeId?: string;
+  openForAll?: boolean;
   [extra: string]: unknown;
 }
 

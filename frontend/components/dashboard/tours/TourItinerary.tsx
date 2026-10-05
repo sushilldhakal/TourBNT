@@ -348,7 +348,7 @@ function ItineraryItem({ id, index, onRemove, onDragStart, onDragOver, onDrop }:
                 <div className="space-y-2 pt-2 border-t border-border">
                     <p className="text-sm font-medium">Logistics for this day</p>
                     <p className="text-xs text-muted-foreground -mt-1">
-                        Start typing to find a registered guide, hotel, restaurant or transport provider — travelers will see a link to their reviews. Otherwise just type a name.
+                        Assign a hotel, guesthouse, restaurant, guide or transport provider, or leave the day open so any of them who are free can apply and you choose one.
                     </p>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <BusinessPartnerPicker

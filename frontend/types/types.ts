@@ -249,6 +249,7 @@ export interface ItineraryPartner {
     businessPartnerType?: string;
     businessPartnerRating?: number;
     businessPartnerReviewCount?: number;
+    openForAll?: boolean;
 }
 
 /** One itinerary day. Dates arrive from the API as ISO strings. */

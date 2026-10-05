@@ -132,6 +132,8 @@ export const itineraryPartnerRoleEnum = pgEnum('itinerary_partner_role', [
 // units/date/time (see the counter* columns) for the agency to accept or
 // decline. 'expired' = a stale 'pending'/'held' the sweep auto-released.
 export const itineraryRequestStatusEnum = pgEnum('itinerary_request_status', ['pending', 'held', 'confirmed', 'countered', 'declined', 'expired']);
+// An application from a free business onto a seller's open itinerary slot.
+export const itinerarySlotApplicationStatusEnum = pgEnum('itinerary_slot_application_status', ['applied', 'selected', 'declined', 'withdrawn']);
 // Who/what caused an itineraryRequestEvents transition.
 export const itineraryRequestActorRoleEnum = pgEnum('itinerary_request_actor_role', ['agency', 'partner', 'system']);
 // Where on the site an ad campaign is eligible to render.
@@ -866,6 +868,10 @@ export const businessPartners = pgTable('business_partners', {
   details: jsonb('details').$type<Record<string, unknown> | null>(),
   isApproved: boolean('is_approved').notNull().default(false),
   approvalStatus: approvalStatusEnum('approval_status').notNull().default('pending'),
+  // Set when an approved business cancels a deal they had already confirmed
+  // and the explanation is too thin to count as evidence. Cleared once they
+  // submit a sufficient explanation (or an admin approves them again).
+  approvalHoldReason: text('approval_hold_reason'),
   approvedBy: text('approved_by').references(() => users.id),
   rejectedBy: text('rejected_by').references(() => users.id),
   rejectionReason: text('rejection_reason'),
@@ -971,6 +977,10 @@ export const tourItineraryPartners = pgTable('tour_itinerary_partners', {
   role: itineraryPartnerRoleEnum('role').notNull(),
   businessPartnerId: text('business_partner_id').references(() => businessPartners.id, { onDelete: 'set null' }),
   name: text('name').notNull(),
+  // Seller left this day/role open. Any approved business of the matching
+  // type who is free on a departure date can apply; the seller then picks one.
+  // Mutually exclusive with businessPartnerId — a direct assignment is the other path.
+  openForAll: boolean('open_for_all').notNull().default(false),
   notes: text('notes'),
   sortOrder: integer('sort_order').notNull().default(0),
   // The agency's own stated quantity for this day/role (e.g. "10" rooms) —
@@ -991,6 +1001,7 @@ export const tourItineraryPartners = pgTable('tour_itinerary_partners', {
 }, (table) => ({
   tourDayIdx: index('tour_itinerary_partners_tour_day_idx').on(table.tourId, table.dayId),
   partnerIdx: index('tour_itinerary_partners_partner_idx').on(table.businessPartnerId),
+  openIdx: index('tour_itinerary_partners_open_idx').on(table.openForAll),
 }));
 
 // ---------------------------------------------------------------------------
@@ -1199,6 +1210,39 @@ export const itineraryRequestBookingContributions = pgTable('itinerary_request_b
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
   requestBookingIdx: uniqueIndex('itinerary_request_contributions_request_booking_idx').on(table.requestId, table.bookingId),
+}));
+
+// A business applying for one real date on an open (openForAll) itinerary link.
+// The link stays open after a selection so other departure dates can still
+// receive applications. Selecting one creates a confirmed itineraryPartnerRequests row.
+export const itinerarySlotApplications = pgTable('itinerary_slot_applications', {
+  id: id(),
+  tourItineraryPartnerId: text('tour_itinerary_partner_id').notNull().references(() => tourItineraryPartners.id, { onDelete: 'cascade' }),
+  businessPartnerId: text('business_partner_id').notNull().references(() => businessPartners.id, { onDelete: 'cascade' }),
+  serviceDate: date('service_date').notNull(),
+  sourceDepartureDate: timestamp('source_departure_date', { withTimezone: true }),
+  message: text('message'),
+  unitsOffered: integer('units_offered'),
+  status: itinerarySlotApplicationStatusEnum('status').notNull().default('applied'),
+  ...timestamps,
+}, (table) => ({
+  uniqueApply: uniqueIndex('itinerary_slot_applications_unique_idx').on(table.tourItineraryPartnerId, table.businessPartnerId, table.serviceDate),
+  partnerIdx: index('itinerary_slot_applications_partner_idx').on(table.businessPartnerId, table.status),
+  linkDateIdx: index('itinerary_slot_applications_link_date_idx').on(table.tourItineraryPartnerId, table.serviceDate),
+}));
+
+// Recorded when a partner backs out of a request they had already confirmed.
+// evidenceSufficient false is what puts the business back on pending approval.
+export const partnerDealWithdrawals = pgTable('partner_deal_withdrawals', {
+  id: id(),
+  requestId: text('request_id').notNull().references(() => itineraryPartnerRequests.id, { onDelete: 'cascade' }),
+  businessPartnerId: text('business_partner_id').notNull().references(() => businessPartners.id, { onDelete: 'cascade' }),
+  explanation: text('explanation').notNull(),
+  evidenceSufficient: boolean('evidence_sufficient').notNull(),
+  ...timestamps,
+}, (table) => ({
+  partnerIdx: index('partner_deal_withdrawals_partner_idx').on(table.businessPartnerId, table.createdAt),
+  requestIdx: index('partner_deal_withdrawals_request_idx').on(table.requestId),
 }));
 
 // ---------------------------------------------------------------------------
@@ -1594,10 +1638,21 @@ export const businessReviewLikesRelations = relations(businessReviewLikes, ({ on
   user: one(users, { fields: [businessReviewLikes.userId], references: [users.id] }),
 }));
 
-export const tourItineraryPartnersRelations = relations(tourItineraryPartners, ({ one }) => ({
+export const tourItineraryPartnersRelations = relations(tourItineraryPartners, ({ one, many }) => ({
   tour: one(tours, { fields: [tourItineraryPartners.tourId], references: [tours.id] }),
   businessPartner: one(businessPartners, { fields: [tourItineraryPartners.businessPartnerId], references: [businessPartners.id] }),
   unitType: one(businessPartnerUnitTypes, { fields: [tourItineraryPartners.unitTypeId], references: [businessPartnerUnitTypes.id] }),
+  applications: many(itinerarySlotApplications),
+}));
+
+export const itinerarySlotApplicationsRelations = relations(itinerarySlotApplications, ({ one }) => ({
+  link: one(tourItineraryPartners, { fields: [itinerarySlotApplications.tourItineraryPartnerId], references: [tourItineraryPartners.id] }),
+  businessPartner: one(businessPartners, { fields: [itinerarySlotApplications.businessPartnerId], references: [businessPartners.id] }),
+}));
+
+export const partnerDealWithdrawalsRelations = relations(partnerDealWithdrawals, ({ one }) => ({
+  request: one(itineraryPartnerRequests, { fields: [partnerDealWithdrawals.requestId], references: [itineraryPartnerRequests.id] }),
+  businessPartner: one(businessPartners, { fields: [partnerDealWithdrawals.businessPartnerId], references: [businessPartners.id] }),
 }));
 
 export const advertisementsRelations = relations(advertisements, ({ one, many }) => ({

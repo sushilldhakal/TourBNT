@@ -27,6 +27,7 @@ import {
   reopenItineraryPartnerRequest,
   replaceItineraryPartner
 } from './controllers/tourController';
+import { listTourOpenSlots, selectOpenApplication } from '../businessPartners/openSlotController';
 import {
   validateObjectId,
   validateTourCreation,
@@ -605,6 +606,8 @@ router.get('/:tourId/route-map', getTourRouteMap);
 router.get('/:tourId/business', cacheRoute('tour-business', 60), getTourBusinessInfo);
 
 router.get('/:tourId/logistics-status', authenticate, validateObjectId(), getTourLogisticsStatus);
+router.get('/:tourId/open-slots', authenticate, validateObjectId(), listTourOpenSlots);
+router.post('/:tourId/open-applications/:applicationId/select', authenticate, validateObjectId(), validateObjectId('applicationId'), selectOpenApplication);
 
 // Agency orchestrator actions — ownership (tour-author-or-admin) checked inside ItineraryRequestService.
 router.post('/:tourId/itinerary-partners/:linkId/request', authenticate, validateObjectId(), validateObjectId('linkId'), sendItineraryPartnerRequest);

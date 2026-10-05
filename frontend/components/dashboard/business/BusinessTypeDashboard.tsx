@@ -19,6 +19,7 @@ import type { LucideIcon } from 'lucide-react';
 import { CheckCircle2, Clock, XCircle, Repeat2 } from 'lucide-react';
 import {
     respondToItineraryRequest,
+    withdrawConfirmedRequest,
     updateMyCapacity,
     setCapacityOverride,
     getAvailableCapacityForDate,
@@ -31,6 +32,7 @@ import {
     type ItineraryRequestStatus,
 } from '@/lib/api/businessPartners';
 import { AdCampaignsPanel } from '@/components/dashboard/ads/AdCampaignsPanel';
+import { OpenDatesTab, WithdrawalNotice } from '@/components/dashboard/business/OpenDatesAndWithdrawal';
 import { getApprovedCategories, getApprovedDestinations } from '@/lib/api/globalApi';
 import {
     createUnitType,
@@ -134,13 +136,14 @@ export function BusinessTypeDashboard({ types, title, description, icon, showLog
                     </CardContent>
                 </Card>
             )}
-            {business.approvalStatus === 'pending' && (
+            {business.approvalStatus === 'pending' && business.approvalHoldReason !== 'insufficient_withdrawal_evidence' && (
                 <Card>
                     <CardContent className="py-4 text-sm text-muted-foreground">
                         Your application is being reviewed. You&apos;ll be notified once it&apos;s approved.
                     </CardContent>
                 </Card>
             )}
+            {showLogistics && <WithdrawalNotice businessPartnerId={business.id} />}
 
             <div className="flex items-center gap-6 text-sm text-muted-foreground">
                 {/* Advertisers aren't reviewed by travellers, so no rating for them. */}
@@ -152,6 +155,7 @@ export function BusinessTypeDashboard({ types, title, description, icon, showLog
                 <TabsList>
                     {showLogistics && <TabsTrigger value="capacity">Capacity</TabsTrigger>}
                     {showLogistics && <TabsTrigger value="requests">Requests</TabsTrigger>}
+                    {showLogistics && <TabsTrigger value="open-dates">Open dates</TabsTrigger>}
                     {/* Hotels/restaurants/guides/transport surface through sellers' day-by-day itineraries — only advertisers need targeting. */}
                     {business.type === 'advertiser' && <TabsTrigger value="targeting">Visibility</TabsTrigger>}
                     {business.type !== 'advertiser' && <TabsTrigger value="reviews">Reviews</TabsTrigger>}
@@ -166,6 +170,11 @@ export function BusinessTypeDashboard({ types, title, description, icon, showLog
                 {showLogistics && (
                     <TabsContent value="requests" className="mt-4">
                         <RequestsTab businessPartnerId={business.id} />
+                    </TabsContent>
+                )}
+                {showLogistics && (
+                    <TabsContent value="open-dates" className="mt-4">
+                        <OpenDatesTab businessPartnerId={business.id} />
                     </TabsContent>
                 )}
                 {business.type === 'advertiser' && (
@@ -809,8 +818,14 @@ function RequestsTab({ businessPartnerId }: { businessPartnerId: string }) {
     const [unitsDrafts, setUnitsDrafts] = useState<Record<string, string>>({});
     const [counterDrafts, setCounterDrafts] = useState<Record<string, { units?: string; date?: string; time?: string; notes?: string }>>({});
     const [counterOpenFor, setCounterOpenFor] = useState<string | null>(null);
+    const [withdrawFor, setWithdrawFor] = useState<string | null>(null);
+    const [withdrawText, setWithdrawText] = useState('');
 
-    const invalidate = () => queryClient.invalidateQueries({ queryKey: ['business-partners', businessPartnerId, 'requests'] });
+    const invalidate = () => {
+        queryClient.invalidateQueries({ queryKey: ['business-partners', businessPartnerId, 'requests'] });
+        queryClient.invalidateQueries({ queryKey: ['business-partners', businessPartnerId, 'withdrawal-status'] });
+        queryClient.invalidateQueries({ queryKey: queryKeys.businessPartners.mine() });
+    };
 
     const respondMutation = useMutation({
         mutationFn: ({ requestId, action, params }: { requestId: string; action: 'hold' | 'confirm' | 'decline' | 'counter'; params?: { units?: number; notes?: string; counterUnits?: number; counterDate?: string; counterTime?: string } }) =>
@@ -821,6 +836,17 @@ function RequestsTab({ businessPartnerId }: { businessPartnerId: string }) {
             invalidate();
         },
         onError: (error: Error) => toast({ title: 'Could not save response', description: error.message, variant: 'destructive' }),
+    });
+
+    const withdrawMutation = useMutation({
+        mutationFn: (requestId: string) => withdrawConfirmedRequest(businessPartnerId, requestId, withdrawText),
+        onSuccess: (result) => {
+            toast({ title: result.accountPending ? 'Account set to pending approval' : 'Cancellation recorded', description: result.warning });
+            setWithdrawFor(null);
+            setWithdrawText('');
+            invalidate();
+        },
+        onError: (error: Error) => toast({ title: 'Could not cancel the deal', description: error.message, variant: 'destructive' }),
     });
 
     return (
@@ -962,7 +988,30 @@ function RequestsTab({ businessPartnerId }: { businessPartnerId: string }) {
                                     <p className="text-sm text-muted-foreground">Waiting for the agency to accept or decline your counter-offer.</p>
                                 )}
                                 {r.status === 'confirmed' && (
-                                    <p className="text-sm text-muted-foreground">Committed {r.capacityConfirmed} for this date.</p>
+                                    <div className="space-y-2">
+                                        <p className="text-sm text-muted-foreground">Committed {r.capacityConfirmed} for this date.</p>
+                                        {withdrawFor !== r.id ? (
+                                            <Button type="button" size="sm" variant="destructive" onClick={() => { setWithdrawFor(r.id); setWithdrawText(''); }}>
+                                                Cancel this approved deal
+                                            </Button>
+                                        ) : (
+                                            <div className="space-y-2">
+                                                <Label className="text-xs">Why you are cancelling a deal that was already approved</Label>
+                                                <Textarea
+                                                    rows={3}
+                                                    value={withdrawText}
+                                                    onChange={(e) => setWithdrawText(e.target.value)}
+                                                    placeholder="A short note is not enough. Describe what happened and why the booking cannot be kept."
+                                                />
+                                                <div className="flex gap-2">
+                                                    <Button type="button" size="sm" variant="destructive" disabled={withdrawMutation.isPending || !withdrawText.trim()} onClick={() => withdrawMutation.mutate(r.id)}>
+                                                        Withdraw approval
+                                                    </Button>
+                                                    <Button type="button" size="sm" variant="outline" onClick={() => setWithdrawFor(null)}>Keep the deal</Button>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
                                 )}
                                 {r.status === 'expired' && (
                                     <p className="text-sm text-muted-foreground">This request went unanswered and expired.</p>

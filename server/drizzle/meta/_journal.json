@@ -162,6 +162,13 @@
       "when": 1791230000000,
       "tag": "0022_drop_google_maps_key",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1791300000000,
+      "tag": "0023_open_itinerary_slots",
+      "breakpoints": true
     }
   ]
 }

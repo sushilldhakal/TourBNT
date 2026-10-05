@@ -240,7 +240,17 @@ export interface ItineraryPartnerInput {
   unitsRequested?: number;
   unitType?: string;
   unitTypeId?: string;
+  /** Seller left this role open so any free business of the matching type can apply. */
+  openForAll?: boolean;
 }
+
+const OPEN_SLOT_NAME: Record<string, string> = {
+  transport: 'Open for any transport provider',
+  accommodation: 'Open for any hotel or guesthouse',
+  guide: 'Open for any guide',
+  meals: 'Open for any restaurant',
+  other: 'Open for any partner',
+};
 
 /**
  * Process a single itinerary day's `partners[]` — each entry links a
@@ -250,20 +260,26 @@ export interface ItineraryPartnerInput {
 const processItineraryPartners = (partners: unknown): ItineraryPartnerInput[] => {
   return asArray(partners)
     .map(asRecord)
-    .filter((p) => typeof p.role === 'string' && ITINERARY_PARTNER_ROLES.has(p.role) && p.name)
-    .map((p) => ({
-      role: String(p.role),
-      ...(p.businessPartnerId ? { businessPartnerId: String(p.businessPartnerId) } : {}),
-      name: String(p.name),
-      ...(p.notes ? { notes: String(p.notes) } : {}),
-      // Keep the request details too — syncTourItineraryPartners reads these, and
-      // stripping them here silently reset every room/seat count and time slot on save.
-      ...(p.time ? { time: String(p.time) } : {}),
-      ...(p.endTime ? { endTime: String(p.endTime) } : {}),
-      ...(p.unitsRequested !== undefined && p.unitsRequested !== null && p.unitsRequested !== '' && !Number.isNaN(Number(p.unitsRequested)) ? { unitsRequested: Number(p.unitsRequested) } : {}),
-      ...(p.unitType ? { unitType: String(p.unitType) } : {}),
-      ...(p.unitTypeId ? { unitTypeId: String(p.unitTypeId) } : {}),
-    }));
+    .filter((p) => typeof p.role === 'string' && ITINERARY_PARTNER_ROLES.has(p.role) && (p.name || p.openForAll === true || p.openForAll === 'true'))
+    .map((p) => {
+      // A named business wins: open-for-all is the path where nobody is assigned yet.
+      const openForAll = (p.openForAll === true || p.openForAll === 'true') && !p.businessPartnerId;
+      const role = String(p.role);
+      return {
+        role,
+        ...(openForAll || !p.businessPartnerId ? {} : { businessPartnerId: String(p.businessPartnerId) }),
+        name: openForAll ? (OPEN_SLOT_NAME[role] || 'Open for any partner') : String(p.name),
+        ...(openForAll ? { openForAll: true } : {}),
+        ...(p.notes ? { notes: String(p.notes) } : {}),
+        // Keep the request details too — syncTourItineraryPartners reads these, and
+        // stripping them here silently reset every room/seat count and time slot on save.
+        ...(p.time ? { time: String(p.time) } : {}),
+        ...(p.endTime ? { endTime: String(p.endTime) } : {}),
+        ...(p.unitsRequested !== undefined && p.unitsRequested !== null && p.unitsRequested !== '' && !Number.isNaN(Number(p.unitsRequested)) ? { unitsRequested: Number(p.unitsRequested) } : {}),
+        ...(p.unitType ? { unitType: String(p.unitType) } : {}),
+        ...(openForAll || !p.unitTypeId ? {} : { unitTypeId: String(p.unitTypeId) }),
+      };
+    });
 };
 
 export interface ItineraryDayInput {
