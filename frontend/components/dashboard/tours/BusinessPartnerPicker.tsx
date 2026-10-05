@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { Search, Link2, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -60,10 +60,12 @@ export function BusinessPartnerPicker({ basePath, role, label, placeholder }: Bu
     const [open, setOpen] = useState(false);
     const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-    useEffect(() => {
+    // Linking a different partner shows its name in the search box (adjusted while rendering).
+    const [shownPartnerId, setShownPartnerId] = useState(current?.businessPartnerId);
+    if (current?.businessPartnerId !== shownPartnerId) {
+        setShownPartnerId(current?.businessPartnerId);
         setQuery(current?.name || '');
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [current?.businessPartnerId]);
+    }
 
     const upsert = (patch: Partial<ItineraryPartner> | null) => {
         const existing: ItineraryPartner[] = getValues(partnersPath) ?? [];

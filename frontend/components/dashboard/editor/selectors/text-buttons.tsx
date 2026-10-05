@@ -82,7 +82,7 @@ export const TextButtons = () => {
 
     return (
         <div className="flex items-center">
-            {buttons.map((button, index) => (
+            {buttons.map((button) => (
                 <Tooltip key={button.name}>
                     <TooltipTrigger asChild>
                         <EditorBubbleItem

@@ -9,6 +9,7 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { useTourContext } from '@/providers/TourProvider';
 import { usePricingPresets, usePaxPresets, useDiscountPresets } from '@/lib/queries';
 import { queryKeys } from '@/lib/queries/queryKeys';
+import { apiErrorMessage } from '@/lib/api/apiClient';
 import { createPaxPreset, createDiscountPreset, createPricingPreset, type PaxPreset, type DiscountPreset, type PricingOptionPreset, type PricingOption as PresetPricingOption } from '@/lib/api/tourSettingsApi';
 import type { EditorDateRange, EditorPricingOption, PricingCategory, ScheduleType } from '@/types/tourEditor';
 import type { RecurrencePattern } from '@/types/types';
@@ -1762,8 +1763,8 @@ function CreatePaxPresetDialog({ open, onOpenChange, onCreated }: CreatePaxPrese
             setMaxSize('10');
             setPricePerPerson(true);
         },
-        onError: (error: any) => {
-            toast.error(error?.response?.data?.message || 'Failed to create preset');
+        onError: (error) => {
+            toast.error(apiErrorMessage(error, 'Failed to create preset'));
         },
     });
 
@@ -1852,8 +1853,8 @@ function CreateDiscountPresetDialog({ open, onOpenChange, onCreated }: CreateDis
             setType('percentage');
             setValue('');
         },
-        onError: (error: any) => {
-            toast.error(error?.response?.data?.message || 'Failed to create preset');
+        onError: (error) => {
+            toast.error(apiErrorMessage(error, 'Failed to create preset'));
         },
     });
 
@@ -1955,8 +1956,8 @@ function CreatePricingPresetDialog({ open, onOpenChange, onCreated }: CreatePric
             setMinPax('1');
             setMaxPax('50');
         },
-        onError: (error: any) => {
-            toast.error(error?.response?.data?.message || 'Failed to create preset');
+        onError: (error) => {
+            toast.error(apiErrorMessage(error, 'Failed to create preset'));
         },
     });
 

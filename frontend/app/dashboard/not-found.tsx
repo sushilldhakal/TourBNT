@@ -12,14 +12,6 @@ import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, C
 
 export default function DashboardNotFound() {
     const router = useRouter();
-    const [searchQuery, setSearchQuery] = useState('');
-
-    const handleSearch = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (searchQuery.trim()) {
-            router.push(`/dashboard/search?q=${encodeURIComponent(searchQuery)}`);
-        }
-    };
     const { user, userRole, isHydrated } = useAuth();
     const displayRole = userRole ?? getUserRole();
     const [searchOpen, setSearchOpen] = useState(false);
@@ -28,7 +20,7 @@ export default function DashboardNotFound() {
     const searchItems = useMemo(() => {
         if (!isHydrated) return [];
         return getFlatNavigationForSearch(baseNavigationItems, isUserAdmin, user?.id ?? undefined, false, userRole ?? displayRole);
-    }, [isHydrated, isUserAdmin, user?.id]);
+    }, [isHydrated, isUserAdmin, user?.id, userRole, displayRole]);
 
 
     // Command+K keyboard shortcut

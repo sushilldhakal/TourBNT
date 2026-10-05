@@ -102,7 +102,7 @@ const CategoryTableView = ({ categories, isLoading, onRefresh }: CategoryTableVi
     });
 
     const selectedCategory = selectedCategoryId
-        ? categories.find(c => c._id === selectedCategoryId || (c as any).categoryId === selectedCategoryId || c.id === selectedCategoryId)
+        ? categories.find(c => c._id === selectedCategoryId || c.categoryId === selectedCategoryId || c.id === selectedCategoryId)
         : null;
 
     const { data: usage, isLoading: usageLoading } = useQuery({
@@ -225,7 +225,7 @@ const CategoryTableView = ({ categories, isLoading, onRefresh }: CategoryTableVi
                 // Use _id for edit/delete operations (UserCategory ID)
                 const userCategoryId = category._id || category.id;
                 // Use categoryId for toggle-active API (GlobalCategory ID)
-                const globalCategoryId = (category as any).categoryId || category._id || category.id;
+                const globalCategoryId = category.categoryId || category._id || category.id;
 
                 if (!userCategoryId) return null;
                 if (!globalCategoryId) return null;

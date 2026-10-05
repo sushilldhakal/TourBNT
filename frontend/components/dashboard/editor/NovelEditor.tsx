@@ -3,7 +3,10 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { EditorRoot, EditorContent, type JSONContent, EditorInstance, EditorCommand, EditorCommandEmpty, EditorCommandList, ImageResizer, handleCommandNavigation, handleImagePaste, handleImageDrop } from "novel";
 import { useDebouncedCallback } from "use-debounce";
-import { coreExtensions } from "./extensions";
+import { createCoreExtensions } from "./extensions";
+import type { AnyExtension } from "@tiptap/core";
+import type { EditorView } from "@tiptap/pm/view";
+import type { Slice } from "@tiptap/pm/model";
 import { getLazyExtensions } from "./extensions-lazy";
 import { createUploadFn } from "./image-upload";
 import { useAuth } from '@/lib/hooks/useAuth';
@@ -46,7 +49,9 @@ function NovelEditorCore({
     const [saveStatus, setSaveStatus] = useState<"Saved" | "Unsaved" | "Saving">("Saved");
     const [charsCount, setCharsCount] = useState<number | undefined>(undefined);
     const [editorInstance, setEditorInstance] = useState<EditorInstance | null>(null);
-    const [extensions, setExtensions] = useState<any[]>(coreExtensions);
+    // Core extensions (with this editor's placeholder) plus the heavy ones loaded on demand.
+    const baseExtensions = useMemo(() => createCoreExtensions(placeholder), [placeholder]);
+    const [lazyExtensions, setLazyExtensions] = useState<AnyExtension[]>([]);
     const [extensionsLoaded, setExtensionsLoaded] = useState(false);
 
     // Dialog states - wrapped in useRef to prevent re-renders
@@ -72,7 +77,7 @@ function NovelEditorCore({
     /**
      * FIX 1: Memoize extensions to prevent recreation on every render
      */
-    const memoizedExtensions = useMemo(() => extensions, [extensions]);
+    const memoizedExtensions = useMemo(() => [...baseExtensions, ...lazyExtensions], [baseExtensions, lazyExtensions]);
 
     /**
      * FIX 2: Load extensions only once
@@ -87,11 +92,10 @@ function NovelEditorCore({
                     enableMedia: true,
                 });
 
-                setExtensions([...coreExtensions, ...lazyExts]);
+                setLazyExtensions(lazyExts);
                 setExtensionsLoaded(true);
             } catch (error) {
                 console.error('Failed to load extensions:', error);
-                setExtensions(coreExtensions);
                 setExtensionsLoaded(true);
 
                 toast({
@@ -178,7 +182,7 @@ function NovelEditorCore({
             setInitialContent(createEmptyDocument());
             contentInitialized.current = true;
         }
-    }, []); // Empty deps - run only once
+    }, [initialValue]); // Runs once: contentInitialized guards later changes
 
     /**
      * FIX 4: Optimize debounced updates - don't trigger re-renders
@@ -253,10 +257,10 @@ function NovelEditorCore({
      */
     const editorProps = useMemo(() => ({
         handleDOMEvents: {
-            keydown: (_view: any, event: any) => handleCommandNavigation(event),
+            keydown: (_view: EditorView, event: KeyboardEvent) => handleCommandNavigation(event),
         },
-        handlePaste: (view: any, event: any) => handleImagePaste(view, event, createUploadFn(user?.id || '')),
-        handleDrop: (view: any, event: any, _slice: any, moved: any) => handleImageDrop(view, event, moved, createUploadFn(user?.id || '')),
+        handlePaste: (view: EditorView, event: ClipboardEvent) => handleImagePaste(view, event, createUploadFn(user?.id || '')),
+        handleDrop: (view: EditorView, event: DragEvent, _slice: Slice, moved: boolean) => handleImageDrop(view, event, moved, createUploadFn(user?.id || '')),
         attributes: {
             class: cn(
                 "prose prose-lg dark:prose-invert prose-headings:font-title font-default focus:outline-none max-w-full",
@@ -345,7 +349,6 @@ function NovelEditorCore({
 
                     {/* FIX 9: Memoize menu switch to prevent re-renders */}
                     <MenuSwitch
-                        enableAI={enableAI}
                         openAI={openAI}
                         setOpenAI={setOpenAI}
                         openNode={openNode}
@@ -414,8 +417,18 @@ function NovelEditorCore({
 /**
  * FIX 11: Separate MenuSwitch component to prevent parent re-renders
  */
+interface MenuSwitchProps {
+    openAI: boolean;
+    setOpenAI: (open: boolean) => void;
+    openNode: boolean;
+    setOpenNode: (open: boolean) => void;
+    openLink: boolean;
+    setOpenLink: (open: boolean) => void;
+    openColor: boolean;
+    setOpenColor: (open: boolean) => void;
+}
+
 const MenuSwitch = React.memo(({
-    enableAI,
     openAI,
     setOpenAI,
     openNode,
@@ -424,7 +437,7 @@ const MenuSwitch = React.memo(({
     setOpenLink,
     openColor,
     setOpenColor
-}: any) => {
+}: MenuSwitchProps) => {
     return (
         <GenerativeMenuSwitch open={openAI} onOpenChange={setOpenAI}>
             <Separator orientation="vertical" />

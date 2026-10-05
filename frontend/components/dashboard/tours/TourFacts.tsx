@@ -53,7 +53,7 @@ export function TourFacts() {
     const [openPopovers, setOpenPopovers] = useState<Record<number, boolean>>({});
 
     const { data: masterFacts } = useFacts(userId, !!userId);
-    const masterFactsData = masterFacts?.data || [];
+    const masterFactsData = useMemo(() => masterFacts?.data ?? [], [masterFacts]);
 
     const hasManuallyAddedFacts = useMemo(() => {
         return Array.isArray(factsFields) && factsFields.length > 0;

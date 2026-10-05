@@ -59,7 +59,6 @@ export default function EditUserPage() {
     const userId = typeof params?.id === 'string' ? params.id : Array.isArray(params?.id) ? params.id[0] : null;
 
     const [showPassword, setShowPassword] = useState(false);
-    const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
     const [avatarDialogOpen, setAvatarDialogOpen] = useState(false);
     const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
 
@@ -136,13 +135,13 @@ export default function EditUserPage() {
     // Set form values when user data is loaded
     useEffect(() => {
         if (user) {
-            const userData = user as any;
+            const userData = user;
             form.reset({
                 name: userData.name || '',
                 email: userData.email || '',
                 phone: userData.phone?.toString() || '',
                 password: '', // Don't populate password
-                roles: userData.roles || '',
+                roles: (Array.isArray(userData.roles) ? userData.roles[0] : userData.roles) || '',
                 bankName: userData.sellerInfo?.bankDetails?.bankName || '',
                 accountNumber: userData.sellerInfo?.bankDetails?.accountNumber || '',
                 accountHolderName: userData.sellerInfo?.bankDetails?.accountHolderName || '',
@@ -174,7 +173,6 @@ export default function EditUserPage() {
             // Password (only if provided)
             if (data.password && data.password.length > 0) {
                 formData.append('password', data.password);
-                setIsUpdatingPassword(true);
             }
 
             // Role (only if admin and provided)

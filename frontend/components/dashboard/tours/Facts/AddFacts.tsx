@@ -1,4 +1,4 @@
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { useMutation } from "@tanstack/react-query";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
@@ -46,8 +46,7 @@ const AddFact = ({ onFactAdded }: { onFactAdded: () => void }) => {
         },
     });
 
-    const { watch } = form;
-    const fieldType = watch('field_type');
+    const fieldType = useWatch({ control: form.control, name: 'field_type' });
 
     const factMutation = useMutation({
         mutationFn: (data: FormData) => addFacts(data),

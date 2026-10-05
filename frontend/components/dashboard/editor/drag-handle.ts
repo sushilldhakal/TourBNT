@@ -8,27 +8,6 @@ export interface DragHandleOptions {
     dragHandleWidth: number;
 }
 
-function absoluteRect(node: Element) {
-    const data = node.getBoundingClientRect();
-    const modal = node.closest('[role="dialog"]');
-
-    // Check if editor is inside a modal/dialog with transforms
-    if (modal && window.getComputedStyle(modal).transform !== 'none') {
-        const modalRect = modal.getBoundingClientRect();
-        return {
-            top: data.top - modalRect.top,
-            left: data.left - modalRect.left,
-            width: data.width,
-        };
-    }
-
-    return {
-        top: data.top,
-        left: data.left,
-        width: data.width,
-    };
-}
-
 function nodeDOMAtCoords(coords: { x: number; y: number }) {
     return document
         .elementsFromPoint(coords.x, coords.y)

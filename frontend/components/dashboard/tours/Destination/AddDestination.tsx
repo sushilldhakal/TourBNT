@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import dynamic from "next/dynamic";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { useMutation } from "@tanstack/react-query";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -61,6 +61,7 @@ const AddDestination = ({ onDestinationAdded }: AddDestinationProps) => {
             featuredTours: [],
         }
     });
+    const [watchedCity, watchedRegion, watchedCountry] = useWatch({ control: form.control, name: ['city', 'region', 'country'] });
     // Destination mutation for creating new destinations
     const destinationMutation = useMutation({
         mutationFn: (data: FormData) => addDestination(data),
@@ -282,7 +283,7 @@ const AddDestination = ({ onDestinationAdded }: AddDestinationProps) => {
                                     </div>
 
                                     {/* Location Fields - Show when manual entry or after selection */}
-                                    {(showManualEntry || form.watch('city') || form.watch('region') || form.watch('country')) && (
+                                    {(showManualEntry || watchedCity || watchedRegion || watchedCountry) && (
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 border rounded-lg bg-secondary/30">
                                             <FormField
                                                 control={form.control}

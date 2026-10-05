@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import React, { useState, useCallback } from 'react';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useTourContext } from '@/providers/TourProvider';
@@ -404,12 +405,12 @@ export function ApplyPresetsBar() {
           <Settings2 className="h-4 w-4 shrink-0 text-muted-foreground" />
           <p className="text-xs text-muted-foreground">
             No presets yet.{' '}
-            <a
+            <Link
               href="/dashboard/tours/settings"
               className="font-medium text-primary underline-offset-4 hover:underline"
             >
               Create presets in Tour settings
-            </a>
+            </Link>
           </p>
         </div>
       )}

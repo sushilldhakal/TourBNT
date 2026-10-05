@@ -117,7 +117,7 @@ const CategoryGridView = ({ categories, isLoading, onRefresh }: CategoryGridView
     });
 
     const selectedCategory = selectedCategoryId
-        ? categories.find(c => c._id === selectedCategoryId || (c as any).categoryId === selectedCategoryId)
+        ? categories.find(c => c._id === selectedCategoryId || c.categoryId === selectedCategoryId)
         : null;
 
     const { data: usage, isLoading: usageLoading } = useQuery({
@@ -169,7 +169,7 @@ const CategoryGridView = ({ categories, isLoading, onRefresh }: CategoryGridView
                     // Use _id for the card key and edit/delete operations (UserCategory ID)
                     const userCategoryId = category._id;
                     // Use categoryId for toggle-active API (GlobalCategory ID)
-                    const globalCategoryId = (category as any).categoryId || category._id;
+                    const globalCategoryId = category.categoryId || category._id;
 
                     if (!userCategoryId) {
                         console.warn('[CategoryGridView] Category missing _id:', category);

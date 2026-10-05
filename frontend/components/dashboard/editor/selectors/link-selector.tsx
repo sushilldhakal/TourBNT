@@ -55,13 +55,11 @@ export const LinkSelector = ({ open, onOpenChange }: LinkSelectorProps) => {
     const { editor } = useEditor();
     const [url, setUrl] = useState<string>("");
 
-    // Get the current link URL when the popover opens
-    useEffect(() => {
-        if (open && editor) {
-            const previousUrl = editor.getAttributes("link").href || "";
-            setUrl(previousUrl);
-        }
-    }, [open, editor]);
+    // Opening the popover starts from the selection's current link.
+    const handleOpenChange = (next: boolean) => {
+        if (next && editor) setUrl(editor.getAttributes("link").href || "");
+        onOpenChange(next);
+    };
 
     // Auto-focus the input when popover opens
     useEffect(() => {
@@ -121,7 +119,7 @@ export const LinkSelector = ({ open, onOpenChange }: LinkSelectorProps) => {
     const isValid = !url || isValidUrl(url) || isValidUrl(`https://${url}`);
 
     return (
-        <Popover modal={true} open={open} onOpenChange={onOpenChange}>
+        <Popover modal={true} open={open} onOpenChange={handleOpenChange}>
             <PopoverTrigger asChild>
                 <Button
                     size="sm"

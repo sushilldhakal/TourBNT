@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useUserCategories, useApprovedCategories } from '@/lib/queries';
 import { useDestinationsRoleBased } from '@/lib/queries/useDestinations';
 import { DestinationTypes } from '@/types/types';
@@ -92,18 +92,16 @@ export function TourBasicInfo() {
 
     // Get current form value to use as fallback if memoized content is null
     const currentDescription = watch('description');
-    // Cache initial description value so the editor is not re-initialized on every render
-    const initialDescriptionRef = useRef<JSONContent | null>(null);
-
-    if (initialDescriptionRef.current === null) {
-        if (editorContent && typeof editorContent === 'object' && 'type' in editorContent) {
-            initialDescriptionRef.current = editorContent as JSONContent;
-        } else if (currentDescription && typeof currentDescription === 'object' && 'type' in currentDescription) {
-            initialDescriptionRef.current = currentDescription as JSONContent;
-        }
+    // The editor's starting document, kept once found so the editor is not re-initialized on every render.
+    const [descriptionInitialValue, setDescriptionInitialValue] = useState<JSONContent | null>(null);
+    if (descriptionInitialValue === null) {
+        const candidate = editorContent && typeof editorContent === 'object' && 'type' in editorContent
+            ? editorContent
+            : currentDescription && typeof currentDescription === 'object' && 'type' in currentDescription
+                ? currentDescription
+                : null;
+        if (candidate) setDescriptionInitialValue(candidate);
     }
-
-    const descriptionInitialValue = initialDescriptionRef.current;
 
 
     const [imageDialogOpen, setImageDialogOpen] = useState(false);
@@ -113,14 +111,13 @@ export function TourBasicInfo() {
     const [numPages, setNumPages] = useState<number>(1);
     const [pageNumber, setPageNumber] = useState<number>(1);
 
-    const selectedCategories = watch('category') || [];
-    const tourStatusValue = watch('tourStatus');
+    const watchedCategories = watch('category');
+    const selectedCategories = useMemo(() => watchedCategories ?? [], [watchedCategories]);
     // MultiSelect expects string[]; form stores category as { label, value, disable }[]
-    const categoryValueForSelect: string[] = Array.isArray(selectedCategories)
-        ? selectedCategories.map((c: { value?: string } | string) =>
-            typeof c === 'string' ? c : (c?.value ?? '')
-        ).filter(Boolean)
-        : [];
+    const categoryValueForSelect = useMemo(
+        () => selectedCategories.map((c) => c?.value ?? '').filter(Boolean),
+        [selectedCategories],
+    );
     const coverImage = watch('coverImage');
     const file = watch('file');
 

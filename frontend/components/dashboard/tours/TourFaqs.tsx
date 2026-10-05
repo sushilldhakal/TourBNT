@@ -54,7 +54,7 @@ export function TourFAQs() {
 
 
     const { data: faqData } = useFaq(userId, !!userId);
-    const faq = (faqData as { data?: FaqData[] })?.data || [];
+    const faq = useMemo(() => faqData?.data ?? [], [faqData]);
 
     // Derive hasManuallyAddedFaqs directly from faqFields instead of using effect-based state
     const hasManuallyAddedFaqs = useMemo(() => {

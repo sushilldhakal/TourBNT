@@ -45,7 +45,7 @@ export default function ToursPage() {
                 description: 'The tour has been deleted successfully.',
             });
         },
-        onError: (error) => {
+        onError: () => {
             toast({
                 title: 'Failed to delete tour',
                 description: `An error occurred while deleting the tour. Please try again later.`,
@@ -110,13 +110,13 @@ export default function ToursPage() {
                     <span>Author</span>
                 </div>
             ),
-            cell: ({ row }: any) => {
-                const author = row.original.author;
+            cell: ({ row }) => {
+                const authors = row.original.author ?? [];
                 return (
                     <div className="text-sm">
-                        {Array.isArray(author) ? (
-                            author.map((a, i) => (
-                                <div className="flex items-center gap-2 font-medium text-muted-foreground" key={i}>
+                        {authors.length > 0 ? (
+                            authors.map((a, i) => (
+                                <div className="flex items-center gap-2 font-medium text-muted-foreground" key={a.id || i}>
                                     <User className="h-3 w-3" />
                                     {a.name}
                                 </div>
@@ -124,7 +124,7 @@ export default function ToursPage() {
                         ) : (
                             <div className="flex items-center gap-2 font-medium text-muted-foreground">
                                 <User className="h-3 w-3" />
-                                {author?.name || 'Unknown Author'}
+                                Unknown Author
                             </div>
                         )}
                     </div>
@@ -133,7 +133,7 @@ export default function ToursPage() {
         },
         {
             header: 'Price',
-            cell: ({ row }: any) => {
+            cell: ({ row }) => {
                 const pricingOptions = row.original.pricingOptions;
                 const price =
                     pricingOptions && pricingOptions.length > 0
@@ -148,7 +148,7 @@ export default function ToursPage() {
         },
         {
             accessorKey: 'tourStatus',
-            header: ({ column }: any) => (
+            header: ({ column }) => (
                 <Button
                     variant="ghost"
                     onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
@@ -157,11 +157,11 @@ export default function ToursPage() {
                     <ArrowUpDown className="ml-2 h-4 w-4" />
                 </Button>
             ),
-            cell: ({ row }: any) => <div className="capitalize">{row.getValue('tourStatus')}</div>,
+            cell: ({ row }) => <div className="capitalize">{row.getValue('tourStatus')}</div>,
         },
         {
             accessorKey: 'code',
-            header: ({ column }: any) => (
+            header: ({ column }) => (
                 <Button
                     variant="ghost"
                     onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
@@ -170,11 +170,11 @@ export default function ToursPage() {
                     <ArrowUpDown className="ml-2 h-4 w-4" />
                 </Button>
             ),
-            cell: ({ row }: any) => <div className="capitalize">{row.getValue('code')}</div>,
+            cell: ({ row }) => <div className="capitalize">{row.getValue('code')}</div>,
         },
         {
             accessorKey: 'createdAt',
-            header: ({ column }: any) => (
+            header: ({ column }) => (
                 <Button
                     variant="ghost"
                     onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
@@ -185,7 +185,7 @@ export default function ToursPage() {
                     <ArrowUpDown className="ml-2 h-4 w-4" />
                 </Button>
             ),
-            cell: ({ row }: any) => {
+            cell: ({ row }) => {
                 const createdAt = row.getValue('createdAt');
                 const updatedAt = row.original.updatedAt; // Get from original data
                 return (
@@ -213,7 +213,7 @@ export default function ToursPage() {
                 </div>
             ),
             enableHiding: true,
-            cell: ({ row }: any) => {
+            cell: ({ row }) => {
                 const tour = row.original;
                 return (
                     <ActionDropdown

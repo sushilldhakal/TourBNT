@@ -39,6 +39,7 @@ import {
 } from '@/components/ui/select';
 import { Plus, Trash2, Copy, Edit, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
+import { apiErrorMessage } from '@/lib/api/apiClient';
 
 const DATE_TYPES = [
   { value: 'flexible', label: 'Flexible Dates' },
@@ -74,8 +75,8 @@ export function DatePresets() {
       toast.success('Date preset created successfully');
       handleCloseDialog();
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Failed to create preset');
+    onError: (error) => {
+      toast.error(apiErrorMessage(error, 'Failed to create preset'));
     },
   });
 
@@ -151,13 +152,13 @@ export function DatePresets() {
       config: formData.config,
     };
     if (editingPreset) {
-      updateMutation.mutate({ presetId: (editingPreset as any)._id || editingPreset.id, data: payload });
+      updateMutation.mutate({ presetId: editingPreset._id || editingPreset.id, data: payload });
     } else {
       createMutation.mutate(payload);
     }
   };
 
-  const presetId = (p: DatePreset) => (p as any)._id || (p as any).id;
+  const presetId = (p: DatePreset) => p._id || p.id;
 
   if (isLoading) return <div>Loading...</div>;
 
@@ -306,12 +307,12 @@ export function DatePresets() {
               </div>
 
               <div className="mt-4 pt-4 border-t flex items-center justify-between gap-2">
-                {(preset as any).usageCount > 0 && (
+                {(preset.usageCount ?? 0) > 0 && (
                   <div className="text-xs text-muted-foreground">
-                    Used {(preset as any).usageCount} time{(preset as any).usageCount !== 1 ? 's' : ''}
+                    Used {(preset.usageCount ?? 0)} time{(preset.usageCount ?? 0) !== 1 ? 's' : ''}
                   </div>
                 )}
-                <div className={(preset as any).usageCount > 0 ? 'ml-auto' : ''} style={{ marginLeft: 'auto' }}>
+                <div className={(preset.usageCount ?? 0) > 0 ? 'ml-auto' : ''} style={{ marginLeft: 'auto' }}>
                   <div className="flex gap-1">
                     <Button
                       variant="ghost"

@@ -54,7 +54,7 @@ export function TourInclusionsExclusions() {
                     <div className="space-y-2">
                         <Label htmlFor="include">Inclusions</Label>
                         <NovelEditor
-                            initialValue={inclusionsContent}
+                            initialValue={includeInitialValue}
                             onContentChange={handleInclusionsChange}
                             placeholder="List what's included in the tour (e.g., accommodation, meals, transportation, activities)..."
                             minHeight="250px"

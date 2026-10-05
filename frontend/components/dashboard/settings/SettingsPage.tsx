@@ -75,22 +75,14 @@ export function SettingsPage() {
         },
     });
 
-    // Populate form with fetched data
+    // Keys are never sent back in the clear: once settings load, the form starts blank.
     useEffect(() => {
-        if (data) {
-            const initialFormValues: FormValues = {
-                OPENAI_API_KEY: '',
-                GOOGLE_API_KEY: '',
-            };
-
-            setInitialValues(initialFormValues);
-            form.reset(initialFormValues);
-        }
+        if (data) form.reset({ OPENAI_API_KEY: '', GOOGLE_API_KEY: '' });
     }, [data, form]);
 
     const { invalidateUserSettings } = useCacheManager();
     const userSettingUpdate = useMutation({
-        mutationFn: ({ userId, formData }: { userId: string; formData: FormData }) =>
+        mutationFn: ({ formData }: { userId: string; formData: FormData }) =>
             updateMySettings(formData),
         onSuccess: () => {
             setDecryptedKeys({});
@@ -241,7 +233,7 @@ export function SettingsPage() {
             <FormField
                 control={form.control}
                 name={name}
-                render={({ field }: any) => (
+                render={({ field }) => (
                     <FormItem>
                         <FormLabel className="flex items-center gap-2">
                             {label}

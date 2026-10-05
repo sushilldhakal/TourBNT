@@ -33,6 +33,7 @@ import {
 import { Plus, Trash2, Copy, Edit, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { Switch } from '@/components/ui/switch';
+import { apiErrorMessage } from '@/lib/api/apiClient';
 
 export function PaxPresets() {
   const { user } = useAuth();
@@ -62,8 +63,8 @@ export function PaxPresets() {
       toast.success('Pax preset created successfully');
       handleCloseDialog();
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Failed to create preset');
+    onError: (error) => {
+      toast.error(apiErrorMessage(error, 'Failed to create preset'));
     },
   });
 

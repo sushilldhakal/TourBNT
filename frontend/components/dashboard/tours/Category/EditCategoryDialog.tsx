@@ -27,6 +27,20 @@ export interface EditCategoryDialogProps {
     onSuccess: () => void;
 }
 
+/** A stored description as an editor document: JSON as-is, plain text wrapped in a paragraph. */
+function descriptionDoc(description: string | undefined): DescriptionContent | string {
+    if (!description) return '';
+    const text = description.trim();
+    if (text.startsWith('{') && text.endsWith('}')) {
+        try {
+            return JSON.parse(text) as DescriptionContent;
+        } catch {
+            // Not JSON after all: fall through to plain text.
+        }
+    }
+    return { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: description }] }] };
+}
+
 export const EditCategoryDialog = ({ categoryId, open, onOpenChange, onSuccess }: EditCategoryDialogProps) => {
     const { userId, userRole } = useAuth();
     const isAdmin = userRole === 'admin';
@@ -57,7 +71,7 @@ export const EditCategoryDialog = ({ categoryId, open, onOpenChange, onSuccess }
 
     const updateMutation = useMutation({
         mutationFn: (formData: FormData) => updateCategory(categoryId, formData),
-        onSuccess: (response: any) => {
+        onSuccess: () => {
             // Check if this was a change request (for approved categories edited by non-admins)
             const isChangeRequest = !isAdmin && category?.approvalStatus === 'approved';
 
@@ -82,33 +96,23 @@ export const EditCategoryDialog = ({ categoryId, open, onOpenChange, onSuccess }
         },
     });
 
+    // Opening the dialog on a loaded category fills the editor state from it (adjusted while rendering).
+    const [loadedFrom, setLoadedFrom] = useState<typeof category | null>(null);
+    if (!open && loadedFrom) setLoadedFrom(null);
+    if (open && categoryId && category && category !== loadedFrom) {
+        setLoadedFrom(category);
+        setDescriptionContent(descriptionDoc(category.description));
+    }
+
     useEffect(() => {
         if (!open || !categoryId || !category) return;
         form.reset({
             name: category.name || '',
             description: category.description || '',
             imageUrl: category.imageUrl || '',
-            reason: (category as any).reason || '',
+            reason: category.reason || '',
             featuredTours: (category.featuredTours || []) as string[],
         });
-        if (category.description) {
-            try {
-                const isLikelyJSON = category.description.trim().startsWith('{') && category.description.trim().endsWith('}');
-                if (isLikelyJSON) {
-                    setDescriptionContent(JSON.parse(category.description));
-                } else {
-                    setDescriptionContent({
-                        type: 'doc',
-                        content: [{ type: 'paragraph', content: [{ type: 'text', text: category.description }] }],
-                    });
-                }
-            } catch {
-                setDescriptionContent({
-                    type: 'doc',
-                    content: [{ type: 'paragraph', content: [{ type: 'text', text: category.description }] }],
-                });
-            }
-        }
     }, [open, categoryId, category, form]);
 
     const handleSubmit = (values: { name: string; description: string; imageUrl: string; featuredTours: string[]; reason: string }) => {

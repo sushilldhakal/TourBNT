@@ -15,34 +15,12 @@ import {
 import { createSuggestionItems, Command, renderItems } from "novel";
 import type { Range, Editor } from "@tiptap/core";
 import Magic from "./icons/Magic";
-import { type JSONContent } from "novel";
 import { toast } from "@/components/ui/use-toast";
 
 interface CommandProps {
     editor: Editor;
     range: Range;
 }
-
-/**
- * Helper function to extract text content from JSONContent structure
- * Recursively traverses the JSON tree to find text nodes
- */
-const extractTextFromJSONContent = (jsonContent: JSONContent): string => {
-    let text = '';
-
-    const traverse = (node: any) => {
-        if (node.type === 'text' && node.text) {
-            text += node.text;
-        } else if (node.content && Array.isArray(node.content)) {
-            for (const child of node.content) {
-                traverse(child);
-            }
-        }
-    };
-
-    traverse(jsonContent);
-    return text;
-};
 
 /**
  * Suggestion items for the slash command menu
@@ -55,8 +33,6 @@ export const suggestionItems = createSuggestionItems([
         searchTerms: ["gpt", "ai", "continue"],
         icon: <Magic className="novel-w-7" />,
         command: async ({ editor, range }: CommandProps) => {
-            const prompt: JSONContent = editor.getJSON();
-            const promptString = extractTextFromJSONContent(prompt);
             editor.chain().focus().deleteRange(range).run();
 
             try {

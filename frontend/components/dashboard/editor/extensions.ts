@@ -1,4 +1,5 @@
 import StarterKit from '@tiptap/starter-kit';
+import type { AnyExtension } from '@tiptap/core';
 import {
     TiptapLink,
     UpdatedImage,
@@ -16,12 +17,14 @@ import {
 import AutoJoiner from 'tiptap-extension-auto-joiner';
 import { DragAndDrop } from './drag-handle';
 
+const DEFAULT_PLACEHOLDER = "Press '/' for commands, or double click in text for more styling options.";
+
 /**
- * Core extensions configuration for the Novel editor
+ * Core extensions configuration for the Novel editor; `placeholder` is the hint shown in an empty paragraph.
  * Heavy extensions (AI, Math, Media) are loaded lazily via extensions-lazy.ts
  * Requirements: 19.4
  */
-export const coreExtensions = [
+export const createCoreExtensions = (placeholder: string = DEFAULT_PLACEHOLDER): AnyExtension[] => [
     // Core editing functionality with custom HTML attributes
     StarterKit.configure({
         bulletList: {
@@ -59,11 +62,11 @@ export const coreExtensions = [
 
     // Dynamic placeholder text based on node type
     Placeholder.configure({
-        placeholder: ({ node }: { node: any }) => {
+        placeholder: ({ node }) => {
             if (node.type.name === 'heading') {
                 return `Heading ${node.attrs.level}`;
             }
-            return "Press '/' for commands, or double click in text for more styling options.";
+            return placeholder;
         },
         includeChildren: true,
     }),
@@ -132,9 +135,9 @@ export const coreExtensions = [
     AutoJoiner.configure({
         elementsToJoin: ["bulletList", "orderedList"]
     }),
-
-
 ];
+
+export const coreExtensions = createCoreExtensions();
 
 /**
  * Legacy export for backward compatibility

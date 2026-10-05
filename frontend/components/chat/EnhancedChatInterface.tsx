@@ -61,9 +61,8 @@ export interface Contact {
   directUserId?: string
   isOnline?: boolean
   isTyping?: boolean
-  // optional flag used by Archive filter
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  isArchived?: any
+  /** Shown under the Archive filter instead of All. */
+  isArchived?: boolean
 }
 
 interface ChatInterfaceProps {
@@ -160,8 +159,6 @@ export function EnhancedChatInterface({
   const [broadcastTitle, setBroadcastTitle] = React.useState("")
   const [broadcastMessage, setBroadcastMessage] = React.useState("")
   const [panelMode, setPanelMode] = React.useState<"broadcast" | "direct">("broadcast")
-  const [directUsers, setDirectUsers] = React.useState<{ id: string; name: string; email?: string; role: string }[]>([])
-  const [isLoadingUsers, setIsLoadingUsers] = React.useState(false)
   const [directSearch, setDirectSearch] = React.useState("")
   const [directSubject, setDirectSubject] = React.useState("")
   const [pendingDirectTarget, setPendingDirectTarget] = React.useState<{ userId: string; name: string } | null>(null)
@@ -178,26 +175,26 @@ export function EnhancedChatInterface({
     )
     .filter((contact) => {
       if (hiddenConversationIds.includes(contact.id)) return false
-      if (listFilter === "all") return !(contact as any).isArchived
+      if (listFilter === "all") return !contact.isArchived
       if (listFilter === "unread") return contact.unread > 0
       if (listFilter === "groups") return contact.isBroadcast
-      if (listFilter === "archive") return (contact as any).isArchived
+      if (listFilter === "archive") return contact.isArchived
       return true
     })
 
   const isDraft =
     Boolean(
       selectedContact &&
-        (selectedContact as any).directUserId &&
+        selectedContact.directUserId &&
         pendingDirectTarget &&
-        (selectedContact as any).directUserId === pendingDirectTarget.userId
+        selectedContact.directUserId === pendingDirectTarget.userId
     )
 
   const isDraftContact = (c: Contact) =>
     Boolean(
-      (c as any).directUserId &&
+      c.directUserId &&
         pendingDirectTarget &&
-        (c as any).directUserId === pendingDirectTarget.userId
+        c.directUserId === pendingDirectTarget.userId
     )
 
   const contactsForSidebar =
@@ -239,9 +236,9 @@ export function EnhancedChatInterface({
     onSelectContact?.(contact)
 
     const isDraftContact =
-      (contact as any).directUserId &&
+      contact.directUserId &&
       pendingDirectTarget &&
-      (contact as any).directUserId === pendingDirectTarget.userId
+      contact.directUserId === pendingDirectTarget.userId
     if (isDraftContact) {
       setMessages([])
       return
@@ -260,22 +257,28 @@ export function EnhancedChatInterface({
     }
   }
 
-  React.useEffect(() => {
-    if (initialSelectDone.current || !initialSelectedContactId || contacts.length === 0 || !onLoadMessages) return
+  // Open the conversation named by initialSelectedContactId once the list has it: select it while
+  // rendering, then load its messages and tell the parent in an effect.
+  const [initialContact, setInitialContact] = React.useState<Contact | null>(null)
+  if (!initialContact && initialSelectedContactId && onLoadMessages) {
     const contact = contacts.find((c) => c.id === initialSelectedContactId)
     if (contact) {
-      initialSelectDone.current = true
+      setInitialContact(contact)
       setSelectedContact(contact)
       setShowUserList(false)
       setShowMobileList(false)
-      onSelectContact?.(contact)
       setIsLoading(true)
-      onLoadMessages(contact.id)
-        .then((loaded) => setMessages(loaded))
-        .catch(() => setMessages([]))
-        .finally(() => setIsLoading(false))
     }
-  }, [contacts, initialSelectedContactId, onLoadMessages, onSelectContact])
+  }
+  React.useEffect(() => {
+    if (!initialContact || initialSelectDone.current || !onLoadMessages) return
+    initialSelectDone.current = true
+    onSelectContact?.(initialContact)
+    onLoadMessages(initialContact.id)
+      .then((loaded) => setMessages(loaded))
+      .catch(() => setMessages([]))
+      .finally(() => setIsLoading(false))
+  }, [initialContact, onLoadMessages, onSelectContact])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -318,7 +321,7 @@ export function EnhancedChatInterface({
             const senderId = raw ? String(raw.id ?? (raw as { _id?: string })._id ?? "") : ""
             const isFromCurrentUser = currentId != null && senderId !== "" ? senderId === currentId : undefined
             return {
-              id: (m as any).id ?? (m as any)._id ?? "",
+              id: m.id ?? "",
               content: m.content,
               role: m.role === "customer" ? "user" : "assistant",
               timestamp: new Date(m.createdAt),
@@ -375,8 +378,10 @@ export function EnhancedChatInterface({
   // Live updates: poll the open conversation every few seconds while the tab is visible (and
   // immediately when the tab regains focus) so new messages show up without a page refresh.
   const livePollRef = React.useRef({ contactId: "", loader: onLoadMessages })
-  livePollRef.current = { contactId: selectedContact?.id ?? "", loader: onLoadMessages }
-  const isDraftSelected = !!(selectedContact as any)?.directUserId && !!pendingDirectTarget
+  React.useEffect(() => {
+    livePollRef.current = { contactId: selectedContact?.id ?? "", loader: onLoadMessages }
+  })
+  const isDraftSelected = !!selectedContact?.directUserId && !!pendingDirectTarget
   React.useEffect(() => {
     if (mode !== "dashboard" || !selectedContact?.id || isDraftSelected || !onLoadMessages) return
     const contactId = selectedContact.id
@@ -465,16 +470,6 @@ export function EnhancedChatInterface({
     if (isAdmin) void queryClient.prefetchQuery({ queryKey: ["user-directory", ""], queryFn: () => getUserDirectory(""), staleTime: 60_000 })
   }, [isAdmin, queryClient])
 
-  // People are now loaded by the drawer itself (grouped + server-side search); kept as a no-op for prop compatibility.
-  const handleLoadUsersForDirect = async () => {}
-
-  const filteredDirectUsers = directUsers.filter((u) => {
-    const term = directSearch.toLowerCase()
-    return (
-      u.name.toLowerCase().includes(term) ||
-      (u.email ?? "").toLowerCase().includes(term)
-    )
-  })
 
   // Enquiry mode (single chat)
   if (mode === "enquiry") {
@@ -684,11 +679,11 @@ export function EnhancedChatInterface({
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-2 overflow-x-auto border-b px-3 py-2 text-xs">
-              {["all", "unread", "groups", "archive"].map((filter) => (
+              {(["all", "unread", "groups", "archive"] as const).map((filter) => (
                 <button
                   key={filter}
                   type="button"
-                  onClick={() => setListFilter(filter as any)}
+                  onClick={() => setListFilter(filter)}
                   className={cn(
                     "whitespace-nowrap rounded-full px-3 py-1 capitalize",
                     listFilter === filter
@@ -815,37 +810,15 @@ export function EnhancedChatInterface({
                 title={title}
                 subtitle={subtitle}
                 contacts={contactsForSidebar}
-                allContacts={contacts}
                 selectedContact={selectedContact}
                 searchQuery={searchQuery}
                 setSearchQuery={setSearchQuery}
                 listFilter={listFilter}
                 setListFilter={setListFilter}
                 isAdmin={isAdmin}
-                showUserList={showUserList}
                 setShowUserList={setShowUserList}
-                panelMode={panelMode}
                 setPanelMode={setPanelMode}
-                broadcastAudience={broadcastAudience}
-                setBroadcastAudience={setBroadcastAudience}
-                broadcastTitle={broadcastTitle}
-                setBroadcastTitle={setBroadcastTitle}
-                broadcastMessage={broadcastMessage}
-                setBroadcastMessage={setBroadcastMessage}
-                isCreatingBroadcast={isCreatingBroadcast}
-                handleCreateBroadcast={handleCreateBroadcast}
-                directSubject={directSubject}
-                setDirectSubject={setDirectSubject}
-                directSearch={directSearch}
-                setDirectSearch={setDirectSearch}
-                filteredDirectUsers={filteredDirectUsers}
-                isLoadingUsers={isLoadingUsers}
-                handleLoadUsersForDirect={handleLoadUsersForDirect}
-                setPendingDirectTarget={setPendingDirectTarget}
-                setSelectedContact={setSelectedContact}
                 handleSelectContact={handleSelectContact}
-                hiddenConversationIds={hiddenConversationIds}
-                setHiddenConversationIds={setHiddenConversationIds}
                 onArchive={(contact) => {
                   if (isDraftContact(contact)) {
                     setPendingDirectTarget(null)
@@ -949,8 +922,6 @@ export function EnhancedChatInterface({
           setPanelMode={setPanelMode}
           broadcastAudience={broadcastAudience}
           setBroadcastAudience={setBroadcastAudience}
-          broadcastTitle={broadcastTitle}
-          setBroadcastTitle={setBroadcastTitle}
           broadcastMessage={broadcastMessage}
           setBroadcastMessage={setBroadcastMessage}
           isCreatingBroadcast={isCreatingBroadcast}
@@ -959,10 +930,6 @@ export function EnhancedChatInterface({
           setDirectSubject={setDirectSubject}
           directSearch={directSearch}
           setDirectSearch={setDirectSearch}
-          directUsers={directUsers}
-          filteredDirectUsers={filteredDirectUsers}
-          isLoadingUsers={isLoadingUsers}
-          handleLoadUsersForDirect={handleLoadUsersForDirect}
           setPendingDirectTarget={setPendingDirectTarget}
           setSelectedContact={setSelectedContact}
           setShowUserList={setShowUserList}
@@ -1357,37 +1324,15 @@ interface ChatListProps {
   title: string
   subtitle?: string
   contacts: Contact[]
-  allContacts: Contact[]
   selectedContact: Contact | null
   searchQuery: string
   setSearchQuery: (v: string) => void
   listFilter: "all" | "unread" | "groups" | "archive"
   setListFilter: (v: "all" | "unread" | "groups" | "archive") => void
   isAdmin: boolean
-  showUserList: boolean
   setShowUserList: (v: boolean | ((prev: boolean) => boolean)) => void
-  panelMode: "broadcast" | "direct"
   setPanelMode: (v: "broadcast" | "direct") => void
-  broadcastAudience: "sellers" | "users" | "all"
-  setBroadcastAudience: (v: "sellers" | "users" | "all") => void
-  broadcastTitle: string
-  setBroadcastTitle: (v: string) => void
-  broadcastMessage: string
-  setBroadcastMessage: (v: string) => void
-  isCreatingBroadcast: boolean
-  handleCreateBroadcast: (e: React.FormEvent, overrides?: { subject?: string }) => void
-  directSubject: string
-  setDirectSubject: (v: string) => void
-  directSearch: string
-  setDirectSearch: (v: string) => void
-  filteredDirectUsers: { id: string; name: string; email?: string; role: string }[]
-  isLoadingUsers: boolean
-  handleLoadUsersForDirect: () => void
-  setPendingDirectTarget: (v: { userId: string; name: string } | null) => void
-  setSelectedContact: (v: Contact | null) => void
   handleSelectContact: (contact: Contact) => void
-  hiddenConversationIds: string[]
-  setHiddenConversationIds: (v: string[] | ((prev: string[]) => string[])) => void
   onArchive?: (contact: Contact) => void
   onDelete?: (contact: Contact) => void
 }
@@ -1397,14 +1342,12 @@ function ChatList(props: ChatListProps) {
     title,
     subtitle,
     contacts,
-    allContacts: _allContacts,
     selectedContact,
     searchQuery,
     setSearchQuery,
     listFilter,
     setListFilter,
     isAdmin,
-    showUserList,
     setShowUserList,
     handleSelectContact,
     onArchive,
@@ -1499,8 +1442,6 @@ interface NewMessageDrawerProps {
   setPanelMode: (v: "broadcast" | "direct") => void
   broadcastAudience: "sellers" | "users" | "all"
   setBroadcastAudience: (v: "sellers" | "users" | "all") => void
-  broadcastTitle: string
-  setBroadcastTitle: (v: string) => void
   broadcastMessage: string
   setBroadcastMessage: (v: string) => void
   isCreatingBroadcast: boolean
@@ -1509,10 +1450,6 @@ interface NewMessageDrawerProps {
   setDirectSubject: (v: string) => void
   directSearch: string
   setDirectSearch: (v: string) => void
-  directUsers: { id: string; name: string; email?: string; role: string }[]
-  filteredDirectUsers: { id: string; name: string; email?: string; role: string }[]
-  isLoadingUsers: boolean
-  handleLoadUsersForDirect: () => void
   setPendingDirectTarget: (v: { userId: string; name: string } | null) => void
   setSelectedContact: (v: Contact | null) => void
   setShowUserList: (v: boolean | ((prev: boolean) => boolean)) => void
@@ -1526,17 +1463,12 @@ function NewMessageDrawer(props: NewMessageDrawerProps) {
     onClose,
     broadcastAudience,
     setBroadcastAudience,
-    broadcastTitle,
-    setBroadcastTitle,
     broadcastMessage,
     setBroadcastMessage,
     isCreatingBroadcast,
     handleCreateBroadcast,
     directSearch,
     setDirectSearch,
-    directUsers,
-    isLoadingUsers,
-    handleLoadUsersForDirect,
     setPendingDirectTarget,
     setSelectedContact,
     setShowUserList,
@@ -1568,7 +1500,7 @@ function NewMessageDrawer(props: NewMessageDrawerProps) {
   }, [onClose, drawerView])
 
 
-  const handleSelectUser = (u: (typeof directUsers)[0]) => {
+  const handleSelectUser = (u: { id: string; name: string }) => {
     setPendingDirectTarget({ userId: u.id, name: u.name })
     setSelectedContact({
       id: u.id,
@@ -1695,7 +1627,7 @@ function NewMessageDrawer(props: NewMessageDrawerProps) {
                               <li key={u.id}>
                                 <button
                                   type="button"
-                                  onClick={() => handleSelectUser({ id: u.id, name: u.name, email: u.email, role: u.role })}
+                                  onClick={() => handleSelectUser({ id: u.id, name: u.name })}
                                   className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-muted/60"
                                 >
                                   <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 font-medium text-primary">
@@ -1790,157 +1722,6 @@ function NewMessageDrawer(props: NewMessageDrawerProps) {
         </div>
       </div>
     </>
-  )
-}
-
-function NewMessagePanel(props: ChatListProps) {
-  const {
-    panelMode,
-    setPanelMode,
-    broadcastAudience,
-    setBroadcastAudience,
-    broadcastTitle,
-    setBroadcastTitle,
-    broadcastMessage,
-    setBroadcastMessage,
-    isCreatingBroadcast,
-    handleCreateBroadcast,
-    directSubject,
-    setDirectSubject,
-    directSearch,
-    setDirectSearch,
-    filteredDirectUsers,
-    isLoadingUsers,
-    handleLoadUsersForDirect,
-    setPendingDirectTarget,
-    setSelectedContact,
-    setShowUserList,
-  } = props
-
-  return (
-    <div className="border-b bg-muted/20 px-3 py-3">
-      <div className="mb-3 flex items-center justify-between">
-        <p className="text-sm font-semibold">New message</p>
-        <div className="inline-flex rounded-full bg-background p-0.5 text-xs">
-          <button
-            type="button"
-            onClick={() => setPanelMode("broadcast")}
-            className={cn(
-              "rounded-full px-3 py-1.5 font-medium transition-colors",
-              panelMode === "broadcast" && "bg-primary text-primary-foreground shadow-sm"
-            )}
-          >
-            Broadcast
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setPanelMode("direct")
-              void handleLoadUsersForDirect()
-            }}
-            className={cn(
-              "rounded-full px-3 py-1.5 font-medium transition-colors",
-              panelMode === "direct" && "bg-primary text-primary-foreground shadow-sm"            )}
-          >
-            Direct
-          </button>
-        </div>
-      </div>
-
-      {panelMode === "broadcast" ? (
-        <form onSubmit={handleCreateBroadcast} className="space-y-2">
-          <div className="flex gap-1 rounded-full bg-background p-1 text-xs">
-            {(["sellers", "users", "all"] as const).map((audience) => (
-              <button
-                key={audience}
-                type="button"
-                onClick={() => setBroadcastAudience(audience)}
-                className={cn(
-                  "flex-1 rounded-full px-2 py-1.5 capitalize font-medium transition-colors",
-                  broadcastAudience === audience && "bg-primary text-primary-foreground"
-                )}
-              >
-                {audience}
-              </button>
-            ))}
-          </div>
-          <Input
-            value={broadcastTitle}
-            onChange={(e) => setBroadcastTitle(e.target.value)}
-            placeholder="Announcement title"
-            className="h-9"
-          />
-          <textarea
-            value={broadcastMessage}
-            onChange={(e) => setBroadcastMessage(e.target.value)}
-            rows={3}
-            className="w-full resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            placeholder="Write your announcement..."
-          />
-          <Button
-            type="submit"
-            className="h-9 w-full bg-primary hover:bg-primary/90"
-            disabled={isCreatingBroadcast}
-          >
-            {isCreatingBroadcast ? "Sending..." : "Send broadcast"}
-          </Button>
-        </form>
-      ) : (
-        <div className="space-y-2">
-          <Input
-            value={directSubject}
-            onChange={(e) => setDirectSubject(e.target.value)}
-            placeholder="Subject (optional)"
-            className="h-9"
-          />
-          <Input
-            value={directSearch}
-            onChange={(e) => setDirectSearch(e.target.value)}
-            placeholder="Search users..."
-            className="h-9"
-          />
-          <div className="max-h-48 overflow-y-auto rounded-lg border bg-background">
-            {isLoadingUsers ? (
-              <p className="px-3 py-3 text-sm text-muted-foreground">Loading...</p>
-            ) : filteredDirectUsers.length === 0 ? (
-              <p className="px-3 py-3 text-sm text-muted-foreground">No users found</p>
-            ) : (
-              filteredDirectUsers.map((u) => (
-                <button
-                  key={u.id}
-                  type="button"
-                  onClick={() => {
-                    setPendingDirectTarget({ userId: u.id, name: u.name })
-                    setSelectedContact({
-                      id: u.id,
-                      name: u.name,
-                      lastMessage: "",
-                      lastActive: new Date(),
-                      unread: 0,
-                      directUserId: u.id,
-                    })
-                    setShowUserList(false)
-                  }}
-                  className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-muted transition-colors"
-                >
-                  <span className="text-sm truncate">
-                    {u.name}
-                    {u.email && (
-                      <span className="text-xs text-muted-foreground ml-2">
-                        {u.email}
-                      </span>
-                    )}
-                  </span>
-                  <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-[10px] uppercase font-medium">
-                    {u.role}
-                  </span>
-                </button>
-              ))
-            )}
-          </div>
-        </div>
-      )}
-    </div>
   )
 }
 

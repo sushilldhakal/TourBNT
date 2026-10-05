@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { useFormContext, Controller } from 'react-hook-form';
+import { get, useFormContext, Controller, type FieldError } from 'react-hook-form';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
@@ -30,22 +30,9 @@ export function FormSwitch({
 }: FormSwitchProps) {
     const { control, formState: { errors } } = useFormContext();
 
-    // Get nested error by path
-    const getError = (path: string) => {
-        const keys = path.split('.');
-        let error: any = errors;
-        for (const key of keys) {
-            if (error?.[key]) {
-                error = error[key];
-            } else {
-                return null;
-            }
-        }
-        return error;
-    };
-
-    const error = getError(name);
-    const errorMessage = error?.message as string | undefined;
+    // Nested error by path (e.g. "pricing.price")
+    const error = get(errors, name) as FieldError | undefined;
+    const errorMessage = error?.message;
 
     return (
         <div className={cn('space-y-2', className)}>

@@ -39,6 +39,7 @@ import {
 } from '@/components/ui/select';
 import { Plus, Trash2, Copy, Edit, FileText } from 'lucide-react';
 import { toast } from 'sonner';
+import { apiErrorMessage } from '@/lib/api/apiClient';
 
 const CONTENT_TYPES = [
   { value: 'description', label: 'Description' },
@@ -71,8 +72,8 @@ export function ContentPresets() {
       toast.success('Content preset created successfully');
       handleCloseDialog();
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Failed to create preset');
+    onError: (error) => {
+      toast.error(apiErrorMessage(error, 'Failed to create preset'));
     },
   });
 
@@ -87,8 +88,8 @@ export function ContentPresets() {
       toast.success('Content preset updated successfully');
       handleCloseDialog();
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Failed to update preset');
+    onError: (error) => {
+      toast.error(apiErrorMessage(error, 'Failed to update preset'));
     },
   });
 
@@ -102,8 +103,8 @@ export function ContentPresets() {
       refetch();
       toast.success('Content preset deleted successfully');
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Failed to delete preset');
+    onError: (error) => {
+      toast.error(apiErrorMessage(error, 'Failed to delete preset'));
     },
   });
 
@@ -117,8 +118,8 @@ export function ContentPresets() {
       refetch();
       toast.success('Content preset duplicated successfully');
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Failed to duplicate preset');
+    onError: (error) => {
+      toast.error(apiErrorMessage(error, 'Failed to duplicate preset'));
     },
   });
 
@@ -149,13 +150,13 @@ export function ContentPresets() {
       content: formData.content,
     };
     if (editingPreset) {
-      updateMutation.mutate({ presetId: (editingPreset as any)._id || editingPreset.id, data: payload });
+      updateMutation.mutate({ presetId: editingPreset._id || editingPreset.id, data: payload });
     } else {
       createMutation.mutate(payload);
     }
   };
 
-  const presetId = (p: ContentPreset) => (p as any)._id || (p as any).id;
+  const presetId = (p: ContentPreset) => p._id || p.id;
 
   if (isLoading) return <div>Loading...</div>;
 
@@ -259,12 +260,12 @@ export function ContentPresets() {
                   : JSON.stringify(preset.content).slice(0, 80) + '...'}
               </p>
               <div className="mt-4 pt-4 border-t flex items-center justify-between gap-2">
-                {(preset as any).usageCount > 0 && (
+                {(preset.usageCount ?? 0) > 0 && (
                   <div className="text-xs text-muted-foreground">
-                    Used {(preset as any).usageCount} time{(preset as any).usageCount !== 1 ? 's' : ''}
+                    Used {(preset.usageCount ?? 0)} time{(preset.usageCount ?? 0) !== 1 ? 's' : ''}
                   </div>
                 )}
-                <div className={(preset as any).usageCount > 0 ? 'ml-auto' : ''} style={{ marginLeft: 'auto' }}>
+                <div className={(preset.usageCount ?? 0) > 0 ? 'ml-auto' : ''} style={{ marginLeft: 'auto' }}>
                   <div className="flex gap-1">
                     <Button
                       variant="ghost"

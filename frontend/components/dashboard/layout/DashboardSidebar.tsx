@@ -16,7 +16,7 @@ import { isAdmin } from '@/lib/utils/roles';
 import { canAccessDashboardPath } from '@/lib/config/dashboardAccess';
 import { useMyBusinessPartners } from '@/lib/queries';
 import type { BusinessPartnerType } from '@/lib/api/businessPartners';
-import { Megaphone, Building2, Tag, Banknote } from 'lucide-react';
+import { Megaphone, Building2, Tag, Banknote, type LucideIcon } from 'lucide-react';
 
 /**
  * Which nav link each business-partner type resolves to. A user can own
@@ -25,7 +25,7 @@ import { Megaphone, Building2, Tag, Banknote } from 'lucide-react';
  * existing seller/admin role), so this is driven by what they actually
  * own (useMyBusinessPartners), not by their single `role` column.
  */
-const TYPE_TO_NAV: Record<BusinessPartnerType, { href: string; label: string; icon: any }> = {
+const TYPE_TO_NAV: Record<BusinessPartnerType, { href: string; label: string; icon: LucideIcon }> = {
     hotel: { href: '/dashboard/hotels', label: 'Hotels', icon: Building2 },
     guesthouse: { href: '/dashboard/hotels', label: 'Hotels', icon: Building2 },
     restaurant: { href: '/dashboard/restaurants', label: 'Restaurant', icon: Utensils },
@@ -49,7 +49,7 @@ interface DashboardSidebarProps {
 interface NavigationItem {
     href?: string;
     label: string;
-    icon: any;
+    icon: LucideIcon;
     children?: NavigationItem[];
     adminOnly?: boolean; // Flag to mark admin-only items
     hideForAdmin?: boolean; // Personal/customer pages that mean nothing in the admin view
