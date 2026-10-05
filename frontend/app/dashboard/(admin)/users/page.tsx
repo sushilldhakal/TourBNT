@@ -39,6 +39,9 @@ const TABS: Array<{ key: string; label: string; role?: string }> = [
 const initials = (name?: string) =>
     (name ?? 'U').split(' ').map((p) => p[0]).join('').toUpperCase().slice(0, 2);
 
+// Customers, guides and admins are people. Every other account is a business.
+const PERSON_ROLES = new Set(['user', 'guide', 'admin', 'subscriber']);
+
 export default function UsersPage() {
     const [tab, setTab] = useState('all');
     const [search, setSearch] = useState('');
@@ -96,7 +99,7 @@ export default function UsersPage() {
                             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                             <Input
                                 type="search"
-                                placeholder="Search name, email or phone…"
+                                placeholder="Search name, business, email or phone…"
                                 className="pl-8"
                                 value={search}
                                 onChange={(e) => { setSearch(e.target.value); setPage(1); }}
@@ -118,7 +121,8 @@ export default function UsersPage() {
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
-                                            <TableHead>User</TableHead>
+                                            <TableHead>Name</TableHead>
+                                            <TableHead>Contact person</TableHead>
                                             <TableHead>Phone</TableHead>
                                             <TableHead>Role</TableHead>
                                             <TableHead>Email status</TableHead>
@@ -129,20 +133,25 @@ export default function UsersPage() {
                                     <TableBody>
                                         {rows.map((u) => {
                                             const userRole = u.role ?? u.roles;
+                                            const isPerson = PERSON_ROLES.has(userRole ?? '');
+                                            const displayName = isPerson ? (u.name || 'Unknown') : (u.businessName || u.name || 'Unknown');
+                                            const contactName = u.contactPerson || u.name;
+                                            const showContact = !isPerson && !!contactName && contactName !== displayName;
                                             return (
                                                 <TableRow key={u.id}>
                                                     <TableCell>
                                                         <div className="flex items-center gap-3">
                                                             <Avatar className="h-9 w-9 border">
-                                                                <AvatarImage src={u.avatar} alt={u.name} />
-                                                                <AvatarFallback>{initials(u.name)}</AvatarFallback>
+                                                                <AvatarImage src={u.avatar} alt={displayName} />
+                                                                <AvatarFallback>{initials(displayName)}</AvatarFallback>
                                                             </Avatar>
                                                             <div className="min-w-0">
-                                                                <div className="font-medium truncate">{u.name || 'Unknown'}</div>
+                                                                <div className="font-medium truncate">{displayName}</div>
                                                                 <div className="text-sm text-muted-foreground truncate">{u.email}</div>
                                                             </div>
                                                         </div>
                                                     </TableCell>
+                                                    <TableCell className="text-sm">{showContact ? contactName : '—'}</TableCell>
                                                     <TableCell className="text-sm">{u.phone || '—'}</TableCell>
                                                     <TableCell>
                                                         <Badge variant={getRoleBadgeColor(userRole ?? null)} className="capitalize">{userRole}</Badge>

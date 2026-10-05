@@ -77,6 +77,9 @@ export interface DashboardUser {
     email: string;
     phone?: string;
     roles: string;
+    role?: string;
+    businessName?: string | null;
+    contactPerson?: string | null;
     avatar?: string;
     createdAt?: string;
     created_at?: string;

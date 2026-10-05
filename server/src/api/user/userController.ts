@@ -5,8 +5,8 @@ import jwt, { sign } from "jsonwebtoken";
 import { createHash, createHmac, randomBytes } from "crypto";
 import { OAuth2Client } from "google-auth-library";
 import { validationResult } from "express-validator";
-import { db, users, userRoleEnum } from "../../db";
-import { eq, desc, asc, count, sql, ilike, or, type SQL } from "drizzle-orm";
+import { db, users, userRoleEnum, businessPartners } from "../../db";
+import { eq, desc, asc, count, sql, ilike, or, inArray, type SQL } from "drizzle-orm";
 import { config } from "../../config/config";
 import { claimOnce } from "../../config/redisClient";
 import { sendResetPasswordEmail as sendResetPasswordEmailMaileroo, sendVerificationEmail as sendVerificationEmailMaileroo } from "../../controller/maileroo";
@@ -20,6 +20,9 @@ import { coerceUserRole, isUserRole } from "../../utils/roles";
 import { invalidateAgency } from '../../services/cacheInvalidation';
 
 const SORTABLE = new Set(['createdAt', 'name', 'email']);
+
+// These accounts are businesses. The list shows the business name, and the person's name as the contact.
+const BUSINESS_NAME_ROLES = new Set(['seller', 'hotel', 'guesthouse', 'restaurant', 'transport', 'advertiser']);
 
 /**
  * These are plain signed JWTs with no server-side record of issuance, so
@@ -302,7 +305,13 @@ export const getAllUsers = async (req: Request, res: Response, next: NextFunctio
     const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
     if (q) {
       const like = `%${q}%`;
-      const search = or(ilike(users.name, like), ilike(users.email, like), ilike(users.phone, like));
+      const search = or(
+        ilike(users.name, like),
+        ilike(users.email, like),
+        ilike(users.phone, like),
+        sql`${users.sellerInfo}->>'companyName' ILIKE ${like}`,
+        sql`EXISTS (SELECT 1 FROM business_partners bp WHERE bp.owner_id = ${users.id} AND bp.name ILIKE ${like})`,
+      );
       if (search) conditions.push(search);
     }
     const where = conditions.length ? sql.join(conditions, sql` AND `) : undefined;
@@ -319,7 +328,32 @@ export const getAllUsers = async (req: Request, res: Response, next: NextFunctio
       db.select({ value: count() }).from(users).where(where),
     ]);
 
-    const items = rows.map((u) => pgUsers.withoutPassword(u));
+    const partnerOwnerIds = rows.filter((u) => BUSINESS_NAME_ROLES.has(u.role) && u.role !== 'seller').map((u) => u.id);
+    const partnerRows = partnerOwnerIds.length
+      ? await db
+        .select({ ownerId: businessPartners.ownerId, name: businessPartners.name, type: businessPartners.type })
+        .from(businessPartners)
+        .where(inArray(businessPartners.ownerId, partnerOwnerIds))
+      : [];
+    const partnersByOwner = new Map<string, Array<{ name: string; type: string }>>();
+    for (const partner of partnerRows) {
+      const list = partnersByOwner.get(partner.ownerId) ?? [];
+      list.push({ name: partner.name, type: partner.type });
+      partnersByOwner.set(partner.ownerId, list);
+    }
+
+    const items = rows.map((u) => {
+      const isBusiness = BUSINESS_NAME_ROLES.has(u.role);
+      let businessName: string | null = null;
+      if (u.role === 'seller') {
+        const company = (u.sellerInfo as { companyName?: string } | null)?.companyName?.trim();
+        businessName = company || null;
+      } else if (isBusiness) {
+        const owned = partnersByOwner.get(u.id) ?? [];
+        businessName = (owned.find((p) => p.type === u.role) ?? owned[0])?.name?.trim() || null;
+      }
+      return { ...pgUsers.withoutPassword(u), businessName, contactPerson: isBusiness ? u.name : null };
+    });
 
     sendPaginatedResponse(res, items, {
       page,

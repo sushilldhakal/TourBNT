@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { zodResolver } from '@/lib/forms/zodResolver';
 import * as z from 'zod';
 import { useMutation } from '@tanstack/react-query';
 import { useCacheManager, useUserById } from '@/lib/queries';

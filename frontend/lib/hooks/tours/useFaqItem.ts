@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { zodResolver } from '@/lib/forms/zodResolver';
 import * as z from 'zod';
 import { useMutation } from '@tanstack/react-query';
 import { useCacheManager } from '@/lib/queries/cacheUtils';

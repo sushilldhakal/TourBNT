@@ -218,7 +218,7 @@ export const getSingleTour = async (
  */
 export const getTourById = async (
     tourId: string,
-    options?: { include?: string[] }
+    options?: { include?: string[]; cookie?: string }
 ) => {
     return getSingleTour(tourId, options);
 };

@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { HelpCircle, MessageCircle, Plus } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { z } from "zod";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { zodResolver } from '@/lib/forms/zodResolver';
 
 // A new FAQ needs both parts (the tour editor's faqSchema allows blanks for partially filled tours).
 const faqSchema = z.object({
