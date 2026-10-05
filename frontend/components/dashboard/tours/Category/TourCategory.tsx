@@ -42,7 +42,6 @@ const TourCategory = () => {
     const { userRole } = useAuth();
     const isAdmin = userRole === 'admin';
     const canAccessCategories = isAdminOrSeller(userRole);
-    const isAdminView = userRole === 'admin';
 
     // Fetch categories based on user role (admin sees all, users see their personal categories)
     const { data: categories, isLoading, isError } = useCategoriesRoleBased();
@@ -215,7 +214,7 @@ const TourCategory = () => {
                                                                 Reason for Adding
                                                             </h4>
                                                             <p className="text-sm text-amber-800 dark:text-amber-200 leading-relaxed">
-                                                                {(category as any).reason && (category as any).reason.trim() ? (category as any).reason : 'No reason provided'}
+                                                                {category.reason && category.reason.trim() ? category.reason : 'No reason provided'}
                                                             </p>
                                                         </div>
 
@@ -225,7 +224,7 @@ const TourCategory = () => {
                                                             <div className="flex items-center gap-4 text-xs text-muted-foreground">
                                                                 <span className="flex items-center gap-1">
                                                                     <span className="w-2 h-2 bg-orange-400 rounded-full"></span>
-                                                                    Submitted: {(category as any).submittedAt ? new Date((category as any).submittedAt).toLocaleDateString() : 'N/A'}
+                                                                    Submitted: {category.submittedAt ? new Date(category.submittedAt).toLocaleDateString() : 'N/A'}
                                                                 </span>
                                                                 {category.createdBy && (() => {
                                                                     const createdBy = category.createdBy as { _id?: string; id?: string; name?: string; email?: string } | string;

@@ -147,10 +147,10 @@ export const getRoleName = (role: string | null): string => {
  * @param role - User role
  * @returns Tailwind color class
  */
-export const getRoleBadgeColor = (role: string | null): string => {
-    if (!role) return 'bg-gray-500';
+export const getRoleBadgeColor = (role: string | null): 'default' | 'secondary' | 'destructive' | 'outline' => {
+    if (!role) return 'outline';
 
-    const colorMap: Record<string, string> = {
+    const colorMap: Record<string, 'default' | 'secondary' | 'destructive'> = {
         [UserRole.ADMIN]: 'destructive',
         [UserRole.SELLER]: 'default',
         [UserRole.GUIDE]: 'secondary',

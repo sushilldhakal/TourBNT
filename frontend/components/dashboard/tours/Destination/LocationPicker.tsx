@@ -29,7 +29,9 @@ export default function LocationPicker({ value, onChange }: { value: LatLng | nu
     const markerRef = useRef<L.Marker | null>(null);
     const placeRef = useRef<((lat: number, lng: number) => void) | null>(null);
     const onChangeRef = useRef(onChange);
-    onChangeRef.current = onChange;
+    useEffect(() => {
+        onChangeRef.current = onChange;
+    });
 
     const round = (n: number) => Math.round(n * 1e6) / 1e6;
 

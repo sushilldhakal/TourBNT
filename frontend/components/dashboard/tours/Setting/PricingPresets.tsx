@@ -41,6 +41,7 @@ import {
 import { Plus, Trash2, Copy, Edit, Settings } from 'lucide-react';
 import { toast } from 'sonner';
 import { Switch } from '@/components/ui/switch';
+import { apiErrorMessage } from '@/lib/api/apiClient';
 
 export function PricingPresets() {
   const { user } = useAuth();
@@ -75,8 +76,8 @@ export function PricingPresets() {
       toast.success('Pricing preset created successfully');
       handleCloseDialog();
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Failed to create preset');
+    onError: (error) => {
+      toast.error(apiErrorMessage(error, 'Failed to create preset'));
     },
   });
 
@@ -94,8 +95,8 @@ export function PricingPresets() {
       toast.success('Pricing preset updated successfully');
       handleCloseDialog();
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Failed to update preset');
+    onError: (error) => {
+      toast.error(apiErrorMessage(error, 'Failed to update preset'));
     },
   });
 
@@ -112,8 +113,8 @@ export function PricingPresets() {
       refetch();
       toast.success('Pricing preset deleted successfully');
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Failed to delete preset');
+    onError: (error) => {
+      toast.error(apiErrorMessage(error, 'Failed to delete preset'));
     },
   });
 
@@ -130,8 +131,8 @@ export function PricingPresets() {
       refetch();
       toast.success('Pricing preset duplicated successfully');
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Failed to duplicate preset');
+    onError: (error) => {
+      toast.error(apiErrorMessage(error, 'Failed to duplicate preset'));
     },
   });
 
@@ -199,10 +200,8 @@ export function PricingPresets() {
     setPricingOptions(pricingOptions.filter((_, i) => i !== index));
   };
 
-  const handleOptionChange = (index: number, field: keyof PricingOption, value: any) => {
-    const newOptions = [...pricingOptions];
-    (newOptions[index] as any)[field] = value;
-    setPricingOptions(newOptions);
+  const handleOptionChange = <K extends keyof PricingOption>(index: number, field: K, value: PricingOption[K]) => {
+    setPricingOptions(pricingOptions.map((option, i) => (i === index ? { ...option, [field]: value } : option)));
   };
 
   if (isLoading) {
@@ -276,7 +275,7 @@ export function PricingPresets() {
                               <Select
                                 value={option.category || 'adult'}
                                 onValueChange={(value) =>
-                                  handleOptionChange(index, 'category', value)
+                                  handleOptionChange(index, 'category', value as PricingOption['category'])
                                 }
                               >
                                 <SelectTrigger>
@@ -328,8 +327,8 @@ export function PricingPresets() {
                                 value={option.paxRange?.min || 1}
                                 onChange={(e) =>
                                   handleOptionChange(index, 'paxRange', {
-                                    ...option.paxRange,
                                     min: parseInt(e.target.value) || 1,
+                                    max: option.paxRange?.max || 50,
                                   })
                                 }
                               />
@@ -341,7 +340,7 @@ export function PricingPresets() {
                                 value={option.paxRange?.max || 50}
                                 onChange={(e) =>
                                   handleOptionChange(index, 'paxRange', {
-                                    ...option.paxRange,
+                                    min: option.paxRange?.min || 1,
                                     max: parseInt(e.target.value) || 50,
                                   })
                                 }

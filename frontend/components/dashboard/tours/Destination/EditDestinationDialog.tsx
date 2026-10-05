@@ -18,6 +18,20 @@ import { useDestinationById, useTourTitles, useUpdateDestination } from '@/lib/q
 import { EditDestinationDialogProps, TourTitle, TourObject, DescriptionContent } from "@/types/types";
 import Image from "next/image";
 
+/** A stored description as an editor document: JSON as-is, plain text wrapped in a paragraph. */
+function descriptionDoc(description: string | undefined): DescriptionContent | string {
+    if (!description) return '';
+    const text = description.trim();
+    if (text.startsWith('{') && text.endsWith('}')) {
+        try {
+            return JSON.parse(text) as DescriptionContent;
+        } catch {
+            // Not JSON after all: fall through to plain text.
+        }
+    }
+    return { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: description }] }] };
+}
+
 export const EditDestinationDialog = ({ destinationId, open, onOpenChange, onSuccess }: EditDestinationDialogProps) => {
     const { userId, userRole } = useAuth();
     const isAdmin = userRole === 'admin';
@@ -60,6 +74,18 @@ export const EditDestinationDialog = ({ destinationId, open, onOpenChange, onSuc
     });
 
 
+    // Opening the dialog on a loaded destination fills the editor state from it (adjusted while rendering).
+    const [loadedFrom, setLoadedFrom] = useState<typeof destination | null>(null);
+    if (!open && loadedFrom) setLoadedFrom(null);
+    if (open && destinationId && destination && destination !== loadedFrom) {
+        setLoadedFrom(destination);
+        setDescriptionContent(descriptionDoc(destination.description));
+        const d = destination as { latitude?: number | null; longitude?: number | null; coordinates?: { latitude?: number; longitude?: number } };
+        const lat = d.latitude ?? d.coordinates?.latitude;
+        const lng = d.longitude ?? d.coordinates?.longitude;
+        setPosition(typeof lat === 'number' && typeof lng === 'number' ? { latitude: lat, longitude: lng } : null);
+    }
+
     useEffect(() => {
         if (!open || !destinationId || !destination) return;
         form.reset({
@@ -73,28 +99,6 @@ export const EditDestinationDialog = ({ destinationId, open, onOpenChange, onSuc
             reason: destination.reason || '',
             featuredTours: (destination.featuredTours || []) as string[],
         });
-        const d = destination as { latitude?: number | null; longitude?: number | null; coordinates?: { latitude?: number; longitude?: number } };
-        const lat = d.latitude ?? d.coordinates?.latitude;
-        const lng = d.longitude ?? d.coordinates?.longitude;
-        setPosition(typeof lat === 'number' && typeof lng === 'number' ? { latitude: lat, longitude: lng } : null);
-        if (destination.description) {
-            try {
-                const isLikelyJSON = destination.description.trim().startsWith('{') && destination.description.trim().endsWith('}');
-                if (isLikelyJSON) {
-                    setDescriptionContent(JSON.parse(destination.description));
-                } else {
-                    setDescriptionContent({
-                        type: 'doc',
-                        content: [{ type: 'paragraph', content: [{ type: 'text', text: destination.description }] }],
-                    });
-                }
-            } catch {
-                setDescriptionContent({
-                    type: 'doc',
-                    content: [{ type: 'paragraph', content: [{ type: 'text', text: destination.description }] }],
-                });
-            }
-        }
     }, [open, destinationId, destination, form]);
 
     const handleSubmit = (values: { name: string; description: string; coverImage: string; isActive: boolean; country: string; region: string; city: string; featuredTours: string[], reason: string }) => {

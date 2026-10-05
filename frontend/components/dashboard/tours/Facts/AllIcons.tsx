@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, type ComponentType } from "react"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -37,6 +37,16 @@ const iconSets = [
     { prefix: "Lu", name: "Lucide Icons", icons: LuIcons, path: "lu" },
 ]
 
+type IconComponentType = ComponentType<{ size?: number }>
+
+/** The icon components exported by an icon set module (it also exports non-component helpers). */
+function iconsMatching(icons: object, searchTerm: string): Array<[string, IconComponentType]> {
+    const term = searchTerm.toLowerCase()
+    return Object.entries(icons as Record<string, unknown>).filter(
+        (entry): entry is [string, IconComponentType] => typeof entry[1] === "function" && entry[0].toLowerCase().includes(term),
+    )
+}
+
 interface AllIconsProps {
     onSelectIcon: (iconName: string) => void
 }
@@ -47,19 +57,14 @@ export default function AllIcons({ onSelectIcon }: AllIconsProps) {
 
     // Process icons for all sets or current set
     const getAllFilteredIcons = useMemo(() => {
-        const allIcons: Array<{ iconName: string; fullIconName: string; IconComponent: any; setName: string; setPath: string }> = []
+        const allIcons: Array<{ iconName: string; fullIconName: string; IconComponent: IconComponentType; setName: string; setPath: string }> = []
 
         iconSets.forEach((set) => {
-            const allKeys = Object.keys(set.icons)
-            const iconKeys = allKeys.filter((key) => {
-                return typeof (set.icons as any)[key] === "function" && key.toLowerCase().includes(searchTerm.toLowerCase())
-            })
-
-            iconKeys.forEach((iconName) => {
+            iconsMatching(set.icons, searchTerm).forEach(([iconName, IconComponent]) => {
                 allIcons.push({
                     iconName,
                     fullIconName: `${set.path}/${iconName}`,
-                    IconComponent: (set.icons as any)[iconName],
+                    IconComponent,
                     setName: set.name,
                     setPath: set.path,
                 })
@@ -74,15 +79,10 @@ export default function AllIcons({ onSelectIcon }: AllIconsProps) {
         const selectedIconSet = iconSets.find((set) => set.prefix === setPrefix)
         if (!selectedIconSet) return []
 
-        const allKeys = Object.keys(selectedIconSet.icons)
-        const iconKeys = allKeys.filter((key) => {
-            return typeof (selectedIconSet.icons as any)[key] === "function" && key.toLowerCase().includes(searchTerm.toLowerCase())
-        })
-
-        return iconKeys.map((iconName) => ({
+        return iconsMatching(selectedIconSet.icons, searchTerm).map(([iconName, IconComponent]) => ({
             iconName,
             fullIconName: `${selectedIconSet.path}/${iconName}`,
-            IconComponent: (selectedIconSet.icons as any)[iconName],
+            IconComponent,
             setName: selectedIconSet.name,
             setPath: selectedIconSet.path,
         }))

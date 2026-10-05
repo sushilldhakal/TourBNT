@@ -75,7 +75,7 @@ const TourFacts = () => {
 
     const handleSelectAll = (checked: boolean | 'indeterminate') => {
         if (checked === true && filteredFacts) {
-            setSelectedFacts(new Set(filteredFacts.map((fact: any) => fact.id || fact._id)));
+            setSelectedFacts(new Set(filteredFacts.map((fact) => fact.id || fact._id || '')));
         } else {
             setSelectedFacts(new Set());
         }

@@ -109,7 +109,9 @@ export default function MessagePage() {
     // The chat that's open on screen counts as read: no badge, no notification for it.
     const [openId, setOpenId] = useState<string | null>(conversationId);
     const openIdRef = useRef(openId);
-    openIdRef.current = openId;
+    useEffect(() => {
+        openIdRef.current = openId;
+    });
 
     const items = useMemo(() => (conversations.data?.pages ?? []).flatMap((p) => p.items), [conversations.data]);
     const contacts = useMemo<Contact[]>(

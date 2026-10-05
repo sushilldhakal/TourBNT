@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
+import Image from 'next/image';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useMutation } from '@tanstack/react-query';
@@ -67,18 +68,19 @@ export default function AddPostPage() {
         shouldUnregister: false,
         reValidateMode: 'onChange',
     });
+    const status = useWatch({ control: form.control, name: 'status' });
 
     // Create post mutation
     const createPostMutation = useMutation({
         mutationFn: (data: FormData) => addPost(data),
-        onSuccess: (data: any) => {
+        onSuccess: (data) => {
             toast({
                 title: 'Success',
                 description: 'Post created successfully',
             });
             invalidatePosts();
             // Navigate to edit page for the newly created post
-            const postId = data?.post?._id || data?.post?.id || data?._id || data?.id;
+            const postId = data?.id;
             if (postId) {
                 router.push(`/dashboard/posts/edit/${postId}`);
             } else {
@@ -112,10 +114,6 @@ export default function AddPostPage() {
             });
         }
         createPostMutation.mutate(formData);
-    };
-
-    const handleContentChange = (content: string) => {
-        form.setValue('content', content);
     };
 
     const handleImageSelect = (image: string | string[] | null, onChange: (value: string) => void) => {
@@ -243,7 +241,7 @@ export default function AddPostPage() {
                                 control={form.control}
                                 name="status"
                                 render={({ field }) => {
-                                    const currentValue = form.watch('status') || field.value || 'Draft';
+                                    const currentValue = status || field.value || 'Draft';
 
                                     return (
                                         <FormItem>
@@ -286,10 +284,12 @@ export default function AddPostPage() {
                                         {field.value ? (
                                             <div className="mt-2 relative">
                                                 <Link href={field.value} target="_blank" rel="noopener noreferrer">
-                                                    <img
+                                                    <Image
                                                         src={field.value}
                                                         alt="Selected Cover Image"
-                                                        className="rounded-md w-full"
+                                                        width={800}
+                                                        height={450}
+                                                        className="rounded-md w-full h-auto"
                                                     />
                                                 </Link>
                                                 <button

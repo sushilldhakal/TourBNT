@@ -117,7 +117,7 @@ const DestinationGridView = ({ destinations, isLoading, onRefresh }: Destination
     });
 
     const selectedDestination = selectedDestinationId
-        ? destinations.find(d => d._id === selectedDestinationId || (d as any).destinationId === selectedDestinationId)
+        ? destinations.find(d => d._id === selectedDestinationId || d.destinationId === selectedDestinationId)
         : null;
 
     const { data: usage, isLoading: usageLoading } = useQuery({
@@ -174,7 +174,7 @@ const DestinationGridView = ({ destinations, isLoading, onRefresh }: Destination
                     // Use _id for the card key and edit/delete operations (UserDestination ID)
                     const userDestinationId = destination._id;
                     // Use destinationId for toggle-active API (GlobalDestination ID)
-                    const globalDestinationId = (destination as any).destinationId || destination._id;
+                    const globalDestinationId = destination.destinationId || destination._id;
 
                     if (!userDestinationId) {
                         console.warn('[DestinationGridView] Destination missing _id:', destination);

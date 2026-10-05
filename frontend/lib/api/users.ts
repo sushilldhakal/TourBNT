@@ -294,10 +294,24 @@ export const getUsers = async (params?: { page?: number; limit?: number }) => {
  * Get user by ID (admin only)
  * @param userId - User ID
  */
-export const getUserById = async (userId: string) => {
+/** A user as GET /users/:id returns it (the person themself or an admin sees the private fields). */
+export interface UserProfile {
+    id: string;
+    name: string;
+    email?: string;
+    phone?: string | number | null;
+    roles: string | string[];
+    avatar?: string | null;
+    createdAt?: string;
+    sellerInfo?: {
+        bankDetails?: { bankName?: string; accountNumber?: string; accountHolderName?: string; branchCode?: string };
+    } | null;
+}
+
+export const getUserById = async (userId: string): Promise<UserProfile> => {
     try {
         const response = await api.get(`/users/${userId}`);
-        return extractResponseData(response);
+        return extractResponseData<UserProfile>(response);
     } catch (error) {
         throw handleApiError(error, 'fetching user');
     }

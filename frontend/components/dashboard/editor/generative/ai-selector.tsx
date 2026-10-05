@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { useMutation } from "@tanstack/react-query";
 import { generateCompletion } from "@/lib/api/aiApi";
 import { toast } from "@/components/ui/use-toast";
+import { apiErrorMessage, apiErrorStatus } from "@/lib/api/apiClient";
 
 /**
  * AISelector - AI command menu interface
@@ -52,8 +53,8 @@ export function AISelector({ onOpenChange }: AISelectorProps) {
                 });
             }
         },
-        onError: (error: any) => {
-            if (error.response && error.response.status === 429) {
+        onError: (error: unknown) => {
+            if (apiErrorStatus(error) === 429) {
                 toast({
                     title: "Rate limit exceeded",
                     description: "You have reached your request limit for the day.",
@@ -63,7 +64,7 @@ export function AISelector({ onOpenChange }: AISelectorProps) {
             } else {
                 toast({
                     title: "Something went wrong",
-                    description: error.message || 'Internal Server Error',
+                    description: apiErrorMessage(error, 'Internal Server Error'),
                     variant: "destructive",
                     duration: 9000,
                 });

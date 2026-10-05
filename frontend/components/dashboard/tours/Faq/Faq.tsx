@@ -73,7 +73,7 @@ const TourFaqs = () => {
 
     const handleSelectAll = (checked: boolean | 'indeterminate') => {
         if (checked === true && filteredFaqs) {
-            setSelectedFaqs(new Set(filteredFaqs.map((faq: any) => faq.id || faq._id)));
+            setSelectedFaqs(new Set(filteredFaqs.map((faq) => faq.id || faq._id || '')));
         } else {
             setSelectedFaqs(new Set());
         }
@@ -99,7 +99,7 @@ const TourFaqs = () => {
         }
     };
 
-    const filteredFaqs = faqs?.data?.filter((faq: { question: string; answer: string }) =>
+    const filteredFaqs = faqs?.data?.filter((faq) =>
         faq.question.toLowerCase().includes(searchQuery.toLowerCase()) ||
         faq.answer.toLowerCase().includes(searchQuery.toLowerCase())
     );
@@ -199,7 +199,7 @@ const TourFaqs = () => {
                         ) : filteredFaqs?.length ? (
                             view === 'grid' ? (
                                 <div className="grid md:grid-cols-2 gap-6">
-                                    {filteredFaqs.map((faq: any) => (
+                                    {filteredFaqs.map((faq) => (
                                         <FaqGridCard
                                             key={faq.id || faq._id}
                                             faq={faq}
@@ -224,12 +224,12 @@ const TourFaqs = () => {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {filteredFaqs.map((faq: any) => (
+                                            {filteredFaqs.map((faq) => (
                                                 <FaqTableRow
                                                     key={faq.id || faq._id}
                                                     faq={faq}
                                                     DeleteFaq={handleDeleteFaqs}
-                                                    isSelected={selectedFaqs.has(faq.id || faq._id)}
+                                                    isSelected={selectedFaqs.has(faq.id || faq._id || '')}
                                                     onSelectChange={handleSelectFaq}
                                                 />
                                             ))}

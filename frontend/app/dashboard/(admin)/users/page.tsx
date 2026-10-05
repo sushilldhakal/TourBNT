@@ -145,7 +145,7 @@ export default function UsersPage() {
                                                     </TableCell>
                                                     <TableCell className="text-sm">{u.phone || '—'}</TableCell>
                                                     <TableCell>
-                                                        <Badge variant={getRoleBadgeColor(userRole ?? null) as any} className="capitalize">{userRole}</Badge>
+                                                        <Badge variant={getRoleBadgeColor(userRole ?? null)} className="capitalize">{userRole}</Badge>
                                                     </TableCell>
                                                     <TableCell>
                                                         {u.verified ? (

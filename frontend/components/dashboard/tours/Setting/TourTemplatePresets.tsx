@@ -49,6 +49,7 @@ import {
 } from '@/components/ui/select';
 import { Plus, Trash2, Copy, Edit, LayoutTemplate, Link2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { apiErrorMessage } from '@/lib/api/apiClient';
 
 const BUNDLE_LABELS = {
   pricingPresetId: 'Pricing preset',
@@ -62,6 +63,21 @@ const BUNDLE_LABELS = {
   defaultCategoryId: 'Default category',
   defaultDestinationId: 'Default destination',
 } as const;
+
+/** A preset, category or destination row as the bundle selects read it. */
+interface BundleOption {
+  _id?: string;
+  id?: string;
+  name?: string;
+  title?: string;
+  category?: { name?: string } | null;
+  globalCategory?: { name?: string } | null;
+  destination?: { name?: string } | null;
+  globalDestination?: { name?: string } | null;
+  city?: string | null;
+  region?: string | null;
+  country?: string | null;
+}
 
 export function TourTemplatePresets() {
   const { user } = useAuth();
@@ -133,8 +149,8 @@ export function TourTemplatePresets() {
       toast.success('Tour template preset created successfully');
       handleCloseDialog();
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Failed to create preset');
+    onError: (error) => {
+      toast.error(apiErrorMessage(error, 'Failed to create preset'));
     },
   });
 
@@ -149,8 +165,8 @@ export function TourTemplatePresets() {
       toast.success('Tour template preset updated successfully');
       handleCloseDialog();
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Failed to update preset');
+    onError: (error) => {
+      toast.error(apiErrorMessage(error, 'Failed to update preset'));
     },
   });
 
@@ -164,8 +180,8 @@ export function TourTemplatePresets() {
       refetch();
       toast.success('Tour template preset deleted successfully');
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Failed to delete preset');
+    onError: (error) => {
+      toast.error(apiErrorMessage(error, 'Failed to delete preset'));
     },
   });
 
@@ -179,8 +195,8 @@ export function TourTemplatePresets() {
       refetch();
       toast.success('Tour template preset duplicated successfully');
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Failed to duplicate preset');
+    onError: (error) => {
+      toast.error(apiErrorMessage(error, 'Failed to duplicate preset'));
     },
   });
 
@@ -257,20 +273,20 @@ export function TourTemplatePresets() {
       defaultDestinationId: formData.defaultDestinationId || undefined,
     };
     if (editingPreset) {
-      updateMutation.mutate({ presetId: String((editingPreset as any)._id ?? (editingPreset as any).id ?? ''), data: payload });
+      updateMutation.mutate({ presetId: String(editingPreset._id ?? editingPreset.id ?? ''), data: payload });
     } else {
       createMutation.mutate(payload);
     }
   };
 
-  const presetId = (p: TourTemplatePreset) => String((p as any)._id ?? (p as any).id ?? '');
+  const presetId = (p: TourTemplatePreset) => String(p._id ?? p.id ?? '');
 
-  const id = (x: unknown) => String((x as any)?._id ?? (x as any)?.id ?? '').trim();
+  const id = (x: BundleOption | null | undefined) => String(x?._id ?? x?.id ?? '').trim();
   /** Radix Select forbids empty string value; filter to non-empty ids only */
-  const optionsWithId = (opts: unknown[]) => (opts ?? []).filter((o) => id(o).length > 0);
+  const optionsWithId = (opts: BundleOption[]) => (opts ?? []).filter((o) => id(o).length > 0);
 
   /** Extract display name from API item (handles nested category/destination shapes) */
-  const getDisplayName = (o: any, fallback = ''): string =>
+  const getDisplayName = (o: BundleOption, fallback = ''): string =>
     o?.name ?? o?.title ?? o?.category?.name ?? o?.globalCategory?.name
     ?? o?.destination?.name ?? o?.globalDestination?.name
     ?? (o?.city || o?.region || o?.country ? [o.city, o.region, o.country].filter(Boolean).join(', ') : undefined)
@@ -278,9 +294,9 @@ export function TourTemplatePresets() {
 
   const renderSelect = (
     key: keyof typeof BUNDLE_LABELS,
-    options: unknown[],
+    options: BundleOption[],
     placeholder = 'None',
-    getLabel?: (o: any) => string
+    getLabel?: (o: BundleOption) => string
   ) => {
     const safeOptions = optionsWithId(options);
     const currentValue = formData[key]?.trim();
@@ -428,12 +444,12 @@ export function TourTemplatePresets() {
                   <p className="text-sm text-muted-foreground line-clamp-2 mt-1">{preset.description}</p>
                 )}
                 <div className="mt-4 pt-4 border-t flex items-center justify-between gap-2">
-                  {(preset as any).usageCount > 0 && (
+                  {(preset.usageCount ?? 0) > 0 && (
                     <div className="text-xs text-muted-foreground">
-                      Used {(preset as any).usageCount} time{(preset as any).usageCount !== 1 ? 's' : ''}
+                      Used {(preset.usageCount ?? 0)} time{(preset.usageCount ?? 0) !== 1 ? 's' : ''}
                     </div>
                   )}
-                  <div className={(preset as any).usageCount > 0 ? 'ml-auto' : ''} style={{ marginLeft: 'auto' }}>
+                  <div className={(preset.usageCount ?? 0) > 0 ? 'ml-auto' : ''} style={{ marginLeft: 'auto' }}>
                     <div className="flex gap-1">
                       <Button
                         variant="ghost"

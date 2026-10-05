@@ -1,5 +1,7 @@
 'use client';
 
+import axios from 'axios';
+import { apiErrorMessage } from '@/lib/api/apiClient';
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { useCacheManager } from '@/lib/queries/cacheUtils';
@@ -45,14 +47,14 @@ export function AddSubscriber() {
             setBulkEmails('');
             invalidateSubscribers();
         },
-        onError: (error: any) => {
+        onError: (error: unknown) => {
             // Try to extract results from error response
-            if (error?.response?.data?.error?.details && Array.isArray(error.response.data.error.details)) {
-                const failedCount = error.response.data.error.details.length;
+            const details: unknown = axios.isAxiosError(error) ? error.response?.data?.error?.details : undefined;
+            if (Array.isArray(details)) {
+                const failedCount = details.length;
                 toast.error(`Failed to add ${failedCount} subscriber(s). Please check the email addresses.`);
             } else {
-                const message = error?.response?.data?.error?.message || error?.message || 'Failed to add subscriber';
-                toast.error(message);
+                toast.error(apiErrorMessage(error, 'Failed to add subscriber'));
             }
         },
     });

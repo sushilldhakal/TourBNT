@@ -215,7 +215,7 @@ const FactTableRow = ({
                 <td className="p-4">
                     {fact?.value && Array.isArray(fact.value) && fact.value.length > 0 ? (
                         <div className="flex flex-wrap gap-1">
-                            {fact.value.slice(0, 3).map((item: any, index: number) => {
+                            {fact.value.slice(0, 3).map((item: string | { label?: string; value?: string }, index: number) => {
                                 const tagValue = typeof item === 'object' && item !== null
                                     ? item.label || item.value
                                     : String(item);

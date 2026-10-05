@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Megaphone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -199,15 +199,11 @@ export default function AdsAdminPage() {
 function PricingCard() {
     const queryClient = useQueryClient();
     const { data: pricing } = useQuery({ queryKey: ['ad-pricing'], queryFn: getAdPricing });
-    const [monthly, setMonthly] = useState('');
-    const [per100, setPer100] = useState('');
-
-    useEffect(() => {
-        if (pricing) {
-            setMonthly(String(pricing.monthlyPrice));
-            setPer100(String(pricing.pricePer100Views));
-        }
-    }, [pricing]);
+    // What the admin typed; null shows the saved price.
+    const [monthlyDraft, setMonthly] = useState<string | null>(null);
+    const [per100Draft, setPer100] = useState<string | null>(null);
+    const monthly = monthlyDraft ?? (pricing ? String(pricing.monthlyPrice) : '');
+    const per100 = per100Draft ?? (pricing ? String(pricing.pricePer100Views) : '');
 
     const mutation = useMutation({
         mutationFn: () => updateAdPricing({ monthlyPrice: parseInt(monthly, 10), pricePer100Views: parseInt(per100, 10) }),

@@ -1,5 +1,6 @@
 'use client';
 
+import { apiErrorMessage } from '@/lib/api/apiClient';
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import { useInfiniteQuery, useMutation } from '@tanstack/react-query';
 import { useCacheManager } from '@/lib/queries/cacheUtils';
@@ -116,9 +117,8 @@ export function SubscriberList() {
             setDeleteEmail(null);
             invalidateSubscribers();
         },
-        onError: (error: any) => {
-            const message = error?.response?.data?.error?.message || error?.message || 'Failed to remove subscriber';
-            toast.error(message);
+        onError: (error) => {
+            toast.error(apiErrorMessage(error, 'Failed to remove subscriber'));
         },
     });
 

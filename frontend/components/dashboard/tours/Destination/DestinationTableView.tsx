@@ -101,7 +101,7 @@ const DestinationTableView = ({ destinations, isLoading, onRefresh }: Destinatio
     });
 
     const selectedDestination = selectedDestinationId
-        ? destinations.find(d => d._id === selectedDestinationId || (d as any).destinationId === selectedDestinationId || d.id === selectedDestinationId)
+        ? destinations.find(d => d._id === selectedDestinationId || d.destinationId === selectedDestinationId || d.id === selectedDestinationId)
         : null;
 
     const { data: usage, isLoading: usageLoading } = useQuery({
@@ -241,7 +241,7 @@ const DestinationTableView = ({ destinations, isLoading, onRefresh }: Destinatio
                 // Use _id for edit/delete operations (UserDestination ID)
                 const userDestinationId = destination._id || destination.id;
                 // Use destinationId for toggle-active API (GlobalDestination ID)
-                const globalDestinationId = (destination as any).destinationId || destination._id || destination.id;
+                const globalDestinationId = destination.destinationId || destination._id || destination.id;
 
                 if (!userDestinationId) return null;
                 if (!globalDestinationId) return null;

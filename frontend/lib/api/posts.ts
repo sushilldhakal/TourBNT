@@ -86,7 +86,7 @@ export const addPost = async (postData: FormData) => {
                 'Content-Type': 'multipart/form-data',
             },
         });
-        return extractResponseData(response);
+        return extractResponseData<Post>(response);
     } catch (error) {
         throw handleApiError(error, 'creating post');
     }

@@ -20,10 +20,11 @@ export interface ParseResult<T> {
  * @param obj - Object to validate
  * @returns True if valid JSONContent structure
  */
-export function isValidJSONContent(obj: any): obj is JSONContent {
-    if (!obj || typeof obj !== 'object') {
+export function isValidJSONContent(value: unknown): value is JSONContent {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
         return false;
     }
+    const obj = value as Record<string, unknown>;
 
     // Must have a type property
     if (typeof obj.type !== 'string') {
@@ -179,30 +180,27 @@ export function sanitizeJSONContent(content: JSONContent): JSONContent {
     const sanitized = JSON.parse(JSON.stringify(content));
 
     // Recursive function to sanitize nodes
-    function sanitizeNode(node: any): any {
+    function sanitizeNode(node: JSONContent & { type?: string }): JSONContent | null {
         // Remove dangerous node types
         if (node.type === 'script' || node.type === 'iframe') {
             return null;
         }
 
         // Sanitize attributes
-        if (node.attrs) {
+        const attrs = node.attrs;
+        if (attrs) {
             // Remove event handlers
-            Object.keys(node.attrs).forEach(key => {
+            Object.keys(attrs).forEach(key => {
                 if (key.startsWith('on')) {
-                    delete node.attrs[key];
+                    delete attrs[key];
                 }
             });
 
             // Sanitize href and src attributes
-            if (node.attrs.href && typeof node.attrs.href === 'string') {
-                if (node.attrs.href.startsWith('javascript:')) {
-                    delete node.attrs.href;
-                }
-            }
-            if (node.attrs.src && typeof node.attrs.src === 'string') {
-                if (node.attrs.src.startsWith('javascript:')) {
-                    delete node.attrs.src;
+            for (const key of ['href', 'src']) {
+                const value = attrs[key];
+                if (typeof value === 'string' && value.trim().toLowerCase().startsWith('javascript:')) {
+                    delete attrs[key];
                 }
             }
         }
@@ -211,11 +209,11 @@ export function sanitizeJSONContent(content: JSONContent): JSONContent {
         if (node.content && Array.isArray(node.content)) {
             node.content = node.content
                 .map(sanitizeNode)
-                .filter((n: any) => n !== null);
+                .filter((n): n is JSONContent => n !== null);
         }
 
         return node;
     }
 
-    return sanitizeNode(sanitized);
+    return sanitizeNode(sanitized) ?? { type: 'doc', content: [] };
 }

@@ -91,10 +91,10 @@ function Toolbar({ search, onSearch, placeholder, children }: { search: string; 
 
 /** The loading / empty / table / pagination scaffold every tab shares. */
 function PagedTable<T>({
-    query, page, onPage, limit, onLimit, emptyTitle, head, row,
+    query, onPage, onLimit, emptyTitle, head, row,
 }: {
     query: { data?: PagedResult<T>; isLoading: boolean; isFetching: boolean; isError: boolean; error: unknown };
-    page: number; onPage: (p: number) => void; limit: number; onLimit: (l: number) => void;
+    onPage: (p: number) => void; onLimit: (l: number) => void;
     emptyTitle: string; head: React.ReactNode; row: (item: T) => React.ReactNode;
 }) {
     const items = query.data?.items ?? [];
@@ -176,7 +176,7 @@ function RequestsTab() {
                 </select>
             </Toolbar>
             <PagedTable
-                query={query} page={page} onPage={setPage} limit={limit} onLimit={setLimit} emptyTitle="No supplier requests"
+                query={query} onPage={setPage} onLimit={setLimit} emptyTitle="No supplier requests"
                 head={<><TableHead>Service date</TableHead><TableHead>Trip</TableHead><TableHead>Supplier</TableHead><TableHead>Service</TableHead><TableHead>Units</TableHead><TableHead>Status</TableHead><TableHead>Deadline / notes</TableHead></>}
                 row={(r) => (
                     <TableRow key={r.id}>
@@ -214,7 +214,7 @@ function TripsTab() {
         <div className="space-y-4">
             <Toolbar search={search} onSearch={(v) => { setSearch(v); setPage(1); }} placeholder="Search trip or code…" />
             <PagedTable
-                query={query} page={page} onPage={setPage} limit={limit} onLimit={setLimit} emptyTitle="No upcoming trips"
+                query={query} onPage={setPage} onLimit={setLimit} emptyTitle="No upcoming trips"
                 head={<><TableHead>Departure</TableHead><TableHead>Trip</TableHead><TableHead>Destination</TableHead><TableHead className="text-right">Bookings</TableHead><TableHead className="text-right">Travellers</TableHead><TableHead className="text-right">Revenue</TableHead><TableHead>Supplier confirmations</TableHead></>}
                 row={(t) => {
                     const pct = t.requestsTotal ? Math.round((t.requestsConfirmed / t.requestsTotal) * 100) : 0;
@@ -267,7 +267,7 @@ function SuppliersTab() {
                 </select>
             </Toolbar>
             <PagedTable
-                query={query} page={page} onPage={setPage} limit={limit} onLimit={setLimit} emptyTitle="No suppliers found"
+                query={query} onPage={setPage} onLimit={setLimit} emptyTitle="No suppliers found"
                 head={<><TableHead>Supplier</TableHead><TableHead>Type</TableHead><TableHead>City</TableHead><TableHead className="text-right">Inventory</TableHead><TableHead className="text-right">Open requests</TableHead><TableHead className="text-right">Confirmed</TableHead><TableHead className="text-right">Declined / expired</TableHead></>}
                 row={(s) => (
                     <TableRow key={s.id}>

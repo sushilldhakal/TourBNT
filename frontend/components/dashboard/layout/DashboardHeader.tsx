@@ -70,9 +70,10 @@ export function DashboardHeader({ onToggleSidebar, onLogout }: DashboardHeaderPr
             .finally(() => setMessagesLoading(false));
     }, []);
 
-    useEffect(() => {
-        if (messagesOpen) loadRecentMessages();
-    }, [messagesOpen, loadRecentMessages]);
+    const handleMessagesOpenChange = (open: boolean) => {
+        setMessagesOpen(open);
+        if (open) loadRecentMessages();
+    };
 
     const loadRecentNotifications = useCallback(() => {
         setNotificationsLoading(true);
@@ -94,9 +95,10 @@ export function DashboardHeader({ onToggleSidebar, onLogout }: DashboardHeaderPr
             .catch(() => {});
     }, [isHydrated, user?.id]);
 
-    useEffect(() => {
-        if (notificationsOpen) loadRecentNotifications();
-    }, [notificationsOpen, loadRecentNotifications]);
+    const handleNotificationsOpenChange = (open: boolean) => {
+        setNotificationsOpen(open);
+        if (open) loadRecentNotifications();
+    };
 
     const handleNotificationClick = (notification: Notification) => {
         setNotificationsOpen(false);
@@ -217,7 +219,7 @@ export function DashboardHeader({ onToggleSidebar, onLogout }: DashboardHeaderPr
                     </Button>
 
                     {/* Messages dropdown */}
-                    <DropdownMenu open={messagesOpen} onOpenChange={setMessagesOpen}>
+                    <DropdownMenu open={messagesOpen} onOpenChange={handleMessagesOpenChange}>
                         <DropdownMenuTrigger asChild>
                             <Button
                                 variant="ghost"
@@ -302,7 +304,7 @@ export function DashboardHeader({ onToggleSidebar, onLogout }: DashboardHeaderPr
                     </DropdownMenu>
 
                     {/* Notifications dropdown */}
-                    <DropdownMenu open={notificationsOpen} onOpenChange={setNotificationsOpen}>
+                    <DropdownMenu open={notificationsOpen} onOpenChange={handleNotificationsOpenChange}>
                         <DropdownMenuTrigger asChild>
                             <Button
                                 variant="ghost"

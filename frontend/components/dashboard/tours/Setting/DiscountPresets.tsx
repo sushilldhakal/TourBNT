@@ -39,6 +39,7 @@ import {
 } from '@/components/ui/select';
 import { Plus, Trash2, Copy, Edit, Percent } from 'lucide-react';
 import { toast } from 'sonner';
+import { apiErrorMessage } from '@/lib/api/apiClient';
 
 export function DiscountPresets() {
   const { user } = useAuth();
@@ -66,8 +67,8 @@ export function DiscountPresets() {
       toast.success('Discount preset created successfully');
       handleCloseDialog();
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Failed to create preset');
+    onError: (error) => {
+      toast.error(apiErrorMessage(error, 'Failed to create preset'));
     },
   });
 

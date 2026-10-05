@@ -107,7 +107,7 @@ const fromPartner = (p: BusinessPartner): ApplicationCard => {
         website: p.website,
         location: p.address ? [p.address.address, p.address.city, p.address.country].filter(Boolean).join(', ') : null,
         description: p.description,
-        submittedAt: (p as any).submittedAt ?? p.createdAt,
+        submittedAt: p.createdAt,
         rejectionReason: p.rejectionReason,
         facts,
         documents: (p.documents ?? []).map((d) => ({ label: d.docType.replace(/_/g, ' '), url: d.url })),

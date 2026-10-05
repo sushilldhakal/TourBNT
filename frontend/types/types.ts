@@ -93,6 +93,9 @@ export interface CategoryData {
     id: string;
     /** Set by normalizeCategories (useCategories.ts); the user-category id the dashboard edits by. */
     _id?: string;
+    /** The global category a seller's row points at (absent on admin rows, which are global). */
+    categoryId?: string;
+    submittedAt?: string;
     name: string;
     description: string;
     imageUrl?: string;
@@ -126,6 +129,8 @@ export interface Destination {
 
 export interface DestinationTypes {
     approvalStatus: string;
+    /** The global destination a seller's row points at (absent on admin rows, which are global). */
+    destinationId?: string;
     _id?: string; // MongoDB _id
     id?: string; // API response id (normalized to _id)
     name: string;

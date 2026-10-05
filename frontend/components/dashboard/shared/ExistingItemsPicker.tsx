@@ -62,7 +62,14 @@ export function ExistingItemsPicker({ noun, nounPlural, queryKey, fetchPage, bul
         return () => document.removeEventListener('mousedown', onDown);
     }, [open]);
 
-    useEffect(() => { setPage(1); setAllMatching(false); setActive(0); }, [q]);
+    // A new search starts from page 1 with nothing selected (adjusted while rendering).
+    const [searchedFor, setSearchedFor] = useState(q);
+    if (q !== searchedFor) {
+        setSearchedFor(q);
+        setPage(1);
+        setAllMatching(false);
+        setActive(0);
+    }
 
     const list = useQuery({
         queryKey: ['existing-picker', queryKey, { q, page }],

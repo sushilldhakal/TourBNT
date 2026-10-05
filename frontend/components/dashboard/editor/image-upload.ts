@@ -24,9 +24,9 @@ enum UploadErrorType {
  */
 class ImageUploadError extends Error {
     type: UploadErrorType;
-    originalError?: any;
+    originalError?: unknown;
 
-    constructor(message: string, type: UploadErrorType, originalError?: any) {
+    constructor(message: string, type: UploadErrorType, originalError?: unknown) {
         super(message);
         this.name = 'ImageUploadError';
         this.type = type;
@@ -159,14 +159,12 @@ const compressImage = async (
 /**
  * Upload image files to the server with retry capability and progress tracking
  * @param files - Array of files to upload
- * @param retryCount - Number of retry attempts (default: 0)
  * @param onProgress - Optional callback for upload progress
  * @returns Promise resolving to array of uploaded image URLs
  */
 const uploadImageFiles = async (
     files: File[],
     userId: string,
-    retryCount: number = 0,
     onProgress?: (progress: number) => void
 ): Promise<string[]> => {
     if (!userId) {
@@ -187,14 +185,8 @@ const uploadImageFiles = async (
                 onProgress((i / files.length) * 30); // 0-30% for compression
             }
 
-            const compressed = await compressImage(file, 1, 0.8);
-            compressedFiles.push(compressed);
-
-            // Log compression results
-            if (compressed.size < file.size) {
-                const savedMB = ((file.size - compressed.size) / 1024 / 1024).toFixed(2);
-            }
-        } catch (error) {
+            compressedFiles.push(await compressImage(file, 1, 0.8));
+        } catch {
             compressedFiles.push(file);
         }
     }
@@ -210,50 +202,28 @@ const uploadImageFiles = async (
             onProgress(40); // 40% - starting upload
         }
 
-        const response = await uploadMedia({
-            formData
-        }) as any;
+        const response = await uploadMedia({ formData });
 
         if (onProgress) {
             onProgress(90); // 90% - processing response
         }
 
-        // The response structure from uploadMedia is { success: boolean, urls: string[], resources: any[], message?: string }
-        if (response && response.success && response.urls && response.urls.length > 0) {
+        if (response.success && response.urls.length > 0) {
             return response.urls;
-        } else {
-            throw new ImageUploadError(
-                response?.message || 'No image URLs returned from server',
-                UploadErrorType.SERVER,
-                response
-            );
         }
-    } catch (error: any) {
-        // Determine error type
-        let errorType = UploadErrorType.UNKNOWN;
-        let errorMessage = 'Failed to upload image';
-
+        throw new ImageUploadError(
+            response.message || 'No image URLs returned from server',
+            UploadErrorType.SERVER,
+            response
+        );
+    } catch (error) {
         if (error instanceof ImageUploadError) {
             throw error; // Re-throw our custom errors
         }
-
-        // Network errors
-        if (error.message?.includes('fetch') || error.message?.includes('network')) {
-            errorType = UploadErrorType.NETWORK;
-            errorMessage = 'Network error. Please check your connection and try again.';
-        }
-        // Server errors
-        else if (error.response?.status >= 500) {
-            errorType = UploadErrorType.SERVER;
-            errorMessage = 'Server error. Please try again later.';
-        }
-        // Client errors
-        else if (error.response?.status >= 400) {
-            errorType = UploadErrorType.SERVER;
-            errorMessage = error.response?.data?.message || 'Upload failed. Please try again.';
-        }
-
-        throw new ImageUploadError(errorMessage, errorType, error);
+        // uploadMedia already turns failures into readable messages (size, type, auth, network...).
+        const message = error instanceof Error && error.message ? error.message : 'Failed to upload image';
+        const isNetwork = /network|timed out|timeout/i.test(message);
+        throw new ImageUploadError(message, isNetwork ? UploadErrorType.NETWORK : UploadErrorType.SERVER, error);
     }
 };
 
@@ -274,7 +244,7 @@ const uploadWithRetry = async (
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
-            return await uploadImageFiles(files, userId, attempt, onProgress);
+            return await uploadImageFiles(files, userId, onProgress);
         } catch (error) {
             lastError = error instanceof ImageUploadError
                 ? error
@@ -301,27 +271,16 @@ const uploadWithRetry = async (
 };
 
 /**
- * Handle upload errors with user-friendly messages and retry option
+ * Tell the user an upload failed (uploads already retry automatically before this).
  * @param error - The error that occurred
- * @param retryFn - Function to call for retry
  */
-const handleUploadError = (error: ImageUploadError, retryFn?: () => void) => {
-    const toastConfig: any = {
+const handleUploadError = (error: ImageUploadError) => {
+    toast({
         title: 'Image Upload Failed',
         description: error.message,
         variant: 'destructive',
         duration: 9000,
-    };
-
-    // Add retry button for network and server errors
-    if (retryFn && (error.type === UploadErrorType.NETWORK || error.type === UploadErrorType.SERVER)) {
-        toastConfig.action = {
-            label: 'Retry',
-            onClick: retryFn,
-        };
-    }
-
-    toast(toastConfig);
+    });
 
     // Log error details for debugging
     console.error('Image upload error:', {
@@ -357,26 +316,22 @@ export const createUploadFn = (userId: string) => createImageUpload({
         }
 
         // Show upload progress toast
-        let progressToast: any = null;
-        const showProgress = (progress: number) => {
-            const message = progress < 30
+        // Held in an object: TypeScript can't see the closure below assigning a plain `let`.
+        const progress: { toast: ReturnType<typeof toast> | null } = { toast: null };
+        const showProgress = (percent: number) => {
+            const message = percent < 30
                 ? 'Compressing image...'
-                : progress < 90
+                : percent < 90
                     ? 'Uploading image...'
                     : 'Processing...';
 
-            if (progressToast) {
-                // Update existing toast (not directly supported, so we'll just log)
-                toast({
-                    title: 'Uploading Image',
-                    description: `${message} (${progress}%)`,
-                    duration: 30000, // Long duration, will be dismissed on completion
-                });
+            if (progress.toast) {
+                progress.toast.update({ id: progress.toast.id, title: 'Uploading Image', description: `${message} (${Math.round(percent)}%)` });
             } else {
-                progressToast = toast({
+                progress.toast = toast({
                     title: 'Uploading Image',
                     description: message,
-                    duration: 30000, // Long duration, will be dismissed on completion
+                    duration: 30000, // Long duration, dismissed on completion
                 });
             }
         };
@@ -384,8 +339,8 @@ export const createUploadFn = (userId: string) => createImageUpload({
         try {
             // Upload with automatic retry and progress tracking
             const imageUrls = await uploadWithRetry([file], userId, 2, showProgress);
+            progress.toast?.dismiss();
 
-            // Show success message
             toast({
                 title: 'Image uploaded',
                 description: 'Your image has been uploaded successfully.',
@@ -394,30 +349,11 @@ export const createUploadFn = (userId: string) => createImageUpload({
 
             return imageUrls[0];
         } catch (error) {
+            progress.toast?.dismiss();
             const uploadError = error instanceof ImageUploadError
                 ? error
                 : new ImageUploadError('Failed to upload image', UploadErrorType.UNKNOWN, error);
-
-            // Create retry function
-            const retry = async () => {
-                try {
-                    const imageUrls = await uploadWithRetry([file as File], userId, 2, showProgress);
-                    toast({
-                        title: 'Image uploaded',
-                        description: 'Your image has been uploaded successfully.',
-                        duration: 3000,
-                    });
-                    return imageUrls[0];
-                } catch (retryError) {
-                    const retryUploadError = retryError instanceof ImageUploadError
-                        ? retryError
-                        : new ImageUploadError('Failed to upload image', UploadErrorType.UNKNOWN, retryError);
-                    handleUploadError(retryUploadError);
-                    throw retryUploadError;
-                }
-            };
-
-            handleUploadError(uploadError, retry);
+            handleUploadError(uploadError);
             throw uploadError;
         }
     },
