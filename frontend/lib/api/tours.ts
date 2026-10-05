@@ -297,6 +297,32 @@ export interface TourItineraryRequestStatus {
     counterNotes?: string | null;
     sourceDepartureDate?: string | null;
     events: ItineraryRequestEvent[];
+    /** Partner confirmed this request, then cancelled it. */
+    withdrewAfterConfirm?: boolean;
+}
+
+export interface OpenSlotApplication {
+    id: string;
+    businessPartnerId: string;
+    businessName: string;
+    businessType: string;
+    message: string | null;
+    unitsOffered: number | null;
+    status: 'applied' | 'selected' | 'declined' | 'withdrawn';
+    serviceDate: string;
+}
+
+export interface TourOpenSlot {
+    linkId: string;
+    role: string;
+    dayId: string;
+    dayLabel: string;
+    unitsRequested: number | null;
+    unitType: string | null;
+    serviceDate: string | null;
+    filled: boolean;
+    selectedPartnerName: string | null;
+    applications: OpenSlotApplication[];
 }
 
 /** Read-only per-day partner confirmation status for the tour editor. */
@@ -340,6 +366,24 @@ export const reopenItineraryPartnerRequest = async (tourId: string, requestId: s
 };
 
 /** Agency swaps the business partner linked to a day/role in place. */
+export const getTourOpenSlots = async (tourId: string) => {
+    try {
+        const response = await api.get(`/tours/${tourId}/open-slots`);
+        return extractList<TourOpenSlot>(response);
+    } catch (error) {
+        throw handleApiError(error, 'fetching open slot applications');
+    }
+};
+
+export const selectOpenSlotApplication = async (tourId: string, applicationId: string) => {
+    try {
+        const response = await api.post(`/tours/${tourId}/open-applications/${applicationId}/select`, {});
+        return extractResponseData<{ requestId: string; businessName: string; serviceDate: string }>(response);
+    } catch (error) {
+        throw handleApiError(error, 'choosing an applicant');
+    }
+};
+
 export const replaceItineraryPartner = async (tourId: string, linkId: string, businessPartnerId: string, name: string) => {
     try {
         const response = await api.patch(`/tours/${tourId}/itinerary-partners/${linkId}/replace`, { businessPartnerId, name });

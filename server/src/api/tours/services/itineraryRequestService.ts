@@ -5,6 +5,7 @@ import {
   itineraryPartnerRequests,
   itineraryRequestEvents,
   itineraryRequestBookingContributions,
+  partnerDealWithdrawals,
   businessPartnerCapacity,
   businessPartnerCapacityOverrides,
   businessPartnerUnitTypes,
@@ -351,7 +352,12 @@ export class ItineraryRequestService {
     }
   }
 
-  /** True iff every fixed-departure-sourced request for this exact date is confirmed (vacuously true if there are none — nothing to gate on). */
+  /**
+   * True iff every fixed-departure-sourced request for this exact date is
+   * confirmed, and every open slot on the itinerary has a confirmed supplier
+   * for the calendar day that departure lands on. Vacuously true when the
+   * tour has neither requests nor open slots.
+   */
   static async isFixedDepartureDateConfirmed(tourId: string, departureDate: Date): Promise<boolean> {
     const dateStr = toDateString(departureDate);
     const [{ value: unconfirmedCount }] = await db
@@ -362,7 +368,31 @@ export class ItineraryRequestService {
         sql`${itineraryPartnerRequests.sourceDepartureDate}::date = ${dateStr}::date`,
         ne(itineraryPartnerRequests.status, 'confirmed'),
       ));
-    return Number(unconfirmedCount) === 0;
+    if (Number(unconfirmedCount) > 0) return false;
+
+    const [tour, openLinks] = await Promise.all([
+      db.select({ itinerary: tours.itinerary }).from(tours).where(eq(tours.id, tourId)).limit(1),
+      db.select().from(tourItineraryPartners).where(and(eq(tourItineraryPartners.tourId, tourId), eq(tourItineraryPartners.openForAll, true))),
+    ]);
+    if (openLinks.length === 0) return true;
+
+    const itinerary = Array.isArray(tour[0]?.itinerary) ? (tour[0].itinerary as Array<{ id?: string }>) : [];
+    const confirmed = await db
+      .select({ tourItineraryPartnerId: itineraryPartnerRequests.tourItineraryPartnerId, serviceDate: itineraryPartnerRequests.serviceDate })
+      .from(itineraryPartnerRequests)
+      .where(and(
+        eq(itineraryPartnerRequests.tourId, tourId),
+        eq(itineraryPartnerRequests.status, 'confirmed'),
+        sql`${itineraryPartnerRequests.sourceDepartureDate}::date = ${dateStr}::date`,
+      ));
+    const confirmedKeys = new Set(confirmed.map((r) => `${r.tourItineraryPartnerId}|${r.serviceDate}`));
+    for (const link of openLinks) {
+      const dayIndex = itinerary.findIndex((day) => day?.id === link.dayId);
+      if (dayIndex < 0) continue;
+      const serviceDate = toDateString(addDays(departureDate, dayIndex));
+      if (!confirmedKeys.has(`${link.id}|${serviceDate}`)) return false;
+    }
+    return true;
   }
 
   /** Admin, or a tourAuthors row for the tour — else 403. Shared by every agency-facing method below. */
@@ -386,7 +416,7 @@ export class ItineraryRequestService {
     // All four reads are independent, so they run together — one round trip instead of four in a
     // row (~3s on the remote DB for a 15-day tour). Events are selected by tour via a sub-select
     // rather than waiting for the request ids. The access check still gates the response.
-    const [, requestedRows, events, links] = await Promise.all([
+    const [, requestedRows, events, links, withdrawals] = await Promise.all([
       ItineraryRequestService.assertTourAuthorOrAdmin(tourId, requester),
       db
         .select({ request: itineraryPartnerRequests, partnerName: businessPartners.name, partnerType: businessPartners.type })
@@ -403,7 +433,11 @@ export class ItineraryRequestService {
         .from(tourItineraryPartners)
         .innerJoin(businessPartners, eq(tourItineraryPartners.businessPartnerId, businessPartners.id))
         .where(and(eq(tourItineraryPartners.tourId, tourId), sql`${tourItineraryPartners.businessPartnerId} IS NOT NULL`)),
+      db.select({ requestId: partnerDealWithdrawals.requestId })
+        .from(partnerDealWithdrawals)
+        .where(inArray(partnerDealWithdrawals.requestId, db.select({ id: itineraryPartnerRequests.id }).from(itineraryPartnerRequests).where(eq(itineraryPartnerRequests.tourId, tourId)))),
     ]);
+    const withdrawnAfterConfirm = new Set(withdrawals.map((w) => w.requestId));
 
     const eventsByRequest = new Map<string, typeof events>();
     for (const e of events) {
@@ -420,6 +454,7 @@ export class ItineraryRequestService {
       partnerType,
       unitType: linkById.get(request.tourItineraryPartnerId)?.unitType ?? null,
       events: eventsByRequest.get(request.id) ?? [],
+      withdrewAfterConfirm: withdrawnAfterConfirm.has(request.id),
     }));
 
     const linkedPartnerIds = new Set(requested.map((r) => r.tourItineraryPartnerId));

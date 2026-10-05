@@ -5,6 +5,7 @@ import { Search, Link2, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { searchBusinessPartners, BusinessPartner, BusinessPartnerType } from '@/lib/api/businessPartners';
 import { useUnitTypes } from '@/lib/queries';
 import { useTourContext } from '@/providers/TourProvider';
@@ -26,6 +27,22 @@ const QUANTITY_LABEL: Record<string, string> = {
     accommodation: 'Rooms',
     meals: 'Covers',
     transport: 'Seats',
+};
+
+const OPEN_AUDIENCE: Record<ItineraryPartnerRole, string> = {
+    accommodation: 'any free hotel or guesthouse',
+    meals: 'any free restaurant',
+    guide: 'any free guide',
+    transport: 'any free transport provider',
+    other: 'any free partner',
+};
+
+const OPEN_NAME: Record<ItineraryPartnerRole, string> = {
+    accommodation: 'Open for any hotel or guesthouse',
+    meals: 'Open for any restaurant',
+    guide: 'Open for any guide',
+    transport: 'Open for any transport provider',
+    other: 'Open for any partner',
 };
 
 interface BusinessPartnerPickerProps {
@@ -55,16 +72,18 @@ export function BusinessPartnerPicker({ basePath, role, label, placeholder }: Bu
     // free-text guess.
     const { data: unitTypes } = useUnitTypes(role === 'accommodation' || role === 'meals' || role === 'transport' ? current?.businessPartnerId : undefined);
 
-    const [query, setQuery] = useState(current?.name || '');
+    const [query, setQuery] = useState(current?.openForAll ? '' : (current?.name || ''));
     const [results, setResults] = useState<BusinessPartner[]>([]);
     const [open, setOpen] = useState(false);
     const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
     // Linking a different partner shows its name in the search box (adjusted while rendering).
     const [shownPartnerId, setShownPartnerId] = useState(current?.businessPartnerId);
-    if (current?.businessPartnerId !== shownPartnerId) {
+    const [shownOpen, setShownOpen] = useState(!!current?.openForAll);
+    if (current?.businessPartnerId !== shownPartnerId || !!current?.openForAll !== shownOpen) {
         setShownPartnerId(current?.businessPartnerId);
-        setQuery(current?.name || '');
+        setShownOpen(!!current?.openForAll);
+        setQuery(current?.openForAll ? '' : (current?.name || ''));
     }
 
     const upsert = (patch: Partial<ItineraryPartner> | null) => {
@@ -77,11 +96,30 @@ export function BusinessPartnerPicker({ basePath, role, label, placeholder }: Bu
         setValue(partnersPath, [...withoutRole, { role, name: '', ...patch }], { shouldDirty: true });
     };
 
+    const setOpenForAll = (open: boolean) => {
+        if (!open) {
+            setQuery('');
+            upsert(null);
+            return;
+        }
+        setQuery('');
+        setResults([]);
+        setOpen(false);
+        upsert({
+            openForAll: true,
+            name: OPEN_NAME[role],
+            time: current?.time,
+            endTime: current?.endTime,
+            unitsRequested: current?.unitsRequested,
+            notes: current?.notes,
+        });
+    };
+
     const handleQueryChange = (value: string) => {
         setQuery(value);
         // Typing clears any previous link — becomes a free-text name until a suggestion is picked.
         if (value.trim()) {
-            upsert({ name: value });
+            upsert({ name: value, openForAll: false });
         } else {
             upsert(null);
         }
@@ -106,7 +144,7 @@ export function BusinessPartnerPicker({ basePath, role, label, placeholder }: Bu
     };
 
     const handleSelect = (partner: BusinessPartner) => {
-        upsert({ businessPartnerId: partner.id, name: partner.name });
+        upsert({ businessPartnerId: partner.id, name: partner.name, openForAll: false, time: current?.time, endTime: current?.endTime, unitsRequested: current?.unitsRequested });
         setQuery(partner.name);
         setOpen(false);
         setResults([]);
@@ -150,10 +188,22 @@ export function BusinessPartnerPicker({ basePath, role, label, placeholder }: Bu
     return (
         <div className="space-y-2 relative">
             <Label>{label}</Label>
+            <label className="flex items-start gap-2 text-sm">
+                <Checkbox
+                    checked={!!current?.openForAll}
+                    onCheckedChange={(checked) => setOpenForAll(checked === true)}
+                    className="mt-0.5"
+                />
+                <span>
+                    Leave open for {OPEN_AUDIENCE[role]}
+                    <span className="block text-xs text-muted-foreground">They apply for a date they are free. You choose one. Or assign a business yourself below.</span>
+                </span>
+            </label>
             <div className="relative">
                 <Input
-                    placeholder={placeholder}
+                    placeholder={current?.openForAll ? 'Open — applications will come in' : placeholder}
                     value={query}
+                    disabled={!!current?.openForAll}
                     onChange={(e) => handleQueryChange(e.target.value)}
                     onFocus={() => results.length > 0 && setOpen(true)}
                     onBlur={() => setTimeout(() => setOpen(false), 150)}
@@ -183,7 +233,10 @@ export function BusinessPartnerPicker({ basePath, role, label, placeholder }: Bu
                     ))}
                 </div>
             )}
-            {!current?.businessPartnerId && query.trim() && (
+            {current?.openForAll && (
+                <p className="text-xs text-muted-foreground">Open for this day. Approved businesses who are free on a departure date can apply, and you pick one.</p>
+            )}
+            {!current?.businessPartnerId && !current?.openForAll && query.trim() && (
                 <p className="text-xs text-muted-foreground">Not registered on TourBNT — will be shown as plain text with no link.</p>
             )}
             {role === 'meals' && current && (
