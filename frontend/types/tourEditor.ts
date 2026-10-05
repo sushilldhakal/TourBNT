@@ -34,6 +34,8 @@ export interface EditorItineraryPartner {
     unitType?: string;
     /** One of the partner's configured unit types, when picked from its list. */
     unitTypeId?: string;
+    /** No business is assigned. Any free approved business of this role can apply, and the seller picks one. */
+    openForAll?: boolean;
 }
 
 export interface EditorItineraryDay {

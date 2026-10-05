@@ -113,7 +113,7 @@ async function syncTourAuthors(tourId: string, authorIds: string[] | undefined) 
 async function syncTourItineraryPartners(tourId: string, itinerary: unknown[] | undefined) {
   if (itinerary === undefined) return;
 
-  type LinkRow = { tourId: string; dayId: string; role: 'transport' | 'accommodation' | 'guide' | 'meals' | 'other'; businessPartnerId: string | null; name: string; notes: string | null; sortOrder: number; unitsRequested: number | null; unitType: string | null; unitTypeId: string | null };
+  type LinkRow = { tourId: string; dayId: string; role: 'transport' | 'accommodation' | 'guide' | 'meals' | 'other'; businessPartnerId: string | null; name: string; notes: string | null; sortOrder: number; unitsRequested: number | null; unitType: string | null; unitTypeId: string | null; openForAll: boolean };
   const rows: LinkRow[] = [];
 
   for (const day of itinerary as StoredItineraryDay[]) {
@@ -121,17 +121,19 @@ async function syncTourItineraryPartners(tourId: string, itinerary: unknown[] | 
     if (!dayId || !Array.isArray(day.partners)) continue;
     day.partners.forEach((p, idx) => {
       if (!p || !isItineraryRole(p.role) || !p.name) return;
+      const openForAll = p.openForAll === true && !p.businessPartnerId;
       rows.push({
         tourId,
         dayId,
         role: p.role,
-        businessPartnerId: p.businessPartnerId || null,
+        businessPartnerId: openForAll ? null : (p.businessPartnerId || null),
         name: p.name,
         notes: p.notes || null,
         sortOrder: idx,
         unitsRequested: typeof p.unitsRequested === 'number' ? p.unitsRequested : null,
         unitType: p.unitType || null,
-        unitTypeId: p.unitTypeId || null,
+        unitTypeId: openForAll ? null : (p.unitTypeId || null),
+        openForAll,
       });
     });
   }
@@ -193,10 +195,15 @@ async function syncTourItineraryPartners(tourId: string, itinerary: unknown[] | 
   const updates: Array<PromiseLike<unknown>> = [];
   for (const row of rows) {
     // Same day + role + same business = same link. A different business is a new link (its requests belong to the old one).
-    const match = existingByKey.get(keyOf(row))?.find((e) => !keepIds.has(e.id) && (e.businessPartnerId ?? null) === (row.businessPartnerId ?? null) && e.name === row.name);
+    // An open slot stays the same link when only its label changes, so applications are not cascade-deleted.
+    const match = existingByKey.get(keyOf(row))?.find((e) => {
+      if (keepIds.has(e.id)) return false;
+      if (row.openForAll) return e.openForAll === true;
+      return !e.openForAll && (e.businessPartnerId ?? null) === (row.businessPartnerId ?? null) && e.name === row.name;
+    });
     if (match) {
       keepIds.add(match.id);
-      const changed = (['notes', 'sortOrder', 'unitsRequested', 'unitType', 'unitTypeId'] as const).some((k) => (match[k] ?? null) !== (row[k] ?? null));
+      const changed = (['notes', 'sortOrder', 'unitsRequested', 'unitType', 'unitTypeId', 'openForAll', 'name', 'businessPartnerId'] as const).some((k) => (match[k] ?? null) !== (row[k] ?? null));
       if (changed) updates.push(db.update(tourItineraryPartners).set({ ...row, updatedAt: new Date() }).where(eq(tourItineraryPartners.id, match.id)));
     } else {
       toInsert.push(row);

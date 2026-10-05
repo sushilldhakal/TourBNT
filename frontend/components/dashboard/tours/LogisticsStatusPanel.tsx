@@ -24,6 +24,7 @@ import { searchBusinessPartners, type BusinessPartner, type BusinessPartnerType 
 import { useTourContext } from '@/providers/TourProvider';
 import { queryKeys } from '@/lib/queries/queryKeys';
 import { format } from 'date-fns';
+import { OpenSlotApplications } from './OpenSlotApplications';
 
 const STATUS_META = {
     confirmed: { label: 'Confirmed', icon: CheckCircle2, className: 'status-pill status-pill--confirmed' },
@@ -175,6 +176,9 @@ function RequestRow({ tourId, row, tourDestinationId }: { tourId: string; row: T
                 <div className="min-w-0">
                     <span className="font-medium">{row.partnerName}</span>
                     <span className="text-muted-foreground"> · {requirementLabel(row)}</span>
+                    {row.withdrewAfterConfirm && (
+                        <Badge variant="destructive" className="ml-2">Cancelled after approval</Badge>
+                    )}
                     {row.serviceTime && <span className="text-muted-foreground"> · {row.serviceTime}</span>}
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
@@ -343,11 +347,11 @@ export function LogisticsStatusPanel() {
         return { dated: Array.from(dated.entries()).sort(([a], [b]) => a.localeCompare(b)), undated };
     }, [requests]);
 
-    if (!tourId || isLoading || !requests || requests.length === 0) {
-        return null;
-    }
+    if (!tourId) return null;
 
     return (
+        <>
+        {requests && requests.length > 0 && !isLoading && (
         <Card className="mt-6">
             <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
@@ -384,5 +388,8 @@ export function LogisticsStatusPanel() {
                 ))}
             </CardContent>
         </Card>
+        )}
+        <OpenSlotApplications tourId={tourId} />
+        </>
     );
 }

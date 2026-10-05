@@ -372,6 +372,7 @@ export const approveBusinessPartner = async (req: Request, res: Response, next: 
       rejectedBy: null,
       rejectedAt: null,
       rejectionReason: null,
+      approvalHoldReason: null,
       updatedAt: new Date(),
     }).where(eq(businessPartners.id, businessPartnerId)).returning();
     await invalidateBusinessPartner(businessPartnerId);

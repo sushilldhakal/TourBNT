@@ -1,4 +1,4 @@
-import { api, handleApiError, extractResponseData } from './apiClient';
+import { api, handleApiError, extractResponseData, extractList } from './apiClient';
 
 export type BusinessPartnerType = 'guide' | 'hotel' | 'guesthouse' | 'restaurant' | 'transport' | 'advertiser';
 
@@ -19,6 +19,7 @@ export interface BusinessPartner {
     details?: Record<string, unknown> | null;
     isApproved: boolean;
     approvalStatus: 'pending' | 'approved' | 'rejected';
+    approvalHoldReason?: string | null;
     rejectionReason?: string | null;
     isActive: boolean;
     averageRating: number;
@@ -342,5 +343,76 @@ export const respondToItineraryRequest = async (
         return extractResponseData<ItineraryPartnerRequest>(response);
     } catch (error) {
         throw handleApiError(error, 'responding to itinerary request');
+    }
+};
+
+export interface PartnerOpenSlot {
+    linkId: string;
+    tourId: string;
+    tourTitle: string;
+    role: string;
+    dayLabel: string;
+    serviceDate: string;
+    unitsRequested: number | null;
+    unitType: string | null;
+    serviceTime: string | null;
+    serviceEndTime: string | null;
+}
+
+export const getPartnerOpenSlots = async (businessPartnerId: string) => {
+    try {
+        const response = await api.get(`/business-partners/${businessPartnerId}/open-slots`);
+        return extractList<PartnerOpenSlot>(response);
+    } catch (error) {
+        throw handleApiError(error, 'fetching open dates');
+    }
+};
+
+export const applyToOpenSlot = async (businessPartnerId: string, linkId: string, body: { serviceDate: string; message?: string; unitsOffered?: number }) => {
+    try {
+        const response = await api.post(`/business-partners/${businessPartnerId}/open-slots/${linkId}/apply`, body);
+        return extractResponseData(response);
+    } catch (error) {
+        throw handleApiError(error, 'applying for an open date');
+    }
+};
+
+export interface WithdrawalResult {
+    evidenceSufficient: boolean;
+    accountPending: boolean;
+    warning: string;
+}
+
+export const withdrawConfirmedRequest = async (businessPartnerId: string, requestId: string, explanation: string) => {
+    try {
+        const response = await api.post(`/business-partners/${businessPartnerId}/requests/${requestId}/withdraw`, { explanation });
+        return extractResponseData<WithdrawalResult>(response);
+    } catch (error) {
+        throw handleApiError(error, 'withdrawing an approved deal');
+    }
+};
+
+export interface WithdrawalStatus {
+    holdReason: string | null;
+    warning: string | null;
+    evidenceSufficient: boolean | null;
+    latestExplanation: string | null;
+}
+
+export const getWithdrawalStatus = async (businessPartnerId: string) => {
+    try {
+        const response = await api.get(`/business-partners/${businessPartnerId}/withdrawal-status`);
+        return extractResponseData<WithdrawalStatus>(response);
+    } catch (error) {
+        throw handleApiError(error, 'fetching withdrawal status');
+    }
+};
+
+export const submitWithdrawalEvidence = async (businessPartnerId: string, explanation: string) => {
+    try {
+        const response = await api.post(`/business-partners/${businessPartnerId}/withdrawal-evidence`, { explanation });
+        return extractResponseData<{ restored: boolean; warning: string }>(response);
+    } catch (error) {
+        throw handleApiError(error, 'submitting a cancellation explanation');
     }
 };

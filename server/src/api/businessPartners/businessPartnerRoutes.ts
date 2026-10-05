@@ -42,6 +42,13 @@ import {
   createAvailabilityBlock,
   deleteAvailabilityBlock,
 } from './availabilityController';
+import {
+  listPartnerOpenSlots,
+  applyToOpenSlot,
+  withdrawConfirmedRequest,
+  getWithdrawalStatus,
+  submitWithdrawalEvidence,
+} from './openSlotController';
 
 const businessPartnerRouter = express.Router();
 
@@ -127,6 +134,11 @@ businessPartnerRouter.get('/:businessPartnerId/capacity/overrides', authenticate
 businessPartnerRouter.put('/:businessPartnerId/capacity/overrides/:date', authenticate, asyncAuthHandler(setCapacityOverride));
 businessPartnerRouter.get('/:businessPartnerId/requests', authenticate, paginationMiddleware(), asyncAuthHandler(getMyItineraryRequests));
 businessPartnerRouter.patch('/:businessPartnerId/requests/:requestId', authenticate, asyncAuthHandler(respondToItineraryRequest));
+businessPartnerRouter.post('/:businessPartnerId/requests/:requestId/withdraw', authenticate, asyncAuthHandler(withdrawConfirmedRequest));
+businessPartnerRouter.get('/:businessPartnerId/open-slots', authenticate, asyncAuthHandler(listPartnerOpenSlots));
+businessPartnerRouter.post('/:businessPartnerId/open-slots/:linkId/apply', authenticate, asyncAuthHandler(applyToOpenSlot));
+businessPartnerRouter.get('/:businessPartnerId/withdrawal-status', authenticate, asyncAuthHandler(getWithdrawalStatus));
+businessPartnerRouter.post('/:businessPartnerId/withdrawal-evidence', authenticate, asyncAuthHandler(submitWithdrawalEvidence));
 
 // Named unit types (hotel room types today; transport vehicle types reuse
 // this later) with per-date channel blocks — owner-or-admin gated inside
