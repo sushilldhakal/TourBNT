@@ -1,6 +1,6 @@
 import {
     Home, FileText, Users, Image, Settings, Mail, LayoutDashboard,
-    List, MapPin, FolderTree, Lightbulb, HelpCircle, Calendar, Star, Wrench,
+    List, MapPin, FolderTree, Lightbulb, HelpCircle, Calendar, CalendarRange, Star, Wrench,
     MessageSquare, Plus, Briefcase, UserCog, CalendarCheck, Building2, Megaphone,
     Compass, Utensils, Truck, Gauge, Tag, Banknote
 } from 'lucide-react';
@@ -94,6 +94,12 @@ export const baseNavigationItems: NavigationItem[] = [
         href: '/dashboard/operations',
         label: 'Operations',
         icon: Gauge,
+        roles: ['admin', 'seller'],
+    },
+    {
+        href: '/dashboard/operations/timeline',
+        label: 'Tour timeline',
+        icon: CalendarRange,
         roles: ['admin', 'seller'],
     },
     // Split by type (see DashboardSidebar for the ownership-driven version

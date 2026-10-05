@@ -24,6 +24,7 @@ export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) 
     const { isFullWidth } = useLayout();
     // Messaging is a fixed-height app view, not a standard page: it keeps its own sizing.
     const isMessagePage = pathname?.startsWith('/dashboard/message') ?? false;
+    const isTimelinePage = pathname?.startsWith('/dashboard/operations/timeline') ?? false;
 
 
     const handleLogout = () => {
@@ -118,7 +119,7 @@ export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) 
                             data-dashboard-shell
                             className={cn(
                                 'flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6 transition-[max-width] duration-300 min-w-0',
-                                isFullWidth || isMessagePage ? 'w-full max-w-none' : 'w-full max-w-7xl mx-auto'
+                                isFullWidth || isMessagePage || isTimelinePage ? 'w-full max-w-none' : 'w-full max-w-7xl mx-auto'
                             )}
                         >
                             {/* Content Container */}

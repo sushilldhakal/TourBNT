@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { format, formatDistanceToNowStrict } from 'date-fns';
-import { BellRing, Gauge, Building2, Utensils, Compass, Truck, AlertCircle, AlertTriangle, CheckCircle2, Search, ListChecks, Plane, Store } from 'lucide-react';
+import { BellRing, Gauge, Building2, Utensils, Compass, Truck, AlertCircle, AlertTriangle, CheckCircle2, Search, ListChecks, Plane, Store, CalendarRange } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { SellerGuard } from '@/components/dashboard/RoleGuard';
 import { AttentionBoard } from '@/components/dashboard/operations/AttentionBoard';
@@ -19,6 +19,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
 import { useOperationsSummary } from '@/lib/queries';
 import {
     getOperationsRequestsPage,
@@ -305,6 +306,11 @@ export default function OperationsPage() {
                     description={admin
                         ? 'A live snapshot across every trip and supplier — the control center for TourBNT staff.'
                         : 'Hotels, guesthouses, restaurants, guides and transport on your upcoming tours that haven\'t confirmed yet, soonest first. Call them, accept a proposed change, ask again or swap the supplier. The same actions are on each tour\'s itinerary.'}
+                    actions={(
+                        <Button variant="outline" size="sm" asChild>
+                            <Link href="/dashboard/operations/timeline"><CalendarRange className="h-4 w-4" /> Tour timeline</Link>
+                        </Button>
+                    )}
                 />
 
                 {admin ? (
