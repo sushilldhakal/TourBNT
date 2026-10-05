@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { getOperationsSummary, getOperationsRequests, getOperationsTrips, getOperationsSuppliers, getOperationsAttention } from './operationsController';
+import { getOperationsEpg } from './epgController';
 import { authenticate, authorizeRoles } from '../../middlewares/authenticate';
 import { asyncAuthHandler } from '../../utils/routeWrapper';
 
@@ -12,6 +13,7 @@ const router = Router();
  */
 // Sellers' (and admins') board of upcoming supplier requests that still need attention.
 router.get('/attention', authenticate, authorizeRoles('admin', 'seller'), asyncAuthHandler(getOperationsAttention));
+router.get('/epg', authenticate, authorizeRoles('admin', 'seller'), asyncAuthHandler(getOperationsEpg));
 router.get('/summary', authenticate, authorizeRoles('admin'), asyncAuthHandler(getOperationsSummary));
 
 router.get('/requests', authenticate, authorizeRoles('admin'), asyncAuthHandler(getOperationsRequests));

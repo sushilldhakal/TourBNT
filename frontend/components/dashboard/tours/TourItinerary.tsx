@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useSyncExternalStore } from 'react';
 import { useFieldArray } from 'react-hook-form';
 import { useTourContext } from '@/providers/TourProvider';
 import { GripVertical, Plus, Trash2, Calendar, AlertTriangle } from 'lucide-react';
@@ -41,6 +41,32 @@ export function TourItinerary() {
         control,
         name: 'itinerary.options.0', // Using first option array for simplicity
     });
+
+    // The operations timeline links here with ?day=<index>#itinerary. The server snapshot is -1 so
+    // hydration matches; the client snapshot then opens that existing day.
+    const dayIndex = useSyncExternalStore(
+        () => () => {},
+        () => {
+            const raw = new URLSearchParams(window.location.search).get('day');
+            if (raw == null) return -1;
+            const index = Number(raw);
+            return Number.isInteger(index) && index >= 0 ? index : -1;
+        },
+        () => -1,
+    );
+    const [openedFromLink, setOpenedFromLink] = React.useState(false);
+    if (!openedFromLink && dayIndex >= 0 && fields[dayIndex]) {
+        setOpenedFromLink(true);
+        const fieldId = fields[dayIndex].id;
+        if (!openDays.includes(fieldId)) setOpenDays([...openDays, fieldId]);
+    }
+    React.useEffect(() => {
+        if (!openedFromLink || dayIndex < 0) return;
+        const timer = window.setTimeout(() => {
+            document.getElementById(`itinerary-day-${dayIndex}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 200);
+        return () => window.clearTimeout(timer);
+    }, [openedFromLink, dayIndex]);
 
     // Open a day just added once it is in the field array (adjusting state during render, not in an effect).
     if (openNewest && fields.length > 0) {
@@ -209,7 +235,7 @@ function ItineraryItem({ id, index, onRemove, onDragStart, onDragOver, onDrop }:
     const destination = watch(`itinerary.options.0.${index}.destination`);
 
     return (
-        <AccordionItem value={id} className="border-none">
+        <AccordionItem value={id} id={`itinerary-day-${index}`} className="scroll-mt-24 border-none">
         <Card
             onDragOver={(event) => {
                 onDragOver(event);

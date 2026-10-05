@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Package2, Home, FileText, Users, Image, Settings, Mail, LayoutDashboard, ChevronDown, ChevronRight, Plus, List, MapPin, FolderTree, Lightbulb, HelpCircle, Calendar, Star, Wrench, MessageSquare, Briefcase, PanelLeftClose, PanelLeft, UserCog, CalendarCheck, Compass, Utensils, Truck, Gauge } from 'lucide-react';
+import { Package2, Home, FileText, Users, Image, Settings, Mail, LayoutDashboard, ChevronDown, ChevronRight, Plus, List, MapPin, FolderTree, Lightbulb, HelpCircle, Calendar, CalendarRange, Star, Wrench, MessageSquare, Briefcase, PanelLeftClose, PanelLeft, UserCog, CalendarCheck, Compass, Utensils, Truck, Gauge } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState, useMemo } from 'react';
 import {
@@ -112,6 +112,12 @@ const baseNavigationItems: NavigationItem[] = [
         icon: Gauge,
         // Sellers: their own tours' supplier follow-ups. Admins: everything.
         roles: ['admin', 'seller']
+    },
+    {
+        href: '/dashboard/operations/timeline',
+        label: 'Tour timeline',
+        icon: CalendarRange,
+        roles: ['admin', 'seller'],
     },
     // Add My Profile link at top level (accessible to all authenticated users)
     {
@@ -275,7 +281,14 @@ export function DashboardSidebar({ isCollapsed, onToggle, mobileMenuOpen = false
         const Icon = item.icon;
         const hasChildren = item.children && item.children.length > 0;
         const isExpanded = expandedItems.includes(item.label);
-        const isActive = item.href && (pathname === item.href || pathname.startsWith(item.href + '/'));
+        const matchesPath = (href: string) => pathname === href || pathname.startsWith(href + '/');
+        // Longest href wins, so /dashboard/operations does not stay lit on /dashboard/operations/timeline.
+        const isActive = Boolean(item.href) && matchesPath(item.href!) && !navigationItems.some((other) =>
+            other.href
+            && other.href !== item.href
+            && other.href.startsWith(`${item.href}/`)
+            && matchesPath(other.href)
+        );
 
         if (hasChildren) {
             const button = (
