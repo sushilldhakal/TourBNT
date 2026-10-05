@@ -182,24 +182,34 @@ export function MainHeader({ onSearchToggle }: MainHeaderProps) {
                                         {showUserMenu && (
                                             <div className="absolute right-0 z-10 mt-2 w-48 origin-top-right rounded-md bg-card py-1 shadow-lg ring-1 ring-border">
                                                 {/* Only show Dashboard link for authorized roles */}
-                                                {userCanAccessDashboard && (
+                                                {userCanAccessDashboard ? (
+                                                    <>
+                                                        <Link
+                                                            href="/dashboard"
+                                                            className="block px-4 py-2 text-sm hover:bg-accent hover:text-accent-foreground"
+                                                            onClick={() => setShowUserMenu(false)}
+                                                        >
+                                                            Dashboard
+                                                        </Link>
+                                                        <Link
+                                                            href="/dashboard/profile"
+                                                            className="block px-4 py-2 text-sm hover:bg-accent hover:text-accent-foreground"
+                                                            onClick={() => setShowUserMenu(false)}
+                                                        >
+                                                            Your Profile
+                                                        </Link>
+                                                    </>
+                                                ) : (
                                                     <Link
-                                                        href="/dashboard"
+                                                        href="/account"
                                                         className="block px-4 py-2 text-sm hover:bg-accent hover:text-accent-foreground"
                                                         onClick={() => setShowUserMenu(false)}
                                                     >
-                                                        Dashboard
+                                                        My account
                                                     </Link>
                                                 )}
                                                 <Link
-                                                    href="/dashboard/profile"
-                                                    className="block px-4 py-2 text-sm hover:bg-accent hover:text-accent-foreground"
-                                                    onClick={() => setShowUserMenu(false)}
-                                                >
-                                                    Your Profile
-                                                </Link>
-                                                <Link
-                                                    href="/booking"
+                                                    href={userCanAccessDashboard ? '/booking' : '/account?tab=bookings'}
                                                     className="block px-4 py-2 text-sm hover:bg-accent hover:text-accent-foreground"
                                                     onClick={() => setShowUserMenu(false)}
                                                 >
@@ -264,24 +274,34 @@ export function MainHeader({ onSearchToggle }: MainHeaderProps) {
                             {/* Add auth links for mobile */}
                             {isHydrated && isAuthenticated ? (
                                 <>
-                                    {userCanAccessDashboard && (
+                                    {userCanAccessDashboard ? (
+                                        <>
+                                            <Link
+                                                href="/dashboard"
+                                                className="text-secondary-foreground hover:bg-accent hover:text-accent-foreground block rounded-md px-3 py-2 text-base font-medium"
+                                                onClick={() => setIsOpen(false)}
+                                            >
+                                                Dashboard
+                                            </Link>
+                                            <Link
+                                                href="/dashboard/profile"
+                                                className="text-secondary-foreground hover:bg-accent hover:text-accent-foreground block rounded-md px-3 py-2 text-base font-medium"
+                                                onClick={() => setIsOpen(false)}
+                                            >
+                                                Profile
+                                            </Link>
+                                        </>
+                                    ) : (
                                         <Link
-                                            href="/dashboard"
+                                            href="/account"
                                             className="text-secondary-foreground hover:bg-accent hover:text-accent-foreground block rounded-md px-3 py-2 text-base font-medium"
                                             onClick={() => setIsOpen(false)}
                                         >
-                                            Dashboard
+                                            My account
                                         </Link>
                                     )}
                                     <Link
-                                        href="/dashboard/profile"
-                                        className="text-secondary-foreground hover:bg-accent hover:text-accent-foreground block rounded-md px-3 py-2 text-base font-medium"
-                                        onClick={() => setIsOpen(false)}
-                                    >
-                                        Profile
-                                    </Link>
-                                    <Link
-                                        href="/booking"
+                                        href={userCanAccessDashboard ? '/booking' : '/account?tab=bookings'}
                                         className="text-secondary-foreground hover:bg-accent hover:text-accent-foreground block rounded-md px-3 py-2 text-base font-medium"
                                         onClick={() => setIsOpen(false)}
                                     >

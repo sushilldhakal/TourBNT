@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { loginUser } from "@/lib/api/users";
 import { api, apiErrorMessage, extractResponseData } from "@/lib/api/apiClient";
 import useUserStore, { type User } from "@/lib/store/useUserStore";
-import { canAccessDashboard } from "@/lib/utils/roles";
+import { canAccessDashboard, signedInHome } from "@/lib/utils/roles";
 import { Mail, Lock, UserIcon, Phone, CheckCircle2, Loader2, EyeIcon, EyeOffIcon } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
@@ -40,6 +40,8 @@ function LoginPageContent() {
             if (canAccessDashboard(roles)) {
                 const path = targetFromRedirect && targetFromRedirect.startsWith('/dashboard') ? targetFromRedirect : '/dashboard';
                 router.replace(path);
+            } else if (targetFromRedirect && (targetFromRedirect.startsWith('/account') || targetFromRedirect.startsWith('/dashboard'))) {
+                router.replace('/account');
             } else {
                 router.replace('/');
             }
@@ -169,7 +171,7 @@ function LoginPageContent() {
             });
 
             // Client-side navigation: store is already updated by loginUser(), no reload needed
-            router.replace('/dashboard');
+            router.replace(signedInHome(useUserStore.getState().user.roles));
         } catch (error: unknown) {
             const msg = error instanceof Error ? error.message : 'Invalid credentials';
             toast({
@@ -308,17 +310,17 @@ function LoginPageContent() {
                             <div className="space-y-3">
                                 <GoogleSignInButton
                                     keepMeSignedIn={keepMeSignedIn}
-                                    onSuccess={() => { toast({ title: 'Signed in', description: 'Welcome!' }); router.replace('/dashboard'); }}
+                                    onSuccess={() => { toast({ title: 'Signed in', description: 'Welcome!' }); router.replace(signedInHome(useUserStore.getState().user.roles)); }}
                                     onError={(description) => toast({ title: 'Google sign-in failed', description, variant: 'destructive' })}
                                 />
                                 <FacebookSignInButton
                                     keepMeSignedIn={keepMeSignedIn}
-                                    onSuccess={() => { toast({ title: 'Signed in', description: 'Welcome!' }); router.replace('/dashboard'); }}
+                                    onSuccess={() => { toast({ title: 'Signed in', description: 'Welcome!' }); router.replace(signedInHome(useUserStore.getState().user.roles)); }}
                                     onError={(description) => toast({ title: 'Facebook sign-in failed', description, variant: 'destructive' })}
                                 />
                                 <PasskeySignInButton
                                     keepMeSignedIn={keepMeSignedIn}
-                                    onSuccess={() => { toast({ title: 'Signed in', description: 'Welcome!' }); router.replace('/dashboard'); }}
+                                    onSuccess={() => { toast({ title: 'Signed in', description: 'Welcome!' }); router.replace(signedInHome(useUserStore.getState().user.roles)); }}
                                     onError={(description) => toast({ title: 'Passkey sign-in failed', description, variant: 'destructive' })}
                                 />
                                 <div className="relative text-center text-xs text-muted-foreground">

@@ -69,6 +69,10 @@ export const canAccessDashboard = (role: string | null): boolean => {
     return (RoleGroups.DASHBOARD_ACCESS as readonly string[]).includes(role);
 };
 
+/** Where a person lands after they sign in. Travellers get their own account page, not the operator dashboard. */
+export const signedInHome = (role: string | null | undefined): string =>
+    canAccessDashboard(role ?? null) ? '/dashboard' : '/account';
+
 /**
  * Check if user is admin
  * @param role - User role to check

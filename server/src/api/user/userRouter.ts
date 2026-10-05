@@ -26,6 +26,15 @@ import { filterSortMiddleware } from "../../middlewares/filterSort";
 import { uploadNone, uploadAvatar as uploadAvatarMiddleware, uploadSellerDocs } from '../../middlewares/multer';
 import { authLimiter } from '../../middlewares/rateLimiter';
 import { sendValidationError } from '../../utils/apiResponse';
+import {
+  addWishlist,
+  listMyComments,
+  listMyReviews,
+  listPaymentMethods,
+  listWishlist,
+  removeWishlist,
+  replacePaymentMethods,
+} from './travelerAccountController';
 
 const userRouter = express.Router();
 
@@ -161,6 +170,15 @@ userRouter.patch('/me', authenticate, uploadSellerDocs, updateMyProfile);
  *         description: Unauthorized
  */
 userRouter.patch('/me/password', authenticate, changeMyPassword);
+
+// Traveller account: bookmarks, their own reviews and comments, and display-only cards.
+userRouter.get('/me/wishlist', authenticate, listWishlist);
+userRouter.post('/me/wishlist', authenticate, addWishlist);
+userRouter.delete('/me/wishlist/:tourId', authenticate, removeWishlist);
+userRouter.get('/me/reviews', authenticate, listMyReviews);
+userRouter.get('/me/comments', authenticate, listMyComments);
+userRouter.get('/me/payment-methods', authenticate, listPaymentMethods);
+userRouter.put('/me/payment-methods', authenticate, replacePaymentMethods);
 
 /**
  * @swagger

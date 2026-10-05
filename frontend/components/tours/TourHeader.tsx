@@ -1,14 +1,18 @@
+'use client';
+
 import React from 'react';
 import { Badge } from '@/components/ui/badge';
+import { SaveTourButton } from '@/components/tours/SaveTourButton';
 
 /** Category can be { name, _id } (legacy) or { label, value } (lean API) */
 interface TourHeaderProps {
     title: string;
     code: string;
+    tourId?: string;
     categories?: string | string[] | Array<{ id?: string; _id?: string; label?: string; value?: string; name?: string }>;
 }
 
-export function TourHeader({ title, code, categories }: TourHeaderProps) {
+export function TourHeader({ title, code, tourId, categories }: TourHeaderProps) {
     // Normalize categories to array
     const categoryArray = React.useMemo(() => {
         if (!categories) return [];
@@ -20,9 +24,12 @@ export function TourHeader({ title, code, categories }: TourHeaderProps) {
     return (
         <header className="space-y-3 sm:space-y-4">
             {/* Tour Title */}
-            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-foreground break-words">
-                {title}
-            </h1>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+                <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-foreground break-words">
+                    {title}
+                </h1>
+                {tourId ? <SaveTourButton tourId={tourId} /> : null}
+            </div>
 
             {/* Tour Code and Categories */}
             <div className="flex flex-wrap items-center gap-2 sm:gap-3">

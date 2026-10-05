@@ -151,6 +151,16 @@ export const adBillingModelEnum = pgEnum('ad_billing_model', ['monthly', 'per_vi
 // Users
 // ---------------------------------------------------------------------------
 
+/** A card a traveller saved for display. The full number and the security code are never stored. */
+export interface SavedCard {
+  id: string;
+  brand: 'visa' | 'mastercard' | 'amex' | 'other';
+  last4: string;
+  expiryMonth: number;
+  expiryYear: number;
+  cardholderName: string;
+}
+
 export const users = pgTable('users', {
   id: id(),
   name: text('name').notNull(),
@@ -164,8 +174,8 @@ export const users = pgTable('users', {
   // stored under (e.g. "acme-tours"), assigned once at onboarding approval —
   // see mediaFolderService.ensureMediaFolder. Null until they onboard.
   mediaFolder: text('media_folder'),
-  // Unused legacy column. Do not store card numbers, expiry, or CVV here.
-  paymentMethods: jsonb('payment_methods').$type<unknown[]>().default([]),
+  // Display-only saved cards. Never store a full card number, expiry as a secret, or CVV.
+  paymentMethods: jsonb('payment_methods').$type<SavedCard[]>().default([]),
   // Seller application/profile info (was `sellerInfo` embedded doc in Mongo).
   sellerInfo: jsonb('seller_info').$type<Record<string, unknown> | null>(),
   // Google account id (the `sub` claim) for people who signed in with Google; null for password accounts.

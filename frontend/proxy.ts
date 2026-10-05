@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { ROUTES } from '@/lib/config/routes';
 import { canAccessDashboardPath } from '@/lib/config/dashboardAccess';
-import { canAccessDashboard } from '@/lib/utils/roles';
+import { canAccessDashboard, isRegularUser } from '@/lib/utils/roles';
 
 const DASHBOARD_PREFIX = '/dashboard';
 const LOGIN_PATH = ROUTES.LOGIN;
@@ -32,6 +32,9 @@ export function proxy(request: NextRequest) {  // Changed from 'middleware' to '
     // cookie after a role change) falls through to the client layout, which
     // uses the live role.
     const role = roleFromToken(request.cookies.get('token')?.value);
+    if (role && isRegularUser(role)) {
+        return NextResponse.redirect(new URL('/account', request.url));
+    }
     if (role && canAccessDashboard(role) && !canAccessDashboardPath(path, role)) {
         return NextResponse.redirect(new URL(DASHBOARD_PREFIX, request.url));
     }
@@ -51,4 +54,4 @@ function roleFromToken(token?: string): string | null {
     }
 }
 
-export const config = { matcher: ['/dashboard/:path*'] };
+export const config = { matcher: ['/dashboard', '/dashboard/:path*'] };

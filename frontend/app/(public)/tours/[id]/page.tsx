@@ -211,6 +211,7 @@ export default async function SingleTourPage({ params }: PageProps) {
                         <TourHeader
                             title={tour.title}
                             code={tour.code}
+                            tourId={tour.id}
                             categories={tour.category}
                         />
 
