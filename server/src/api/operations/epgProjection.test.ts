@@ -302,4 +302,45 @@ describe('projectEpg', () => {
     assert.equal(epg.departures[0].status, 'completed');
     assert.equal(epg.departures[0].currentDay, null);
   });
+
+  it('marks only the day a supplier has not confirmed, not the whole departure', () => {
+    const trek = tour({
+      id: 'trek', title: 'Trek', destination: null,
+      tourDates: { scheduleType: 'fixed', defaultDateRange: { from: '2026-10-05' } },
+      itinerary: [day(0, 'A'), day(1, 'B'), day(2, 'C'), day(3, 'D')],
+    });
+    const request = (status: string, serviceDate: string, role = 'accommodation', partnerName = 'Hotel X') => ({
+      tourId: 'trek', status, role, serviceDate, sourceDepartureDate: null, counterDate: null, partnerName,
+    });
+    const result = projectEpg({
+      tours: [trek], bookings: [],
+      requests: [request('declined', '2026-10-07'), request('countered', '2026-10-08', 'transport', 'Bus Co'), request('confirmed', '2026-10-06'), request('held', '2026-10-05')],
+      query: query(),
+    });
+    const [row] = result.departures;
+    assert.equal(row.status, 'attention'); // the departure badge still says something needs attention
+    const byDate = Object.fromEntries(row.days.map((d) => [d.date, d.issues?.map((i) => `${i.role}:${i.status}`)]));
+    assert.deepEqual(byDate, {
+      '2026-10-05': undefined, // held = the supplier has agreed to hold it
+      '2026-10-06': undefined, // confirmed
+      '2026-10-07': ['accommodation:declined'],
+      '2026-10-08': ['transport:countered'],
+    });
+  });
+
+  it('flags a day whose supplier has not replied yet', () => {
+    const trek = tour({
+      id: 'trek', title: 'Trek', destination: null,
+      tourDates: { scheduleType: 'fixed', defaultDateRange: { from: '2026-10-05' } },
+      itinerary: [day(0, 'A'), day(1, 'B'), day(2, 'C'), day(3, 'D')],
+    });
+    const result = projectEpg({
+      tours: [trek], bookings: [],
+      requests: [{ tourId: 'trek', status: 'pending', role: 'guide', serviceDate: '2026-10-06', sourceDepartureDate: null, counterDate: null, partnerName: 'Guide G' }],
+      query: query(),
+    });
+    assert.equal(result.departures[0].status, 'running'); // waiting is not a departure-level problem
+    assert.deepEqual(result.departures[0].days[1].issues, [{ role: 'guide', status: 'pending', partnerName: 'Guide G' }]);
+    assert.equal(result.departures[0].days[0].issues, undefined);
+  });
 });
