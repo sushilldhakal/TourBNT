@@ -15,8 +15,11 @@ import {
     Search,
     Ship,
     UserRound,
+    Utensils,
 } from 'lucide-react';
-import { SellerGuard } from '@/components/dashboard/RoleGuard';
+import { RoleGuard } from '@/components/dashboard/RoleGuard';
+import { useAuth } from '@/lib/hooks/useAuth';
+import { useMyBusinessPartners } from '@/lib/queries';
 import { DashboardCardHeader } from '@/components/dashboard/layout/CardHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,6 +30,8 @@ import {
     type EpgDay,
     type EpgDeparture,
     type EpgOperationalStatus,
+    type EpgPartnerService,
+    type EpgScope,
     type EpgStatusFilter,
     type TransportKind,
 } from '@/lib/api/operationsEpg';
@@ -76,10 +81,44 @@ const STATUS_STYLE: Record<EpgOperationalStatus, { label: string; dot: string; t
     attention: { label: 'Attention', dot: 'bg-red-500', text: 'text-red-700 dark:text-red-300', cell: 'border-red-600/40 bg-red-500/10' },
 };
 
+/** Everyone who may open the timeline: operators see tours, businesses see their own services. */
+const TIMELINE_ROLES = ['admin', 'seller', 'hotel', 'guesthouse', 'restaurant', 'guide', 'transport'];
+
+const SERVICE_ROLE: Record<string, { label: string; Icon: typeof Bed }> = {
+    accommodation: { label: 'Stay', Icon: Bed },
+    meals: { label: 'Meals', Icon: Utensils },
+    guide: { label: 'Guide', Icon: UserRound },
+    transport: { label: 'Transport', Icon: Car },
+    other: { label: 'Activity', Icon: Binoculars },
+};
+
+const SERVICE_STATUS: Record<string, { label: string; dot: string; cell: string }> = {
+    confirmed: { label: 'Confirmed', dot: 'bg-emerald-500', cell: 'border-emerald-600/30 bg-emerald-500/10' },
+    held: { label: 'Held', dot: 'bg-sky-500', cell: 'border-sky-600/30 bg-sky-500/10' },
+    pending: { label: 'Needs reply', dot: 'bg-amber-500', cell: 'border-amber-600/40 bg-amber-500/10' },
+    countered: { label: 'Countered', dot: 'bg-amber-500', cell: 'border-amber-600/40 bg-amber-500/10' },
+    declined: { label: 'Declined', dot: 'bg-red-500', cell: 'border-red-600/40 bg-red-500/10' },
+    expired: { label: 'Expired', dot: 'bg-red-500', cell: 'border-red-600/40 bg-red-500/10' },
+};
+
+const serviceStatus = (status: string) => SERVICE_STATUS[status] ?? SERVICE_STATUS.pending;
+
+/** One line describing a request: guests, units and time. */
+function serviceDetail(service: EpgPartnerService): string {
+    const parts: string[] = [];
+    if (service.headcount > 0) parts.push(`${service.headcount} guest${service.headcount === 1 ? '' : 's'}`);
+    const units = service.capacityConfirmed ?? service.unitsRequested;
+    if (units > 0) parts.push(`${units} ${service.unitType ?? (service.role === 'accommodation' ? 'rooms' : service.role === 'transport' ? 'seats' : 'units')}`);
+    if (service.serviceTime) parts.push(service.serviceEndTime ? `${service.serviceTime}–${service.serviceEndTime}` : service.serviceTime);
+    if (service.counterDate) parts.push(`offered ${dateParts(service.counterDate).month} ${dateParts(service.counterDate).day}`);
+    return parts.join(' · ');
+}
+
 const ROW_HEADER = 248;
 const HEADER_H = 52;
 const COL = { detailed: 176, compact: 112 } as const;
 const ROW = { detailed: 112, compact: 60 } as const;
+const PARTNER_ROW = { detailed: 140, compact: 72 } as const;
 
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -174,6 +213,118 @@ function DayCell({ day, tourId, status, today, density }: { day: EpgDay; tourId:
     );
 }
 
+/** A day on a business's own timeline: where the group is, and what this business was asked to do. */
+function PartnerDayCell({ day, status, today, density }: { day: EpgDay; status: EpgOperationalStatus; today: string; density: Density }) {
+    const services = day.services ?? [];
+    const isNow = day.date === today;
+    const worst = services.find((s) => s.status === 'declined' || s.status === 'expired')
+        ?? services.find((s) => s.status === 'pending' || s.status === 'countered')
+        ?? services[0];
+    const cell = worst ? serviceStatus(worst.status).cell : STATUS_STYLE[status].cell;
+    return (
+        <div
+            className={cn('flex h-full flex-col gap-0.5 overflow-hidden rounded-md border px-1.5 py-1 text-left', services.length ? cell : 'border-dashed bg-transparent opacity-70', isNow && 'ring-1 ring-rose-500')}
+            title={`Day ${day.dayNumber}${day.destination ? `, ${day.destination}` : ''}${services.length ? '' : '. Nothing asked of you today.'}`}
+        >
+            <div className="flex items-center justify-between gap-1">
+                <span className="truncate text-[11px] font-semibold leading-tight">D{day.dayNumber} · {day.destination || 'Day'}</span>
+                {isNow && density === 'detailed' && <span className="text-[9px] font-bold uppercase text-rose-600 dark:text-rose-300">Now</span>}
+            </div>
+            {services.map((service) => {
+                const meta = SERVICE_ROLE[service.role] ?? SERVICE_ROLE.other;
+                const state = serviceStatus(service.status);
+                return density === 'detailed' ? (
+                    <div key={service.requestId} className="min-w-0 text-[10px] leading-tight">
+                        <span className="flex items-center gap-1 font-medium">
+                            <meta.Icon className="h-3 w-3 shrink-0" aria-hidden />
+                            <span className="truncate">{service.partnerName || meta.label}</span>
+                            <span className={cn('ml-auto h-1.5 w-1.5 shrink-0 rounded-full', state.dot)} aria-hidden />
+                            <span className="shrink-0 text-muted-foreground">{state.label}</span>
+                        </span>
+                        <span className="block truncate text-muted-foreground">{serviceDetail(service)}</span>
+                    </div>
+                ) : (
+                    <span key={service.requestId} className="flex items-center gap-1 text-[10px] text-muted-foreground" title={`${service.partnerName} · ${state.label} · ${serviceDetail(service)}`}>
+                        <meta.Icon className="h-3 w-3 shrink-0" aria-label={meta.label} />
+                        <span className={cn('h-1.5 w-1.5 rounded-full', state.dot)} aria-hidden />
+                        {service.headcount > 0 && <span>{service.headcount}</span>}
+                    </span>
+                );
+            })}
+        </div>
+    );
+}
+
+function PartnerRowHeader({ row, today }: { row: EpgDeparture; today: string }) {
+    const style = STATUS_STYLE[row.status];
+    const services = row.days.flatMap((day) => day.services ?? []);
+    const todayCount = row.days.filter((day) => day.date === today).flatMap((day) => day.services ?? []).length;
+    return (
+        <div
+            title={row.issues.length ? row.issues.join(' · ') : row.title}
+            className="flex h-full flex-col justify-center gap-0.5 overflow-hidden border-r bg-card px-3"
+            style={{ width: ROW_HEADER }}
+        >
+            <span className="flex items-center gap-1.5">
+                <span className={cn('h-2 w-2 shrink-0 rounded-full', style.dot)} aria-hidden />
+                <span className="truncate text-sm font-semibold">{row.title}</span>
+            </span>
+            <span className="truncate text-[11px] text-muted-foreground">
+                {row.code}{row.departureLabel && row.departureLabel !== row.code ? ` · ${row.departureLabel}` : ''}
+                {' · '}{dateParts(row.startDate).month} {dateParts(row.startDate).day}–{dateParts(row.endDate).month} {dateParts(row.endDate).day}
+            </span>
+            <span className="truncate text-[11px] text-muted-foreground">
+                {row.guestCount} guest{row.guestCount === 1 ? '' : 's'} in group
+            </span>
+            <span className={cn('truncate text-[11px] font-medium', style.text)}>
+                {todayCount > 0 ? `${todayCount} service${todayCount === 1 ? '' : 's'} today` : `${services.length} service${services.length === 1 ? '' : 's'} in view`}
+                {row.issues.length ? ` · ${row.issues[0]}` : ''}
+            </span>
+        </div>
+    );
+}
+
+function PartnerMobileCard({ row, today }: { row: EpgDeparture; today: string }) {
+    const style = STATUS_STYLE[row.status];
+    const days = row.days.filter((day) => (day.services?.length ?? 0) > 0);
+    const upcomingFirst = [...days].sort((a, b) => (a.date < today) === (b.date < today) ? a.date.localeCompare(b.date) : a.date < today ? 1 : -1);
+    return (
+        <article className="rounded-lg border bg-card p-3">
+            <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold">{row.title}</p>
+                    <p className="text-[11px] text-muted-foreground">{row.code} · {row.guestCount} guests in group</p>
+                </div>
+                <span className={cn('inline-flex items-center gap-1 text-[11px] font-medium', style.text)}>
+                    <span className={cn('h-1.5 w-1.5 rounded-full', style.dot)} />
+                    {style.label}
+                </span>
+            </div>
+            <ul className="mt-2 space-y-2">
+                {upcomingFirst.map((day) => (
+                    <li key={day.date} className={cn('rounded-md border px-2 py-1.5', day.date === today && 'border-rose-500')}>
+                        <p className="text-xs font-semibold">
+                            {day.date === today ? 'Today' : `${dateParts(day.date).weekday} ${dateParts(day.date).month} ${dateParts(day.date).day}`} · D{day.dayNumber}{day.destination ? ` · ${day.destination}` : ''}
+                        </p>
+                        {(day.services ?? []).map((service) => {
+                            const meta = SERVICE_ROLE[service.role] ?? SERVICE_ROLE.other;
+                            const state = serviceStatus(service.status);
+                            return (
+                                <p key={service.requestId} className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                                    <meta.Icon className="h-3 w-3 shrink-0" aria-hidden />
+                                    <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', state.dot)} aria-hidden />
+                                    <span className="min-w-0 truncate">{state.label} · {serviceDetail(service)}</span>
+                                </p>
+                            );
+                        })}
+                    </li>
+                ))}
+                {days.length === 0 && <li className="text-xs text-muted-foreground">No services of yours fall inside these dates.</li>}
+            </ul>
+        </article>
+    );
+}
+
 function RowHeader({ row, today }: { row: EpgDeparture; today: string }) {
     const style = STATUS_STYLE[row.status];
     const onRoad = row.currentDay != null;
@@ -253,6 +404,7 @@ function EpgGrid({
     fraction,
     density,
     centerToken,
+    partner,
 }: {
     departures: EpgDeparture[];
     dates: string[];
@@ -260,12 +412,14 @@ function EpgGrid({
     fraction: number;
     density: Density;
     centerToken: number;
+    /** Business view: no links into tour editing, own services in each cell. */
+    partner: boolean;
 }) {
     const scrollerRef = useRef<HTMLDivElement>(null);
     const [scrollTop, setScrollTop] = useState(0);
     const [viewportH, setViewportH] = useState(640);
     const colW = COL[density];
-    const rowH = ROW[density];
+    const rowH = (partner ? PARTNER_ROW : ROW)[density];
     const todayIndex = dates.indexOf(today);
 
     useEffect(() => {
@@ -308,7 +462,7 @@ function EpgGrid({
     const width = ROW_HEADER + dates.length * colW;
 
     return (
-        <div ref={scrollerRef} className="h-full overflow-auto rounded-lg border bg-card" aria-label="Tour operations timeline">
+        <div ref={scrollerRef} className="h-full overflow-auto rounded-lg border bg-card" aria-label={partner ? 'My operations timeline' : 'Tour operations timeline'}>
             <div className="relative" style={{ width }}>
                 {todayIndex >= 0 && (
                     <div
@@ -354,13 +508,17 @@ function EpgGrid({
                     return (
                         <div key={row.id} className="flex border-b" style={{ height: rowH }}>
                             <div className="sticky left-0 z-20 shrink-0" style={{ width: ROW_HEADER }}>
-                                <RowHeader row={row} today={today} />
+                                {partner ? <PartnerRowHeader row={row} today={today} /> : <RowHeader row={row} today={today} />}
                             </div>
                             {dates.map((iso) => {
                                 const day = byDate.get(iso);
                                 return (
                                     <div key={iso} className="shrink-0 border-r p-1" style={{ width: colW }}>
-                                        {day ? <DayCell day={day} tourId={row.tourId} status={row.status} today={today} density={density} /> : null}
+                                        {day
+                                            ? partner
+                                                ? <PartnerDayCell day={day} status={row.status} today={today} density={density} />
+                                                : <DayCell day={day} tourId={row.tourId} status={row.status} today={today} density={density} />
+                                            : null}
                                     </div>
                                 );
                             })}
@@ -391,6 +549,14 @@ function EpgGrid({
 const selectClass = 'h-9 rounded-md border bg-background px-2 text-sm';
 
 export function TourEpg() {
+    const { user } = useAuth();
+    const isOperator = user.roles === 'admin' || user.roles === 'seller';
+    // Sellers/admins who also run an approved business can flip to that business's own services.
+    const { data: myBusinesses } = useMyBusinessPartners(isOperator);
+    const ownsBusiness = Array.isArray(myBusinesses) && myBusinesses.length > 0;
+    const [showMine, setShowMine] = useState(false);
+    const scope: EpgScope = isOperator && !(ownsBusiness && showMine) ? 'all' : 'partner';
+    const partner = scope === 'partner';
     const [clock, setClock] = useState<{ today: string; fraction: number } | null>(null);
     const [scale, setScale] = useState<Scale>('days');
     const [density, setDensity] = useState<Density>('detailed');
@@ -427,7 +593,7 @@ export function TourEpg() {
     }, []);
 
     const timeline = useQuery({
-        queryKey: ['operations', 'epg', { from: activeRange?.from, to: activeRange?.to, today: clock?.today, status, q, destination, guide, transport }],
+        queryKey: ['operations', 'epg', { scope, from: activeRange?.from, to: activeRange?.to, today: clock?.today, status, q, destination, guide, transport }],
         queryFn: () => getOperationsEpg({
             from: activeRange!.from,
             to: activeRange!.to,
@@ -435,8 +601,9 @@ export function TourEpg() {
             status,
             q,
             destination,
-            guide,
-            transport,
+            transport: partner ? '' : transport,
+            guide: partner ? '' : guide,
+            scope,
         }),
         enabled: Boolean(activeRange && clock),
         placeholderData: keepPreviousData,
@@ -445,8 +612,9 @@ export function TourEpg() {
     const counts = timeline.data?.counts;
     const summary = useMemo(() => {
         if (!counts) return null;
+        if (partner) return `${counts.running} running · ${counts['starting-today']} starting · ${counts['ending-today']} ending · ${counts.attention} declined or expired · ${counts.delayed} countered`;
         return `${counts.running} running · ${counts['starting-today']} starting · ${counts['ending-today']} ending · ${counts.attention} need attention`;
-    }, [counts]);
+    }, [counts, partner]);
 
     const chooseScale = (next: Scale) => {
         if (!activeRange) return;
@@ -471,18 +639,29 @@ export function TourEpg() {
     };
 
     return (
-        <SellerGuard>
+        <RoleGuard allowedRoles={TIMELINE_ROLES} redirectTo="/dashboard">
             <div className="flex min-h-[calc(100dvh-8rem)] flex-col gap-4">
                 <DashboardCardHeader
                     variant="compact"
                     icon={Plane}
-                    badge="Tour operations"
-                    title="Tour timeline"
-                    description="Every departure on one guide. Columns are calendar dates. The day number inside a row belongs to that departure, counted from its own start."
+                    badge={partner ? 'My operations' : 'Tour operations'}
+                    title={partner ? 'Daily operations' : 'Tour timeline'}
+                    description={partner
+                        ? `Every trip that needs ${timeline.data?.partners?.length ? timeline.data.partners.map((p) => p.name).join(', ') : 'your business'}, by date: how many guests, what time, and whether you have confirmed. Columns are calendar dates; D-numbers are that trip's own day.`
+                        : "Every departure on one guide. Columns are calendar dates. The day number inside a row belongs to that departure, counted from its own start."}
                     actions={(
-                        <Button variant="outline" size="sm" asChild>
-                            <Link href="/dashboard/operations">Operations board</Link>
-                        </Button>
+                        <div className="flex gap-2">
+                            {isOperator && ownsBusiness && (
+                                <Button variant="outline" size="sm" onClick={() => setShowMine((value) => !value)}>
+                                    {partner ? 'Show all tours' : 'Show my business'}
+                                </Button>
+                            )}
+                            {isOperator && !partner && (
+                                <Button variant="outline" size="sm" asChild>
+                                    <Link href="/dashboard/operations">Operations board</Link>
+                                </Button>
+                            )}
+                        </div>
                     )}
                 />
 
@@ -494,7 +673,7 @@ export function TourEpg() {
                                 type="search"
                                 value={search}
                                 onChange={(event) => setSearch(event.target.value)}
-                                placeholder="Search tours, guides, places"
+                                placeholder={partner ? 'Search trips, places' : 'Search tours, guides, places'}
                                 className="pl-8"
                                 aria-label="Search tours"
                             />
@@ -503,14 +682,18 @@ export function TourEpg() {
                             <option value="">All destinations</option>
                             {(timeline.data?.facets.destinations ?? []).map((name) => <option key={name} value={name}>{name}</option>)}
                         </select>
-                        <select className={selectClass} value={guide} onChange={(event) => setGuide(event.target.value)} aria-label="Guide">
-                            <option value="">All guides</option>
-                            {(timeline.data?.facets.guides ?? []).map((name) => <option key={name} value={name}>{name}</option>)}
-                        </select>
-                        <select className={selectClass} value={transport} onChange={(event) => setTransport(event.target.value)} aria-label="Transport">
-                            <option value="">All transport</option>
-                            {(timeline.data?.facets.transports ?? []).map((name) => <option key={name} value={name}>{name}</option>)}
-                        </select>
+                        {!partner && (
+                            <>
+                                <select className={selectClass} value={guide} onChange={(event) => setGuide(event.target.value)} aria-label="Guide">
+                                    <option value="">All guides</option>
+                                    {(timeline.data?.facets.guides ?? []).map((name) => <option key={name} value={name}>{name}</option>)}
+                                </select>
+                                <select className={selectClass} value={transport} onChange={(event) => setTransport(event.target.value)} aria-label="Transport">
+                                    <option value="">All transport</option>
+                                    {(timeline.data?.facets.transports ?? []).map((name) => <option key={name} value={name}>{name}</option>)}
+                                </select>
+                            </>
+                        )}
                     </div>
 
                     <div className="flex flex-wrap gap-1.5">
@@ -591,8 +774,12 @@ export function TourEpg() {
 
                 {timeline.data && timeline.data.departures.length === 0 && (
                     <div className="rounded-lg border bg-card px-6 py-16 text-center">
-                        <p className="font-medium">No departures in this window</p>
-                        <p className="mt-1 text-sm text-muted-foreground">Try another date range, or clear the filters. Draft tours stay off this guide.</p>
+                        <p className="font-medium">{partner ? 'Nothing asked of your business in this window' : 'No departures in this window'}</p>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                            {partner
+                                ? 'When a tour operator requests your hotel, restaurant, guide or transport for a date, it shows up here. Try another date range or clear the filters.'
+                                : 'Try another date range, or clear the filters. Draft tours stay off this guide.'}
+                        </p>
                     </div>
                 )}
 
@@ -607,17 +794,20 @@ export function TourEpg() {
                                     fraction={clock.fraction}
                                     density={density}
                                     centerToken={centerToken}
+                                    partner={partner}
                                 />
                             </div>
                         )}
                         {layout === 'mobile' && (
                             <div className="space-y-2">
-                                {timeline.data.departures.map((row) => <MobileCard key={row.id} row={row} today={clock.today} />)}
+                                {timeline.data.departures.map((row) => partner
+                                    ? <PartnerMobileCard key={row.id} row={row} today={clock.today} />
+                                    : <MobileCard key={row.id} row={row} today={clock.today} />)}
                             </div>
                         )}
                     </>
                 )}
             </div>
-        </SellerGuard>
+        </RoleGuard>
     );
 }

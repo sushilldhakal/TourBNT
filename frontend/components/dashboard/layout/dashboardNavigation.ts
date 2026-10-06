@@ -102,6 +102,13 @@ export const baseNavigationItems: NavigationItem[] = [
         icon: CalendarRange,
         roles: ['admin', 'seller'],
     },
+    {
+        href: '/dashboard/operations/timeline',
+        label: 'Daily operations',
+        icon: CalendarRange,
+        // Each partner type sees only the trips that ask for its own services.
+        roles: ['hotel', 'guesthouse', 'restaurant', 'guide', 'transport'],
+    },
     // Split by type (see DashboardSidebar for the ownership-driven version
     // that only shows the ones a user actually owns) — the search palette
     // shows all of these once `isPartner` is true rather than tracking

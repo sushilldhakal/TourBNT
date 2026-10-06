@@ -70,6 +70,22 @@ export interface EpgRequestAgg {
 
 export type TransportKind = 'flight' | 'road' | 'trek' | 'boat' | 'safari';
 
+/** What one business has been asked to provide on one calendar day (partner scope only). */
+export interface EpgPartnerService {
+  requestId: string;
+  partnerId: string;
+  partnerName: string;
+  role: string;
+  status: string;
+  serviceTime: string | null;
+  serviceEndTime: string | null;
+  headcount: number;
+  unitsRequested: number;
+  capacityConfirmed: number | null;
+  unitType: string | null;
+  counterDate: string | null;
+}
+
 export interface EpgDay {
   index: number;
   dayNumber: number;
@@ -83,6 +99,8 @@ export interface EpgDay {
   vehicle: string | null;
   activity: string | null;
   transportKind: TransportKind | null;
+  /** Present only in partner scope: this business's own services on this day. */
+  services?: EpgPartnerService[];
 }
 
 export interface EpgDeparture {
@@ -115,6 +133,10 @@ export interface EpgDeparture {
 }
 
 export interface EpgProjection {
+  /** `all` = tour operator view; `partner` = only what the caller's own businesses were asked to provide. */
+  scope?: 'all' | 'partner';
+  /** Partner scope: the caller's own businesses this view covers. */
+  partners?: { id: string; name: string; type: string }[];
   from: string;
   to: string;
   today: string;
@@ -477,6 +499,8 @@ export function projectEpg(input: {
   bookings: EpgBookingAgg[];
   requests: EpgRequestAgg[];
   query: EpgQuery;
+  /** Drop a departure before it is searched, faceted or counted. */
+  include?: (row: EpgDeparture) => boolean;
 }): EpgProjection {
   const { query } = input;
   const limit = query.limit ?? DEFAULT_LIMIT;
@@ -603,6 +627,8 @@ export function projectEpg(input: {
         issues,
         days: days.filter((day) => day.date >= query.from && day.date <= query.to),
       };
+
+      if (input.include && !input.include(row)) continue;
 
       const search = [
         tour.title,

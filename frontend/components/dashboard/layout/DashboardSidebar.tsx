@@ -119,6 +119,13 @@ const baseNavigationItems: NavigationItem[] = [
         icon: CalendarRange,
         roles: ['admin', 'seller'],
     },
+    {
+        href: '/dashboard/operations/timeline',
+        label: 'Daily operations',
+        icon: CalendarRange,
+        // Each partner type sees only the trips that ask for its own services.
+        roles: ['hotel', 'guesthouse', 'restaurant', 'guide', 'transport'],
+    },
     // Add My Profile link at top level (accessible to all authenticated users)
     {
         href: '/dashboard/profile', // We'll create this page

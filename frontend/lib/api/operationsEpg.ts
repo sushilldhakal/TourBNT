@@ -14,6 +14,24 @@ export type EpgStatusFilter =
 export type EpgOperationalStatus = 'upcoming' | 'running' | 'completed' | 'cancelled' | 'delayed' | 'attention';
 export type TransportKind = 'flight' | 'road' | 'trek' | 'boat' | 'safari';
 
+/** What one of the caller's own businesses was asked to provide on a day (partner scope). */
+export interface EpgPartnerService {
+    requestId: string;
+    partnerId: string;
+    partnerName: string;
+    role: string;
+    status: string;
+    serviceTime: string | null;
+    serviceEndTime: string | null;
+    headcount: number;
+    unitsRequested: number;
+    capacityConfirmed: number | null;
+    unitType: string | null;
+    counterDate: string | null;
+}
+
+export type EpgScope = 'all' | 'partner';
+
 export interface EpgDay {
     index: number;
     dayNumber: number;
@@ -27,6 +45,8 @@ export interface EpgDay {
     vehicle: string | null;
     activity: string | null;
     transportKind: TransportKind | null;
+    /** Partner scope only. */
+    services?: EpgPartnerService[];
 }
 
 export interface EpgDeparture {
@@ -55,6 +75,9 @@ export interface EpgDeparture {
 }
 
 export interface EpgTimeline {
+    scope?: EpgScope;
+    /** Partner scope: the caller's own businesses this view covers. */
+    partners?: { id: string; name: string; type: string }[];
     from: string;
     to: string;
     today: string;
@@ -79,6 +102,8 @@ export interface EpgParams {
     destination?: string;
     guide?: string;
     transport?: string;
+    /** `partner` = only this user's own businesses' services. Hotel/restaurant/guide/transport users always get it. */
+    scope?: EpgScope;
 }
 
 export const getOperationsEpg = async (params: EpgParams) => {
