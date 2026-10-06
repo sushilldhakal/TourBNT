@@ -283,6 +283,7 @@ const processItineraryPartners = (partners: unknown): ItineraryPartnerInput[] =>
 };
 
 export interface ItineraryDayInput {
+  destinationId?: string;
   id: string;
   day: string;
   title: string;
@@ -329,6 +330,8 @@ export const processItineraryData = (itinerary: unknown): ItineraryDayInput[] =>
         title: String(item.title || ''),
         description: String(item.description || ''),
         destination: String(item.destination || ''),
+        // The global destination this day is in (drives which suppliers can be picked for it).
+        ...(typeof item.destinationId === 'string' && item.destinationId ? { destinationId: item.destinationId } : {}),
         date: item.date ? toDate(item.date) : undefined,
         partners,
       };

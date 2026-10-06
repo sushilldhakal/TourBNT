@@ -13,6 +13,7 @@ import {
   businessPartnerTypeEnum,
 } from '../../db';
 import { eq, and, ilike, desc, count, inArray, sql } from 'drizzle-orm';
+import { isSingleDestinationType, servesDestination } from './partnerDestinations';
 import { HTTP_STATUS, sendSuccess, sendPaginatedResponse, sendValidationError, sendNotFoundError, sendForbiddenError, handleUnauthorized } from '../../utils/apiResponse';
 import { uploadBusinessDocuments, deleteBusinessDocuments } from '../../services/businessDocumentService';
 import { ensureMediaFolder } from '../../services/mediaFolderService';
@@ -62,8 +63,12 @@ function isOwnerOrAdmin(partner: Pick<BusinessPartnerRow, 'ownerId'>, req: Reque
 }
 
 async function withDocuments(partner: BusinessPartnerRow) {
-  const docs = await db.select().from(businessDocuments).where(eq(businessDocuments.businessPartnerId, partner.id));
-  return { ...partner, documents: docs };
+  const [docs, extras] = await Promise.all([
+    db.select().from(businessDocuments).where(eq(businessDocuments.businessPartnerId, partner.id)),
+    db.select({ destinationId: businessPartnerDestinations.destinationId }).from(businessPartnerDestinations).where(eq(businessPartnerDestinations.businessPartnerId, partner.id)),
+  ]);
+  // `serviceDestinationIds` = the extra destinations this business covers besides its home `destinationId`.
+  return { ...partner, documents: docs, serviceDestinationIds: extras.map((row) => row.destinationId).filter((id) => id !== partner.destinationId) };
 }
 
 async function syncBusinessCategories(businessPartnerId: string, categoryIds: string[] | undefined) {
@@ -199,7 +204,7 @@ export const searchBusinessPartners = async (req: Request, res: Response, next: 
     const types = type ? type.split(',').map((t) => t.trim()).filter((t): t is BusinessPartnerType => VALID_TYPES.includes(t as BusinessPartnerType)) : [];
     if (types.length === 1) conditions.push(eq(businessPartners.type, types[0]));
     else if (types.length > 1) conditions.push(inArray(businessPartners.type, types));
-    if (destinationId) conditions.push(eq(businessPartners.destinationId, destinationId));
+    if (destinationId) conditions.push(servesDestination(destinationId));
     if (q) conditions.push(ilike(businessPartners.name, `%${q}%`));
     if (categoryId) {
       conditions.push(inArray(
@@ -252,6 +257,10 @@ export const updateMyBusinessPartner = async (req: Request, res: Response, next:
       ...(isActive !== undefined && { isActive: isActive === true || isActive === 'true' }),
       updatedAt: new Date(),
     }).where(eq(businessPartners.id, businessPartnerId)).returning();
+    if (isSingleDestinationType(updated.type) && destinationId !== undefined) {
+      // Moving a guesthouse: it can't keep extra destinations from before.
+      await db.delete(businessPartnerDestinations).where(eq(businessPartnerDestinations.businessPartnerId, businessPartnerId));
+    }
     await invalidateBusinessPartner(businessPartnerId);
 
     const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
@@ -284,6 +293,13 @@ export const updateBusinessPartnerTargeting = async (req: Request, res: Response
     if (!isOwnerOrAdmin(existing, req)) return sendForbiddenError(res, 'Not authorized to update this business');
 
     const { categoryIds, destinationIds } = req.body as { categoryIds?: string[]; destinationIds?: string[] };
+    // A guesthouse is a single building: one destination (its home one), never a list.
+    if (isSingleDestinationType(existing.type) && destinationIds !== undefined) {
+      const extras = destinationIds.filter((id) => id !== existing.destinationId);
+      if (extras.length > 0) {
+        return sendValidationError(res, 'A guesthouse serves one destination', [{ field: 'destinationIds', message: 'Guesthouses can only be in one destination. Change the location instead.' }]);
+      }
+    }
     await syncBusinessCategories(businessPartnerId, categoryIds);
     await syncBusinessDestinations(businessPartnerId, destinationIds);
 
