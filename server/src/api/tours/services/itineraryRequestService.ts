@@ -890,6 +890,55 @@ export class ItineraryRequestService {
   }
 
   /**
+   * Agency/admin: hand ONE departure's declined/expired request to a different business. The itinerary link is
+   * shared by every departure of the tour, so it is left alone — other dates keep the supplier they confirmed.
+   * The closed request is reopened for the new business as a fresh pending ask for the same date.
+   */
+  static async reassignClosedRequest(requestId: string, requester: { id: string; isAdmin: boolean }, businessPartnerId: string) {
+    const [request] = await db.select().from(itineraryPartnerRequests).where(eq(itineraryPartnerRequests.id, requestId)).limit(1);
+    if (!request) throw createHttpError(404, 'Request not found');
+    await ItineraryRequestService.assertTourAuthorOrAdmin(request.tourId, requester);
+    if (request.status !== 'declined' && request.status !== 'expired') {
+      throw createHttpError(409, 'Only a declined or expired request can be handed to another business');
+    }
+    if (request.businessPartnerId === businessPartnerId) throw createHttpError(400, 'Choose a different business');
+
+    const [partner] = await db.select({ id: businessPartners.id, type: businessPartners.type, approvalStatus: businessPartners.approvalStatus, isActive: businessPartners.isActive }).from(businessPartners).where(eq(businessPartners.id, businessPartnerId)).limit(1);
+    if (!partner || partner.approvalStatus !== 'approved' || !partner.isActive) {
+      throw createHttpError(400, 'That business is unknown or not available');
+    }
+
+    const [clash] = await db
+      .select({ id: itineraryPartnerRequests.id })
+      .from(itineraryPartnerRequests)
+      .where(and(
+        eq(itineraryPartnerRequests.tourItineraryPartnerId, request.tourItineraryPartnerId),
+        eq(itineraryPartnerRequests.businessPartnerId, businessPartnerId),
+        eq(itineraryPartnerRequests.serviceDate, request.serviceDate),
+        ne(itineraryPartnerRequests.id, request.id),
+      ))
+      .limit(1);
+    if (clash) throw createHttpError(409, 'That business already has a request for this date');
+
+    await updateRequestWithVersion(request.id, request.version, {
+      businessPartnerId,
+      status: 'pending',
+      capacityConfirmed: null,
+      holdExpiresAt: null,
+      counterUnits: null, counterDate: null, counterTime: null, counterNotes: null,
+      responseNotes: null,
+      respondByAt: new Date(Date.now() + RESPOND_BY_MS),
+    });
+    await logEvent(request.id, request.status, 'pending', requester.id, 'agency', request.unitsRequested, 'Reassigned to another business by agency');
+    try {
+      await notifyPartnerOfNewRequest(request.id);
+    } catch (err) {
+      console.error('Failed to notify reassigned partner:', err);
+    }
+    return { requestId: request.id, businessPartnerId };
+  }
+
+  /**
    * Sweep: `held` rows past holdExpiresAt, and `pending`/`countered` rows
    * past respondByAt, get flipped to `expired`, freeing whatever capacity
    * they had reserved. Run on a timer (itineraryRequestExpiry.ts) — this is

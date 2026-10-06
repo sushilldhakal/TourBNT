@@ -29,6 +29,16 @@ export interface DayDetail {
     /** `day` saved on the day; `text` guessed from its place name; `tour` the tour's own destination. */
     destinationSource: 'day' | 'text' | 'tour' | null;
     partners: DaySupplier[];
+    /** Requests this departure's date lost. Only filled when the dialog passes the date. */
+    closedRequests: ClosedRequest[];
+}
+
+export interface ClosedRequest {
+    requestId: string;
+    role: string;
+    status: 'declined' | 'expired';
+    businessPartnerId: string;
+    partnerName: string;
 }
 
 export interface SupplierOption {
@@ -51,9 +61,9 @@ export interface DaySupplierInput {
 /** Stable key the API uses to find a day: its id when it has one, else its position. */
 export const dayKeyOf = (day: { dayId?: string; index: number }): string => day.dayId ?? `idx:${day.index}`;
 
-export const getDayDetail = async (tourId: string, dayKey: string) => {
+export const getDayDetail = async (tourId: string, dayKey: string, date?: string) => {
     try {
-        const response = await api.get(`/operations/tours/${tourId}/days/${encodeURIComponent(dayKey)}`);
+        const response = await api.get(`/operations/tours/${tourId}/days/${encodeURIComponent(dayKey)}`, { params: date ? { date } : {} });
         return extractResponseData<DayDetail>(response);
     } catch (error) {
         throw handleApiError(error, 'loading this itinerary day');
@@ -79,5 +89,14 @@ export const updateDay = async (
         return extractResponseData<DayDetail>(response);
     } catch (error) {
         throw handleApiError(error, 'saving this itinerary day');
+    }
+};
+
+export const reassignRequest = async (requestId: string, businessPartnerId: string) => {
+    try {
+        const response = await api.post(`/operations/requests/${requestId}/reassign`, { businessPartnerId });
+        return extractResponseData<{ requestId: string; businessPartnerId: string }>(response);
+    } catch (error) {
+        throw handleApiError(error, 'sending the request to another business');
     }
 };

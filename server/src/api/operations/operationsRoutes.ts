@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { getOperationsSummary, getOperationsRequests, getOperationsTrips, getOperationsSuppliers, getOperationsAttention } from './operationsController';
 import { getOperationsEpg } from './epgController';
-import { getDayDetail, getSupplierOptions, updateDay } from './dayController';
+import { getDayDetail, getSupplierOptions, reassignRequest, updateDay } from './dayController';
 import { authenticate, authorizeRoles } from '../../middlewares/authenticate';
 import { asyncAuthHandler } from '../../utils/routeWrapper';
 
@@ -20,6 +20,7 @@ router.get('/epg', authenticate, authorizeRoles('admin', 'seller', 'hotel', 'gue
 router.get('/supplier-options', authenticate, authorizeRoles('admin', 'seller'), asyncAuthHandler(getSupplierOptions));
 router.get('/tours/:tourId/days/:dayKey', authenticate, authorizeRoles('admin', 'seller'), asyncAuthHandler(getDayDetail));
 router.patch('/tours/:tourId/days/:dayKey', authenticate, authorizeRoles('admin', 'seller'), asyncAuthHandler(updateDay));
+router.post('/requests/:requestId/reassign', authenticate, authorizeRoles('admin', 'seller'), asyncAuthHandler(reassignRequest));
 router.get('/summary', authenticate, authorizeRoles('admin'), asyncAuthHandler(getOperationsSummary));
 
 router.get('/requests', authenticate, authorizeRoles('admin'), asyncAuthHandler(getOperationsRequests));

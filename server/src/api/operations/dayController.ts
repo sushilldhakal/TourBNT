@@ -158,9 +158,32 @@ export const getDayDetail = async (req: Request, res: Response, next: NextFuncti
       liveRequests: p.businessPartnerId ? live.get(p.businessPartnerId)?.live ?? 0 : 0,
       confirmedRequests: p.businessPartnerId ? live.get(p.businessPartnerId)?.confirmed ?? 0 : 0,
     }));
+    // Requests this departure's date lost (declined/expired). The itinerary supplier is shared by every departure,
+    // so these are what let one date be handed to another business without touching the others.
+    const date = typeof req.query.date === 'string' && /^\d{4}-\d{2}-\d{2}/.test(req.query.date) ? req.query.date.slice(0, 10) : null;
+    const closedRequests = date && day.id
+      ? await db
+          .select({
+            requestId: itineraryPartnerRequests.id,
+            role: itineraryPartnerRequests.role,
+            status: itineraryPartnerRequests.status,
+            businessPartnerId: itineraryPartnerRequests.businessPartnerId,
+            partnerName: businessPartners.name,
+          })
+          .from(itineraryPartnerRequests)
+          .innerJoin(tourItineraryPartners, eq(itineraryPartnerRequests.tourItineraryPartnerId, tourItineraryPartners.id))
+          .innerJoin(businessPartners, eq(itineraryPartnerRequests.businessPartnerId, businessPartners.id))
+          .where(and(
+            eq(tourItineraryPartners.tourId, tourId),
+            eq(tourItineraryPartners.dayId, day.id),
+            eq(itineraryPartnerRequests.serviceDate, date),
+            inArray(itineraryPartnerRequests.status, ['declined', 'expired']),
+          ))
+      : [];
     return sendSuccess(res, {
       tourId,
       tourTitle: tour.title,
+      closedRequests,
       dayId: day.id ?? null,
       dayKey,
       dayNumber: index + 1,
@@ -355,3 +378,15 @@ export const updateDay = async (req: Request, res: Response, next: NextFunction)
   }
 };
 
+
+/** POST /operations/requests/:requestId/reassign — give one departure's declined/expired request to another business. */
+export const reassignRequest = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const businessPartnerId = (req.body as { businessPartnerId?: unknown }).businessPartnerId;
+    if (typeof businessPartnerId !== 'string' || !businessPartnerId) throw createHttpError(400, 'businessPartnerId is required');
+    const result = await ItineraryRequestService.reassignClosedRequest(req.params.requestId, requesterOf(req), businessPartnerId);
+    return sendSuccess(res, result, 'Request sent to the new business');
+  } catch (error) {
+    next(error);
+  }
+};

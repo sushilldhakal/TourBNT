@@ -16,7 +16,9 @@ import {
     dayKeyOf,
     getDayDetail,
     getSupplierOptions,
+    reassignRequest,
     updateDay,
+    type ClosedRequest,
     type DayDetail,
     type DayRole,
     type DaySupplier,
@@ -165,8 +167,8 @@ function ServiceCard({ service }: { service: EpgPartnerService }) {
 function OperatorBody({ departure, day, onClose }: { departure: EpgDeparture; day: EpgDay; onClose: () => void }) {
     const dayKey = dayKeyOf(day);
     const detail = useQuery({
-        queryKey: ['operations', 'day', departure.tourId, dayKey],
-        queryFn: () => getDayDetail(departure.tourId, dayKey),
+        queryKey: ['operations', 'day', departure.tourId, dayKey, day.date],
+        queryFn: () => getDayDetail(departure.tourId, dayKey, day.date),
     });
     const itineraryHref = `/dashboard/tours/edit/${departure.tourId}?day=${day.index}#itinerary`;
 
@@ -306,6 +308,20 @@ function OperatorForm({
 
                 {options.isError && <p className="text-xs text-destructive">{messageOf(options.error)}</p>}
 
+                {detail.closedRequests.map((closed) => (
+                    <ClosedRequestPanel
+                        key={closed.requestId}
+                        closed={closed}
+                        date={day.date}
+                        options={(options.data?.[closed.role as DayRole] ?? []).filter((o) => o.id !== closed.businessPartnerId)}
+                        optionsLoading={options.isLoading}
+                        onDone={() => {
+                            queryClient.invalidateQueries({ queryKey: ['operations'] });
+                            onClose();
+                        }}
+                    />
+                ))}
+
                 {ROLES.map(({ role, label, add, Icon, hint }) => {
                     const list: SupplierOption[] = options.data?.[role] ?? [];
                     return (
@@ -354,6 +370,53 @@ function OperatorForm({
                 </div>
             </DialogFooter>
         </>
+    );
+}
+
+/** One departure's declined/expired request: hand just this date to another business, leaving the shared itinerary alone. */
+function ClosedRequestPanel({
+    closed,
+    date,
+    options,
+    optionsLoading,
+    onDone,
+}: {
+    closed: ClosedRequest;
+    date: string;
+    options: SupplierOption[];
+    optionsLoading: boolean;
+    onDone: () => void;
+}) {
+    const [pick, setPick] = useState<string | null>(null);
+    const role = ROLES.find((r) => r.role === closed.role);
+    const mutation = useMutation({
+        mutationFn: () => reassignRequest(closed.requestId, pick as string),
+        onSuccess: () => {
+            toast({ title: 'Request sent', description: `${options.find((o) => o.id === pick)?.name ?? 'The new business'} has been asked for ${longDate(date)}.` });
+            onDone();
+        },
+    });
+    return (
+        <div className="space-y-2 rounded-md border border-red-500/40 bg-red-500/5 px-3 py-2">
+            <p className="text-sm">
+                <span className="font-medium">{closed.partnerName}</span> {closed.status === 'expired' ? 'did not reply' : 'declined'} {role?.label.toLowerCase() ?? closed.role} for {longDate(date)}.
+            </p>
+            <div className="flex items-center gap-2">
+                <Select value={pick ?? undefined} onValueChange={setPick}>
+                    <SelectTrigger className="w-full" aria-label={`Replace ${closed.partnerName} for ${longDate(date)}`}>
+                        <SelectValue placeholder={optionsLoading ? 'Loading…' : options.length === 0 ? 'No other suppliers here' : 'Choose another business'} />
+                    </SelectTrigger>
+                    <SelectContent className="z-[9999]">
+                        {options.map((o) => <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+                <Button type="button" onClick={() => mutation.mutate()} disabled={!pick || mutation.isPending}>
+                    {mutation.isPending ? 'Sending…' : 'Send request'}
+                </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">Only this date changes. Other departures keep their supplier.</p>
+            {mutation.isError && <p role="alert" className="text-xs text-destructive">{messageOf(mutation.error)}</p>}
+        </div>
     );
 }
 
@@ -410,7 +473,7 @@ function SupplierRow({
                 </Button>
             </div>
             {locked && (
-                <p className="text-xs text-muted-foreground">{row.name} has confirmed {row.confirmedRequests} upcoming date{row.confirmedRequests === 1 ? '' : 's'}. They need to withdraw before you can change this.</p>
+                <p className="text-xs text-muted-foreground">{row.name} has confirmed {row.confirmedRequests} upcoming date{row.confirmedRequests === 1 ? '' : 's'}. That is across the tour's other departures, so replacing them here would affect those too. To change only this date, use the replace option above.</p>
             )}
             {!locked && row.liveRequests > 0 && (
                 <p className="text-xs text-amber-700 dark:text-amber-300">{row.name} has {row.liveRequests} open request{row.liveRequests === 1 ? '' : 's'}. If you replace or remove them, those are declined and they are told.</p>
