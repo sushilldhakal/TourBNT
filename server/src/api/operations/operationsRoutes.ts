@@ -13,7 +13,8 @@ const router = Router();
  */
 // Sellers' (and admins') board of upcoming supplier requests that still need attention.
 router.get('/attention', authenticate, authorizeRoles('admin', 'seller'), asyncAuthHandler(getOperationsAttention));
-router.get('/epg', authenticate, authorizeRoles('admin', 'seller'), asyncAuthHandler(getOperationsEpg));
+// Admin/seller see tours; hotel, guesthouse, restaurant, guide and transport businesses see their own daily operations.
+router.get('/epg', authenticate, authorizeRoles('admin', 'seller', 'hotel', 'guesthouse', 'restaurant', 'guide', 'transport'), asyncAuthHandler(getOperationsEpg));
 router.get('/summary', authenticate, authorizeRoles('admin'), asyncAuthHandler(getOperationsSummary));
 
 router.get('/requests', authenticate, authorizeRoles('admin'), asyncAuthHandler(getOperationsRequests));

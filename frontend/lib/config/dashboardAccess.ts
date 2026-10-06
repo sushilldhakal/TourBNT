@@ -28,6 +28,8 @@ export const DASHBOARD_ACCESS_RULES: ReadonlyArray<{ prefix: string; roles: read
     { prefix: '/dashboard/users', roles: [A] },
     { prefix: '/dashboard/subscribers', roles: [A] },
     { prefix: '/dashboard/operations', roles: [A, S] }, // sellers: their own tours' supplier follow-ups
+    // Daily operations timeline: operators see tours, each partner type sees only its own services.
+    { prefix: '/dashboard/operations/timeline', roles: [A, S, UserRole.HOTEL, UserRole.GUESTHOUSE, UserRole.RESTAURANT, UserRole.GUIDE, UserRole.TRANSPORT] },
     { prefix: '/dashboard/ads', roles: [A] }, // ad moderation queue
     { prefix: '/dashboard/business-partners', roles: [A] },
 
