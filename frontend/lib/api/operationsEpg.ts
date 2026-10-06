@@ -32,6 +32,13 @@ export interface EpgPartnerService {
 
 export type EpgScope = 'all' | 'partner';
 
+/** One supplier on one day that has not said yes: declined/expired = problem, countered/pending = waiting. */
+export interface EpgDayIssue {
+    role: string;
+    status: 'declined' | 'expired' | 'countered' | 'pending';
+    partnerName: string;
+}
+
 export interface EpgDay {
     index: number;
     dayNumber: number;
@@ -47,6 +54,8 @@ export interface EpgDay {
     transportKind: TransportKind | null;
     /** Partner scope only. */
     services?: EpgPartnerService[];
+    /** Suppliers on this exact day that have not confirmed. Absent when the day is fine. */
+    issues?: EpgDayIssue[];
 }
 
 export interface EpgDeparture {

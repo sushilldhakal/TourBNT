@@ -101,7 +101,18 @@ export interface EpgDay {
   transportKind: TransportKind | null;
   /** Present only in partner scope: this business's own services on this day. */
   services?: EpgPartnerService[];
+  /** Supplier requests for this exact day that are not in good standing. Absent when the day is fine. */
+  issues?: EpgDayIssue[];
 }
+
+/** One supplier on one day that has not said yes: declined/expired (problem), countered or still unanswered (waiting). */
+export interface EpgDayIssue {
+  role: string;
+  status: 'declined' | 'expired' | 'countered' | 'pending';
+  partnerName: string;
+}
+
+const DAY_ISSUE_STATUSES = new Set(['declined', 'expired', 'countered', 'pending']);
 
 export interface EpgDeparture {
   id: string;
@@ -575,6 +586,13 @@ export function projectEpg(input: {
         if (request.sourceDepartureDate) return request.sourceDepartureDate === plan.start;
         return request.serviceDate >= plan.start && request.serviceDate <= end;
       });
+      // A supplier that has not said yes marks only the day it was asked for, not the whole departure.
+      for (const day of days) {
+        const dayIssues = linkedRequests
+          .filter((request) => request.serviceDate === day.date && DAY_ISSUE_STATUSES.has(request.status))
+          .map((request) => ({ role: request.role, status: request.status as EpgDayIssue['status'], partnerName: request.partnerName }));
+        if (dayIssues.length > 0) day.issues = dayIssues;
+      }
       const needsAttention = linkedRequests.some((request) => request.status === 'declined' || request.status === 'expired');
       const delayed = linkedRequests.some((request) => request.status === 'countered');
       const issues = linkedRequests

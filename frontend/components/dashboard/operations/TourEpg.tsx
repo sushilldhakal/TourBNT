@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import {
     Bed,
+    AlertTriangle,
     Binoculars,
     Bus,
     Car,
@@ -30,6 +31,7 @@ import {
     getOperationsEpg,
     type EpgDay,
     type EpgDeparture,
+    type EpgDayIssue,
     type EpgOperationalStatus,
     type EpgPartnerService,
     type EpgScope,
@@ -115,6 +117,29 @@ function serviceDetail(service: EpgPartnerService): string {
     return parts.join(' · ');
 }
 
+/**
+ * What colours a day card. The card follows the departure's dates (upcoming, running, completed), so a
+ * departure with one unconfirmed supplier is not painted red from end to end; only the day that supplier
+ * was asked for changes colour (see dayProblem).
+ */
+function cardStatus(row: EpgDeparture, today: string): EpgOperationalStatus {
+    if (row.cancelled) return 'cancelled';
+    if (row.endDate < today) return 'completed';
+    if (row.startDate > today) return 'upcoming';
+    return 'running';
+}
+
+const ISSUE_ROLE: Record<string, string> = { accommodation: 'Hotel', meals: 'Meals', guide: 'Guide', transport: 'Transport', other: 'Activity' };
+const ISSUE_WORD: Record<EpgDayIssue['status'], string> = { declined: 'declined', expired: 'did not reply in time', countered: 'countered', pending: 'has not replied yet' };
+const issueText = (issue: EpgDayIssue) => `${ISSUE_ROLE[issue.role] ?? issue.role}${issue.partnerName ? ` ${issue.partnerName}` : ''} ${ISSUE_WORD[issue.status]}`;
+
+/** `attention` = a supplier declined or let the request lapse; `waiting` = countered or not answered yet. */
+function dayProblem(day: EpgDay): 'attention' | 'waiting' | null {
+    const issues = day.issues ?? [];
+    if (issues.some((issue) => issue.status === 'declined' || issue.status === 'expired')) return 'attention';
+    return issues.length > 0 ? 'waiting' : null;
+}
+
 const ROW_HEADER = 248;
 const HEADER_H = 52;
 const COL = { detailed: 176, compact: 112 } as const;
@@ -162,7 +187,10 @@ function TransportGlyph({ kind, label }: { kind: TransportKind | null; label: st
 }
 
 function DayCell({ day, status, today, density, onOpen }: { day: EpgDay; status: EpgOperationalStatus; today: string; density: Density; onOpen: () => void }) {
-    const style = STATUS_STYLE[status];
+    const problem = dayProblem(day);
+    const style = problem ? STATUS_STYLE[problem === 'attention' ? 'attention' : 'delayed'] : STATUS_STYLE[status];
+    const issues = day.issues ?? [];
+    const issueSummary = issues.map(issueText).join('; ');
     const isNow = day.date === today;
     const motion = day.transport || day.vehicle || day.activity;
     const motionLabel = day.vehicle || day.transport || day.activity || '';
@@ -170,8 +198,8 @@ function DayCell({ day, status, today, density, onOpen }: { day: EpgDay; status:
         <button
             type="button"
             onClick={onOpen}
-            aria-label={`Day ${day.dayNumber}, ${dateParts(day.date).month} ${dateParts(day.date).day}${day.destination ? `, ${day.destination}` : ''}. Open details.`}
-            title={`Day ${day.dayNumber}${day.destination ? `, ${day.destination}` : ''}. Open details.`}
+            aria-label={`Day ${day.dayNumber}, ${dateParts(day.date).month} ${dateParts(day.date).day}${day.destination ? `, ${day.destination}` : ''}.${issueSummary ? ` ${issueSummary}.` : ''} Open details.`}
+            title={`Day ${day.dayNumber}${day.destination ? `, ${day.destination}` : ''}.${issueSummary ? ` ${issueSummary}.` : ''} Open details.`}
             className={cn(
                 'flex h-full w-full flex-col overflow-hidden rounded-md border px-1.5 py-1 text-left transition-colors hover:ring-2 hover:ring-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
                 style.cell,
@@ -201,6 +229,12 @@ function DayCell({ day, status, today, density, onOpen }: { day: EpgDay; status:
                             <span className="truncate">{motionLabel}</span>
                         </span>
                     )}
+                    {issues.length > 0 && (
+                        <span className={cn('mt-auto flex items-center gap-1 truncate pt-0.5 text-[10px] font-medium', style.text)}>
+                            <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden />
+                            <span className="truncate">{issueText(issues[0])}{issues.length > 1 ? ` +${issues.length - 1}` : ''}</span>
+                        </span>
+                    )}
                 </>
             ) : (
                 <>
@@ -209,6 +243,7 @@ function DayCell({ day, status, today, density, onOpen }: { day: EpgDay; status:
                         {day.accommodation && <Bed className="h-3 w-3" aria-label="Accommodation" />}
                         {day.guide && <UserRound className="h-3 w-3" aria-label="Guide" />}
                         {day.transportKind && <TransportGlyph kind={day.transportKind} label={motionLabel} />}
+                        {issues.length > 0 && <AlertTriangle className={cn('h-3 w-3', style.text)} aria-label={issueSummary} />}
                     </span>
                 </>
             )}
@@ -526,8 +561,8 @@ function EpgGrid({
                                     <div key={iso} className="shrink-0 border-r p-1" style={{ width: colW }}>
                                         {day
                                             ? partner
-                                                ? <PartnerDayCell day={day} status={row.status} today={today} density={density} onOpen={() => onOpenDay(row, day)} />
-                                                : <DayCell day={day} status={row.status} today={today} density={density} onOpen={() => onOpenDay(row, day)} />
+                                                ? <PartnerDayCell day={day} status={cardStatus(row, today)} today={today} density={density} onOpen={() => onOpenDay(row, day)} />
+                                                : <DayCell day={day} status={cardStatus(row, today)} today={today} density={density} onOpen={() => onOpenDay(row, day)} />
                                             : null}
                                     </div>
                                 );
