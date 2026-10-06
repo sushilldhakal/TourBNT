@@ -18,6 +18,7 @@ import {
     Utensils,
 } from 'lucide-react';
 import { RoleGuard } from '@/components/dashboard/RoleGuard';
+import { DayDialog } from '@/components/dashboard/operations/DayDialog';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useMyBusinessPartners } from '@/lib/queries';
 import { DashboardCardHeader } from '@/components/dashboard/layout/CardHeader';
@@ -108,7 +109,7 @@ function serviceDetail(service: EpgPartnerService): string {
     const parts: string[] = [];
     if (service.headcount > 0) parts.push(`${service.headcount} guest${service.headcount === 1 ? '' : 's'}`);
     const units = service.capacityConfirmed ?? service.unitsRequested;
-    if (units > 0) parts.push(`${units} ${service.unitType ?? (service.role === 'accommodation' ? 'rooms' : service.role === 'transport' ? 'seats' : 'units')}`);
+    if (units > 0 && service.role !== 'guide') parts.push(`${units} ${service.unitType ?? (service.role === 'accommodation' ? (units === 1 ? 'room' : 'rooms') : service.role === 'transport' ? (units === 1 ? 'seat' : 'seats') : units === 1 ? 'unit' : 'units')}`);
     if (service.serviceTime) parts.push(service.serviceEndTime ? `${service.serviceTime}–${service.serviceEndTime}` : service.serviceTime);
     if (service.counterDate) parts.push(`offered ${dateParts(service.counterDate).month} ${dateParts(service.counterDate).day}`);
     return parts.join(' · ');
@@ -160,17 +161,19 @@ function TransportGlyph({ kind, label }: { kind: TransportKind | null; label: st
     return null;
 }
 
-function DayCell({ day, tourId, status, today, density }: { day: EpgDay; tourId: string; status: EpgOperationalStatus; today: string; density: Density }) {
+function DayCell({ day, status, today, density, onOpen }: { day: EpgDay; status: EpgOperationalStatus; today: string; density: Density; onOpen: () => void }) {
     const style = STATUS_STYLE[status];
     const isNow = day.date === today;
     const motion = day.transport || day.vehicle || day.activity;
     const motionLabel = day.vehicle || day.transport || day.activity || '';
     return (
-        <Link
-            href={`/dashboard/tours/edit/${tourId}?day=${day.index}#itinerary`}
-            title={`Day ${day.dayNumber}${day.destination ? `, ${day.destination}` : ''}. Open this itinerary day.`}
+        <button
+            type="button"
+            onClick={onOpen}
+            aria-label={`Day ${day.dayNumber}, ${dateParts(day.date).month} ${dateParts(day.date).day}${day.destination ? `, ${day.destination}` : ''}. Open details.`}
+            title={`Day ${day.dayNumber}${day.destination ? `, ${day.destination}` : ''}. Open details.`}
             className={cn(
-                'flex h-full flex-col overflow-hidden rounded-md border px-1.5 py-1 text-left transition-colors hover:ring-2 hover:ring-primary/50',
+                'flex h-full w-full flex-col overflow-hidden rounded-md border px-1.5 py-1 text-left transition-colors hover:ring-2 hover:ring-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
                 style.cell,
                 isNow && 'ring-1 ring-rose-500',
             )}
@@ -209,12 +212,12 @@ function DayCell({ day, tourId, status, today, density }: { day: EpgDay; tourId:
                     </span>
                 </>
             )}
-        </Link>
+        </button>
     );
 }
 
 /** A day on a business's own timeline: where the group is, and what this business was asked to do. */
-function PartnerDayCell({ day, status, today, density }: { day: EpgDay; status: EpgOperationalStatus; today: string; density: Density }) {
+function PartnerDayCell({ day, status, today, density, onOpen }: { day: EpgDay; status: EpgOperationalStatus; today: string; density: Density; onOpen: () => void }) {
     const services = day.services ?? [];
     const isNow = day.date === today;
     const worst = services.find((s) => s.status === 'declined' || s.status === 'expired')
@@ -222,8 +225,11 @@ function PartnerDayCell({ day, status, today, density }: { day: EpgDay; status: 
         ?? services[0];
     const cell = worst ? serviceStatus(worst.status).cell : STATUS_STYLE[status].cell;
     return (
-        <div
-            className={cn('flex h-full flex-col gap-0.5 overflow-hidden rounded-md border px-1.5 py-1 text-left', services.length ? cell : 'border-dashed bg-transparent opacity-70', isNow && 'ring-1 ring-rose-500')}
+        <button
+            type="button"
+            onClick={onOpen}
+            aria-label={`Day ${day.dayNumber}, ${dateParts(day.date).month} ${dateParts(day.date).day}${day.destination ? `, ${day.destination}` : ''}. Open details.`}
+            className={cn('flex h-full w-full flex-col gap-0.5 overflow-hidden rounded-md border px-1.5 py-1 text-left transition-colors hover:ring-2 hover:ring-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary', services.length ? cell : 'border-dashed bg-transparent opacity-70', isNow && 'ring-1 ring-rose-500')}
             title={`Day ${day.dayNumber}${day.destination ? `, ${day.destination}` : ''}${services.length ? '' : '. Nothing asked of you today.'}`}
         >
             <div className="flex items-center justify-between gap-1">
@@ -251,7 +257,7 @@ function PartnerDayCell({ day, status, today, density }: { day: EpgDay; status: 
                     </span>
                 );
             })}
-        </div>
+        </button>
     );
 }
 
@@ -284,7 +290,7 @@ function PartnerRowHeader({ row, today }: { row: EpgDeparture; today: string }) 
     );
 }
 
-function PartnerMobileCard({ row, today }: { row: EpgDeparture; today: string }) {
+function PartnerMobileCard({ row, today, onOpenDay }: { row: EpgDeparture; today: string; onOpenDay: (day: EpgDay) => void }) {
     const style = STATUS_STYLE[row.status];
     const days = row.days.filter((day) => (day.services?.length ?? 0) > 0);
     const upcomingFirst = [...days].sort((a, b) => (a.date < today) === (b.date < today) ? a.date.localeCompare(b.date) : a.date < today ? 1 : -1);
@@ -302,7 +308,8 @@ function PartnerMobileCard({ row, today }: { row: EpgDeparture; today: string })
             </div>
             <ul className="mt-2 space-y-2">
                 {upcomingFirst.map((day) => (
-                    <li key={day.date} className={cn('rounded-md border px-2 py-1.5', day.date === today && 'border-rose-500')}>
+                    <li key={day.date}>
+                      <button type="button" onClick={() => onOpenDay(day)} className={cn('w-full rounded-md border px-2 py-1.5 text-left hover:bg-muted/50', day.date === today && 'border-rose-500')}>
                         <p className="text-xs font-semibold">
                             {day.date === today ? 'Today' : `${dateParts(day.date).weekday} ${dateParts(day.date).month} ${dateParts(day.date).day}`} · D{day.dayNumber}{day.destination ? ` · ${day.destination}` : ''}
                         </p>
@@ -317,6 +324,7 @@ function PartnerMobileCard({ row, today }: { row: EpgDeparture; today: string })
                                 </p>
                             );
                         })}
+                      </button>
                     </li>
                 ))}
                 {days.length === 0 && <li className="text-xs text-muted-foreground">No services of yours fall inside these dates.</li>}
@@ -361,7 +369,7 @@ function RowHeader({ row, today }: { row: EpgDeparture; today: string }) {
     );
 }
 
-function MobileCard({ row, today }: { row: EpgDeparture; today: string }) {
+function MobileCard({ row, today, onOpenDay }: { row: EpgDeparture; today: string; onOpenDay: (day: EpgDay) => void }) {
     const style = STATUS_STYLE[row.status];
     const stop = row.todayStop ?? row.nextStop ?? row.days[row.days.length - 1] ?? null;
     return (
@@ -389,9 +397,9 @@ function MobileCard({ row, today }: { row: EpgDeparture; today: string }) {
                 <p className="mt-1 text-xs text-muted-foreground">Next: {row.nextStop.destination || row.nextStop.title}</p>
             )}
             {stop && (
-                <Link href={`/dashboard/tours/edit/${row.tourId}?day=${stop.index}#itinerary`} className="mt-2 inline-block text-xs font-medium text-primary hover:underline">
+                <button type="button" onClick={() => onOpenDay(stop)} className="mt-2 inline-block text-xs font-medium text-primary hover:underline">
                     Open day {stop.dayNumber}
-                </Link>
+                </button>
             )}
         </article>
     );
@@ -405,6 +413,7 @@ function EpgGrid({
     density,
     centerToken,
     partner,
+    onOpenDay,
 }: {
     departures: EpgDeparture[];
     dates: string[];
@@ -414,6 +423,7 @@ function EpgGrid({
     centerToken: number;
     /** Business view: no links into tour editing, own services in each cell. */
     partner: boolean;
+    onOpenDay: (row: EpgDeparture, day: EpgDay) => void;
 }) {
     const scrollerRef = useRef<HTMLDivElement>(null);
     const [scrollTop, setScrollTop] = useState(0);
@@ -516,8 +526,8 @@ function EpgGrid({
                                     <div key={iso} className="shrink-0 border-r p-1" style={{ width: colW }}>
                                         {day
                                             ? partner
-                                                ? <PartnerDayCell day={day} status={row.status} today={today} density={density} />
-                                                : <DayCell day={day} tourId={row.tourId} status={row.status} today={today} density={density} />
+                                                ? <PartnerDayCell day={day} status={row.status} today={today} density={density} onOpen={() => onOpenDay(row, day)} />
+                                                : <DayCell day={day} status={row.status} today={today} density={density} onOpen={() => onOpenDay(row, day)} />
                                             : null}
                                     </div>
                                 );
@@ -555,6 +565,7 @@ export function TourEpg() {
     const { data: myBusinesses } = useMyBusinessPartners(isOperator);
     const ownsBusiness = Array.isArray(myBusinesses) && myBusinesses.length > 0;
     const [showMine, setShowMine] = useState(false);
+    const [selected, setSelected] = useState<{ row: EpgDeparture; day: EpgDay } | null>(null);
     const scope: EpgScope = isOperator && !(ownsBusiness && showMine) ? 'all' : 'partner';
     const partner = scope === 'partner';
     const [clock, setClock] = useState<{ today: string; fraction: number } | null>(null);
@@ -795,19 +806,29 @@ export function TourEpg() {
                                     density={density}
                                     centerToken={centerToken}
                                     partner={partner}
+                                    onOpenDay={(row, day) => setSelected({ row, day })}
                                 />
                             </div>
                         )}
                         {layout === 'mobile' && (
                             <div className="space-y-2">
                                 {timeline.data.departures.map((row) => partner
-                                    ? <PartnerMobileCard key={row.id} row={row} today={clock.today} />
-                                    : <MobileCard key={row.id} row={row} today={clock.today} />)}
+                                    ? <PartnerMobileCard key={row.id} row={row} today={clock.today} onOpenDay={(day) => setSelected({ row, day })} />
+                                    : <MobileCard key={row.id} row={row} today={clock.today} onOpenDay={(day) => setSelected({ row, day })} />)}
                             </div>
                         )}
                     </>
                 )}
             </div>
+            {selected && (
+                <DayDialog
+                    open
+                    onOpenChange={(open) => { if (!open) setSelected(null); }}
+                    departure={selected.row}
+                    day={selected.day}
+                    mode={partner ? 'partner' : 'operator'}
+                />
+            )}
         </RoleGuard>
     );
 }

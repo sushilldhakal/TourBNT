@@ -233,6 +233,9 @@ function ProfileTab({ business }: { business: BusinessPartner }) {
         Object.fromEntries(fields.map((f) => [f.key, f.kind === 'list' ? parseListField(details[f.key]) : String(details[f.key] ?? '')]))
     );
     const [destinationId, setDestinationId] = useState(business.destinationId || '');
+    // Extra destinations (chains, guides, transport). A guesthouse is one building, so it only has a home destination.
+    const multiDestination = business.type !== 'guesthouse' && business.type !== 'advertiser';
+    const [extraDestinationIds, setExtraDestinationIds] = useState<string[]>(business.serviceDestinationIds ?? []);
     const [addDestinationOpen, setAddDestinationOpen] = useState(false);
     // A partner has no destination preferences of their own (that list belongs to sellers), so offer
     // every approved destination. One the partner just created is still pending approval and not in
@@ -253,7 +256,13 @@ function ProfileTab({ business }: { business: BusinessPartner }) {
         : approvedDestinations;
 
     const mutation = useMutation({
-        mutationFn: (fd: FormData) => updateMyBusinessPartner(business.id, fd),
+        mutationFn: async (fd: FormData) => {
+            const saved = await updateMyBusinessPartner(business.id, fd);
+            if (multiDestination) {
+                await updateBusinessPartnerTargeting(business.id, undefined, extraDestinationIds.filter((id) => id !== destinationId));
+            }
+            return saved;
+        },
         onSuccess: () => {
             toast({ title: 'Profile updated' });
             queryClient.invalidateQueries({ queryKey: ['business-partners', 'mine'] });
@@ -306,7 +315,7 @@ function ProfileTab({ business }: { business: BusinessPartner }) {
                         <Input value={form.website} onChange={(e) => setForm({ ...form, website: e.target.value })} />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium mb-1">Location</label>
+                        <label className="block text-sm font-medium mb-1">{multiDestination ? 'Home destination' : 'Location'}</label>
                         <Select
                             value={destinationId || undefined}
                             onValueChange={(v) => {
@@ -340,9 +349,42 @@ function ProfileTab({ business }: { business: BusinessPartner }) {
                             </SelectContent>
                         </Select>
                         <p className="text-sm text-muted-foreground mt-1">
-                            The destination you&apos;re located in — e.g. a Srinagar restaurant sets Srinagar here, the same destination tours tag when they include you.
+                            {business.type === 'guesthouse'
+                                ? 'A guesthouse is in one destination. Tour operators can only pick you for days in this destination.'
+                                : 'The destination you\'re based in — e.g. a Srinagar restaurant sets Srinagar here, the same destination tours tag when they include you.'}
                         </p>
                     </div>
+                    {multiDestination && (
+                        <div>
+                            <label className="block text-sm font-medium mb-1">Other destinations you serve</label>
+                            <div className="flex flex-wrap gap-2" role="group" aria-label="Other destinations you serve">
+                                {(destinations as DestinationTypes[])
+                                    .map((dest) => ({ id: dest._id != null ? String(dest._id) : '', name: dest.name, active: dest.isActive !== false }))
+                                    .filter((dest) => dest.id && dest.active && dest.id !== destinationId)
+                                    .map((dest) => {
+                                        const on = extraDestinationIds.includes(dest.id);
+                                        return (
+                                            <button
+                                                type="button"
+                                                key={dest.id}
+                                                aria-pressed={on}
+                                                onClick={() => setExtraDestinationIds(on ? extraDestinationIds.filter((x) => x !== dest.id) : [...extraDestinationIds, dest.id])}
+                                                className={`px-3 py-1.5 rounded-full text-sm border ${on ? 'bg-primary text-primary-foreground border-primary' : 'border-border'}`}
+                                            >
+                                                {dest.name}
+                                            </button>
+                                        );
+                                    })}
+                            </div>
+                            <p className="text-sm text-muted-foreground mt-1">
+                                {business.type === 'transport'
+                                    ? 'Every destination you run vehicles to or from. Tour operators only see you for days in these places.'
+                                    : business.type === 'guide'
+                                        ? 'Only the areas you actually guide in. Tour operators only see you for days in these places.'
+                                        : 'Other destinations where you have a branch. Tour operators only see you for days in these places.'}
+                            </p>
+                        </div>
+                    )}
 
                     {fields.length > 0 && (
                         <div className="space-y-4 pt-2 border-t">
@@ -1029,7 +1071,8 @@ function TargetingTab({ business }: { business: BusinessPartner }) {
     const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([]);
     const [destinations, setDestinations] = useState<Array<{ id: string; name: string }>>([]);
     const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-    const [selectedDestinations, setSelectedDestinations] = useState<string[]>([]);
+    const [categoriesTouched, setCategoriesTouched] = useState(false);
+    const [selectedDestinations, setSelectedDestinations] = useState<string[]>(business.serviceDestinationIds ?? []);
 
     useEffect(() => {
         getApprovedCategories().then((d: unknown) => {
@@ -1043,7 +1086,7 @@ function TargetingTab({ business }: { business: BusinessPartner }) {
     }, []);
 
     const mutation = useMutation({
-        mutationFn: () => updateBusinessPartnerTargeting(business.id, selectedCategories, selectedDestinations),
+        mutationFn: () => updateBusinessPartnerTargeting(business.id, categoriesTouched ? selectedCategories : undefined, selectedDestinations),
         onSuccess: () => toast({ title: 'Visibility preferences saved' }),
         onError: (error: Error) => toast({ title: 'Save failed', description: error.message, variant: 'destructive' }),
     });
@@ -1066,7 +1109,7 @@ function TargetingTab({ business }: { business: BusinessPartner }) {
                             <button
                                 type="button"
                                 key={c.id}
-                                onClick={() => toggle(selectedCategories, setSelectedCategories, c.id)}
+                                onClick={() => { setCategoriesTouched(true); toggle(selectedCategories, setSelectedCategories, c.id); }}
                                 className={`px-3 py-1.5 rounded-full text-sm border ${selectedCategories.includes(c.id) ? 'bg-primary text-primary-foreground border-primary' : 'border-border'}`}
                             >
                                 {c.name}

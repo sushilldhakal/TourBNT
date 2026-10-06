@@ -16,6 +16,8 @@ export interface BusinessPartner {
     website?: string | null;
     address?: { address?: string; city?: string; state?: string; postalCode?: string; country?: string } | null;
     destinationId?: string | null;
+    /** Extra destinations served besides the home `destinationId` (chains, guides, transport). */
+    serviceDestinationIds?: string[];
     details?: Record<string, unknown> | null;
     isApproved: boolean;
     approvalStatus: 'pending' | 'approved' | 'rejected';
@@ -96,7 +98,8 @@ export const updateMyBusinessPartner = async (businessPartnerId: string, formDat
     }
 };
 
-export const updateBusinessPartnerTargeting = async (businessPartnerId: string, categoryIds: string[], destinationIds: string[]) => {
+/** Leave `categoryIds` undefined to keep the business's categories as they are. */
+export const updateBusinessPartnerTargeting = async (businessPartnerId: string, categoryIds: string[] | undefined, destinationIds: string[]) => {
     try {
         const response = await api.patch(`/business-partners/${businessPartnerId}/targeting`, { categoryIds, destinationIds });
         return extractResponseData(response);
