@@ -16,6 +16,9 @@ import { createSuggestionItems, Command, renderItems } from "novel";
 import type { Range, Editor } from "@tiptap/core";
 import Magic from "./icons/Magic";
 import { toast } from "@/components/ui/use-toast";
+import { generateCompletion, aiErrorCode } from "@/lib/api/aiApi";
+import { apiErrorMessage } from "@/lib/api/apiClient";
+import { getContextBeforeCursor } from "./generative/editor-text";
 
 interface CommandProps {
     editor: Editor;
@@ -34,38 +37,27 @@ export const suggestionItems = createSuggestionItems([
         icon: <Magic className="novel-w-7" />,
         command: async ({ editor, range }: CommandProps) => {
             editor.chain().focus().deleteRange(range).run();
+            const context = getContextBeforeCursor(editor);
+            if (!context.trim()) {
+                toast({
+                    title: "Nothing to continue",
+                    description: "Write a few words first, then try again.",
+                    duration: 5000,
+                });
+                return;
+            }
 
             try {
-                // Note: AI API integration will be implemented in task 12.1
-                // For now, this is a placeholder that shows a message
-                toast({
-                    title: "AI Feature",
-                    description: "AI completion will be available once the AI API is configured.",
-                    duration: 3000,
-                });
-
-                // TODO: Uncomment when AI API is implemented
-                // const response = await generateCompletion({
-                //   prompt: promptString,
-                //   option: 'continue',
-                //   command: ''
-                // });
-                // 
-                // const { completion } = response;
-                // if (completion) {
-                //   editor.chain().focus().insertContent(completion).run();
-                // } else {
-                //   toast({
-                //     title: "No completion received.",
-                //     description: "Please try again later.",
-                //     variant: "destructive",
-                //     duration: 9000,
-                //   });
-                // }
+                const { completion } = await generateCompletion({ prompt: context, option: "continue" });
+                if (completion) {
+                    editor.chain().focus().insertContent(completion).run();
+                } else {
+                    toast({ title: "No completion received.", description: "Please try again later.", variant: "destructive", duration: 9000 });
+                }
             } catch (error) {
                 toast({
-                    title: "An error occurred while generating the text.",
-                    description: `Please try again later. ${error}`,
+                    title: aiErrorCode(error) === "AI_LIMIT_REACHED" ? "AI is unavailable right now" : "Could not generate text",
+                    description: apiErrorMessage(error, "Please try again later."),
                     variant: "destructive",
                     duration: 9000,
                 });

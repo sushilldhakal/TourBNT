@@ -1,5 +1,6 @@
 import { ArrowDownWideNarrow, CheckCheck, RefreshCcwDot, StepForward, WrapText } from "lucide-react";
-import { useEditor, getPrevText } from "novel";
+import { useEditor } from "novel";
+import { getContextBeforeCursor, getSelectionText } from "./editor-text";
 import { CommandGroup, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command";
 
 /**
@@ -63,9 +64,7 @@ const AISelectorCommands = ({ onSelect }: AISelectorCommandsProps) => {
                         <CommandItem
                             onSelect={(value) => {
                                 // Extract selected text as markdown
-                                const slice = editor.state.selection.content();
-                                const text = editor.storage.markdown.serializer.serialize(slice.content);
-                                onSelect(text, value);
+                                onSelect(getSelectionText(editor), value);
                             }}
                             className="flex gap-2 px-4"
                             key={option.value}
@@ -81,9 +80,7 @@ const AISelectorCommands = ({ onSelect }: AISelectorCommandsProps) => {
                     <CommandItem
                         onSelect={() => {
                             // Get text before cursor for "continue writing" command
-                            const pos = editor.state.selection.from;
-                            const text = getPrevText(editor, pos);
-                            onSelect(text, "continue");
+                            onSelect(getContextBeforeCursor(editor), "continue");
                         }}
                         value="continue"
                         className="gap-2 px-4"

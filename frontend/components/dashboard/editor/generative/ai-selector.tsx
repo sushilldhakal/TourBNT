@@ -5,6 +5,7 @@ import { useState } from "react";
 import Markdown from "react-markdown";
 import AICompletionCommands from "./ai-completion-command";
 import AISelectorCommands from "./ai-selector-commands";
+import { getContextBeforeCursor, getSelectionText } from "./editor-text";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import Magic from "../icons/Magic";
 import CrazySpinner from "../icons/CrazySpinner";
@@ -137,8 +138,7 @@ export function AISelector({ onOpenChange }: AISelectorProps) {
                                     return;
                                 }
 
-                                const slice = editor.state.selection.content();
-                                const text = editor.storage.markdown.serializer.serialize(slice.content);
+                                const text = getSelectionText(editor) || getContextBeforeCursor(editor);
 
                                 complete({ prompt: text, option: "zap", command: inputValue });
                                 setInputValue("");

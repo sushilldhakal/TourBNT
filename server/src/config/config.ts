@@ -103,7 +103,7 @@ const _config = {
       model: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
     },
     cloudflare: {
-      accountId: process.env.CLOUDFLARE_AI_ACCOUNT_ID || process.env.CLOUDFLARE_R2_ACCOUNT_ID,
+      accountId: process.env.CLOUDFLARE_AI_ACCOUNT_ID || process.env.CLOUDFLARE_ACCOUNT_ID || process.env.CLOUDFLARE_R2_ACCOUNT_ID,
       apiToken: process.env.CLOUDFLARE_AI_API_TOKEN,
       model: process.env.CLOUDFLARE_AI_MODEL || '@cf/meta/llama-3.1-8b-instruct',
     },
