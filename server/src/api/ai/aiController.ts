@@ -39,7 +39,7 @@ export const generateAICompletion = async (req: Request, res: Response) => {
     }
 
     const reservation = await reserveAIUsage(userId, option, inputChars);
-    if (!reservation.allowed) {
+    if (reservation.allowed === false) {
         res.setHeader('Retry-After', String(reservation.retryAfterSeconds));
         return sendError(res, LIMIT_MESSAGES[reservation.reason], HTTP_STATUS.TOO_MANY_REQUESTS, 'AI_USER_LIMIT_REACHED', {
             reason: reservation.reason,

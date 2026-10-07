@@ -88,7 +88,7 @@ const _config = {
   ai: {
     providers: (process.env.AI_PROVIDER_ORDER || 'gemini,cloudflare,openrouter')
       .split(',').map((p) => p.trim().toLowerCase()).filter(Boolean),
-    requestTimeoutMs: Number(process.env.AI_REQUEST_TIMEOUT_MS) || 20000,
+    requestTimeoutMs: Number(process.env.AI_REQUEST_TIMEOUT_MS) || 10000,
     // How long a provider that hit a rate limit/quota is skipped before being retried.
     providerCooldownMs: Number(process.env.AI_PROVIDER_COOLDOWN_MS) || 60000,
     maxPromptChars: Number(process.env.AI_MAX_PROMPT_CHARS) || 6000,
@@ -100,7 +100,7 @@ const _config = {
     globalDailyLimit: Number(process.env.AI_GLOBAL_DAILY_LIMIT) || 0,
     gemini: {
       apiKey: process.env.GEMINI_API_KEY,
-      model: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
+      model: process.env.GEMINI_MODEL || 'gemini-flash-latest',
     },
     cloudflare: {
       accountId: process.env.CLOUDFLARE_AI_ACCOUNT_ID || process.env.CLOUDFLARE_ACCOUNT_ID || process.env.CLOUDFLARE_R2_ACCOUNT_ID,

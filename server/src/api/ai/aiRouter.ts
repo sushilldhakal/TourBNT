@@ -22,7 +22,7 @@ const cooldownUntil = new Map<string, number>();
 function startCooldown(provider: string, kind: AIProviderError['kind']) {
     const base = config.ai.providerCooldownMs;
     if (kind === 'rate_limit' || kind === 'quota') cooldownUntil.set(provider, Date.now() + base);
-    else if (kind === 'unavailable') cooldownUntil.set(provider, Date.now() + Math.floor(base / 4));
+    else if (kind === 'unavailable') cooldownUntil.set(provider, Date.now() + Math.floor(base / 2));
 }
 
 /**

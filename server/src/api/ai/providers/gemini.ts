@@ -23,7 +23,8 @@ export const geminiProvider: AIProvider = {
                 body: JSON.stringify({
                     ...(system && { systemInstruction: { parts: [{ text: system }] } }),
                     contents,
-                    generationConfig: { temperature, maxOutputTokens },
+                    // Thinking tokens count against maxOutputTokens and add seconds of latency; short edits don't need them.
+                    generationConfig: { temperature, maxOutputTokens, thinkingConfig: { thinkingBudget: 0 } },
                 }),
             },
         );
