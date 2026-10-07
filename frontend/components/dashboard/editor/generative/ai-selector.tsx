@@ -10,7 +10,7 @@ import Magic from "../icons/Magic";
 import CrazySpinner from "../icons/CrazySpinner";
 import { Button } from "@/components/ui/button";
 import { useMutation } from "@tanstack/react-query";
-import { generateCompletion } from "@/lib/api/aiApi";
+import { generateCompletion, aiErrorCode } from "@/lib/api/aiApi";
 import { toast } from "@/components/ui/use-toast";
 import { apiErrorMessage, apiErrorStatus } from "@/lib/api/apiClient";
 
@@ -54,10 +54,11 @@ export function AISelector({ onOpenChange }: AISelectorProps) {
             }
         },
         onError: (error: unknown) => {
-            if (apiErrorStatus(error) === 429) {
+            const code = aiErrorCode(error);
+            if (code === 'AI_LIMIT_REACHED' || code === 'AI_USER_LIMIT_REACHED' || apiErrorStatus(error) === 429) {
                 toast({
-                    title: "Rate limit exceeded",
-                    description: "You have reached your request limit for the day.",
+                    title: code === 'AI_LIMIT_REACHED' ? "AI is unavailable right now" : "AI limit reached",
+                    description: apiErrorMessage(error, "You have reached your AI request limit. Please try again later."),
                     variant: "destructive",
                     duration: 9000,
                 });

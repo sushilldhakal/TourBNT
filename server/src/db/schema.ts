@@ -204,6 +204,27 @@ export const userSettings = pgTable('user_settings', {
   userIdx: uniqueIndex('user_settings_user_idx').on(table.userId),
 }));
 
+// One row per AI writing-assistant request. Doubles as the usage ledger for per-user limits
+// (rows are inserted as 'pending' before any provider is called, so concurrent requests are counted)
+// and as the audit log: `attempts` records every provider tried, in order, with its outcome.
+export const aiUsageLogs = pgTable('ai_usage_logs', {
+  id: id(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  // pending | success | provider_error | all_providers_exhausted | user_limit
+  status: text('status').notNull().default('pending'),
+  option: text('option').notNull(),
+  provider: text('provider'),
+  model: text('model'),
+  promptChars: integer('prompt_chars').notNull().default(0),
+  completionChars: integer('completion_chars').notNull().default(0),
+  latencyMs: integer('latency_ms'),
+  attempts: jsonb('attempts').$type<Array<{ provider: string; outcome: string; latencyMs: number; error?: string }>>().notNull().default(sql`'[]'::jsonb`),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  userCreatedIdx: index('ai_usage_logs_user_created_idx').on(table.userId, table.createdAt),
+  createdIdx: index('ai_usage_logs_created_idx').on(table.createdAt),
+}));
+
 // User-owned "wishlist" tours (was `wishlists: ObjectId[]` on User).
 export const userWishlists = pgTable('user_wishlists', {
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),

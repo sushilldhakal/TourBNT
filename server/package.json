@@ -20,7 +20,7 @@
     "db:migrate": "tsx src/db/migrate.ts",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "test": "tsx --test src/api/operations/epgProjection.test.ts src/api/operations/partnerEpg.test.ts src/api/tours/services/openSlotDates.test.ts src/api/tours/services/withdrawalEvidence.test.ts"
+    "test": "tsx --test src/api/operations/epgProjection.test.ts src/api/operations/partnerEpg.test.ts src/api/tours/services/openSlotDates.test.ts src/api/tours/services/withdrawalEvidence.test.ts src/api/ai/aiRouter.test.ts"
   },
   "keywords": [
     "rest",

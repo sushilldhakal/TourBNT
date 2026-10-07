@@ -36,6 +36,8 @@ export type ErrorCode =
     | 'FORBIDDEN_ERROR'
     | 'NOT_FOUND_ERROR'
     | 'RATE_LIMIT_ERROR'
+    | 'AI_LIMIT_REACHED'
+    | 'AI_USER_LIMIT_REACHED'
     | 'SERVER_ERROR';
 
 /**

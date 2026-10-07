@@ -83,6 +83,36 @@ const _config = {
   },
   openAIApiBaseUrl: process.env.OPENAI_API_BASE_URL,
 
+  // AI writing assistant (Novel editor) — provider fallback chain, see src/api/ai.
+  // Keys stay server-side only. A provider with no key is skipped, not an error.
+  ai: {
+    providers: (process.env.AI_PROVIDER_ORDER || 'gemini,cloudflare,openrouter')
+      .split(',').map((p) => p.trim().toLowerCase()).filter(Boolean),
+    requestTimeoutMs: Number(process.env.AI_REQUEST_TIMEOUT_MS) || 20000,
+    // How long a provider that hit a rate limit/quota is skipped before being retried.
+    providerCooldownMs: Number(process.env.AI_PROVIDER_COOLDOWN_MS) || 60000,
+    maxPromptChars: Number(process.env.AI_MAX_PROMPT_CHARS) || 6000,
+    maxOutputTokens: Number(process.env.AI_MAX_OUTPUT_TOKENS) || 1024,
+    // Per-user caps so one account cannot drain the shared free tiers.
+    userDailyLimit: Number(process.env.AI_USER_DAILY_LIMIT) || 30,
+    userPerMinuteLimit: Number(process.env.AI_USER_PER_MINUTE_LIMIT) || 6,
+    // Optional cap on all users combined per day (0 = off).
+    globalDailyLimit: Number(process.env.AI_GLOBAL_DAILY_LIMIT) || 0,
+    gemini: {
+      apiKey: process.env.GEMINI_API_KEY,
+      model: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
+    },
+    cloudflare: {
+      accountId: process.env.CLOUDFLARE_AI_ACCOUNT_ID || process.env.CLOUDFLARE_R2_ACCOUNT_ID,
+      apiToken: process.env.CLOUDFLARE_AI_API_TOKEN,
+      model: process.env.CLOUDFLARE_AI_MODEL || '@cf/meta/llama-3.1-8b-instruct',
+    },
+    openrouter: {
+      apiKey: process.env.OPENROUTER_API_KEY,
+      model: process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.3-70b-instruct:free',
+    },
+  },
+
   // SendGrid configuration
   sendGrid: {
     apiKey: process.env.SENDGRID_API_KEY
